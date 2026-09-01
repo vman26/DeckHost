@@ -1,0 +1,49 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DeckHost.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="DeckHost.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="DeckHost.App">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <vm:MainViewModel />
+    </Design.DataContext>
+  <Grid ColumnDefinitions="300, *, 350">
+
+    <!-- Action Toolbox -->
+    <Border Grid.Column="0" Background="#1E1E1E" Padding="10">
+      <StackPanel Spacing="10">
+        <TextBlock Text="Available Actions" FontWeight="Bold" Foreground="White"/>
+        <TextBox Watermark="Search actions..."/>
+        <ListBox ItemsSource="{Binding AvailableActions}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Name}" Foreground="White" Padding="5"/>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </StackPanel>
+    </Border>
+
+    <!-- Visual Device Canvas -->
+    <Canvas Grid.Column="1" Background="#121212" Name="DeviceCanvas">
+      <!-- Dynamically populated or item-templated physical controls with Drop enabled -->
+    </Canvas>
+
+    <!-- Property Inspector -->
+    <Border Grid.Column="2" Background="#1E1E1E" Padding="15">
+      <StackPanel Spacing="10">
+        <TextBlock Text="Property Inspector" FontWeight="Bold" Foreground="White"/>
+        <TextBlock Text="Select a control to configure properties." Foreground="Gray" TextWrapping="Wrap"/>
+      </StackPanel>
+    </Border>
+
+  </Grid>
+
+</Window>
