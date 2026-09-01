@@ -1,0 +1,24 @@
+diff --git a/CPP-SDK/src/DeviceManager/DeviceEnumerator/deviceenumerator.cpp b/CPP-SDK/src/DeviceManager/DeviceEnumerator/deviceenumerator.cpp
+index 6e8d91e..a1152fc 100644
+--- a/CPP-SDK/src/DeviceManager/DeviceEnumerator/deviceenumerator.cpp
++++ b/CPP-SDK/src/DeviceManager/DeviceEnumerator/deviceenumerator.cpp
+@@ -83,10 +83,16 @@ void DeviceEnumerator::enumerate(bool log_out)
+ 			ToolKit::wprint(L"  Vendor:", dev->_manufacturer_string);
+ 			ToolKit::wprint(L"  Product:", dev->_product_string);
+ 			ToolKit::wprint(L"  Serial Number:", dev->_serial_number);
+-			ToolKit::print("  Release Number:", L"0x", dev->_release_number);
++			std::ostringstream releaseNumber;
++			releaseNumber << "  Release Number: 0x" << std::hex << dev->_release_number;
++			ToolKit::print(releaseNumber.str());
+ 			ToolKit::print("  Interface Number:", dev->_interface_number);
+-			ToolKit::print("  Usage Page:", L"0x", dev->_usage_page);
+-			ToolKit::print("  Usage:", L"0x", dev->_usage);
++			std::ostringstream usagePage;
++			usagePage << "  Usage Page: 0x" << std::hex << dev->_usage_page;
++			ToolKit::print(usagePage.str());
++			std::ostringstream usage;
++			usage << "  Usage: 0x" << std::hex << dev->_usage;
++			ToolKit::print(usage.str());
+ 		}
+ 	}
+ 	hid_free_enumeration(devs);

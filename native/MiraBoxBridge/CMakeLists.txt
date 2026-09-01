@@ -1,0 +1,115 @@
+﻿cmake_minimum_required(VERSION 3.21)
+
+project(MiraBoxBridge LANGUAGES CXX)
+
+# CMakeList.txt : CMake project for MiraBoxBridge, include source and define
+# project specific logic here.
+#
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+
+foreach(config Debug Release RelWithDebInfo MinSizeRel)
+    string(TOUPPER "${config}" config_upper)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/bin/${config}")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/bin/${config}")
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/lib/${config}")
+endforeach()
+
+# 1. Add the vendor's SDK folder. 
+# This runs the CMakeLists.txt shown in your image.
+# (The second argument is just a temporary build folder name for their stuff)
+add_subdirectory("../StreamDock-SDK/CPP-SDK" "build_sdk")
+
+if(WIN32 AND TARGET TransportDLL)
+    set_target_properties(TransportDLL PROPERTIES
+        MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
+        MAP_IMPORTED_CONFIG_MINSIZEREL Release
+    )
+endif()
+
+# 2. Replicate their source file collection (ignoring their main.cpp)
+file(GLOB_RECURSE HOTSPOTDEVICE
+    "../StreamDock-SDK/CPP-SDK/src/HotspotDevice/**/*.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/HotspotDevice/**/*.h"
+)
+
+set(VENDOR_SOURCES
+    ${HOTSPOTDEVICE}
+    "../StreamDock-SDK/CPP-SDK/src/DeviceInfo/streamdock.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceInfo/streamdockfactory.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceInfo/Feature/RGBController/rgbcontroller.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceInfo/Feature/GifController/gifcontroller.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceInfo/Feature/ReadController/readcontroller.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceInfo/Feature/Configer/configer.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceInfo/Feature/HeartBeat/heartbeat.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceManager/DeviceEnumerator/deviceenumerator.cpp"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceManager/devicemanager.cpp"
+)
+
+if(WIN32)
+    list(APPEND VENDOR_SOURCES "../StreamDock-SDK/CPP-SDK/src/DeviceManager/devicemanager_win.cpp")
+elseif(APPLE)
+    list(APPEND VENDOR_SOURCES "../StreamDock-SDK/CPP-SDK/src/DeviceManager/devicemanager_mac.cpp")
+elseif(UNIX)
+    list(APPEND VENDOR_SOURCES "../StreamDock-SDK/CPP-SDK/src/DeviceManager/devicemanager_linux.cpp")
+endif()
+
+# 3. Create your Shared Library using your code PLUS their source code
+add_library(MiraBoxBridge SHARED 
+    "MiraBoxBridge.cpp" 
+    "MiraBoxBridge.h"
+    ${VENDOR_SOURCES}
+)
+
+set_target_properties(MiraBoxBridge PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
+
+# 4. Include the same directories they do
+target_include_directories(MiraBoxBridge PRIVATE
+    "../StreamDock-SDK/CPP-SDK/src"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceManager/DeviceEnumerator"
+    "../StreamDock-SDK/CPP-SDK/src/DeviceInfo"
+    "../StreamDock-SDK/CPP-SDK/ImgProcesser/src/Gif2ImgFrame"
+    "../StreamDock-SDK/CPP-SDK/ImgProcesser/src/ImgHelper"
+    "../StreamDock-SDK/CPP-SDK/ImgProcesser/src/OpenCVImageEncoder"
+    "../StreamDock-SDK/CPP-SDK/src/Transport"
+    "../StreamDock-SDK/CPP-SDK/src/ToolKit"
+)
+
+# 5. Link against their internal libraries
+target_link_libraries(MiraBoxBridge PRIVATE TransportCWrapper ImgProcesser TransportDLL)
+
+# 6. Apply platform-specific links (copied from their file)
+if(WIN32)
+    target_link_libraries(MiraBoxBridge PRIVATE setupapi)
+elseif(APPLE)
+    find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
+    find_library(IOKIT_FRAMEWORK IOKit)
+    find_library(APPLICATIONSERVICES_FRAMEWORK ApplicationServices)
+    target_link_libraries(MiraBoxBridge PRIVATE ${COREFOUNDATION_FRAMEWORK} ${IOKIT_FRAMEWORK} ${APPLICATIONSERVICES_FRAMEWORK})
+elseif(UNIX AND NOT APPLE)
+    target_link_libraries(MiraBoxBridge PRIVATE udev pthread)
+endif()
+
+if(WIN32)
+    add_custom_command(TARGET MiraBoxBridge POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:MiraBoxBridge> $<TARGET_FILE_DIR:MiraBoxBridge>
+        COMMAND_EXPAND_LISTS
+    )
+endif()
+
+install(TARGETS MiraBoxBridge
+    RUNTIME DESTINATION .
+    LIBRARY DESTINATION .
+    ARCHIVE DESTINATION lib
+)
+
+if(WIN32)
+    install(FILES $<TARGET_RUNTIME_DLLS:MiraBoxBridge>
+        DESTINATION .
+    )
+endif()

@@ -1,0 +1,89 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableMiraBoxNativeBuild Condition="'$(EnableMiraBoxNativeBuild)' == ''">true</EnableMiraBoxNativeBuild>
+    <IsWindows>$([MSBuild]::IsOsPlatform('Windows'))</IsWindows>
+    <IsLinux>$([MSBuild]::IsOsPlatform('Linux'))</IsLinux>
+    <IsMacOS>$([MSBuild]::IsOsPlatform('OSX'))</IsMacOS>
+    <IsSupportedMiraBoxBuildPlatform Condition="'$(IsWindows)' == 'true' or '$(IsLinux)' == 'true' or '$(IsMacOS)' == 'true'">true</IsSupportedMiraBoxBuildPlatform>
+    <CMakeExePath Condition="'$(CMakeExePath)' == '' and '$(IsWindows)' == 'true' and '$(DevEnvDir)' != '' and Exists('$(DevEnvDir)CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe')">$(DevEnvDir)CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe</CMakeExePath>
+    <CMakeExePath Condition="'$(CMakeExePath)' == '' and '$(IsWindows)' == 'true' and '$(VSInstallDir)' != '' and Exists('$(VSInstallDir)Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe')">$(VSInstallDir)Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe</CMakeExePath>
+    <CMakeCommand Condition="'$(CMakeExePath)' != ''">&quot;$(CMakeExePath)&quot;</CMakeCommand>
+    <CMakeCommand Condition="'$(CMakeCommand)' == ''">cmake</CMakeCommand>
+    <HasCMake>false</HasCMake>
+    <NativeBridgeProjectDir>$(MSBuildProjectDirectory)/../native/MiraBoxBridge</NativeBridgeProjectDir>
+    <NativeBridgeBuildDir>$(NativeBridgeProjectDir)/out/$(Configuration)</NativeBridgeBuildDir>
+    <NativeBridgeRuntimeDir>$(NativeBridgeBuildDir)/bin/$(Configuration)</NativeBridgeRuntimeDir>
+    <NativeBridgeConfigureStamp>$(NativeBridgeBuildDir)/CMakeCache.txt</NativeBridgeConfigureStamp>
+    <NativeBridgeBuildStamp>$(NativeBridgeBuildDir)/MiraBoxBridge.$(Configuration).stamp</NativeBridgeBuildStamp>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <NativeBridgeConfigureInputs Include="$(NativeBridgeProjectDir)/CMakeLists.txt" />
+    <NativeBridgeConfigureInputs Include="$(MSBuildProjectDirectory)/../native/StreamDock-SDK/CPP-SDK/CMakeLists.txt" />
+    <NativeBridgeConfigureInputs Include="$(MSBuildProjectDirectory)/../native/StreamDock-SDK/CPP-SDK/cmake/**/*" />
+    <NativeBridgeInputs Include="$(NativeBridgeProjectDir)/**/*" Exclude="$(NativeBridgeProjectDir)/out/**/*" />
+    <NativeBridgeInputs Include="$(MSBuildProjectDirectory)/../native/StreamDock-SDK/CPP-SDK/**/*" Exclude="$(MSBuildProjectDirectory)/../native/StreamDock-SDK/CPP-SDK/build/**/*" />
+  </ItemGroup>
+
+  <Target Name="DetectCMake"
+          BeforeTargets="ConfigureMiraBoxBridge"
+          Condition="'$(IsSupportedMiraBoxBuildPlatform)' == 'true' and '$(EnableMiraBoxNativeBuild)' == 'true'">
+    <Exec Command="$(CMakeCommand) --version"
+          IgnoreExitCode="true"
+          ConsoleToMSBuild="true">
+      <Output TaskParameter="ExitCode" PropertyName="CMakeExitCode" />
+    </Exec>
+
+    <PropertyGroup>
+      <HasCMake Condition="'$(CMakeExitCode)' == '0'">true</HasCMake>
+    </PropertyGroup>
+
+    <Warning Text="Skipping MiraBox native bridge build because CMake could not be found. Set CMakeExePath, use Visual Studio's bundled CMake on Windows, or install CMake on PATH to build and copy MiraBoxBridge runtime binaries."
+             Condition="'$(HasCMake)' != 'true'" />
+  </Target>
+
+  <Target Name="ConfigureMiraBoxBridge"
+          BeforeTargets="Build"
+          Inputs="@(NativeBridgeConfigureInputs)"
+          Outputs="$(NativeBridgeConfigureStamp)"
+          Condition="'$(IsSupportedMiraBoxBuildPlatform)' == 'true' and '$(EnableMiraBoxNativeBuild)' == 'true' and '$(HasCMake)' == 'true'">
+    <MakeDir Directories="$(NativeBridgeBuildDir)" />
+    <Exec Command="$(CMakeCommand) -S &quot;$(NativeBridgeProjectDir)&quot; -B &quot;$(NativeBridgeBuildDir)&quot;" />
+  </Target>
+
+  <Target Name="BuildMiraBoxBridge"
+          DependsOnTargets="ConfigureMiraBoxBridge"
+          BeforeTargets="Build"
+          Inputs="@(NativeBridgeInputs);$(NativeBridgeConfigureStamp)"
+          Outputs="$(NativeBridgeBuildStamp)"
+          Condition="'$(IsSupportedMiraBoxBuildPlatform)' == 'true' and '$(EnableMiraBoxNativeBuild)' == 'true' and '$(HasCMake)' == 'true'">
+    <Exec Command="$(CMakeCommand) --build &quot;$(NativeBridgeBuildDir)&quot; --config $(Configuration) --target MiraBoxBridge" />
+    <Touch Files="$(NativeBridgeBuildStamp)" AlwaysCreate="true" />
+  </Target>
+
+  <Target Name="CopyMiraBoxBridgeArtifacts"
+          DependsOnTargets="BuildMiraBoxBridge"
+          BeforeTargets="CopyFilesToOutputDirectory"
+          Condition="'$(IsSupportedMiraBoxBuildPlatform)' == 'true' and '$(EnableMiraBoxNativeBuild)' == 'true' and '$(HasCMake)' == 'true'">
+    <ItemGroup>
+      <NativeBridgeArtifacts Include="$(NativeBridgeRuntimeDir)/*.dll" Condition="'$(IsWindows)' == 'true'" />
+      <NativeBridgeArtifacts Include="$(NativeBridgeRuntimeDir)/*.pdb" Condition="'$(IsWindows)' == 'true' and '$(Configuration)' == 'Debug'" />
+      <NativeBridgeArtifacts Include="$(NativeBridgeRuntimeDir)/*.so" Condition="'$(IsLinux)' == 'true'" />
+      <NativeBridgeArtifacts Include="$(NativeBridgeRuntimeDir)/*.dylib" Condition="'$(IsMacOS)' == 'true'" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NativeBridgeArtifacts)"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true"
+          UseHardlinksIfPossible="true" />
+  </Target>
+
+</Project>

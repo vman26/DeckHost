@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".gitignore" />
+    <File Path=".gitmodules" />
+    <File Path="CMakeLists.txt" />
+    <File Path="CMakePresets.json" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/Solution Items/native/" />
+  <Folder Name="/Solution Items/native/MiraBoxBridge/">
+    <File Path="native/MiraBoxBridge/CMakeLists.txt" />
+    <File Path="native/MiraBoxBridge/MiraBoxBridge.cpp" />
+    <File Path="native/MiraBoxBridge/MiraBoxBridge.h" />
+  </Folder>
+  <Project Path="DeckHost.App/DeckHost.App.csproj" />
+  <Project Path="DeckHost.Contracts/DeckHost.Contracts.csproj" />
+  <Project Path="DeckHost.Core/DeckHost.Core.csproj" Id="1c415323-e703-4e4b-8637-5f09a7941b45" />
+  <Project Path="DeckHost.Device.MiraBox/DeckHost.Device.MiraBox.csproj" />
+</Solution>
