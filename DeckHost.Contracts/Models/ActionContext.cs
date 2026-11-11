@@ -10,5 +10,11 @@ namespace DeckHost.Contracts.Models
         string ControlId,
         IVariableStore Variables,
         InputCapabilities EventType = InputCapabilities.None,
-        int Value = 0);
+        int Value = 0)
+    {
+        /// <summary>The user's settings for this binding (or Multi Action step).</summary>
+        public ActionSettings Settings { get; init; } = ActionSettings.Empty;
+
+        public IActionHost Host { get; init; } = NullActionHost.Instance;
+    }
 }

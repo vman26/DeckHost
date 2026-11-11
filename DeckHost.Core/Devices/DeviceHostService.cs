@@ -43,6 +43,9 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private readonly List<TaskCompletionSource> _idleWaiters = [];
     private readonly SkiaDrawingResources _drawingResources = new();
     private bool _pluginsInitialized;
+    private readonly IActionHost _actionHost;
+    private readonly CancellationTokenSource _refreshCancellation = new();
+    private readonly Dictionary<(string DeviceId, string ControlId), DateTimeOffset> _nextLiveRender = [];
 
     // Thread-safe published state.
     private readonly Lock _logLock = new();
@@ -57,6 +60,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     public event Action<RuntimeLogEntry>? RuntimeLogReceived;
     public event Action<DeviceConnectionStatus>? ConnectionStatusChanged;
     public event Action? DevicesChanged;
+    public event Action<string, string>? ActiveProfileChanged;
 
     public DeviceHostService(
         IEnumerable<IDevicePlugin> devicePlugins,
@@ -76,6 +80,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         _variableStore = variableStore;
         _devicePlugins = devicePlugins.ToList();
         _actionRouter = actionRouter;
+        _actionHost = new ActionHostServices(this);
 
         foreach (var duplicate in _actionRouter.DuplicateActionKeys)
         {
@@ -129,6 +134,28 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         Enqueue(() => HandleInput(inputEvent));
     }
 
+    public void SetApplicationPlugins(IEnumerable<IApplicationPlugin> applicationPlugins)
+    {
+        ArgumentNullException.ThrowIfNull(applicationPlugins);
+        var snapshot = applicationPlugins.ToArray();
+        Enqueue(() =>
+        {
+            _actionRouter.SetApplicationPlugins(snapshot);
+            foreach (var duplicate in _actionRouter.DuplicateActionKeys)
+            {
+                Log("Warning", $"Action '{duplicate}' is registered more than once; only the first registration is used.");
+            }
+
+            // Bindings may now resolve to different (or no) actions.
+            foreach (var deviceId in _devicesById.Keys)
+            {
+                _dirtyDevices.Add(deviceId);
+            }
+
+            Log("Info", $"{snapshot.Length} application plugin(s) enabled.");
+        });
+    }
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         if (Interlocked.Exchange(ref _startRequested, 1) == 1)
@@ -143,6 +170,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             try
             {
                 await InitializePluginsAsync(cancellationToken).ConfigureAwait(false);
+                _ = RunLiveRefreshAsync(_refreshCancellation.Token);
                 completion.TrySetResult();
             }
             catch (OperationCanceledException)
@@ -197,6 +225,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
             return ValueTask.CompletedTask;
         });
+        _refreshCancellation.Cancel();
         _work.Writer.TryComplete();
 
         await Task.WhenAny(_worker, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
@@ -320,7 +349,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             return;
         }
 
-        var dispatched = _actionRouter.Dispatch(activeProfile, inputEvent);
+        var dispatched = _actionRouter.Dispatch(activeProfile, inputEvent, _actionHost);
         Log("Debug", $"Input {inputEvent.EventType} ({inputEvent.Value}) on '{inputEvent.ControlId}' {(dispatched ? "dispatched" : "had no matching action")}.");
 
         if (dispatched)
@@ -375,6 +404,40 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         _activeProfilesByDeviceId[profile.DeviceId] = profile.Id;
         Log("Info", $"Activated profile '{profile.Name}' for device '{profile.DeviceId}'.");
         OnActiveProfilesChanged();
+        SafeInvoke(() => ActiveProfileChanged?.Invoke(profile.DeviceId, profile.Id));
+    }
+
+    private void ActivateProfileByIdOrName(string deviceId, string profileIdOrName)
+    {
+        var profile = _profilesById.Values.FirstOrDefault(candidate =>
+                string.Equals(candidate.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Id, profileIdOrName, StringComparison.OrdinalIgnoreCase))
+            ?? _profilesById.Values.FirstOrDefault(candidate =>
+                string.Equals(candidate.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Name.Trim(), profileIdOrName.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (profile is null)
+        {
+            Log("Warning", $"No profile '{profileIdOrName}' for device '{deviceId}'.");
+            return;
+        }
+
+        ActivateProfile(profile.Id);
+    }
+
+    private void ActivateRelativeProfile(string deviceId, int offset)
+    {
+        // Same order the UI shows: the order the profiles were given in.
+        var profiles = _profilesSnapshot.Where(profile => string.Equals(profile.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (profiles.Count < 2)
+        {
+            return;
+        }
+
+        var current = GetActiveProfile(deviceId);
+        var index = current is null ? 0 : profiles.FindIndex(profile => profile.Id == current.Id);
+        var next = ((index + offset) % profiles.Count + profiles.Count) % profiles.Count;
+        ActivateProfile(profiles[next].Id);
     }
 
     private void OnActiveProfilesChanged()
@@ -516,7 +579,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             {
                 pixels = renderer.Render(canvas =>
                 {
-                    var context = new SkiaRenderContext(canvas, renderer.Width, renderer.Height, deviceId, control.Id, _variableStore, _drawingResources);
+                    var context = new SkiaRenderContext(canvas, renderer.Width, renderer.Height, deviceId, control.Id, _variableStore, _drawingResources, binding?.Action.EffectiveSettings);
                     ControlRenderer.Draw(context, binding, action);
                 });
             }
@@ -706,6 +769,65 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         var localRelay = new ActionFailureRelay();
         relay = localRelay;
         return new ActionRouter(variableStore, applicationPlugins, localRelay.Report);
+    }
+
+    // ---------------------------------------------------------------- live actions
+
+    /// <summary>Redraws controls whose action has a <see cref="IDeckAction.RefreshInterval"/> (clocks, system info).</summary>
+    private async Task RunLiveRefreshAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                Enqueue(MarkDueLiveControlsDirty);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void MarkDueLiveControlsDirty()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var (deviceId, entry) in _devicesById)
+        {
+            if (!entry.Device.IsConnected || GetActiveProfile(deviceId) is not { } profile)
+            {
+                continue;
+            }
+
+            foreach (var binding in profile.Bindings)
+            {
+                if (_actionRouter.FindAction(binding.Action)?.RefreshInterval is not { } interval)
+                {
+                    continue;
+                }
+
+                var key = (deviceId, binding.ControlId);
+                if (_nextLiveRender.TryGetValue(key, out var due) && due > now)
+                {
+                    continue;
+                }
+
+                _nextLiveRender[key] = now + (interval < TimeSpan.FromMilliseconds(250) ? TimeSpan.FromMilliseconds(250) : interval);
+                _dirtyDevices.Add(deviceId);
+            }
+        }
+    }
+
+    /// <summary>What actions may ask of the host. Everything is queued onto the worker.</summary>
+    private sealed class ActionHostServices(DeviceHostService host) : IActionHost
+    {
+        public void RequestRender(string deviceId) => host.Enqueue(() => host._dirtyDevices.Add(deviceId));
+
+        public void ActivateProfile(string deviceId, string profileIdOrName) =>
+            host.Enqueue(() => host.ActivateProfileByIdOrName(deviceId, profileIdOrName));
+
+        public void ActivateRelativeProfile(string deviceId, int offset) =>
+            host.Enqueue(() => host.ActivateRelativeProfile(deviceId, offset));
     }
 
     private sealed record DeviceEntry(DeviceDefinition Device, IDevicePlugin Plugin);

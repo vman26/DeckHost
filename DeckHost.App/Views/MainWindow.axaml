@@ -35,14 +35,20 @@
 								<StackPanel Spacing="4">
 									<TextBlock Text="Navigation"
 											   FontWeight="SemiBold"
-											   Foreground="#0F172A" />
+											   Foreground="#F8FAFC" />
 									<TextBlock Text="Current page"
 											   FontSize="12"
 											   Foreground="#64748B" />
 									<TextBlock Text="{Binding CurrentPageName}"
 											   FontWeight="SemiBold" />
 								</StackPanel>
+								<CheckBox Content="Switch profiles with the active app"
+										  IsChecked="{Binding AutoSwitchEnabled}"
+										  IsEnabled="{Binding AutoSwitchSupported}" />
 								<Separator />
+								<Button Content="Open Profile Manager"
+										HorizontalAlignment="Stretch"
+										Click="OpenProfileManager_OnClick" />
 								<Button Content="Open Plugin Manager"
 										HorizontalAlignment="Stretch"
 										Click="OpenPluginManager_OnClick" />
@@ -98,10 +104,19 @@
 
 				<StackPanel Grid.Row="1"
 							Spacing="8">
-					<TextBlock Text="Active Profile"
-							   FontSize="12"
-							   Foreground="#94A3B8" />
+					<DockPanel>
+						<Button DockPanel.Dock="Right"
+								Content="Manage…"
+								Padding="10,2"
+								FontSize="12"
+								Click="OpenProfileManager_OnClick" />
+						<TextBlock Text="Active Profile"
+								   FontSize="12"
+								   VerticalAlignment="Center"
+								   Foreground="#94A3B8" />
+					</DockPanel>
 					<ComboBox ItemsSource="{Binding Profiles}"
+							  HorizontalAlignment="Stretch"
 							  SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
 						<ComboBox.ItemTemplate>
 							<DataTemplate x:DataType="vm:ProfileItemViewModel">
@@ -110,6 +125,10 @@
 									<TextBlock Text="{Binding Summary}"
 											   FontSize="11"
 											   Foreground="#64748B" />
+									<TextBlock Text="{Binding AutoSwitchSummary}"
+											   IsVisible="{Binding HasAutoSwitchApps}"
+											   FontSize="11"
+											   Foreground="#93C5FD" />
 								</StackPanel>
 							</DataTemplate>
 						</ComboBox.ItemTemplate>
@@ -136,7 +155,7 @@
 											<TextBlock Text="{Binding PluginName}"
 													   FontWeight="SemiBold"
 													   Foreground="#F8FAFC" />
-											<TextBlock Text="Actions from this plugin"
+											<TextBlock Text="{Binding ActionCountLabel}"
 													   FontSize="11"
 													   Foreground="#64748B" />
 										</StackPanel>
@@ -235,7 +254,10 @@
 												BorderThickness="1"
 												CornerRadius="{Binding CornerRadius}"
 												Cursor="Hand"
-												PointerPressed="ControlCard_OnPointerPressed">
+												PointerPressed="ControlCard_OnPointerPressed"
+												PointerMoved="ControlCard_OnPointerMoved"
+												PointerReleased="ControlCard_OnPointerReleased"
+												ToolTip.Tip="Double-click to customize. Drag to move, Ctrl+drag to copy.">
 											<Border.ContextMenu>
 												<ContextMenu DataContext="{Binding}">
 													<MenuItem Header="Customize"
@@ -422,13 +444,13 @@
 									   FontSize="12"
 									   Foreground="#94A3B8" />
 							<TextBlock IsVisible="{Binding SelectedAssignmentIsMultiAction}"
-									   Text="Drop additional plugin actions onto a control already using Multi Action to append steps."
+									   Text="Add, remove, reorder and configure steps with Customize, or drop more actions onto the control."
 									   Foreground="#E2E8F0"
 									   TextWrapping="Wrap" />
 							<ItemsControl IsVisible="{Binding SelectedAssignmentIsMultiAction}"
 										  ItemsSource="{Binding SelectedMultiActionSteps}">
 								<ItemsControl.ItemTemplate>
-									<DataTemplate x:DataType="vm:ActionItemViewModel">
+									<DataTemplate x:DataType="vm:StepItemViewModel">
 										<Border Margin="0,0,0,8"
 												Padding="10"
 												Background="#0B1120"
@@ -448,7 +470,7 @@
 								</ItemsControl.ItemTemplate>
 							</ItemsControl>
 							<TextBlock IsVisible="{Binding ShowMultiActionHint}"
-									   Text="Assign Multi Action to a control first to start programming a step sequence."
+									   Text="Drop the Multi Action (DeckHost Built-ins) onto a control to run several actions from one press."
 									   Foreground="#64748B"
 									   TextWrapping="Wrap" />
 							<TextBlock Margin="0,10,0,0"

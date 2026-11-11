@@ -2,8 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="DeckHost.App.App"
              xmlns:local="using:DeckHost.App"
-             RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+             RequestedThemeVariant="Dark">
+             <!-- The windows are designed dark; keep Fluent controls dark too so all windows match. -->
 
     <Application.DataTemplates>
         <local:ViewLocator />

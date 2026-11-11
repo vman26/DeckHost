@@ -22,6 +22,8 @@
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
     <ProjectReference Include="..\DeckHost.Core\DeckHost.Core.csproj" />
     <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
+    <!-- Only built so the plugin catalog tests can install its package. -->
+    <ProjectReference Include="..\plugins\DeckHost.Plugin.Obs\DeckHost.Plugin.Obs.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
 </Project>

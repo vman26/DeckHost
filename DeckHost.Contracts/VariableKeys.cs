@@ -15,6 +15,9 @@ public static class VariableKeys
     public const string AppearanceText = "appearance.text";
     public const string AppearanceImage = "appearance.image";
     public const string HardwareId = "hardwareId";
+    public const string LastError = "lastError";
+    public const string Status = "status";
+    public const string Counter = "counter";
 
     /// <summary><c>devices.{deviceId}.</c></summary>
     public static string Device(string deviceId) => $"devices.{deviceId}.";

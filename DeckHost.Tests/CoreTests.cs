@@ -1,4 +1,5 @@
 using DeckHost.Contracts.Enums;
+using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
 using DeckHost.Core;
 using DeckHost.Core.Models;
@@ -76,7 +77,7 @@ public class ActionRouterTests
         var router = new ActionRouter(store, [new TestApplicationPlugin("p", action)]);
         var profile = new DeviceProfile("profile", "Profile", DeviceId, [Bindings.Single("key.0", "p", "a")]);
 
-        var dispatched = router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1));
+        var dispatched = router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance);
 
         Assert.True(dispatched);
         var context = Assert.Single(action.Executions);
@@ -93,7 +94,7 @@ public class ActionRouterTests
         var router = new ActionRouter(store, [new TestApplicationPlugin("p", action)]);
         var profile = new DeviceProfile("profile", "Profile", DeviceId, [Bindings.Single("key.0", "p", "a")]);
 
-        Assert.False(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1)));
+        Assert.False(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance));
         Assert.Empty(action.Executions);
     }
 
@@ -106,12 +107,12 @@ public class ActionRouterTests
         var failing = new RecordingAction("failing") { OnExecute = _ => throw new InvalidOperationException("boom") };
         var last = new RecordingAction("last") { OnExecute = _ => order.Add("last") };
         var failures = new List<string>();
-        var router = new ActionRouter(store, [new TestApplicationPlugin("p", first, failing, last)], (reference, _) => failures.Add(reference.ActionId));
+        var router = new ActionRouter(store, [new TestApplicationPlugin("p", new RecordingAction("multi"), first, failing, last)], (reference, _) => failures.Add(reference.ActionId));
 
         var binding = new ControlBinding(
             "key.0",
             ProfileActionKind.MultiAction,
-            Bindings.Reference("p", "first"),
+            Bindings.Reference("p", "multi"),
             new ControlAppearance(),
             [
                 new MultiActionStep(2, Bindings.Reference("p", "last")),
@@ -120,7 +121,7 @@ public class ActionRouterTests
             ]);
         var profile = new DeviceProfile("profile", "Profile", DeviceId, [binding]);
 
-        Assert.True(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1)));
+        Assert.True(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance));
         Assert.Equal(["first", "last"], order);
         Assert.Equal(["failing"], failures);
     }

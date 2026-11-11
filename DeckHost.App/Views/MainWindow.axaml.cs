@@ -20,6 +20,12 @@ public partial class MainWindow : Window
     private static readonly DataFormat<string> ControlPayloadFormat =
         DataFormat.CreateInProcessFormat<string>("AssignedControlPayload");
 
+    private const double DragThreshold = 6;
+
+    private PluginManagerWindow? _pluginManagerWindow;
+    private ProfileManagerWindow? _profileManagerWindow;
+    private (ControlItemViewModel Control, Point Start, PointerPressedEventArgs Press)? _pendingControlDrag;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -47,14 +53,51 @@ public partial class MainWindow : Window
     private async void ControlCard_OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not MainViewModel vm ||
-            sender is not Control { DataContext: ControlItemViewModel controlItem })
+            sender is not Control { DataContext: ControlItemViewModel controlItem } control)
         {
             return;
         }
 
         vm.SelectControl(controlItem.Control);
 
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || controlItem.AssignedBinding is null)
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        if (e.ClickCount >= 2)
+        {
+            // Double-click: shortcut to Customize.
+            _pendingControlDrag = null;
+            await OpenCustomizationDialogAsync(vm, controlItem);
+            return;
+        }
+
+        // Only start dragging once the pointer actually moves, so clicks and double-clicks work.
+        _pendingControlDrag = controlItem.AssignedBinding is null ? null : (controlItem, e.GetPosition(control), e);
+    }
+
+    private async void ControlCard_OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_pendingControlDrag is not { } pending ||
+            sender is not Control control ||
+            !ReferenceEquals(control.DataContext, pending.Control) ||
+            !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var offset = e.GetPosition(control) - pending.Start;
+        if (Math.Abs(offset.X) < DragThreshold && Math.Abs(offset.Y) < DragThreshold)
+        {
+            return;
+        }
+
+        _pendingControlDrag = null;
+        var controlItem = pending.Control;
+        if (controlItem.AssignedBinding is null)
         {
             return;
         }
@@ -63,12 +106,12 @@ public partial class MainWindow : Window
         dataTransfer.Add(DataTransferItem.Create(ControlPayloadFormat, controlItem.Id));
         dataTransfer.Add(DataTransferItem.Create(ActionPayloadFormat, controlItem.AssignedBinding.PrimaryAction.Action));
 
-        e.Handled = true;
-
-        // Removal happens in OnControlDrop when the assignment is dropped anywhere in the window
-        // that isn't a control. A cancelled drag (Esc, or released outside the window) keeps it.
-        await DragDrop.DoDragDropAsync(e, dataTransfer, DragDropEffects.Copy | DragDropEffects.Move);
+        // The drop handler moves (or with Ctrl copies/swaps) the binding, or removes it when it's
+        // dropped where there is no control. A cancelled drag (Esc, outside the window) changes nothing.
+        await DragDrop.DoDragDropAsync(pending.Press, dataTransfer, DragDropEffects.Copy | DragDropEffects.Move);
     }
+
+    private void ControlCard_OnPointerReleased(object? sender, PointerReleasedEventArgs e) => _pendingControlDrag = null;
 
     private void OnControlDragOver(object? sender, DragEventArgs e)
     {
@@ -80,12 +123,19 @@ public partial class MainWindow : Window
             return;
         }
 
+        var fromControl = TryGetDraggedSourceControl(e, out var sourceId);
         if (!TryGetDropTargetControl(e, out var targetControl))
         {
             // An assignment dragged off its control can be dropped anywhere to remove it.
-            if (TryGetDraggedSourceControl(e, out _))
+            e.DragEffects = fromControl ? DragDropEffects.Move : DragDropEffects.None;
+            return;
+        }
+
+        if (fromControl)
+        {
+            if (!string.Equals(sourceId, targetControl.Id, StringComparison.OrdinalIgnoreCase) && vm.CanMoveBinding(sourceId, targetControl.Id))
             {
-                e.DragEffects = DragDropEffects.Move;
+                e.DragEffects = IsCopyRequested(e) ? DragDropEffects.Copy : DragDropEffects.Move;
             }
 
             return;
@@ -106,24 +156,31 @@ public partial class MainWindow : Window
             return;
         }
 
+        var fromControl = TryGetDraggedSourceControl(e, out var sourceId);
         if (!TryGetDropTargetControl(e, out var targetControl))
         {
-            if (TryGetDraggedSourceControl(e, out var sourceControlId))
+            if (fromControl)
             {
-                vm.RemoveAssignment(sourceControlId);
+                vm.RemoveAssignment(sourceId);
             }
 
             return;
         }
 
-        if (TryGetDraggedSourceControl(e, out var sourceId) &&
-            string.Equals(sourceId, targetControl.Id, StringComparison.OrdinalIgnoreCase))
+        if (fromControl)
         {
+            if (!string.Equals(sourceId, targetControl.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                vm.MoveBinding(sourceId, targetControl.Id, copy: IsCopyRequested(e));
+            }
+
             return;
         }
 
         vm.AssignActionToControl(targetControl, action);
     }
+
+    private static bool IsCopyRequested(DragEventArgs e) => e.KeyModifiers.HasFlag(KeyModifiers.Control);
 
     private static bool TryGetDraggedSourceControl(DragEventArgs e, out string controlId)
     {
@@ -169,12 +226,39 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new PluginManagerWindow
+        if (_pluginManagerWindow is { IsVisible: true })
         {
-            DataContext = vm,
-        };
+            _pluginManagerWindow.Activate();
+            return;
+        }
 
-        window.Show(this);
+        _pluginManagerWindow = new PluginManagerWindow
+        {
+            DataContext = new PluginManagerViewModel(vm.PluginCatalog, vm.DeviceHost),
+        };
+        _pluginManagerWindow.Closed += (_, _) => _pluginManagerWindow = null;
+        _pluginManagerWindow.Show(this);
+    }
+
+    private void OpenProfileManager_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+        {
+            return;
+        }
+
+        if (_profileManagerWindow is { IsVisible: true })
+        {
+            _profileManagerWindow.Activate();
+            return;
+        }
+
+        _profileManagerWindow = new ProfileManagerWindow
+        {
+            DataContext = new ProfileManagerViewModel(vm),
+        };
+        _profileManagerWindow.Closed += (_, _) => _profileManagerWindow = null;
+        _profileManagerWindow.Show(this);
     }
 
     private async Task OpenCustomizationDialogAsync(MainViewModel vm, ControlItemViewModel controlItem)
@@ -185,32 +269,18 @@ public partial class MainWindow : Window
             DataContext = customization,
         };
 
-        void OnCustomizationChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName is nameof(ControlCustomizationViewModel.DisplayText)
-                or nameof(ControlCustomizationViewModel.ImagePath)
-                or nameof(ControlCustomizationViewModel.LightEnabled)
-                or nameof(ControlCustomizationViewModel.ActiveColor)
-                or nameof(ControlCustomizationViewModel.IdleColor)
-                or nameof(ControlCustomizationViewModel.ActiveDurationText)
-                or nameof(ControlCustomizationViewModel.PulseOnActive))
-            {
-                vm.ApplyCustomization(customization);
-            }
-        }
+        // Every edit previews live on the device; Cancel puts the original binding back.
+        void OnCustomizationChanged(object? sender, EventArgs e) => vm.ApplyBinding(customization.ControlId, customization.BuildBinding());
 
-        // Changes preview live on the device, so Cancel has to put the original values back.
-        var original = vm.CreateCustomizationViewModel(controlItem.Id);
-        customization.PropertyChanged += OnCustomizationChanged;
-
+        customization.Changed += OnCustomizationChanged;
         try
         {
             var saved = await window.ShowDialog<bool?>(this);
-            vm.ApplyCustomization(saved == true ? customization : original);
+            vm.ApplyBinding(customization.ControlId, saved == true ? customization.BuildBinding() : customization.OriginalBinding);
         }
         finally
         {
-            customization.PropertyChanged -= OnCustomizationChanged;
+            customization.Changed -= OnCustomizationChanged;
         }
     }
 
