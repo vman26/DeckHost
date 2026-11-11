@@ -1,0 +1,9 @@
+{
+  "id": "deckhost.plugin.obs",
+  "name": "OBS Studio",
+  "version": "1.0.0",
+  "author": "DeckHost",
+  "description": "Switch scenes, mute sources and control streaming and recording in OBS Studio through obs-websocket (OBS 28 or newer).",
+  "assembly": "DeckHost.Plugin.Obs.dll",
+  "hostApiVersion": 1
+}

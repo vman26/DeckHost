@@ -11,8 +11,8 @@ namespace DeckHost.Core
     {
         private readonly IVariableStore _variableStore;
         private readonly Action<ActionReference, Exception>? _onActionFailed;
-        private readonly Dictionary<string, IDeckAction> _actionsByKey = new(StringComparer.OrdinalIgnoreCase);
-        private readonly List<string> _duplicateActionKeys = [];
+        private Dictionary<string, IDeckAction> _actionsByKey = new(StringComparer.OrdinalIgnoreCase);
+        private List<string> _duplicateActionKeys = [];
 
         public ActionRouter(
             IVariableStore variableStore,
@@ -20,25 +20,34 @@ namespace DeckHost.Core
             Action<ActionReference, Exception>? onActionFailed = null)
         {
             ArgumentNullException.ThrowIfNull(variableStore);
-            ArgumentNullException.ThrowIfNull(applicationPlugins);
-
             _variableStore = variableStore;
             _onActionFailed = onActionFailed;
+            SetApplicationPlugins(applicationPlugins);
+        }
 
+        public IReadOnlyList<string> DuplicateActionKeys => _duplicateActionKeys;
+
+        public void SetApplicationPlugins(IEnumerable<IApplicationPlugin> applicationPlugins)
+        {
+            ArgumentNullException.ThrowIfNull(applicationPlugins);
+
+            var actions = new Dictionary<string, IDeckAction>(StringComparer.OrdinalIgnoreCase);
+            var duplicates = new List<string>();
             foreach (var plugin in applicationPlugins)
             {
                 foreach (var action in plugin.Actions)
                 {
                     var key = BuildActionKey(plugin.Id, action.Id);
-                    if (!_actionsByKey.TryAdd(key, action))
+                    if (!actions.TryAdd(key, action))
                     {
-                        _duplicateActionKeys.Add(key);
+                        duplicates.Add(key);
                     }
                 }
             }
-        }
 
-        public IReadOnlyList<string> DuplicateActionKeys => _duplicateActionKeys;
+            _actionsByKey = actions;
+            _duplicateActionKeys = duplicates;
+        }
 
         public IDeckAction? FindAction(ActionReference reference)
         {
@@ -46,10 +55,11 @@ namespace DeckHost.Core
             return _actionsByKey.GetValueOrDefault(BuildActionKey(reference.PluginId, reference.ActionId));
         }
 
-        public bool Dispatch(DeviceProfile profile, DeviceInputEvent inputEvent)
+        public bool Dispatch(DeviceProfile profile, DeviceInputEvent inputEvent, IActionHost host)
         {
             ArgumentNullException.ThrowIfNull(profile);
             ArgumentNullException.ThrowIfNull(inputEvent);
+            ArgumentNullException.ThrowIfNull(host);
 
             if (!string.Equals(profile.DeviceId, inputEvent.DeviceId, StringComparison.OrdinalIgnoreCase))
             {
@@ -68,19 +78,20 @@ namespace DeckHost.Core
 
             if (binding.ActionKind == ProfileActionKind.MultiAction)
             {
-                var dispatched = false;
+                // The Multi Action itself runs too (it records the activation for its own label).
+                var dispatched = DispatchActionReference(binding.Action, inputEvent, host);
                 foreach (var step in binding.Steps.OrderBy(static step => step.Order))
                 {
-                    dispatched |= DispatchActionReference(step.Action, inputEvent);
+                    dispatched |= DispatchActionReference(step.Action, inputEvent, host);
                 }
 
                 return dispatched;
             }
 
-            return DispatchActionReference(binding.Action, inputEvent);
+            return DispatchActionReference(binding.Action, inputEvent, host);
         }
 
-        private bool DispatchActionReference(ActionReference actionReference, DeviceInputEvent inputEvent)
+        private bool DispatchActionReference(ActionReference actionReference, DeviceInputEvent inputEvent, IActionHost host)
         {
             var action = FindAction(actionReference);
             if (action is null)
@@ -96,7 +107,11 @@ namespace DeckHost.Core
 
             try
             {
-                action.Execute(new ActionContext(inputEvent.DeviceId, inputEvent.ControlId, _variableStore, inputEvent.EventType, inputEvent.Value));
+                action.Execute(new ActionContext(inputEvent.DeviceId, inputEvent.ControlId, _variableStore, inputEvent.EventType, inputEvent.Value)
+                {
+                    Settings = actionReference.EffectiveSettings,
+                    Host = host,
+                });
                 return true;
             }
             catch (Exception ex) when (_onActionFailed is not null)

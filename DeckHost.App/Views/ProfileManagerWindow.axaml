@@ -1,0 +1,147 @@
+<Window xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		x:Class="DeckHost.App.Views.ProfileManagerWindow"
+		x:DataType="vm:ProfileManagerViewModel"
+		Width="900"
+		Height="680"
+		MinWidth="720"
+		MinHeight="480"
+		Background="#111827"
+		RequestedThemeVariant="Dark"
+		Icon="/Assets/avalonia-logo.ico"
+		Title="Profile Manager">
+
+	<Window.Styles>
+		<Style Selector="TextBlock.section">
+			<Setter Property="FontSize" Value="13" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+		</Style>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+		<Style Selector="Border.card">
+			<Setter Property="Background" Value="#0F172A" />
+			<Setter Property="BorderBrush" Value="#1E293B" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="12" />
+			<Setter Property="Padding" Value="14" />
+		</Style>
+	</Window.Styles>
+
+	<Grid RowDefinitions="Auto,*">
+		<Border Padding="20,16" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+			<Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+				<StackPanel Spacing="4">
+					<TextBlock Text="Profile Manager" FontSize="24" FontWeight="SemiBold" Foreground="#F8FAFC" />
+					<TextBlock Classes="hint" Text="Profiles are the pages of your device. Give a profile one or more apps and it turns on by itself while that app is in front." />
+				</StackPanel>
+				<StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+					<ToggleSwitch IsChecked="{Binding AutoSwitchEnabled}"
+								  IsEnabled="{Binding AutoSwitchSupported}"
+								  OnContent="Switch profiles automatically"
+								  OffContent="Switch profiles automatically" />
+					<TextBlock Classes="hint" HorizontalAlignment="Right">
+						<Run Text="Active app: " />
+						<Run Text="{Binding CurrentAppName}" FontWeight="SemiBold" Foreground="#E2E8F0" />
+					</TextBlock>
+					<TextBlock Classes="hint" IsVisible="{Binding AutoSwitchUnsupported}" Text="Automatic switching is Windows only." />
+				</StackPanel>
+			</Grid>
+		</Border>
+
+		<Grid Grid.Row="1" ColumnDefinitions="300,*" Margin="20" ColumnSpacing="16">
+			<!-- Profile list -->
+			<Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+				<TextBlock Classes="section" Text="PROFILES (NEXT/PREVIOUS USE THIS ORDER)" />
+				<ListBox Grid.Row="1"
+						 ItemsSource="{Binding Profiles}"
+						 SelectedItem="{Binding EditingProfile, Mode=TwoWay}"
+						 Background="#0F172A"
+						 CornerRadius="12">
+					<ListBox.ItemTemplate>
+						<DataTemplate x:DataType="vm:ProfileItemViewModel">
+							<StackPanel Spacing="2" Margin="2,4">
+								<TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#F8FAFC" />
+								<TextBlock Text="{Binding Summary}" FontSize="11" Foreground="#94A3B8" />
+								<TextBlock Text="{Binding AutoSwitchSummary}" FontSize="11" Foreground="#93C5FD" TextTrimming="CharacterEllipsis" />
+							</StackPanel>
+						</DataTemplate>
+					</ListBox.ItemTemplate>
+				</ListBox>
+				<WrapPanel Grid.Row="2" ItemSpacing="6" LineSpacing="6">
+					<Button Content="New" Classes="accent" Command="{Binding NewProfileCommand}" />
+					<Button Content="Duplicate" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding HasEditingProfile}" />
+					<Button Content="↑" ToolTip.Tip="Move up" Command="{Binding MoveUpCommand}" IsEnabled="{Binding HasEditingProfile}" />
+					<Button Content="↓" ToolTip.Tip="Move down" Command="{Binding MoveDownCommand}" IsEnabled="{Binding HasEditingProfile}" />
+				</WrapPanel>
+			</Grid>
+
+			<!-- Details -->
+			<ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasEditingProfile}">
+				<StackPanel Spacing="14">
+					<Border Classes="card">
+						<StackPanel Spacing="10">
+							<TextBlock Classes="section" Text="PROFILE" />
+							<TextBlock Text="Name" FontWeight="SemiBold" Foreground="#E2E8F0" />
+							<TextBox Text="{Binding EditingName, Mode=TwoWay}" />
+							<StackPanel Orientation="Horizontal" Spacing="8">
+								<Button Content="Use now" Classes="accent" Command="{Binding UseNowCommand}" IsVisible="{Binding !IsEditingActiveProfile}" />
+								<Border IsVisible="{Binding IsEditingActiveProfile}" Background="#14532D" CornerRadius="999" Padding="10,4" VerticalAlignment="Center">
+									<TextBlock Text="Active on the device" FontSize="12" Foreground="#BBF7D0" />
+								</Border>
+								<Button Content="{Binding DeleteButtonText}" Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding CanDelete}" />
+							</StackPanel>
+						</StackPanel>
+					</Border>
+
+					<Border Classes="card">
+						<StackPanel Spacing="10">
+							<TextBlock Classes="section" Text="SWITCH TO THIS PROFILE WHEN THESE APPS ARE IN FRONT" />
+							<TextBlock Classes="hint" Text="When the focused app isn't listed in any profile, DeckHost goes back to the profile you picked yourself. DeckHost's own windows never trigger a switch." />
+							<ItemsControl ItemsSource="{Binding EditingProfile.AutoSwitchApps}">
+								<ItemsControl.ItemsPanel>
+									<ItemsPanelTemplate>
+										<WrapPanel ItemSpacing="6" LineSpacing="6" />
+									</ItemsPanelTemplate>
+								</ItemsControl.ItemsPanel>
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="x:String">
+										<Border Background="#1E3A8A" CornerRadius="999" Padding="10,2,4,2">
+											<StackPanel Orientation="Horizontal" Spacing="4">
+												<TextBlock Text="{Binding}" Foreground="#DBEAFE" VerticalAlignment="Center" />
+												<Button Content="✕"
+														Padding="6,0"
+														Background="Transparent"
+														ToolTip.Tip="Remove"
+														Command="{Binding $parent[Window].((vm:ProfileManagerViewModel)DataContext).RemoveAppCommand}"
+														CommandParameter="{Binding}" />
+											</StackPanel>
+										</Border>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+
+							<TextBlock Text="Add an app" FontWeight="SemiBold" Foreground="#E2E8F0" Margin="0,6,0,0" />
+							<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+								<ComboBox ItemsSource="{Binding RunningApps}"
+										  SelectedItem="{Binding SelectedRunningApp, Mode=TwoWay}"
+										  PlaceholderText="Pick a running app"
+										  HorizontalAlignment="Stretch" />
+								<Button Grid.Column="1" Content="Add" Command="{Binding AddRunningAppCommand}" />
+								<Button Grid.Column="2" Content="↻" ToolTip.Tip="Refresh the list" Command="{Binding RefreshRunningAppsCommand}" />
+							</Grid>
+							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+								<TextBox Text="{Binding NewAppName, Mode=TwoWay}" PlaceholderText="Or type a process name, e.g. obs64 or chrome" />
+								<Button Grid.Column="1" Content="Add" Command="{Binding AddAppCommand}" />
+							</Grid>
+						</StackPanel>
+					</Border>
+				</StackPanel>
+			</ScrollViewer>
+		</Grid>
+	</Grid>
+</Window>

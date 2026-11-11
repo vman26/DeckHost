@@ -1,9 +1,9 @@
 using Avalonia.Threading;
-using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
 using DeckHost.Core.Interfaces;
 using DeckHost.Core.Models;
+using DeckHost.Core.Plugins;
 using DeckHost.Core.Profiles;
 using System;
 using System.Collections.Generic;
@@ -20,12 +20,13 @@ public class MainViewModel : ViewModelBase
     private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(400);
 
     private readonly IDeviceHostService _deviceHostService;
+    private readonly PluginCatalog _pluginCatalog;
     private readonly ProfileStore? _profileStore;
     private readonly DispatcherTimer _saveTimer;
     private readonly Dictionary<string, ActionItemViewModel> _actionsByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ControlItemViewModel> _controlsById = new(StringComparer.OrdinalIgnoreCase);
     private bool _suppressAppearanceSync;
-    private bool _loadingProfiles;
+    private bool _suppressHostSync;
     private DeviceDefinition? _selectedDevice;
     private string _searchText = string.Empty;
     private ControlItemViewModel? _selectedControl;
@@ -35,18 +36,18 @@ public class MainViewModel : ViewModelBase
     private string _connectionDetail = "The runtime host has not started yet.";
     private string _selectedAppearanceText = string.Empty;
     private string _selectedAppearanceImagePath = string.Empty;
+    private readonly Platform.ForegroundAppWatcher _foregroundAppWatcher = new();
+    private string? _manualProfileId;
+    private bool _autoSwitchEnabled = true;
+    private bool _switchingAutomatically;
 
-    public MainViewModel(
-        IDeviceHostService deviceHostService,
-        IEnumerable<IDevicePlugin> devicePlugins,
-        IEnumerable<IApplicationPlugin> applicationPlugins,
-        ProfileStore? profileStore = null)
+    public MainViewModel(IDeviceHostService deviceHostService, PluginCatalog pluginCatalog, ProfileStore? profileStore = null)
     {
         ArgumentNullException.ThrowIfNull(deviceHostService);
-        ArgumentNullException.ThrowIfNull(devicePlugins);
-        ArgumentNullException.ThrowIfNull(applicationPlugins);
+        ArgumentNullException.ThrowIfNull(pluginCatalog);
 
         _deviceHostService = deviceHostService;
+        _pluginCatalog = pluginCatalog;
         _profileStore = profileStore;
         _saveTimer = new DispatcherTimer { Interval = SaveDelay };
         _saveTimer.Tick += (_, _) => FlushPendingSave();
@@ -60,47 +61,27 @@ public class MainViewModel : ViewModelBase
             _controlsById[control.Id] = control;
         }
 
-        foreach (var plugin in devicePlugins)
-        {
-            PluginItems.Add(new PluginSummaryViewModel(
-                plugin.Id,
-                plugin.Name,
-                "Device Plugin",
-                $"{plugin.Devices.Count} device definition" + (plugin.Devices.Count == 1 ? string.Empty : "s"),
-                "Available"));
-        }
-
-        var applicationPluginList = applicationPlugins.ToList();
-        foreach (var plugin in applicationPluginList)
-        {
-            PluginItems.Add(new PluginSummaryViewModel(
-                plugin.Id,
-                plugin.Name,
-                "Application Plugin",
-                $"{plugin.Actions.Count} action" + (plugin.Actions.Count == 1 ? string.Empty : "s"),
-                "Loaded"));
-
-            foreach (var action in plugin.Actions)
-            {
-                var item = ActionItemViewModel.Create(plugin.Id, plugin.Name, action);
-                _actionsByKey.TryAdd(item.Key, item);
-            }
-        }
-
         // The host raises these on its worker thread; the UI may only be touched on the UI thread.
         _deviceHostService.RuntimeLogReceived += entry => Dispatcher.UIThread.Post(() => OnRuntimeLogReceived(entry));
         _deviceHostService.ConnectionStatusChanged += status => Dispatcher.UIThread.Post(() => OnConnectionStatusChanged(status));
         _deviceHostService.DevicesChanged += () => Dispatcher.UIThread.Post(OnDevicesChanged);
+        _deviceHostService.ActiveProfileChanged += (deviceId, profileId) => Dispatcher.UIThread.Post(() => OnHostActiveProfileChanged(deviceId, profileId));
+        _pluginCatalog.Changed += (_, _) => OnPluginsChanged();
 
-        RefreshActionGroups();
+        RebuildActions();
         LoadProfiles();
         SelectControl(ControlItems[0].Control);
         SeedRuntimeState();
+
+        _foregroundAppWatcher.ForegroundAppChanged += OnForegroundAppChanged;
+        _foregroundAppWatcher.Start();
     }
 
-    public ObservableCollection<PluginActionGroupViewModel> ActionGroups { get; } = new();
+    public PluginCatalog PluginCatalog => _pluginCatalog;
 
-    public ObservableCollection<PluginSummaryViewModel> PluginItems { get; } = new();
+    public IDeviceHostService DeviceHost => _deviceHostService;
+
+    public ObservableCollection<PluginActionGroupViewModel> ActionGroups { get; } = new();
 
     public ObservableCollection<RuntimeLogEntry> RuntimeLogs { get; } = new();
 
@@ -161,10 +142,16 @@ public class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _selectedProfile, value))
             {
+                if (!_switchingAutomatically && value is not null)
+                {
+                    // Chosen by hand (or by a Switch Profile key): the profile to return to when no app rule matches.
+                    _manualProfileId = value.Id;
+                }
+
                 OnPropertyChanged(nameof(SelectedProfileName));
                 OnPropertyChanged(nameof(SelectedProfileSummary));
                 ApplyProfileBindings();
-                if (!_loadingProfiles)
+                if (!_suppressHostSync)
                 {
                     SyncProfilesToHost();
                 }
@@ -257,35 +244,18 @@ public class MainViewModel : ViewModelBase
 
     public bool ShowMultiActionHint => !SelectedAssignmentIsMultiAction;
 
-    public ObservableCollection<ActionItemViewModel> SelectedMultiActionSteps =>
-        SelectedControl?.AssignedBinding?.Steps ?? EmptyActionCollection.Instance;
+    public ObservableCollection<StepItemViewModel> SelectedMultiActionSteps =>
+        SelectedControl?.AssignedBinding?.Steps ?? EmptyStepCollection.Instance;
 
-    public bool CanDropAction(IDeckAction action, PhysicalControl targetControl)
-    {
-        if (!TryGetActionItem(action, out var actionItem))
-        {
-            return false;
-        }
+    // ---------------------------------------------------------------- assigning actions
 
-        if (actionItem.RequiresOutputCapableControl && targetControl.Outputs == OutputCapabilities.None)
-        {
-            return false;
-        }
-
-        if (actionItem.RequiresInteractiveInput && targetControl.Inputs == InputCapabilities.None)
-        {
-            return false;
-        }
-
-        var inputsMatch = (targetControl.Inputs & action.RequiredInputs) == action.RequiredInputs;
-        var outputsMatch = (targetControl.Outputs & action.RequiredOutputs) == action.RequiredOutputs;
-        return inputsMatch && outputsMatch;
-    }
+    public bool CanDropAction(IDeckAction action, PhysicalControl targetControl) =>
+        TryGetActionItem(action, out var actionItem) && actionItem.FitsControl(targetControl);
 
     public void AssignActionToControl(PhysicalControl control, IDeckAction action)
     {
         if (SelectedProfile is null ||
-            !_controlsById.TryGetValue(control.Id, out var controlItem) ||
+            !_controlsById.ContainsKey(control.Id) ||
             !TryGetActionItem(action, out var actionItem))
         {
             return;
@@ -293,56 +263,62 @@ public class MainViewModel : ViewModelBase
 
         SelectControl(control);
 
-        if (!CanDropAction(action, control))
+        if (!actionItem.FitsControl(control))
         {
             StatusMessage = $"{action.Name} is not compatible with {control.DisplayName}.";
             return;
         }
 
-        var existingBinding = SelectedProfile.GetBinding(control.Id);
-        ControlBindingViewModel updatedBinding;
+        var existing = SelectedProfile.GetBinding(control.Id);
+        var appearance = existing?.Model.Appearance ?? new ControlAppearance();
+        ControlBinding updated;
 
         if (actionItem.IsMultiActionScaffold)
         {
-            updatedBinding = CreateOrPromoteToMultiActionBinding(control.Id, existingBinding);
-            StatusMessage = existingBinding is null
-                ? $"Created a Multi Action on {control.DisplayName}."
+            IReadOnlyList<MultiActionStep> steps = existing switch
+            {
+                { IsMultiAction: true } => existing.Model.Steps,
+                { PrimaryAction.CanBeMultiActionStep: true } => [new MultiActionStep(0, existing.Model.Action)],
+                _ => [],
+            };
+
+            updated = new ControlBinding(control.Id, ProfileActionKind.MultiAction, actionItem.ToActionReference(), appearance, steps);
+            StatusMessage = existing is null
+                ? $"Created a Multi Action on {control.DisplayName}. Add steps by dropping actions on it or in Customize."
                 : $"Converted {control.DisplayName} into a Multi Action.";
         }
-        else if (existingBinding?.IsMultiAction == true)
+        else if (existing?.IsMultiAction == true)
         {
             if (!actionItem.CanBeMultiActionStep)
             {
-                StatusMessage = $"{actionItem.Name} cannot be added as a Multi Action step.";
+                StatusMessage = $"{actionItem.Name} cannot be a Multi Action step.";
                 return;
             }
 
-            existingBinding.AddStep(actionItem);
-            updatedBinding = existingBinding;
-            StatusMessage = $"Added {actionItem.Name} as a step on {control.DisplayName}.";
+            var step = new MultiActionStep(existing.Model.Steps.Count, actionItem.ToActionReference(actionItem.DefaultSettings));
+            updated = existing.Model with { Steps = [.. existing.Model.Steps, step] };
+            StatusMessage = $"Added {actionItem.Name} as step {updated.Steps.Count} on {control.DisplayName}.";
         }
         else
         {
-            updatedBinding = CreateSingleActionBinding(control.Id, actionItem, existingBinding);
-            StatusMessage = $"Assigned {actionItem.Name} to {control.DisplayName}.";
+            updated = new ControlBinding(control.Id, ProfileActionKind.Single, actionItem.ToActionReference(actionItem.DefaultSettings), appearance, []);
+            StatusMessage = actionItem.HasSettings
+                ? $"Assigned {actionItem.Name} to {control.DisplayName}. Right-click it and choose Customize to set it up."
+                : $"Assigned {actionItem.Name} to {control.DisplayName}.";
         }
 
-        SelectedProfile.SetBinding(updatedBinding);
-        AttachBinding(controlItem, updatedBinding);
-        SyncProfilesToHost();
+        ApplyBinding(control.Id, updated);
     }
 
     public void RemoveAssignment(PhysicalControl control)
     {
-        if (SelectedProfile is null || !_controlsById.TryGetValue(control.Id, out var controlItem))
+        if (SelectedProfile is null || !_controlsById.ContainsKey(control.Id))
         {
             return;
         }
 
-        SelectedProfile.RemoveBinding(control.Id);
-        AttachBinding(controlItem, null);
+        ApplyBinding(control.Id, null);
         StatusMessage = $"Removed the mapping from {control.DisplayName}.";
-        SyncProfilesToHost();
     }
 
     public void RemoveAssignment(string controlId)
@@ -353,6 +329,89 @@ public class MainViewModel : ViewModelBase
         }
     }
 
+    public bool CanMoveBinding(string sourceControlId, string targetControlId) =>
+        SelectedProfile?.GetBinding(sourceControlId) is { } source &&
+        _controlsById.TryGetValue(targetControlId, out var target) &&
+        source.PrimaryAction.FitsControl(target.Control);
+
+    /// <summary>
+    /// Moves a binding (with its settings, appearance and steps) to another control. When the
+    /// target is taken the two swap places; with <paramref name="copy"/> the source keeps its binding.
+    /// </summary>
+    public void MoveBinding(string sourceControlId, string targetControlId, bool copy)
+    {
+        if (SelectedProfile is null ||
+            SelectedProfile.GetBinding(sourceControlId) is not { } source ||
+            !_controlsById.TryGetValue(sourceControlId, out var sourceControl) ||
+            !_controlsById.TryGetValue(targetControlId, out var targetControl))
+        {
+            return;
+        }
+
+        if (!source.PrimaryAction.FitsControl(targetControl.Control))
+        {
+            StatusMessage = $"{source.DisplayName} doesn't fit on {targetControl.DisplayName}.";
+            return;
+        }
+
+        var moved = source.Model with { ControlId = targetControlId };
+        var existing = SelectedProfile.GetBinding(targetControlId);
+
+        if (copy)
+        {
+            ApplyBinding(targetControlId, moved);
+            StatusMessage = $"Copied {source.DisplayName} to {targetControl.DisplayName}.";
+        }
+        else if (existing is null)
+        {
+            ApplyBinding(targetControlId, moved);
+            ApplyBinding(sourceControlId, null);
+            StatusMessage = $"Moved {source.DisplayName} to {targetControl.DisplayName}.";
+        }
+        else if (existing.PrimaryAction.FitsControl(sourceControl.Control))
+        {
+            ApplyBinding(targetControlId, moved);
+            ApplyBinding(sourceControlId, existing.Model with { ControlId = sourceControlId });
+            StatusMessage = $"Swapped {sourceControl.DisplayName} and {targetControl.DisplayName}.";
+        }
+        else
+        {
+            StatusMessage = $"Can't swap: {existing.DisplayName} doesn't fit on {sourceControl.DisplayName}. Remove it first, or Ctrl+drag to copy.";
+            return;
+        }
+
+        SelectControl(targetControl.Control);
+    }
+
+    /// <summary>Replaces (or with null removes) the selected profile's binding for a control.</summary>
+    public void ApplyBinding(string controlId, ControlBinding? model)
+    {
+        if (SelectedProfile is null || !_controlsById.TryGetValue(controlId, out var controlItem))
+        {
+            return;
+        }
+
+        if (model is null)
+        {
+            SelectedProfile.RemoveBinding(controlId);
+            AttachBinding(controlItem, null);
+        }
+        else if (Resolve(model) is { } binding)
+        {
+            SelectedProfile.SetBinding(binding);
+            AttachBinding(controlItem, binding);
+        }
+        else
+        {
+            SelectedProfile.AddUnresolvedBinding(model);
+            AttachBinding(controlItem, null);
+        }
+
+        SyncProfilesToHost();
+    }
+
+    // ---------------------------------------------------------------- customization
+
     public ControlCustomizationViewModel CreateCustomizationViewModel(string controlId)
     {
         if (!_controlsById.TryGetValue(controlId, out var controlItem))
@@ -360,46 +419,8 @@ public class MainViewModel : ViewModelBase
             throw new InvalidOperationException($"Unknown control '{controlId}'.");
         }
 
-        var binding = SelectedProfile?.GetBinding(controlId);
-        return new ControlCustomizationViewModel(
-            controlItem.Id,
-            controlItem.DisplayName,
-            controlItem.TypeLabel,
-            controlItem.SupportsAppearance,
-            controlItem.SupportsLight,
-            binding?.AppearanceText ?? string.Empty,
-            binding?.AppearanceImagePath ?? string.Empty,
-            binding?.LightFeedback);
-    }
-
-    public void ApplyCustomization(ControlCustomizationViewModel customization)
-    {
-        if (!_controlsById.TryGetValue(customization.ControlId, out var controlItem))
-        {
-            return;
-        }
-
-        SelectControl(controlItem.Control);
-
-        if (customization.SupportsAppearance)
-        {
-            UpdateSelectedControlAppearance(customization.DisplayText, customization.ImagePath);
-        }
-
-        if (customization.SupportsLight && !customization.HasLightError)
-        {
-            var binding = SelectedProfile?.GetBinding(controlItem.Id);
-            if (binding is null && customization.LightEnabled)
-            {
-                StatusMessage = $"Assign an action to {controlItem.DisplayName} before setting its light.";
-                return;
-            }
-
-            binding?.SetLightFeedback(customization.ToRgbFeedback());
-            SyncProfilesToHost();
-        }
-
-        StatusMessage = $"Updated {controlItem.DisplayName}.";
+        _actionsByKey.TryGetValue(EditorActionIds.Key(EditorActionIds.BuiltInPluginId, EditorActionIds.DisplayContent), out var displayContent);
+        return new ControlCustomizationViewModel(controlItem, SelectedProfile?.GetBinding(controlId), _actionsByKey.Values, displayContent);
     }
 
     public void SelectControl(PhysicalControl control)
@@ -423,8 +444,9 @@ public class MainViewModel : ViewModelBase
         {
             _profileStore.Save(new ProfileDocument(
                 ProfileDocument.CurrentVersion,
-                SelectedProfile?.Id,
-                Profiles.Select(static profile => profile.ToModel()).ToList()));
+                _manualProfileId ?? SelectedProfile?.Id,
+                Profiles.Select(static profile => profile.ToModel()).ToList(),
+                AutoSwitchEnabled));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -432,11 +454,214 @@ public class MainViewModel : ViewModelBase
         }
     }
 
+    // ---------------------------------------------------------------- profile management
+
+    /// <summary>Whether profiles follow the focused app (see each profile's AutoSwitchApps).</summary>
+    public bool AutoSwitchEnabled
+    {
+        get => _autoSwitchEnabled;
+        set
+        {
+            if (SetProperty(ref _autoSwitchEnabled, value))
+            {
+                ScheduleSave();
+                if (value && _foregroundAppWatcher.CurrentApp is { } app)
+                {
+                    OnForegroundAppChanged(app);
+                }
+                else if (!value)
+                {
+                    ReturnToManualProfile();
+                }
+            }
+        }
+    }
+
+    public bool AutoSwitchSupported => Platform.ForegroundAppWatcher.IsSupported;
+
+    public string CurrentAppName => _foregroundAppWatcher.CurrentApp ?? "—";
+
+    public ProfileItemViewModel CreateProfile(string name, ProfileItemViewModel? copyFrom = null)
+    {
+        var profile = new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], UniqueProfileName(name), SelectedDevice!.Id);
+        if (copyFrom is not null)
+        {
+            foreach (var binding in copyFrom.ToModel().Bindings)
+            {
+                if (Resolve(binding) is { } resolved)
+                {
+                    profile.SetBinding(resolved);
+                }
+                else
+                {
+                    profile.AddUnresolvedBinding(binding);
+                }
+            }
+        }
+
+        Profiles.Add(profile);
+        NotifyProfilesEdited();
+        StatusMessage = copyFrom is null ? $"Created profile {profile.Name}." : $"Duplicated {copyFrom.Name} as {profile.Name}.";
+        return profile;
+    }
+
+    /// <summary>Deletes a profile. The last profile can't be deleted.</summary>
+    public bool DeleteProfile(ProfileItemViewModel profile)
+    {
+        if (Profiles.Count <= 1 || !Profiles.Contains(profile))
+        {
+            return false;
+        }
+
+        var index = Profiles.IndexOf(profile);
+        if (_manualProfileId == profile.Id)
+        {
+            _manualProfileId = null;
+        }
+
+        if (SelectedProfile == profile)
+        {
+            SelectedProfile = Profiles[index == 0 ? 1 : index - 1];
+        }
+
+        Profiles.Remove(profile);
+        NotifyProfilesEdited();
+        StatusMessage = $"Deleted profile {profile.Name}.";
+        return true;
+    }
+
+    /// <summary>Moves a profile up (-1) or down (+1); the order is also used by Next/Previous Profile.</summary>
+    public void MoveProfile(ProfileItemViewModel profile, int offset)
+    {
+        var index = Profiles.IndexOf(profile);
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= Profiles.Count)
+        {
+            return;
+        }
+
+        Profiles.Move(index, target);
+        NotifyProfilesEdited();
+    }
+
+    /// <summary>Call after renaming a profile or changing its app list.</summary>
+    public void NotifyProfilesEdited()
+    {
+        SyncProfilesToHost();
+        OnPropertyChanged(nameof(SelectedProfileName));
+    }
+
+    private string UniqueProfileName(string name)
+    {
+        var baseName = string.IsNullOrWhiteSpace(name) ? "Profile" : name.Trim();
+        var candidate = baseName;
+        for (var number = 2; Profiles.Any(profile => string.Equals(profile.Name, candidate, StringComparison.OrdinalIgnoreCase)); number++)
+        {
+            candidate = $"{baseName} {number}";
+        }
+
+        return candidate;
+    }
+
+    private void OnForegroundAppChanged(string appName)
+    {
+        OnPropertyChanged(nameof(CurrentAppName));
+        if (!AutoSwitchEnabled || SelectedDevice is null)
+        {
+            return;
+        }
+
+        var match = AutoProfileSelector.FindProfileForApp(Profiles.Select(static profile => profile.ToModel()), SelectedDevice.Id, appName);
+        if (match is null)
+        {
+            ReturnToManualProfile();
+            return;
+        }
+
+        if (Profiles.FirstOrDefault(profile => profile.Id == match.Id) is { } profile && profile != SelectedProfile)
+        {
+            ActivateAutomatically(profile);
+            StatusMessage = $"Switched to {profile.Name} because {appName} is active.";
+        }
+    }
+
+    private void ReturnToManualProfile()
+    {
+        if (_manualProfileId is not null &&
+            SelectedProfile?.Id != _manualProfileId &&
+            Profiles.FirstOrDefault(profile => profile.Id == _manualProfileId) is { } manual)
+        {
+            ActivateAutomatically(manual);
+            StatusMessage = $"Back to {manual.Name}.";
+        }
+    }
+
+    private void ActivateAutomatically(ProfileItemViewModel profile)
+    {
+        _switchingAutomatically = true;
+        try
+        {
+            SelectedProfile = profile;
+        }
+        finally
+        {
+            _switchingAutomatically = false;
+        }
+    }
+
+    private void ScheduleSave()
+    {
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    // ---------------------------------------------------------------- plugins
+
+    private void OnPluginsChanged()
+    {
+        _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
+        RebuildActions();
+
+        // Bindings to a disabled plugin become "unavailable" (kept); re-enabled ones come back.
+        foreach (var profile in Profiles)
+        {
+            foreach (var model in profile.TakeAllBindings())
+            {
+                if (Resolve(model) is { } binding)
+                {
+                    profile.SetBinding(binding);
+                }
+                else
+                {
+                    profile.AddUnresolvedBinding(model);
+                }
+            }
+        }
+
+        ApplyProfileBindings();
+        SyncProfilesToHost();
+    }
+
+    private void RebuildActions()
+    {
+        _actionsByKey.Clear();
+        foreach (var plugin in _pluginCatalog.EnabledApplicationPlugins)
+        {
+            foreach (var action in plugin.Actions)
+            {
+                var item = ActionItemViewModel.Create(plugin.Id, plugin.Name, action);
+                _actionsByKey.TryAdd(item.Key, item);
+            }
+        }
+
+        RefreshActionGroups();
+    }
+
     // ---------------------------------------------------------------- profiles
 
     private void LoadProfiles()
     {
-        _loadingProfiles = true;
+        _suppressHostSync = true;
         try
         {
             var document = TryLoadDocument();
@@ -444,18 +669,17 @@ public class MainViewModel : ViewModelBase
 
             foreach (var profile in document?.Profiles ?? [])
             {
-                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId);
+                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps);
                 foreach (var binding in profile.Bindings)
                 {
-                    var bindingViewModel = FromModel(binding);
-                    if (bindingViewModel is null)
+                    if (Resolve(binding) is { } bindingViewModel)
                     {
-                        item.AddUnresolvedBinding(binding);
-                        unresolved++;
+                        item.SetBinding(bindingViewModel);
                     }
                     else
                     {
-                        item.SetBinding(bindingViewModel);
+                        item.AddUnresolvedBinding(binding);
+                        unresolved++;
                     }
                 }
 
@@ -470,17 +694,19 @@ public class MainViewModel : ViewModelBase
             }
 
             SelectedProfile = Profiles.FirstOrDefault(profile => profile.Id == document?.SelectedProfileId) ?? Profiles[0];
+            _autoSwitchEnabled = document?.AutoSwitchEnabled ?? true;
 
             if (unresolved > 0)
             {
-                StatusMessage = $"{unresolved} saved mapping(s) use actions that aren't loaded; they are kept but inactive.";
+                StatusMessage = $"{unresolved} saved mapping(s) use plugins that aren't enabled; they are kept but inactive.";
             }
         }
         finally
         {
-            _loadingProfiles = false;
+            _suppressHostSync = false;
         }
 
+        _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
         _deviceHostService.SetProfiles(Profiles.Select(static profile => profile.ToModel()).ToList());
         if (SelectedProfile is not null)
         {
@@ -517,14 +743,15 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    private ControlBindingViewModel? FromModel(ControlBinding binding)
+    /// <summary>Links a binding to the loaded actions; null when its plugin (or a step's) isn't enabled.</summary>
+    private ControlBindingViewModel? Resolve(ControlBinding binding)
     {
         if (!_actionsByKey.TryGetValue(EditorActionIds.Key(binding.Action.PluginId, binding.Action.ActionId), out var primary))
         {
             return null;
         }
 
-        var steps = new List<ActionItemViewModel>();
+        var steps = new List<StepItemViewModel>();
         foreach (var step in binding.Steps.OrderBy(static step => step.Order))
         {
             if (!_actionsByKey.TryGetValue(EditorActionIds.Key(step.Action.PluginId, step.Action.ActionId), out var stepAction))
@@ -532,17 +759,10 @@ public class MainViewModel : ViewModelBase
                 return null;
             }
 
-            steps.Add(stepAction);
+            steps.Add(new StepItemViewModel(stepAction, step.Action.EffectiveSettings));
         }
 
-        return new ControlBindingViewModel(
-            binding.ControlId,
-            binding.ActionKind,
-            primary,
-            binding.Appearance.Text,
-            binding.Appearance.ImagePath,
-            steps,
-            binding.Appearance.RgbFeedback);
+        return new ControlBindingViewModel(binding, primary, steps);
     }
 
     private void SyncProfilesToHost()
@@ -556,6 +776,31 @@ public class MainViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(SelectedProfileSummary));
         OnPropertyChanged(nameof(CurrentPageName));
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    private void OnHostActiveProfileChanged(string deviceId, string profileId)
+    {
+        // A Switch Profile action on the device changed the profile: follow it in the editor.
+        if (SelectedDevice is null ||
+            !string.Equals(deviceId, SelectedDevice.Id, StringComparison.OrdinalIgnoreCase) ||
+            SelectedProfile?.Id == profileId ||
+            Profiles.FirstOrDefault(profile => profile.Id == profileId) is not { } profile)
+        {
+            return;
+        }
+
+        _suppressHostSync = true;
+        try
+        {
+            SelectedProfile = profile;
+        }
+        finally
+        {
+            _suppressHostSync = false;
+        }
+
         _saveTimer.Stop();
         _saveTimer.Start();
     }
@@ -630,9 +875,11 @@ public class MainViewModel : ViewModelBase
     private void RefreshActionGroups()
     {
         var filteredActions = _actionsByKey.Values
+            .Where(action => action.ShowInPalette)
             .Where(action => string.IsNullOrWhiteSpace(SearchText)
                 || action.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                || action.PluginName.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+                || action.PluginName.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                || (action.Description?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false))
             .OrderBy(static action => action.PluginName)
             .ThenBy(static action => action.Name)
             .ToList();
@@ -654,34 +901,15 @@ public class MainViewModel : ViewModelBase
         SyncSelectedAppearanceEditors();
         RaiseSelectedAssignmentChanged();
         OnPropertyChanged(nameof(CurrentPageName));
+        OnPropertyChanged(nameof(SelectedProfileSummary));
         StatusMessage = SelectedProfile is null ? "No profile selected." : $"Editing profile {SelectedProfile.Name}.";
     }
 
     private void AttachBinding(ControlItemViewModel controlItem, ControlBindingViewModel? binding)
     {
-        if (controlItem.AssignedBinding is not null)
-        {
-            controlItem.AssignedBinding.Changed -= OnBindingChanged;
-        }
-
         controlItem.AssignedBinding = binding;
 
-        if (binding is not null)
-        {
-            binding.Changed -= OnBindingChanged;
-            binding.Changed += OnBindingChanged;
-        }
-
         if (SelectedControl == controlItem)
-        {
-            SyncSelectedAppearanceEditors();
-            RaiseSelectedAssignmentChanged();
-        }
-    }
-
-    private void OnBindingChanged(object? sender, EventArgs e)
-    {
-        if (SelectedControl?.AssignedBinding == sender)
         {
             SyncSelectedAppearanceEditors();
             RaiseSelectedAssignmentChanged();
@@ -713,6 +941,7 @@ public class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Appearance edits from the inspector. An empty control gets a text/image-only binding.</summary>
     private void UpdateSelectedControlAppearance(string? text, string? imagePath)
     {
         if (SelectedControl is null || SelectedProfile is null || !SelectedControl.SupportsAppearance)
@@ -720,70 +949,38 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
-        var binding = SelectedProfile.GetBinding(SelectedControl.Id);
-        if (binding is null)
+        var existing = SelectedProfile.GetBinding(SelectedControl.Id);
+        var newText = text ?? existing?.AppearanceText ?? string.Empty;
+        var newImage = imagePath ?? existing?.AppearanceImagePath ?? string.Empty;
+        var appearance = new ControlAppearance(
+            string.IsNullOrWhiteSpace(newText) ? null : newText,
+            string.IsNullOrWhiteSpace(newImage) ? null : newImage,
+            existing?.LightFeedback);
+
+        if (existing is null)
         {
-            if (string.IsNullOrWhiteSpace(text) && string.IsNullOrWhiteSpace(imagePath))
+            if (appearance.Text is null && appearance.ImagePath is null ||
+                !_actionsByKey.TryGetValue(EditorActionIds.Key(EditorActionIds.BuiltInPluginId, EditorActionIds.DisplayContent), out var displayAction))
             {
                 return;
             }
 
-            if (!_actionsByKey.TryGetValue(EditorActionIds.Key(EditorActionIds.BuiltInPluginId, EditorActionIds.DisplayContent), out var displayAction))
-            {
-                return;
-            }
-
-            binding = CreateSingleActionBinding(SelectedControl.Id, displayAction, existingBinding: null);
-            SelectedProfile.SetBinding(binding);
-            AttachBinding(SelectedControl, binding);
-            StatusMessage = $"Created display content binding for {SelectedControl.DisplayName}.";
+            ApplyBinding(SelectedControl.Id, new ControlBinding(SelectedControl.Id, ProfileActionKind.Single, displayAction.ToActionReference(), appearance, []));
+            return;
         }
 
-        binding.SetAppearance(text ?? binding.AppearanceText, imagePath ?? binding.AppearanceImagePath);
-        SyncProfilesToHost();
-    }
-
-    private static ControlBindingViewModel CreateSingleActionBinding(string controlId, ActionItemViewModel actionItem, ControlBindingViewModel? existingBinding) =>
-        new(
-            controlId,
-            ProfileActionKind.Single,
-            actionItem,
-            existingBinding?.AppearanceText,
-            existingBinding?.AppearanceImagePath,
-            [],
-            existingBinding?.LightFeedback);
-
-    private ControlBindingViewModel CreateOrPromoteToMultiActionBinding(string controlId, ControlBindingViewModel? existingBinding)
-    {
-        var multiAction = _actionsByKey[EditorActionIds.Key(EditorActionIds.BuiltInPluginId, EditorActionIds.MultiAction)];
-        var steps = new List<ActionItemViewModel>();
-
-        if (existingBinding is not null)
+        if (existing.IsDisplayContentOnly && appearance.Text is null && appearance.ImagePath is null)
         {
-            if (existingBinding.IsMultiAction)
-            {
-                steps.AddRange(existingBinding.Steps);
-            }
-            else if (existingBinding.PrimaryAction.CanBeMultiActionStep)
-            {
-                steps.Add(existingBinding.PrimaryAction);
-            }
+            ApplyBinding(SelectedControl.Id, null);
+            return;
         }
 
-        return new ControlBindingViewModel(
-            controlId,
-            ProfileActionKind.MultiAction,
-            multiAction,
-            existingBinding?.AppearanceText,
-            existingBinding?.AppearanceImagePath,
-            steps,
-            existingBinding?.LightFeedback);
+        ApplyBinding(SelectedControl.Id, existing.Model with { Appearance = appearance });
     }
 
     private bool TryGetActionItem(IDeckAction action, out ActionItemViewModel actionItem)
     {
-        actionItem = _actionsByKey.Values.FirstOrDefault(candidate => ReferenceEquals(candidate.Action, action))
-            ?? _actionsByKey.Values.FirstOrDefault(candidate => string.Equals(candidate.Id, action.Id, StringComparison.OrdinalIgnoreCase))!;
+        actionItem = _actionsByKey.Values.FirstOrDefault(candidate => ReferenceEquals(candidate.Action, action))!;
         return actionItem is not null;
     }
 }

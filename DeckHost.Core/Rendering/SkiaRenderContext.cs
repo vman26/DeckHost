@@ -1,4 +1,5 @@
 using DeckHost.Contracts.Interfaces;
+using DeckHost.Contracts.Models;
 using SkiaSharp;
 
 namespace DeckHost.Core.Rendering
@@ -9,7 +10,7 @@ namespace DeckHost.Core.Rendering
         private readonly SKCanvas _canvas;
         private readonly SkiaDrawingResources _resources;
 
-        public SkiaRenderContext(SKCanvas canvas, int width, int height, string deviceId, string controlId, IVariableStore variables, SkiaDrawingResources resources)
+        public SkiaRenderContext(SKCanvas canvas, int width, int height, string deviceId, string controlId, IVariableStore variables, SkiaDrawingResources resources, ActionSettings? settings = null)
         {
             _canvas = canvas;
             _resources = resources;
@@ -18,6 +19,7 @@ namespace DeckHost.Core.Rendering
             DeviceId = deviceId;
             ControlId = controlId;
             Variables = variables;
+            Settings = settings ?? ActionSettings.Empty;
         }
 
         public string DeviceId { get; }
@@ -29,6 +31,8 @@ namespace DeckHost.Core.Rendering
         public int Height { get; }
 
         public IVariableStore Variables { get; }
+
+        public ActionSettings Settings { get; }
 
         public void Clear(uint argbColor) => _canvas.Clear(new SKColor(argbColor));
 

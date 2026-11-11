@@ -1,7 +1,9 @@
+using DeckHost.App.SystemPlugins;
 using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 
@@ -11,7 +13,7 @@ internal static class EditorActionIds
 {
     public const string MultiAction = "builtin.multi-action";
     public const string DisplayContent = "builtin.display-content";
-    public const string BuiltInPluginId = "deckhost.plugin.builtin";
+    public const string BuiltInPluginId = SystemPluginSet.BuiltInPluginId;
 
     public static string Key(string pluginId, string actionId) => $"{pluginId}:{actionId}";
 }
@@ -25,8 +27,10 @@ public class ActionItemViewModel : ViewModelBase
         Action = action;
         Id = action.Id;
         Name = action.Name;
-        InputsLabel = CapabilityFormatter.Format(action.RequiredInputs, "No input required");
-        OutputsLabel = CapabilityFormatter.Format(action.RequiredOutputs, "No output required");
+        Description = action.Description;
+        SettingDefinitions = action.Settings;
+        InputsLabel = CapabilityFormatter.Format(action.RequiredInputs, "Any input");
+        OutputsLabel = CapabilityFormatter.Format(action.RequiredOutputs, "No display needed");
     }
 
     public string PluginId { get; }
@@ -39,31 +43,61 @@ public class ActionItemViewModel : ViewModelBase
 
     public string Name { get; }
 
+    public string? Description { get; }
+
     public IDeckAction Action { get; }
+
+    public IReadOnlyList<ActionSettingDefinition> SettingDefinitions { get; }
+
+    public bool HasSettings => SettingDefinitions.Count > 0;
 
     public string InputsLabel { get; }
 
     public string OutputsLabel { get; }
 
-    public bool IsMultiActionScaffold => Id == EditorActionIds.MultiAction;
+    public bool ShowInPalette => Action.ShowInPalette;
 
-    public bool IsDisplayContentAction => Id == EditorActionIds.DisplayContent;
+    public bool IsMultiActionScaffold => PluginId == EditorActionIds.BuiltInPluginId && Id == EditorActionIds.MultiAction;
+
+    public bool IsDisplayContentAction => PluginId == EditorActionIds.BuiltInPluginId && Id == EditorActionIds.DisplayContent;
 
     public bool RequiresOutputCapableControl => IsDisplayContentAction;
 
     public bool RequiresInteractiveInput => IsMultiActionScaffold;
 
-    public bool CanBeMultiActionStep => !IsMultiActionScaffold && !IsDisplayContentAction;
+    public bool CanBeMultiActionStep => Action.CanBeMultiActionStep && !IsMultiActionScaffold && !IsDisplayContentAction;
 
-    public string Summary => $"{InputsLabel} / {OutputsLabel}";
+    public string Summary => Description ?? $"{InputsLabel} / {OutputsLabel}";
 
-    public ActionReference ToActionReference() => new(
+    public ActionSettings DefaultSettings => new(SettingDefinitions
+        .Where(static definition => !string.IsNullOrEmpty(definition.DefaultValue))
+        .Select(static definition => new KeyValuePair<string, string>(definition.Key, definition.DefaultValue)));
+
+    public ActionReference ToActionReference(ActionSettings? settings = null) => new(
         PluginId,
         PluginName,
         Id,
         Name,
         Action.RequiredInputs,
-        Action.RequiredOutputs);
+        Action.RequiredOutputs,
+        settings is null || settings.Count == 0 ? null : settings);
+
+    /// <summary>Whether the action fits on the control (its inputs and outputs are available there).</summary>
+    public bool FitsControl(PhysicalControl control)
+    {
+        if (RequiresOutputCapableControl && control.Outputs == OutputCapabilities.None)
+        {
+            return false;
+        }
+
+        if (RequiresInteractiveInput && control.Inputs == InputCapabilities.None)
+        {
+            return false;
+        }
+
+        return (control.Inputs & Action.RequiredInputs) == Action.RequiredInputs &&
+               (control.Outputs & Action.RequiredOutputs) == Action.RequiredOutputs;
+    }
 
     public static ActionItemViewModel Create(string pluginId, string pluginName, IDeckAction action) => new(pluginId, pluginName, action);
 }
@@ -83,7 +117,19 @@ internal static class CapabilityFormatter
                 .Where(flag => flag is not OutputCapabilities.None and not OutputCapabilities.All && capabilities.HasFlag(flag)));
 }
 
-internal sealed class EmptyActionCollection : ObservableCollection<ActionItemViewModel>
+/// <summary>A Multi Action step as shown in the inspector.</summary>
+public sealed class StepItemViewModel(ActionItemViewModel action, ActionSettings settings)
 {
-    public static EmptyActionCollection Instance { get; } = new();
+    public ActionItemViewModel Action { get; } = action;
+
+    public ActionSettings Settings { get; } = settings;
+
+    public string Name => Action.Name;
+
+    public string PluginName => Action.PluginName;
+}
+
+internal sealed class EmptyStepCollection : ObservableCollection<StepItemViewModel>
+{
+    public static EmptyStepCollection Instance { get; } = new();
 }

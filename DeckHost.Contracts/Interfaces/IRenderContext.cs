@@ -11,6 +11,9 @@ public interface IRenderContext
     int Height { get; }
     IVariableStore Variables { get; }
 
+    /// <summary>The settings of the action being drawn.</summary>
+    Models.ActionSettings Settings { get; }
+
     void Clear(uint argbColor);
 
     void DrawText(string text, double x, double y, float size, uint argbColor = 0xFFFFFFFF);

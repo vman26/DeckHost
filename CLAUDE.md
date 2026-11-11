@@ -16,7 +16,10 @@ dotnet build .\DeckHost.slnx -c Debug -p:EnableMiraBoxNativeBuild=false # C# onl
 dotnet run --project .\DeckHost.App
 dotnet test .\DeckHost.Tests -p:EnableMiraBoxNativeBuild=false
 dotnet test .\DeckHost.Tests --filter "FullyQualifiedName~N4ProLayoutTests"   # one class
+dotnet build .\plugins\DeckHost.Plugin.Obs                              # -> artifacts\plugins\deckhost.plugin.obs.zip
 ```
+
+- The plugin catalog tests install the real OBS package, so `DeckHost.Tests` builds the OBS project first (`ReferenceOutputAssembly=false`).
 
 - `DeckHost.Device.MiraBox.csproj` drives the native build. Its targets run in this order: `DetectCMake` → `ApplyStreamDockSdkPatch` (idempotent `git apply` of `native/patches/streamdock-sdk.patch`) → `ConfigureMiraBoxBridge` → `BuildMiraBoxBridge`. CMake is found through `CMakeExePath`, then Visual Studio's bundled CMake, then `PATH`. If none is found, the build only warns and the app runs without device support.
 - Native output goes to `native/MiraBoxBridge/out/<Config>/bin/<Config>/`. `DeckHost.App.csproj` copies it to `bin/.../plugins/device/deckhost.device.mirabox/`. `MiraBoxNative`'s `DllImportResolver` loads `MiraBoxBridge` **only** from that folder, after preloading the other native binaries there (hidapi → transport → opencv).
@@ -40,9 +43,19 @@ The dependency rule: `Contracts` ← `Core` ← `App` → `Device.MiraBox` → `
   - `N4ProLayout`: designer layout, SDK id mapping and input mapping. It's pure and covered by tests.
   - `MiraBoxDevicePlugin`: device tracking keyed by the SDK's device key (HID path), LED state, long-press synthesis and the `[UnmanagedCallersOnly]` native callback.
   - `MiraBoxNative`: the P/Invoke layer, using function pointers and UTF-8 strings.
-- **`DeckHost.App`**: Avalonia MVVM UI with one view model class per file.
+  - `Plugins/PluginCatalog`: system plugins plus installed plugin packages. Packages (`.zip` with `plugin.json`, see `PluginManifest`) install to `%AppData%/DeckHost/plugins/functional/<id>`. They load into a collectible `PluginLoadContext` **from memory**, so the files are never locked and uninstall can delete them immediately. `DeckHost.Contracts` is always shared from the host. Enabled/disabled state lives in `plugins/state.json`. It is not thread-safe, so use it from the UI thread.
+- **`DeckHost.App`**: Avalonia MVVM UI (dark theme) with view models in `ViewModels/`.
   - `App.axaml.cs` is the composition root. It wires everything by hand (no DI). It calls `StartAsync` on `MainWindow.Opened` and, on `Exit`, saves profiles and runs `DisposeAsync`, which blanks the device and shuts the SDK down.
-  - First-party application plugins live in `Plugins/FirstPartyApplicationPlugins.cs`. Nothing loads plugins from the `plugins/` folders at runtime yet.
+  - `SystemPlugins/`: the plugins that ship with DeckHost: Built-ins (required), Media Controls and System Controls. They derive from `DeckActionBase`. `Platform/` holds the Windows `SendInput` code (`WindowsInput`, `Hotkey`) and `SystemMetrics`. These plugins can be disabled but not uninstalled.
+  - Bindings are immutable `ControlBinding` models. Every edit (drop, inspector, Customize) builds a new model and calls `MainViewModel.ApplyBinding`. `ControlBindingViewModel` only links a model to the loaded actions.
+- **`plugins/DeckHost.Plugin.Obs`**: an *installable* plugin (obs-websocket v5) and the template for third-party plugins. It references Contracts with `Private=false`, and building it writes `artifacts/plugins/deckhost.plugin.obs.zip`. The app does not reference it.
+
+Actions:
+
+- An `IDeckAction` declares `Settings` (`ActionSettingDefinition`s). The Customize window generates an editor from them, and the values are stored per binding (and per Multi Action step) in `ActionReference.Settings`. Execute/Render read them through `ActionContext.Settings` / `IRenderContext.Settings`.
+- `ActionContext.Host` (`IActionHost`) lets an action request a re-render after async work or switch profiles. `RefreshInterval` makes the host redraw live actions (clock, system info).
+- `Execute` and `Render` run on the host worker and must stay fast. Process starts, network calls and similar work go to a background task, which then calls `RequestRender`. Show errors on the control through `VariableKeys.LastError`.
+- Bump `PluginManifest.CurrentHostApiVersion` when `IDeckAction` or `IApplicationPlugin` change incompatibly for installed plugins.
 
 Runtime flow:
 
@@ -67,6 +80,10 @@ Conventions that span files:
 - UI behavior:
   - Dragging an assignment off a control, or dropping it anywhere in the window that isn't a control, removes it. A cancelled drag keeps it.
   - The drag visual shows the control.
-  - Right-click a control for Customize / Remove. Customize opens a separate window with a file picker and, for knobs, the LED settings. It previews live, and Cancel restores the previous values.
-  - Multi Action is an action type, and actions are grouped by plugin in collapsible groups.
-  - A hamburger menu shows the current page, and a separate Plugin Manager window lists the plugins.
+  - Dragging a mapped control onto another moves its whole binding (`MainViewModel.MoveBinding`): swap when the target is taken, Ctrl copies. A drag only starts after the pointer moves a few pixels, so click and double-click still work.
+  - Double-click a control (or right-click → Customize) to customize it. Hotkey settings (`ActionSettingKind.Hotkey`) can be recorded from a key press in Customize.
+  - Profiles: the Profile Manager window creates, duplicates, renames, reorders and deletes them. `DeviceProfile.AutoSwitchApps` and `ProfileDocument.AutoSwitchEnabled` drive automatic switching. `Platform/ForegroundAppWatcher` (Windows, 500 ms polling, ignores DeckHost itself) feeds `AutoProfileSelector`. When no app matches, it returns to the manually chosen profile (`_manualProfileId`, which is what `selectedProfileId` saves).
+  - Right-click a control for Customize / Remove. Customize opens a separate window with the action's settings, the Multi Action step editor (add, remove, reorder, per-step settings), text and image (file picker) and, for knobs, the LED. It previews live, and Cancel restores the previous binding.
+  - Multi Action is an action type, and actions are grouped by plugin in collapsible groups. Display Content is hidden from the list: setting a text or image on an empty control creates it.
+  - A hamburger menu shows the current page. The Plugin Manager window (same dark style) installs .zip packages, enables/disables plugins, uninstalls installed ones and shows the devices with their firmware version.
+- Firmware: the StreamDock SDK can only *read* the firmware version (`transport_get_firmware_version`); it has no update/flash API. Don't add update logic without an official MiraBox protocol.

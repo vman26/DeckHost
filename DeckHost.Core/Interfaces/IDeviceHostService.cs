@@ -14,6 +14,9 @@ public interface IDeviceHostService : IAsyncDisposable
     event Action<DeviceConnectionStatus>? ConnectionStatusChanged;
     event Action? DevicesChanged;
 
+    /// <summary>(deviceId, profileId) when the active profile changes, also when an action switched it.</summary>
+    event Action<string, string>? ActiveProfileChanged;
+
     IReadOnlyCollection<DeviceDefinition> Devices { get; }
     IReadOnlyCollection<DeviceProfile> Profiles { get; }
     IReadOnlyCollection<RuntimeLogEntry> RuntimeLogs { get; }
@@ -23,6 +26,9 @@ public interface IDeviceHostService : IAsyncDisposable
     void SetProfiles(IEnumerable<DeviceProfile> profiles);
 
     void SetActiveProfile(string profileId);
+
+    /// <summary>Replaces the enabled application plugins (after enabling, disabling, installing or uninstalling one).</summary>
+    void SetApplicationPlugins(IEnumerable<DeckHost.Contracts.Interfaces.IApplicationPlugin> applicationPlugins);
 
     /// <summary>Initializes device plugins. Completes when every plugin finished (or failed) initializing.</summary>
     Task StartAsync(CancellationToken cancellationToken);

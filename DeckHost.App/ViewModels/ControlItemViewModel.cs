@@ -51,7 +51,8 @@ public class ControlItemViewModel : ViewModelBase
 
     public bool SupportsLight => Control.HasLight;
 
-    public bool SupportsCustomization => SupportsAppearance || SupportsLight;
+    /// <summary>Every control can be customized: appearance, action settings, Multi Action steps or its LED.</summary>
+    public bool SupportsCustomization => true;
 
     /// <summary>Thin controls (the swipe bar) only show their name.</summary>
     public bool IsCompact => Height < CompactHeight;
@@ -82,18 +83,7 @@ public class ControlItemViewModel : ViewModelBase
                 return;
             }
 
-            if (_assignedBinding is not null)
-            {
-                _assignedBinding.Changed -= OnBindingChanged;
-            }
-
             _assignedBinding = value;
-
-            if (_assignedBinding is not null)
-            {
-                _assignedBinding.Changed += OnBindingChanged;
-            }
-
             OnPropertyChanged(nameof(AssignedBinding));
             RefreshComputedState();
         }
@@ -119,9 +109,11 @@ public class ControlItemViewModel : ViewModelBase
 
     public string CapabilitySummary => $"{InputsLabel} / {OutputsLabel}";
 
-    public string PreviewText => string.IsNullOrWhiteSpace(AssignedBinding?.AppearanceText)
-        ? AssignedBinding?.PrimaryAction.Name ?? DisplayName
-        : AssignedBinding.AppearanceText;
+    public string PreviewText => !string.IsNullOrWhiteSpace(AssignedBinding?.AppearanceText)
+        ? AssignedBinding.AppearanceText
+        : AssignedBinding is null ? DisplayName
+        : AssignedBinding.IsDisplayContentOnly ? string.Empty
+        : AssignedBinding.DisplayName;
 
     public string PreviewImageLabel => string.IsNullOrWhiteSpace(AssignedBinding?.AppearanceImagePath)
         ? string.Empty
@@ -135,7 +127,6 @@ public class ControlItemViewModel : ViewModelBase
 
     public double CornerRadius => Type == ControlType.Encoder ? Width / 2d : Math.Min(14d, Height / 3d);
 
-    private void OnBindingChanged(object? sender, EventArgs e) => RefreshComputedState();
 
     private void RefreshComputedState()
     {

@@ -5,10 +5,13 @@ using System.Text.Json.Serialization;
 namespace DeckHost.Core.Profiles;
 
 /// <summary>Saved editor state: all profiles plus which one was selected.</summary>
+/// <param name="SelectedProfileId">The profile chosen by hand (not one activated automatically).</param>
+/// <param name="AutoSwitchEnabled">Whether profiles follow the focused app.</param>
 public sealed record ProfileDocument(
     int Version,
     string? SelectedProfileId,
-    IReadOnlyList<DeviceProfile> Profiles)
+    IReadOnlyList<DeviceProfile> Profiles,
+    bool AutoSwitchEnabled = true)
 {
     public const int CurrentVersion = 1;
 }

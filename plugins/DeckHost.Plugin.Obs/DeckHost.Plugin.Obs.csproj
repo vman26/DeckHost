@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    An installable DeckHost plugin. Building it produces artifacts/plugins/deckhost.plugin.obs.zip,
+    which you install from DeckHost's Plugin Manager (Install plugin…).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <PluginId>deckhost.plugin.obs</PluginId>
+    <PluginPackageDirectory>$(MSBuildThisFileDirectory)..\..\artifacts\plugins\</PluginPackageDirectory>
+  </PropertyGroup>
+
+  <!-- DeckHost.Contracts comes from the host at runtime; never ship a copy inside the package. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\DeckHost.Contracts\DeckHost.Contracts.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="PackPluginPackage"
+          AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <PluginStagingDirectory>$(IntermediateOutputPath)package\</PluginStagingDirectory>
+      <PluginPackagePath>$(PluginPackageDirectory)$(PluginId).zip</PluginPackagePath>
+    </PropertyGroup>
+    <RemoveDir Directories="$(PluginStagingDirectory)" />
+    <Copy SourceFiles="$(TargetPath);$(OutDir)plugin.json"
+          DestinationFolder="$(PluginStagingDirectory)" />
+    <Copy SourceFiles="$(OutDir)$(TargetName).pdb"
+          DestinationFolder="$(PluginStagingDirectory)"
+          Condition="Exists('$(OutDir)$(TargetName).pdb')" />
+    <MakeDir Directories="$(PluginPackageDirectory)" />
+    <ZipDirectory SourceDirectory="$(PluginStagingDirectory)"
+                  DestinationFile="$(PluginPackagePath)"
+                  Overwrite="true" />
+    <Message Importance="high" Text="Plugin package: $(PluginPackagePath)" />
+  </Target>
+
+</Project>
