@@ -21,6 +21,22 @@ namespace DeckHost.Core.State
             {
                 subject.OnNext(value!);
             }
+            else
+            {
+                _variables[key] = new BehaviorSubject<object>(value!);
+            }
+        }
+
+        public bool TryGetValue<T>(string key, out T value)
+        {
+            if (_variables.TryGetValue(key, out var subject) && subject.Value is T typedValue)
+            {
+                value = typedValue;
+                return true;
+            }
+
+            value = default!;
+            return false;
         }
 
         public void Dispose()

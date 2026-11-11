@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <IsWindows>$([MSBuild]::IsOsPlatform('Windows'))</IsWindows>
+    <IsLinux>$([MSBuild]::IsOsPlatform('Linux'))</IsLinux>
+    <IsMacOS>$([MSBuild]::IsOsPlatform('OSX'))</IsMacOS>
+    <MiraBoxNativeRuntimeDir>$(MSBuildProjectDirectory)/../native/MiraBoxBridge/out/$(Configuration)/bin/$(Configuration)</MiraBoxNativeRuntimeDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,5 +29,28 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
+    <ProjectReference Include="..\DeckHost.Core\DeckHost.Core.csproj" />
+    <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
   </ItemGroup>
+
+  <Target Name="PreparePluginDirectories"
+          BeforeTargets="CopyFilesToOutputDirectory">
+    <MakeDir Directories="$(OutDir)plugins\;$(OutDir)plugins\device\;$(OutDir)plugins\functional\;$(OutDir)plugins\device\deckhost.device.mirabox\" />
+  </Target>
+
+  <Target Name="CopyMiraBoxBridgeRuntimeToPluginOutput"
+          BeforeTargets="CopyFilesToOutputDirectory"
+          Condition="Exists('$(MiraBoxNativeRuntimeDir)')">
+    <ItemGroup>
+      <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.dll" Condition="'$(IsWindows)' == 'true'" />
+      <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.pdb" Condition="'$(IsWindows)' == 'true' and '$(Configuration)' == 'Debug'" />
+      <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.so" Condition="'$(IsLinux)' == 'true'" />
+      <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.dylib" Condition="'$(IsMacOS)' == 'true'" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(MiraBoxNativeArtifacts)"
+          DestinationFolder="$(OutDir)plugins\device\deckhost.device.mirabox\"
+          SkipUnchangedFiles="true"
+          UseHardlinksIfPossible="true" />
+  </Target>
 </Project>

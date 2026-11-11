@@ -30,7 +30,7 @@ namespace DeckHost.Core.Devices
             // 1. Render the action's visual layout to the zero-allocation offscreen surface
             ReadOnlySpan<byte> pixelData = _renderer.Render(canvas =>
             {
-                var renderContext = new SkiaRenderContext(canvas, _width, _height);
+                var renderContext = new SkiaRenderContext(canvas, _width, _height, actionContext);
                 action.Render(renderContext);
             });
 

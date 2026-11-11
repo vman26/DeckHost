@@ -1,0 +1,50 @@
+<Window xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		x:Class="DeckHost.App.Views.PluginManagerWindow"
+		x:DataType="vm:MainViewModel"
+		Width="620"
+		Height="440"
+		MinWidth="560"
+		MinHeight="360"
+		Title="Plugin Manager">
+	<Grid RowDefinitions="Auto,*"
+		  RowSpacing="14"
+		  Margin="20">
+		<StackPanel Spacing="4">
+			<TextBlock Text="Plugin Manager" FontSize="24" FontWeight="SemiBold" />
+			<TextBlock Text="Installed device and application plugins exposed by the current host session."
+					   Foreground="#64748B" />
+		</StackPanel>
+
+		<ItemsControl Grid.Row="1"
+					  ItemsSource="{Binding PluginItems}">
+			<ItemsControl.ItemTemplate>
+				<DataTemplate x:DataType="vm:PluginSummaryViewModel">
+					<Border Margin="0,0,0,10"
+							Padding="12"
+							Background="#F8FAFC"
+							BorderBrush="#CBD5E1"
+							BorderThickness="1"
+							CornerRadius="12">
+						<Grid ColumnDefinitions="*,Auto">
+							<StackPanel Spacing="4">
+								<TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" />
+								<TextBlock Text="{Binding Kind}" Foreground="#475569" />
+								<TextBlock Text="{Binding Contents}" Foreground="#475569" />
+								<TextBlock Text="{Binding Id}" FontSize="11" Foreground="#94A3B8" />
+							</StackPanel>
+							<Border Grid.Column="1"
+									Padding="10,6"
+									Background="#DBEAFE"
+									CornerRadius="10"
+									VerticalAlignment="Top">
+								<TextBlock Text="{Binding Status}" Foreground="#1D4ED8" FontWeight="SemiBold" />
+							</Border>
+						</Grid>
+					</Border>
+				</DataTemplate>
+			</ItemsControl.ItemTemplate>
+		</ItemsControl>
+	</Grid>
+</Window>
