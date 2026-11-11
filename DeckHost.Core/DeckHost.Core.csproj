@@ -1,9 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -11,13 +12,13 @@
     <PackageReference Include="System.Reactive" Version="7.0.0" />
   </ItemGroup>
 
+  <!-- Core must stay device-agnostic: reference Contracts only, never a device plugin. -->
   <ItemGroup>
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
-    <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="State\Interfaces\" />
+    <InternalsVisibleTo Include="DeckHost.Tests" />
   </ItemGroup>
 
 </Project>

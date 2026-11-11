@@ -1,3 +1,5 @@
 [submodule "native/StreamDock-SDK"]
 	path = native/StreamDock-SDK
 	url = https://github.com/MiraboxSpace/StreamDock-Device-SDK.git
+	# Local changes live in native/patches/streamdock-sdk.patch and are applied by the build.
+	ignore = dirty

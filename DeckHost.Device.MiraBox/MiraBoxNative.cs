@@ -1,13 +1,19 @@
-using System.Runtime.CompilerServices;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace DeckHost.Device.MiraBox;
 
-public static partial class MiraBoxNative
+/// <summary>
+/// P/Invoke surface of native/MiraBoxBridge. Every EntryPoint here must match an export in
+/// MiraBoxBridge.h exactly. Return values: >= 0 success, negative = <see cref="MiraBoxResult"/>.
+/// </summary>
+internal static unsafe partial class MiraBoxNative
 {
     private const string LibraryName = "MiraBoxBridge";
     private const string PluginDirectoryName = "deckhost.device.mirabox";
+    private const int StringBufferSize = 4096;
     private static readonly Lock NativeLoadSync = new();
     private static bool s_pluginDependenciesLoaded;
 
@@ -16,62 +22,106 @@ public static partial class MiraBoxNative
         NativeLibrary.SetDllImportResolver(typeof(MiraBoxNative).Assembly, ResolveLibraryImport);
     }
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate void MiraBoxEventCallback(int eventType, int keyId, int x, int y);
-
     [LibraryImport(LibraryName, EntryPoint = "MiraBox_Initialize")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int Initialize();
 
+    /// <summary>Callback: (deviceKey UTF-8, eventType, controlId, value). Runs on an SDK thread.</summary>
     [LibraryImport(LibraryName, EntryPoint = "MiraBox_SetCallback")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial void SetCallback(MiraBoxEventCallback callback);
+    public static partial void SetCallback(delegate* unmanaged[Cdecl]<byte*, int, int, int, void> callback);
 
     [LibraryImport(LibraryName, EntryPoint = "MiraBox_Shutdown")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial void Shutdown();
 
-    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SendDisplayBuffer")]
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_GetDeviceCount")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial int SendDisplayBuffer(int deviceId, in byte buffer, int bufferLength, int width, int height);
+    public static partial int GetDeviceCount();
 
-    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SendKeyImage")]
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_GetDeviceKey")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial int SendKeyImage(int deviceId, byte keyId, in byte buffer, int bufferLength, int width, int height);
+    private static partial int GetDeviceKeyNative(int index, byte* outBuffer, int bufferSize);
 
-    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SendTouchDisplay")]
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_GetDeviceInfo", StringMarshalling = StringMarshalling.Utf8)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial int SendTouchDisplay(int deviceId, in byte buffer, int bufferLength, int width, int height);
+    private static partial int GetDeviceInfoNative(string deviceKey, byte* outBuffer, int bufferSize);
 
-    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SetKeyRGB")]
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SendKeyImage", StringMarshalling = StringMarshalling.Utf8)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial int SetKeyRGB(int deviceId, byte keyId, byte red, byte green, byte blue);
+    private static partial int SendKeyImageNative(string deviceKey, int keyId, byte* rgba, int bufferLength, int width, int height);
 
-    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SetAllKeyRGB")]
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SendBackground", StringMarshalling = StringMarshalling.Utf8)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    public static partial int SetAllKeyRGB(int deviceId, byte red, byte green, byte blue);
+    private static partial int SendBackgroundNative(string deviceKey, byte* rgba, int bufferLength, int width, int height);
 
-    [LibraryImport(LibraryName, EntryPoint = "MiraBox_GetDeviceInfo")]
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_ClearAllKeys", StringMarshalling = StringMarshalling.Utf8)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-    private static partial int GetDeviceInfoNative(int deviceId, byte[] outBuffer, int bufferSize);
+    public static partial int ClearAllKeys(string deviceKey);
 
-    /// <summary>
-    /// Query device information from the connected MiraBox device.
-    /// Returns a JSON string with device capabilities.
-    /// </summary>
-    public static string? QueryDeviceInfo(int deviceId)
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SetKeyBrightness", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial int SetKeyBrightness(string deviceKey, byte brightness);
+
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SetLedColors", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    private static partial int SetLedColorsNative(string deviceKey, byte* rgb, int ledCount);
+
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SetLedBrightness", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial int SetLedBrightness(string deviceKey, byte brightness);
+
+    public static string? GetDeviceKey(int index)
     {
-        const int bufferSize = 1024;
-        var buffer = new byte[bufferSize];
-        var result = GetDeviceInfoNative(deviceId, buffer, bufferSize);
-
-        if (result > 0)
-        {
-            return System.Text.Encoding.UTF8.GetString(buffer, 0, result);
-        }
-
-        return null;
+        var buffer = stackalloc byte[StringBufferSize];
+        var length = GetDeviceKeyNative(index, buffer, StringBufferSize);
+        return length >= 0 ? Encoding.UTF8.GetString(buffer, length) : null;
     }
+
+    public static string? GetDeviceInfoJson(string deviceKey, out int result)
+    {
+        var buffer = stackalloc byte[StringBufferSize];
+        result = GetDeviceInfoNative(deviceKey, buffer, StringBufferSize);
+        return result >= 0 ? Encoding.UTF8.GetString(buffer, result) : null;
+    }
+
+    public static int SendKeyImage(string deviceKey, int keyId, ReadOnlySpan<byte> rgba, int width, int height)
+    {
+        fixed (byte* pixels = rgba)
+        {
+            return SendKeyImageNative(deviceKey, keyId, pixels, rgba.Length, width, height);
+        }
+    }
+
+    public static int SendBackground(string deviceKey, ReadOnlySpan<byte> rgba, int width, int height)
+    {
+        fixed (byte* pixels = rgba)
+        {
+            return SendBackgroundNative(deviceKey, pixels, rgba.Length, width, height);
+        }
+    }
+
+    /// <param name="rgb">ledCount * 3 bytes.</param>
+    public static int SetLedColors(string deviceKey, ReadOnlySpan<byte> rgb)
+    {
+        fixed (byte* colors = rgb)
+        {
+            return SetLedColorsNative(deviceKey, colors, rgb.Length / 3);
+        }
+    }
+
+    public static string Describe(int result) => result switch
+    {
+        >= 0 => "OK",
+        (int)MiraBoxResult.InvalidArgument => "invalid argument",
+        (int)MiraBoxResult.BufferSizeMismatch => "buffer size does not match width x height",
+        (int)MiraBoxResult.DeviceNotFound => "device not connected",
+        (int)MiraBoxResult.NotSupported => "not supported by this device or key",
+        (int)MiraBoxResult.BufferTooSmall => "buffer too small",
+        (int)MiraBoxResult.EncodeFailed => "image encoding failed",
+        (int)MiraBoxResult.Exception => "native exception",
+        _ => $"native error {result}",
+    };
 
     private static IntPtr ResolveLibraryImport(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
@@ -196,4 +246,16 @@ public static partial class MiraBoxNative
 
         return "*.so";
     }
+}
+
+internal enum MiraBoxResult
+{
+    Ok = 0,
+    InvalidArgument = -1,
+    BufferSizeMismatch = -2,
+    DeviceNotFound = -3,
+    NotSupported = -4,
+    BufferTooSmall = -5,
+    EncodeFailed = -6,
+    Exception = -7,
 }

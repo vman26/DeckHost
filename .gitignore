@@ -428,3 +428,6 @@ FodyWeavers.xsd
 *.msm
 *.msp
 native/MiraBoxBridge/build
+
+# Native binaries copied next to the app source by earlier builds; the build copies them into bin/
+DeckHost.App/Plugins/device/

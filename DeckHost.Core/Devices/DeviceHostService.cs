@@ -1,39 +1,70 @@
-using DeckHost.Contracts.Enums;
+using DeckHost.Contracts;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
-using DeckHost.Core.Devices.Interfaces;
 using DeckHost.Core.Interfaces;
 using DeckHost.Core.Models;
 using DeckHost.Core.Rendering;
-using DeckHost.Device.MiraBox;
-using System.Runtime.InteropServices;
+using System.Collections.Concurrent;
+using System.Threading.Channels;
 
 namespace DeckHost.Core.Devices;
 
+/// <summary>
+/// Owns the runtime: plugin initialization, input dispatch, rendering and device output.
+/// <para>
+/// Threading model: every public call only queues work. One worker task processes the queue in
+/// order and owns all mutable state, so nothing here needs locks except the log buffer and the
+/// published snapshots. Native SDK callbacks therefore return immediately, and the UI thread
+/// never waits on USB I/O.
+/// </para>
+/// <para>
+/// Rendering: after each batch of work, every "dirty" device is re-rendered control by control,
+/// but a control is only pushed to the device when its pixels differ from the last frame pushed.
+/// </para>
+/// </summary>
 public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 {
+    private const int MaxLogEntries = 500;
+
     private readonly IVariableStore _variableStore;
     private readonly IReadOnlyList<IDevicePlugin> _devicePlugins;
     private readonly IActionRouter _actionRouter;
+    private readonly Channel<Func<ValueTask>> _work = Channel.CreateUnbounded<Func<ValueTask>>(new UnboundedChannelOptions { SingleReader = true });
+    private readonly Task _worker;
+
+    // Worker-owned state.
     private readonly Dictionary<string, DeviceProfile> _profilesById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _activeProfilesByDeviceId = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DeviceDefinition> _devicesById = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, IDeviceDisplaySession> _displaySessions = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<RuntimeLogEntry> _runtimeLogs = [];
-    private readonly Dictionary<string, DeviceConnectionStatus> _connectionStatuses = new(StringComparer.OrdinalIgnoreCase);
-    private readonly IReadOnlyCollection<DeviceDefinition> _devices;
-    private readonly DevicePluginContext _pluginContext;
-    private bool _started;
+    private readonly Dictionary<string, DeviceEntry> _devicesById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _dirtyDevices = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string DeviceId, string ControlId), byte[]> _lastFrames = [];
+    private readonly Dictionary<(int Width, int Height), SurfaceRenderer> _renderers = [];
+    private readonly Dictionary<(string DeviceId, string ControlId), int> _lightVersions = [];
+    private readonly List<TaskCompletionSource> _idleWaiters = [];
+    private readonly SkiaDrawingResources _drawingResources = new();
+    private bool _pluginsInitialized;
+
+    // Thread-safe published state.
+    private readonly Lock _logLock = new();
+    private readonly Queue<RuntimeLogEntry> _runtimeLogs = new();
+    private readonly ConcurrentDictionary<string, DeviceConnectionStatus> _connectionStatuses = new(StringComparer.OrdinalIgnoreCase);
+    private volatile DeviceDefinition[] _devicesSnapshot = [];
+    private volatile DeviceProfile[] _profilesSnapshot = [];
+    private int _startRequested;
+    private int _disposed;
+    private Task? _startTask;
 
     public event Action<RuntimeLogEntry>? RuntimeLogReceived;
     public event Action<DeviceConnectionStatus>? ConnectionStatusChanged;
+    public event Action? DevicesChanged;
 
     public DeviceHostService(
         IEnumerable<IDevicePlugin> devicePlugins,
         IEnumerable<IApplicationPlugin> applicationPlugins,
         IVariableStore variableStore)
-        : this(devicePlugins, new ActionRouter(variableStore, applicationPlugins), variableStore)
+        : this(devicePlugins, CreateRouter(variableStore, applicationPlugins, out var onActionFailed), variableStore)
     {
+        onActionFailed.Target = this;
     }
 
     public DeviceHostService(IEnumerable<IDevicePlugin> devicePlugins, IActionRouter actionRouter, IVariableStore variableStore)
@@ -45,345 +76,646 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         _variableStore = variableStore;
         _devicePlugins = devicePlugins.ToList();
         _actionRouter = actionRouter;
-        _devices = _devicePlugins.SelectMany(static plugin => plugin.Devices).ToArray();
-        foreach (var device in _devices)
+
+        foreach (var duplicate in _actionRouter.DuplicateActionKeys)
         {
-            _devicesById[device.Id] = device;
-            UpdateConnectionStatus(device.Id, "Discovered", "Device definition loaded.");
-            TryCreateDisplaySession(device);
+            Log("Warning", $"Action '{duplicate}' is registered more than once; only the first registration is used.");
         }
 
-        _pluginContext = new DevicePluginContext(this);
+        // Read the initial definitions synchronously so the UI can show devices before StartAsync.
+        RefreshDevices(raiseEvent: false);
+
+        foreach (var plugin in _devicePlugins)
+        {
+            plugin.DevicesChanged += OnPluginDevicesChanged;
+        }
+
+        _worker = Task.Run(RunWorkerAsync);
     }
 
-    public IReadOnlyCollection<DeviceDefinition> Devices => _devices;
+    public IReadOnlyCollection<DeviceDefinition> Devices => _devicesSnapshot;
 
-    public IReadOnlyCollection<DeviceProfile> Profiles => _profilesById.Values.ToArray();
+    public IReadOnlyCollection<DeviceProfile> Profiles => _profilesSnapshot;
 
-    public IReadOnlyCollection<RuntimeLogEntry> RuntimeLogs => _runtimeLogs.AsReadOnly();
+    public IReadOnlyCollection<RuntimeLogEntry> RuntimeLogs
+    {
+        get
+        {
+            lock (_logLock)
+            {
+                return _runtimeLogs.ToArray();
+            }
+        }
+    }
 
     public IReadOnlyCollection<DeviceConnectionStatus> ConnectionStatuses => _connectionStatuses.Values.ToArray();
-
-    public DeviceProfile? GetActiveProfile(string deviceId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
-
-        if (_activeProfilesByDeviceId.TryGetValue(deviceId, out var profileId) &&
-            _profilesById.TryGetValue(profileId, out var activeProfile))
-        {
-            return activeProfile;
-        }
-
-        var fallbackProfile = _profilesById.Values.FirstOrDefault(profile =>
-            string.Equals(profile.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
-
-        if (fallbackProfile is not null)
-        {
-            _activeProfilesByDeviceId[deviceId] = fallbackProfile.Id;
-        }
-
-        return fallbackProfile;
-    }
 
     public void SetProfiles(IEnumerable<DeviceProfile> profiles)
     {
         ArgumentNullException.ThrowIfNull(profiles);
-
-        _profilesById.Clear();
-        _activeProfilesByDeviceId.Clear();
-
-        foreach (var profile in profiles)
-        {
-            _profilesById[profile.Id] = profile;
-            if (!_activeProfilesByDeviceId.ContainsKey(profile.DeviceId))
-            {
-                _activeProfilesByDeviceId[profile.DeviceId] = profile.Id;
-            }
-        }
-
-        Log("Info", $"Loaded {_profilesById.Count} runtime profile(s).");
-
-        if (!_started)
-        {
-            Log("Info", "Queued runtime profiles; device plugins are not initialized yet.");
-            return;
-        }
-
-        foreach (var activeProfile in _activeProfilesByDeviceId.Values
-                     .Select(profileId => _profilesById.TryGetValue(profileId, out var profile) ? profile : null)
-                     .Where(static profile => profile is not null))
-        {
-            RenderProfileOutputs(activeProfile!);
-        }
+        var snapshot = profiles.ToArray();
+        Enqueue(() => ApplyProfiles(snapshot));
     }
 
-    public bool SetActiveProfile(string profileId)
+    public void SetActiveProfile(string profileId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
-
-        if (!_profilesById.TryGetValue(profileId, out var profile))
-        {
-            return false;
-        }
-
-        _activeProfilesByDeviceId[profile.DeviceId] = profile.Id;
-        Log("Info", $"Activated profile '{profile.Name}' for device '{profile.DeviceId}'.");
-
-        if (_started)
-        {
-            RenderProfileOutputs(profile);
-        }
-        return true;
+        Enqueue(() => ActivateProfile(profileId));
     }
 
-    public bool DispatchInput(DeviceInputEvent inputEvent)
+    public void ReportInput(DeviceInputEvent inputEvent)
     {
         ArgumentNullException.ThrowIfNull(inputEvent);
-
-        var activeProfile = GetActiveProfile(inputEvent.DeviceId);
-        if (activeProfile is null)
-        {
-            Log("Warning", $"Input from '{inputEvent.DeviceId}/{inputEvent.ControlId}' ignored because no active profile exists.");
-            return false;
-        }
-
-        var dispatched = _actionRouter.Dispatch(activeProfile, inputEvent);
-        Log(dispatched ? "Info" : "Warning", $"Input {inputEvent.EventType} on '{inputEvent.DeviceId}/{inputEvent.ControlId}' {(dispatched ? "dispatched" : "had no matching action")}." );
-
-        // Handle RGB feedback for the control
-        HandleRgbFeedback(activeProfile, inputEvent.ControlId);
-
-        PublishAppearanceState(activeProfile);
-        RenderProfileOutputs(activeProfile);
-        return dispatched;
+        Enqueue(() => HandleInput(inputEvent));
     }
 
-    private void HandleRgbFeedback(DeviceProfile profile, string controlId)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        var binding = profile.Bindings.FirstOrDefault(b =>
-            string.Equals(b.ControlId, controlId, StringComparison.OrdinalIgnoreCase));
-
-        if (binding?.Appearance?.RgbFeedback is null)
-            return;
-
-        if (!controlId.StartsWith("key.", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        if (!int.TryParse(controlId.AsSpan(4), out var keyIndex))
-            return;
-
-        // Map logical index to actual SDK key ID
-        if (!_devicesById.TryGetValue(profile.DeviceId, out var device))
-            return;
-
-        if (device.Capabilities is null)
-            return;
-
-        var sdkKeyId = device.GetSdkKeyId(keyIndex);
-
-        var feedback = binding.Appearance.RgbFeedback;
-        var (r, g, b) = feedback.GetActiveRgb();
-
-        // Send active color to LED
-        var result = MiraBoxNative.SetKeyRGB(0, sdkKeyId, r, g, b);
-        if (result == 0)
+        if (Interlocked.Exchange(ref _startRequested, 1) == 1)
         {
-            Log("Debug", $"RGB feedback applied to key {keyIndex} (SDK ID {sdkKeyId}): RGB({r},{g},{b})");
+            return _startTask ?? Task.CompletedTask;
+        }
 
-            // Schedule return to idle color after active duration
-            if (feedback.ActiveDuration > 0)
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _startTask = completion.Task;
+        EnqueueAsync(async () =>
+        {
+            try
             {
-                _ = Task.Delay(feedback.ActiveDuration).ContinueWith(_ =>
-                {
-                    var (idleR, idleG, idleB) = feedback.GetIdleRgb();
-                    MiraBoxNative.SetKeyRGB(0, sdkKeyId, idleR, idleG, idleB);
-                });
+                await InitializePluginsAsync(cancellationToken).ConfigureAwait(false);
+                completion.TrySetResult();
             }
-        }
-        else
-        {
-            Log("Warning", $"Failed to apply RGB feedback to key {keyIndex} (SDK ID {sdkKeyId}): error code {result}");
-        }
+            catch (OperationCanceledException)
+            {
+                completion.TrySetCanceled(cancellationToken);
+            }
+        });
+
+        return completion.Task;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task WhenIdleAsync()
     {
-        if (_started)
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_work.Writer.TryWrite(() =>
+            {
+                _idleWaiters.Add(completion);
+                return ValueTask.CompletedTask;
+            }))
+        {
+            completion.TrySetResult();
+        }
+
+        return completion.Task;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
         {
             return;
         }
 
         foreach (var plugin in _devicePlugins)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            plugin.DevicesChanged -= OnPluginDevicesChanged;
+        }
+
+        // Blank the devices so they don't keep showing a profile nobody is running.
+        _work.Writer.TryWrite(() =>
+        {
+            if (_pluginsInitialized)
+            {
+                foreach (var (deviceId, entry) in _devicesById)
+                {
+                    if (entry.Device.IsConnected)
+                    {
+                        entry.Plugin.Output.Clear(deviceId);
+                    }
+                }
+            }
+
+            return ValueTask.CompletedTask;
+        });
+        _work.Writer.TryComplete();
+
+        await Task.WhenAny(_worker, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
+
+        foreach (var plugin in _devicePlugins)
+        {
             try
             {
-                await plugin.InitializeAsync(_pluginContext, cancellationToken).ConfigureAwait(false);
-                foreach (var device in plugin.Devices)
-                {
-                    _devicesById[device.Id] = device;
-                    TryCreateDisplaySession(device);
-                    UpdateConnectionStatus(device.Id, "Initialized", $"{plugin.Name} initialized successfully.");
-                }
+                plugin.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Log("Error", $"Disposing device plugin '{plugin.Name}' failed: {ex.Message}");
+            }
+        }
 
+        if (_worker.IsCompleted)
+        {
+            foreach (var renderer in _renderers.Values)
+            {
+                renderer.Dispose();
+            }
+
+            _renderers.Clear();
+            _drawingResources.Dispose();
+        }
+    }
+
+    // ---------------------------------------------------------------- worker
+
+    private async Task RunWorkerAsync()
+    {
+        var reader = _work.Reader;
+        while (await reader.WaitToReadAsync().ConfigureAwait(false))
+        {
+            while (reader.TryRead(out var item))
+            {
+                try
+                {
+                    await item().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Log("Error", $"Runtime work item failed: {ex.Message}");
+                }
+            }
+
+            try
+            {
+                RenderDirtyDevices();
+            }
+            catch (Exception ex)
+            {
+                Log("Error", $"Rendering failed: {ex.Message}");
+            }
+
+            foreach (var waiter in _idleWaiters)
+            {
+                waiter.TrySetResult();
+            }
+
+            _idleWaiters.Clear();
+        }
+
+        foreach (var waiter in _idleWaiters)
+        {
+            waiter.TrySetResult();
+        }
+    }
+
+    private void Enqueue(Action work) => _work.Writer.TryWrite(() =>
+    {
+        work();
+        return ValueTask.CompletedTask;
+    });
+
+    private void EnqueueAsync(Func<Task> work) => _work.Writer.TryWrite(() => new ValueTask(work()));
+
+    private async Task InitializePluginsAsync(CancellationToken cancellationToken)
+    {
+        foreach (var plugin in _devicePlugins)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var context = new DevicePluginContext(this, Log, ReportConnectionStatus);
+            try
+            {
+                await plugin.InitializeAsync(context, cancellationToken).ConfigureAwait(false);
                 Log("Info", $"Initialized device plugin '{plugin.Name}'.");
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
                 foreach (var device in plugin.Devices)
                 {
-                    UpdateConnectionStatus(device.Id, "Failed", ex.Message);
+                    ReportConnectionStatus(new DeviceConnectionStatus(device.Id, "Failed", ex.Message));
                 }
 
                 Log("Error", $"Failed to initialize device plugin '{plugin.Name}': {ex.Message}");
             }
         }
 
-        _started = true;
+        _pluginsInitialized = true;
+        RefreshDevices(raiseEvent: true);
 
-        foreach (var activeProfile in _activeProfilesByDeviceId.Values
-                     .Select(profileId => _profilesById.TryGetValue(profileId, out var profile) ? profile : null)
-                     .Where(static profile => profile is not null))
+        foreach (var deviceId in _devicesById.Keys)
         {
-            RenderProfileOutputs(activeProfile!);
+            _dirtyDevices.Add(deviceId);
+            ApplyIdleLights(deviceId);
+        }
+    }
+
+    private void HandleInput(DeviceInputEvent inputEvent)
+    {
+        var activeProfile = GetActiveProfile(inputEvent.DeviceId);
+        if (activeProfile is null)
+        {
+            Log("Debug", $"Input from '{inputEvent.DeviceId}/{inputEvent.ControlId}' ignored: no active profile.");
+            return;
         }
 
-        Log("Info", "Initial device profile render completed.");
+        var dispatched = _actionRouter.Dispatch(activeProfile, inputEvent);
+        Log("Debug", $"Input {inputEvent.EventType} ({inputEvent.Value}) on '{inputEvent.ControlId}' {(dispatched ? "dispatched" : "had no matching action")}.");
+
+        if (dispatched)
+        {
+            HandleLightFeedback(activeProfile, inputEvent.ControlId);
+        }
+
+        // Actions can change any variable a renderer reads; unchanged controls are skipped at push time.
+        _dirtyDevices.Add(inputEvent.DeviceId);
     }
+
+    private void ApplyProfiles(IReadOnlyList<DeviceProfile> profiles)
+    {
+        _profilesById.Clear();
+        foreach (var profile in profiles)
+        {
+            _profilesById[profile.Id] = profile;
+        }
+
+        // Keep the active profile per device when it still exists, else fall back to the first one.
+        foreach (var deviceId in _activeProfilesByDeviceId.Keys.ToList())
+        {
+            if (!_profilesById.ContainsKey(_activeProfilesByDeviceId[deviceId]))
+            {
+                _activeProfilesByDeviceId.Remove(deviceId);
+            }
+        }
+
+        foreach (var profile in profiles)
+        {
+            _activeProfilesByDeviceId.TryAdd(profile.DeviceId, profile.Id);
+        }
+
+        _profilesSnapshot = [.. profiles];
+        OnActiveProfilesChanged();
+    }
+
+    private void ActivateProfile(string profileId)
+    {
+        if (!_profilesById.TryGetValue(profileId, out var profile))
+        {
+            Log("Warning", $"Cannot activate unknown profile '{profileId}'.");
+            return;
+        }
+
+        if (_activeProfilesByDeviceId.TryGetValue(profile.DeviceId, out var current) &&
+            string.Equals(current, profile.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _activeProfilesByDeviceId[profile.DeviceId] = profile.Id;
+        Log("Info", $"Activated profile '{profile.Name}' for device '{profile.DeviceId}'.");
+        OnActiveProfilesChanged();
+    }
+
+    private void OnActiveProfilesChanged()
+    {
+        foreach (var deviceId in _devicesById.Keys)
+        {
+            var profile = GetActiveProfile(deviceId);
+            if (profile is not null)
+            {
+                PublishAppearanceState(profile);
+            }
+
+            _dirtyDevices.Add(deviceId);
+            ApplyIdleLights(deviceId);
+        }
+    }
+
+    private DeviceProfile? GetActiveProfile(string deviceId)
+    {
+        if (_activeProfilesByDeviceId.TryGetValue(deviceId, out var profileId) &&
+            _profilesById.TryGetValue(profileId, out var activeProfile))
+        {
+            return activeProfile;
+        }
+
+        var fallback = _profilesById.Values.FirstOrDefault(profile =>
+            string.Equals(profile.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+        if (fallback is not null)
+        {
+            _activeProfilesByDeviceId[deviceId] = fallback.Id;
+        }
+
+        return fallback;
+    }
+
+    private void OnPluginDevicesChanged(object? sender, EventArgs e) => Enqueue(() => RefreshDevices(raiseEvent: true));
+
+    private void RefreshDevices(bool raiseEvent)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var plugin in _devicePlugins)
+        {
+            foreach (var device in plugin.Devices)
+            {
+                if (!seen.Add(device.Id))
+                {
+                    Log("Warning", $"Device id '{device.Id}' is reported by more than one plugin; ignoring the one from '{plugin.Name}'.");
+                    continue;
+                }
+
+                if (_devicesById.TryGetValue(device.Id, out var existing) && existing.Device == device)
+                {
+                    continue;
+                }
+
+                changed = true;
+                _devicesById[device.Id] = new DeviceEntry(device, plugin);
+                ForgetFrames(device.Id);
+                PublishHardwareIds(device);
+
+                if (_pluginsInitialized && device.IsConnected)
+                {
+                    _dirtyDevices.Add(device.Id);
+                    ApplyIdleLights(device.Id);
+                }
+            }
+        }
+
+        foreach (var removed in _devicesById.Keys.Where(id => !seen.Contains(id)).ToList())
+        {
+            changed = true;
+            _devicesById.Remove(removed);
+            ForgetFrames(removed);
+        }
+
+        if (!changed && _devicesSnapshot.Length == _devicesById.Count)
+        {
+            return;
+        }
+
+        _devicesSnapshot = [.. _devicesById.Values.Select(static entry => entry.Device)];
+        if (raiseEvent)
+        {
+            SafeInvoke(() => DevicesChanged?.Invoke());
+        }
+    }
+
+    private void ForgetFrames(string deviceId)
+    {
+        foreach (var key in _lastFrames.Keys.Where(key => string.Equals(key.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            _lastFrames.Remove(key);
+        }
+    }
+
+    // ---------------------------------------------------------------- rendering
+
+    private void RenderDirtyDevices()
+    {
+        if (!_pluginsInitialized || _dirtyDevices.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var deviceId in _dirtyDevices)
+        {
+            RenderDevice(deviceId);
+        }
+
+        _dirtyDevices.Clear();
+    }
+
+    private void RenderDevice(string deviceId)
+    {
+        if (!_devicesById.TryGetValue(deviceId, out var entry) || !entry.Device.IsConnected)
+        {
+            return;
+        }
+
+        var profile = GetActiveProfile(deviceId);
+        var pushed = 0;
+
+        foreach (var control in entry.Device.Controls)
+        {
+            if (!control.HasImageOutput)
+            {
+                continue;
+            }
+
+            var binding = profile?.Bindings.FirstOrDefault(candidate =>
+                string.Equals(candidate.ControlId, control.Id, StringComparison.OrdinalIgnoreCase));
+            var action = binding is null ? null : _actionRouter.FindAction(binding.Action);
+            var renderer = GetRenderer(control.RenderWidth, control.RenderHeight);
+
+            ReadOnlySpan<byte> pixels;
+            try
+            {
+                pixels = renderer.Render(canvas =>
+                {
+                    var context = new SkiaRenderContext(canvas, renderer.Width, renderer.Height, deviceId, control.Id, _variableStore, _drawingResources);
+                    ControlRenderer.Draw(context, binding, action);
+                });
+            }
+            catch (Exception ex)
+            {
+                Log("Error", $"Failed to render '{deviceId}/{control.Id}': {ex.Message}");
+                continue;
+            }
+
+            var key = (deviceId, control.Id);
+            if (_lastFrames.TryGetValue(key, out var lastFrame) && pixels.SequenceEqual(lastFrame))
+            {
+                continue;
+            }
+
+            if (!entry.Plugin.Output.TryPushImage(deviceId, control.Id, pixels, renderer.Width, renderer.Height, out var error))
+            {
+                _lastFrames.Remove(key);
+                Log("Warning", $"Could not update '{deviceId}/{control.Id}': {error}");
+                continue;
+            }
+
+            if (lastFrame is null || lastFrame.Length != pixels.Length)
+            {
+                lastFrame = new byte[pixels.Length];
+                _lastFrames[key] = lastFrame;
+            }
+
+            pixels.CopyTo(lastFrame);
+            pushed++;
+        }
+
+        if (pushed > 0)
+        {
+            Log("Debug", $"Pushed {pushed} changed control image(s) to '{deviceId}'.");
+        }
+    }
+
+    private SurfaceRenderer GetRenderer(int width, int height)
+    {
+        if (!_renderers.TryGetValue((width, height), out var renderer))
+        {
+            renderer = new SurfaceRenderer(width, height);
+            _renderers[(width, height)] = renderer;
+        }
+
+        return renderer;
+    }
+
+    // ---------------------------------------------------------------- lights
+
+    private void HandleLightFeedback(DeviceProfile profile, string controlId)
+    {
+        var binding = profile.Bindings.FirstOrDefault(candidate =>
+            string.Equals(candidate.ControlId, controlId, StringComparison.OrdinalIgnoreCase));
+        var feedback = binding?.Appearance.RgbFeedback;
+        if (feedback is null || !TryGetLightControl(profile.DeviceId, controlId, out var entry))
+        {
+            return;
+        }
+
+        var key = (profile.DeviceId, controlId);
+        var version = _lightVersions.GetValueOrDefault(key) + 1;
+        _lightVersions[key] = version;
+
+        SetLight(entry, profile.DeviceId, controlId, feedback.GetActiveRgb());
+
+        if (feedback.ActiveDuration <= 0)
+        {
+            return;
+        }
+
+        // Pulse: blink active/idle a few times within the active duration, then settle on idle.
+        var steps = feedback.PulseOnActive ? 4 : 1;
+        var stepDuration = Math.Max(30, feedback.ActiveDuration / steps);
+        for (var step = 1; step <= steps; step++)
+        {
+            var color = step == steps || step % 2 == 1 ? feedback.GetIdleRgb() : feedback.GetActiveRgb();
+            _ = Task.Delay(stepDuration * step).ContinueWith(
+                _ => Enqueue(() =>
+                {
+                    // A newer press restarted the feedback: let that one finish instead.
+                    if (_lightVersions.GetValueOrDefault(key) == version && TryGetLightControl(key.DeviceId, key.controlId, out var current))
+                    {
+                        SetLight(current, key.DeviceId, key.controlId, color);
+                    }
+                }),
+                TaskScheduler.Default);
+        }
+    }
+
+    private void ApplyIdleLights(string deviceId)
+    {
+        if (!_pluginsInitialized || !_devicesById.TryGetValue(deviceId, out var entry) || !entry.Device.IsConnected)
+        {
+            return;
+        }
+
+        var profile = GetActiveProfile(deviceId);
+        foreach (var control in entry.Device.Controls.Where(static control => control.HasLight))
+        {
+            var key = (deviceId, control.Id);
+            _lightVersions[key] = _lightVersions.GetValueOrDefault(key) + 1;
+
+            var feedback = profile?.Bindings.FirstOrDefault(candidate =>
+                string.Equals(candidate.ControlId, control.Id, StringComparison.OrdinalIgnoreCase))?.Appearance.RgbFeedback;
+            SetLight(entry, deviceId, control.Id, feedback?.GetIdleRgb() ?? ((byte)0, (byte)0, (byte)0));
+        }
+    }
+
+    private bool TryGetLightControl(string deviceId, string controlId, out DeviceEntry entry)
+    {
+        if (_pluginsInitialized &&
+            _devicesById.TryGetValue(deviceId, out entry!) &&
+            entry.Device.IsConnected &&
+            entry.Device.FindControl(controlId)?.HasLight == true)
+        {
+            return true;
+        }
+
+        entry = null!;
+        return false;
+    }
+
+    private void SetLight(DeviceEntry entry, string deviceId, string controlId, (byte R, byte G, byte B) color)
+    {
+        if (!entry.Plugin.Output.TrySetLight(deviceId, controlId, color.R, color.G, color.B, out var error))
+        {
+            Log("Warning", $"Could not set the light of '{deviceId}/{controlId}': {error}");
+        }
+    }
+
+    // ---------------------------------------------------------------- variables, status, log
 
     private void PublishAppearanceState(DeviceProfile profile)
     {
         foreach (var binding in profile.Bindings)
         {
-            _variableStore.Publish($"devices.{profile.DeviceId}.{binding.ControlId}.appearance.text", binding.Appearance.Text ?? string.Empty);
-            _variableStore.Publish($"devices.{profile.DeviceId}.{binding.ControlId}.appearance.image", binding.Appearance.ImagePath ?? string.Empty);
+            _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceText), binding.Appearance.Text ?? string.Empty);
+            _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceImage), binding.Appearance.ImagePath ?? string.Empty);
         }
     }
 
-    private void PublishSdkKeyMapping(string deviceId, DeviceDefinition device)
+    private void PublishHardwareIds(DeviceDefinition device)
     {
-        foreach (var control in device.Controls.Where(static c => c.Type == ControlType.Key))
+        foreach (var control in device.Controls.Where(static control => control.HardwareId is not null))
         {
-            if (!control.Id.StartsWith("key.", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (!int.TryParse(control.Id.AsSpan(4), out var keyIndex))
-            {
-                continue;
-            }
-
-            var sdkKeyId = device.Capabilities is null ? keyIndex : device.GetSdkKeyId(keyIndex);
-            _variableStore.Publish($"devices.{deviceId}.{control.Id}.sdkKeyId", sdkKeyId);
+            _variableStore.Publish(VariableKeys.For(device.Id, control.Id, VariableKeys.HardwareId), control.HardwareId!);
         }
     }
 
-    private void RenderProfileOutputs(DeviceProfile profile)
+    private void ReportConnectionStatus(DeviceConnectionStatus status)
     {
-        if (!_devicesById.TryGetValue(profile.DeviceId, out var deviceDefinition) ||
-            !_displaySessions.TryGetValue(profile.DeviceId, out var displaySession))
-        {
-            return;
-        }
-
-        PublishAppearanceState(profile);
-        PublishSdkKeyMapping(profile.DeviceId, deviceDefinition);
-
-        // Use per-control rendering strategy
-        var previewAction = new ProfilePreviewAction(deviceDefinition, profile);
-        var renderJobs = previewAction.GetControlRenderJobs();
-
-        foreach (var job in renderJobs)
-        {
-            RenderControlAndPush(displaySession, profile.DeviceId, job);
-        }
-
-        Log("Info", $"Rendered {renderJobs.Count} control outputs for device '{profile.DeviceId}'.");
-    }
-
-    private void RenderControlAndPush(IDeviceDisplaySession displaySession, string deviceId, ControlRenderJob job)
-    {
-        try
-        {
-            var renderContext = new ActionContext(deviceId, job.ControlId, _variableStore);
-
-            if (job.ControlType == ControlType.TouchSurface)
-            {
-                // Touch display uses legacy display session rendering
-                displaySession.RenderAndPush(job.RenderAction, renderContext);
-            }
-            else if (job.ControlType == ControlType.Key)
-            {
-                // Per-key rendering via native bridge
-                RenderKeyImage(deviceId, job);
-            }
-            // Encoders skip visual rendering for now (RGB feedback only)
-        }
-        catch (Exception ex)
-        {
-            Log("Error", $"Failed to render {job.ControlType} '{job.ControlId}': {ex.Message}");
-        }
-    }
-
-    private void RenderKeyImage(string deviceId, ControlRenderJob job)
-    {
-        // Extract key index from control ID (format: "key.0", "key.1", etc.)
-        if (!job.ControlId.StartsWith("key.", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        if (!int.TryParse(job.ControlId.AsSpan(4), out var keyIndex))
-            return;
-
-        // Map logical index to actual SDK key ID using device capabilities
-        if (!_devicesById.TryGetValue(deviceId, out var device))
-            return;
-
-        if (device.Capabilities is null)
-            return;
-
-        var sdkKeyId = device.GetSdkKeyId(keyIndex);
-
-        // Create a temporary display session for this key's specific dimensions
-        using var keyRenderer = new SurfaceRenderer(job.Width, job.Height);
-        ReadOnlySpan<byte> pixelData = keyRenderer.Render(canvas =>
-        {
-            var renderContext = new SkiaRenderContext(canvas, job.Width, job.Height, 
-                new ActionContext(deviceId, job.ControlId, _variableStore));
-            job.RenderAction.Render(renderContext);
-        });
-
-        if (!pixelData.IsEmpty)
-        {
-            ref byte bufferRef = ref MemoryMarshal.GetReference(pixelData);
-            var result = MiraBoxNative.SendKeyImage(0, sdkKeyId, in bufferRef, pixelData.Length, job.Width, job.Height);
-            if (result != 0)
-            {
-                Log("Warning", $"Failed to render key {keyIndex} (SDK ID {sdkKeyId}): error code {result}");
-            }
-        }
-    }
-
-    private void TryCreateDisplaySession(DeviceDefinition device)
-    {
-        var width = device.ScreenWidth > 0 ? device.ScreenWidth : 800;
-        var height = device.ScreenHeight > 0 ? device.ScreenHeight : 480;
-
-        _displaySessions[device.Id] = new DeviceDisplaySession(0, width, height);
-        Log("Info", $"Created display session for '{device.Id}' ({width}x{height}).");
-    }
-
-    private void UpdateConnectionStatus(string deviceId, string state, string message)
-    {
-        var status = new DeviceConnectionStatus(deviceId, state, message);
-        _connectionStatuses[deviceId] = status;
-        ConnectionStatusChanged?.Invoke(status);
+        _connectionStatuses[status.DeviceId] = status;
+        SafeInvoke(() => ConnectionStatusChanged?.Invoke(status));
     }
 
     private void Log(string level, string message)
     {
         var entry = new RuntimeLogEntry(DateTimeOffset.UtcNow, level, message);
-        _runtimeLogs.Add(entry);
-        RuntimeLogReceived?.Invoke(entry);
+        lock (_logLock)
+        {
+            _runtimeLogs.Enqueue(entry);
+            while (_runtimeLogs.Count > MaxLogEntries)
+            {
+                _runtimeLogs.Dequeue();
+            }
+        }
+
+        SafeInvoke(() => RuntimeLogReceived?.Invoke(entry));
+    }
+
+    private static void SafeInvoke(Action raise)
+    {
+        try
+        {
+            raise();
+        }
+        catch
+        {
+            // A misbehaving subscriber must never take down the runtime worker or a native callback.
+        }
+    }
+
+    private static ActionRouter CreateRouter(IVariableStore variableStore, IEnumerable<IApplicationPlugin> applicationPlugins, out ActionFailureRelay relay)
+    {
+        var localRelay = new ActionFailureRelay();
+        relay = localRelay;
+        return new ActionRouter(variableStore, applicationPlugins, localRelay.Report);
+    }
+
+    private sealed record DeviceEntry(DeviceDefinition Device, IDevicePlugin Plugin);
+
+    /// <summary>Lets the router report action failures to a host that doesn't exist yet when the router is built.</summary>
+    private sealed class ActionFailureRelay
+    {
+        public DeviceHostService? Target { get; set; }
+
+        public void Report(ActionReference action, Exception exception) =>
+            Target?.Log("Error", $"Action '{action.ActionName}' ({action.PluginId}:{action.ActionId}) failed: {exception.Message}");
     }
 }

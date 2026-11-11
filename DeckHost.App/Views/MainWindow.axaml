@@ -14,10 +14,6 @@
 		Icon="/Assets/avalonia-logo.ico"
 		Title="DeckHost Studio">
 
-	<Design.DataContext>
-		<vm:MainViewModel />
-	</Design.DataContext>
-
 	<Grid ColumnDefinitions="340,*,360" RowDefinitions="Auto,*">
 		<Border Grid.ColumnSpan="3"
 				Padding="20,16"
@@ -233,7 +229,7 @@
 									<DataTemplate x:DataType="vm:ControlItemViewModel">
 										<Border Width="{Binding Width}"
 												Height="{Binding Height}"
-												Padding="8"
+												Padding="8,4"
 												Background="{Binding SurfaceBrush}"
 												BorderBrush="#E2E8F0"
 												BorderThickness="1"
@@ -243,6 +239,7 @@
 											<Border.ContextMenu>
 												<ContextMenu DataContext="{Binding}">
 													<MenuItem Header="Customize"
+															  IsEnabled="{Binding SupportsCustomization}"
 															  Click="ControlCustomize_OnClick" />
 													<MenuItem Header="Remove Assignment"
 															  IsEnabled="{Binding HasAssignment}"
@@ -260,13 +257,14 @@
 															   FontWeight="SemiBold"
 															   Foreground="#F8FAFC" />
 													<TextBlock DockPanel.Dock="Right"
-															   IsVisible="{Binding HasAssignment}"
-															   Text="Drag off canvas to remove"
+															   IsVisible="{Binding ShowRemoveHint}"
+															   Text="Drag off to remove"
 															   FontSize="10"
 															   Foreground="#BFDBFE" />
 												</DockPanel>
 
 												<StackPanel Grid.Row="1"
+															IsVisible="{Binding ShowDetails}"
 															Spacing="4"
 															HorizontalAlignment="Center"
 															VerticalAlignment="Center">
@@ -290,6 +288,7 @@
 												</StackPanel>
 
 												<TextBlock Grid.Row="2"
+														   IsVisible="{Binding ShowDetails}"
 														   Text="{Binding TypeLabel}"
 														   HorizontalAlignment="Center"
 														   FontSize="10"
