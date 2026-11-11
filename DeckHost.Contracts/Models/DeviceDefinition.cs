@@ -1,25 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace DeckHost.Contracts.Models;
 
-namespace DeckHost.Contracts.Models;
-
+/// <summary>
+/// A device a plugin can drive. Plugins also expose definitions for devices that are not
+/// plugged in, so profiles can be edited offline; <see cref="IsConnected"/> tells them apart.
+/// </summary>
 public sealed record DeviceDefinition(
     string Id,
     string Name,
-    IReadOnlyCollection<PhysicalControl> Controls,
-    int ScreenWidth = 0,
-    int ScreenHeight = 0,
-    DeviceCapabilities? Capabilities = null)
+    IReadOnlyList<PhysicalControl> Controls,
+    bool IsConnected = false,
+    string? Detail = null)
 {
-    /// <summary>
-    /// Maps a logical key index (0-based) to the actual SDK key ID.
-    /// </summary>
-    public byte GetSdkKeyId(int logicalKeyIndex)
-    {
-        if (Capabilities == null)
-            return (byte)logicalKeyIndex; // Fallback if no capabilities
-
-        return (byte)(Capabilities.MinKeyId + logicalKeyIndex);
-    }
+    public PhysicalControl? FindControl(string controlId) =>
+        Controls.FirstOrDefault(control => string.Equals(control.Id, controlId, StringComparison.OrdinalIgnoreCase));
 }

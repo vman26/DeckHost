@@ -1,31 +1,53 @@
 using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace DeckHost.Device.MiraBox;
 
-public sealed class MiraBoxDevicePlugin : IDevicePlugin, IDisposable
+/// <summary>
+/// Device plugin for the MiraBox / StreamDock N4 Pro (see <see cref="N4ProLayout"/>).
+/// <para>
+/// The first N4 Pro gets the id <see cref="PrimaryDeviceId"/>, so profiles keep working when it is
+/// unplugged and plugged back in; further units get <c>mirabox.n4pro-2</c>, <c>-3</c>, ...
+/// The primary definition always exists, connected or not, so profiles can be edited offline.
+/// </para>
+/// </summary>
+public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput
 {
-    private const string DeviceId = "mirabox.n4pro";
+    public const string PrimaryDeviceId = "mirabox.n4pro";
+    private const string DeviceName = "MiraBox N4 Pro";
+    private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);
 
-    private readonly MiraBoxController _controller;
-    private readonly List<DeviceDefinition> _devices;
+    // The native callback is a static function pointer, so it needs a static route back to the plugin.
+    private static MiraBoxDevicePlugin? s_active;
+
+    private readonly Lock _sync = new();
+    private readonly List<DeviceSession> _sessions = [new DeviceSession(PrimaryDeviceId)];
+    private readonly HashSet<string> _reportedUnsupported = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<(string DeviceId, string ControlId), Timer> _longPressTimers = new();
+    private IReadOnlyCollection<DeviceDefinition> _devices;
     private IDevicePluginContext? _context;
-    private bool _initialized;
+    private int _refreshQueued;
+    private bool _nativeInitialized;
     private bool _disposed;
 
     public MiraBoxDevicePlugin()
     {
-        _controller = new MiraBoxController();
-        _controller.InputReceived += OnInputReceived;
-        _devices = [CreateDeviceDefinition()];
+        _devices = BuildDefinitions();
     }
+
+    public event EventHandler? DevicesChanged;
 
     public string Id => "deckhost.device.mirabox";
 
     public string Name => "MiraBox Device Plugin";
 
-    public IReadOnlyCollection<DeviceDefinition> Devices => _devices;
+    public IReadOnlyCollection<DeviceDefinition> Devices => Volatile.Read(ref _devices);
+
+    public IDeviceOutput Output => this;
 
     public Task InitializeAsync(IDevicePluginContext context, CancellationToken cancellationToken)
     {
@@ -33,75 +55,113 @@ public sealed class MiraBoxDevicePlugin : IDevicePlugin, IDisposable
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (_initialized)
+        if (_nativeInitialized)
         {
             return Task.CompletedTask;
         }
 
+        if (Interlocked.CompareExchange(ref s_active, this, null) is not null)
+        {
+            throw new InvalidOperationException("Only one MiraBoxDevicePlugin can be initialized per process.");
+        }
+
         _context = context;
-        _controller.Start();
+        try
+        {
+            var result = MiraBoxNative.Initialize();
+            if (result != 0)
+            {
+                throw new ExternalException($"Failed to initialize the MiraBox bridge: {MiraBoxNative.Describe(result)}.", result);
+            }
 
-        // Query actual device capabilities from the connected device
-        QueryAndUpdateDeviceCapabilities();
+            MiraBoxNative.SetCallback(&OnNativeEvent);
+            _nativeInitialized = true;
+        }
+        catch (DllNotFoundException ex)
+        {
+            Interlocked.CompareExchange(ref s_active, null, this);
+            throw new InvalidOperationException("MiraBoxBridge native library not found. Build with CMake available so it is copied to plugins/device/deckhost.device.mirabox.", ex);
+        }
+        catch
+        {
+            Interlocked.CompareExchange(ref s_active, null, this);
+            throw;
+        }
 
-        _initialized = true;
+        RefreshDevices();
         return Task.CompletedTask;
     }
 
-    private void QueryAndUpdateDeviceCapabilities()
-    {
-        try
-        {
-            // Query device info from the native bridge (device 0)
-            var deviceInfoJson = MiraBoxNative.QueryDeviceInfo(0);
-            if (!string.IsNullOrWhiteSpace(deviceInfoJson))
-            {
-                var capabilities = DeviceCapabilities.FromJson(deviceInfoJson);
-                if (capabilities is not null)
-                {
-                    // Log the key mapping for debugging
-                    System.Diagnostics.Debug.WriteLine($"=== MiraBox Device Info ===");
-                    System.Diagnostics.Debug.WriteLine($"Device: {capabilities.DeviceName}");
-                    System.Diagnostics.Debug.WriteLine($"Display: {capabilities.DisplayWidth}x{capabilities.DisplayHeight}");
-                    System.Diagnostics.Debug.WriteLine($"Key Size: {capabilities.KeyWidth}x{capabilities.KeyHeight}");
-                    System.Diagnostics.Debug.WriteLine($"Key Range: {capabilities.MinKeyId} to {capabilities.MaxKeyId}");
-                    System.Diagnostics.Debug.WriteLine($"Key Count: {capabilities.KeyCount}");
-                    System.Diagnostics.Debug.WriteLine($"Key ID Mapping:");
-                    for (int i = 0; i < capabilities.KeyCount; i++)
-                    {
-                        var sdkKeyId = capabilities.MinKeyId + i;
-                        System.Diagnostics.Debug.WriteLine($"  Logical Key {i} => SDK Key {sdkKeyId}");
-                    }
-                    System.Diagnostics.Debug.WriteLine($"===========================");
+    // ---------------------------------------------------------------- IDeviceOutput
 
-                    // Update the device definition with actual capabilities
-                    UpdateDeviceWithCapabilities(capabilities);
-                }
-            }
-        }
-        catch (Exception ex)
+    public bool TryPushImage(string deviceId, string controlId, ReadOnlySpan<byte> rgba, int width, int height, out string? error)
+    {
+        if (!TryGetConnectedKey(deviceId, out var deviceKey, out error))
         {
-            // If query fails, use defaults (already set in CreateDeviceDefinition)
-            System.Diagnostics.Debug.WriteLine($"Failed to query device info: {ex.Message}");
+            return false;
         }
+
+        if (N4ProLayout.GetImageKeyId(controlId) is not { } keyId)
+        {
+            error = $"'{controlId}' has no image output.";
+            return false;
+        }
+
+        var result = MiraBoxNative.SendKeyImage(deviceKey, keyId, rgba, width, height);
+        return CheckResult(deviceId, result, out error);
     }
 
-    private void UpdateDeviceWithCapabilities(DeviceCapabilities capabilities)
+    public bool TrySetLight(string deviceId, string controlId, byte red, byte green, byte blue, out string? error)
     {
-        // Reconstruct the devices collection with updated capabilities
-        for (var index = 0; index < _devices.Count; index++)
+        if (N4ProLayout.GetLedIndex(controlId) is not { } ledIndex)
         {
-            var device = _devices[index];
-            if (string.Equals(device.Id, DeviceId, StringComparison.OrdinalIgnoreCase))
-            {
-                // Create new device definition with capabilities
-                var updated = device with { Capabilities = capabilities };
-                _devices[index] = updated;
-                break;
-            }
+            error = $"'{controlId}' has no LED.";
+            return false;
         }
+
+        byte[] colors;
+        string deviceKey;
+        lock (_sync)
+        {
+            var session = FindSession(deviceId);
+            if (session is not { DeviceKey: not null } || session.LedColors.Length < (ledIndex + 1) * 3)
+            {
+                error = session?.DeviceKey is null ? "device not connected" : $"LED {ledIndex} does not exist.";
+                return false;
+            }
+
+            // The SDK sets all LEDs in one call, so keep the full state and always send all of it.
+            session.LedColors[ledIndex * 3] = red;
+            session.LedColors[(ledIndex * 3) + 1] = green;
+            session.LedColors[(ledIndex * 3) + 2] = blue;
+            colors = (byte[])session.LedColors.Clone();
+            deviceKey = session.DeviceKey;
+        }
+
+        return CheckResult(deviceId, MiraBoxNative.SetLedColors(deviceKey, colors), out error);
     }
 
+    public void Clear(string deviceId)
+    {
+        if (!TryGetConnectedKey(deviceId, out var deviceKey, out _))
+        {
+            return;
+        }
+
+        byte[] colors;
+        lock (_sync)
+        {
+            var session = FindSession(deviceId)!;
+            Array.Clear(session.LedColors);
+            colors = session.LedColors.ToArray();
+        }
+
+        MiraBoxNative.ClearAllKeys(deviceKey);
+        if (colors.Length > 0)
+        {
+            MiraBoxNative.SetLedColors(deviceKey, colors);
+        }
+    }
 
     public void Dispose()
     {
@@ -110,133 +170,301 @@ public sealed class MiraBoxDevicePlugin : IDevicePlugin, IDisposable
             return;
         }
 
-        _controller.InputReceived -= OnInputReceived;
-        _controller.Dispose();
         _disposed = true;
-        GC.SuppressFinalize(this);
+        foreach (var timer in _longPressTimers.Values)
+        {
+            timer.Dispose();
+        }
+
+        _longPressTimers.Clear();
+
+        if (_nativeInitialized)
+        {
+            MiraBoxNative.SetCallback(null);
+            MiraBoxNative.Shutdown();
+            _nativeInitialized = false;
+        }
+
+        Interlocked.CompareExchange(ref s_active, null, this);
     }
 
-    private void OnInputReceived(object? sender, MiraBoxInputEventArgs e)
+    // ---------------------------------------------------------------- native events
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void OnNativeEvent(byte* deviceKey, int eventType, int controlId, int value)
     {
-        if (_context is null)
+        // Runs on an SDK read thread while the SDK holds a lock: never block, never throw.
+        try
+        {
+            var key = Marshal.PtrToStringUTF8((nint)deviceKey) ?? string.Empty;
+            s_active?.HandleNativeEvent(key, (MiraBoxEventType)eventType, controlId);
+        }
+        catch
+        {
+        }
+    }
+
+    private void HandleNativeEvent(string deviceKey, MiraBoxEventType eventType, int sdkControlId)
+    {
+        if (_disposed || _context is null)
         {
             return;
         }
 
-        if (!TryMapInput(e, out var controlId, out var eventType, out var value))
+        if (eventType == MiraBoxEventType.DevicesChanged)
+        {
+            QueueRefresh();
+            return;
+        }
+
+        string? deviceId;
+        lock (_sync)
+        {
+            deviceId = _sessions.FirstOrDefault(session => session.DeviceKey == deviceKey)?.DeviceId;
+        }
+
+        if (deviceId is null)
+        {
+            QueueRefresh();
+            return;
+        }
+
+        if (!N4ProLayout.TryMapInput(eventType, sdkControlId, out var controlId, out var inputEvent, out var value))
+        {
+            _context.Log("Debug", $"Ignored N4 Pro event {eventType} for SDK id {sdkControlId}.");
+            return;
+        }
+
+        TrackLongPress(deviceId, controlId, inputEvent);
+        _context.ReportInputEvent(deviceId, controlId, inputEvent, value);
+    }
+
+    /// <summary>Raises LongPress when a key stays down for <see cref="LongPressDelay"/>.</summary>
+    private void TrackLongPress(string deviceId, string controlId, InputCapabilities inputEvent)
+    {
+        if (!controlId.StartsWith(N4ProLayout.KeyPrefix, StringComparison.Ordinal))
         {
             return;
         }
 
-        _context.ReportInputEvent(DeviceId, controlId, eventType, value);
+        var key = (deviceId, controlId);
+        if (_longPressTimers.TryRemove(key, out var previous))
+        {
+            previous.Dispose();
+        }
+
+        if (inputEvent != InputCapabilities.Press)
+        {
+            return;
+        }
+
+        Timer? timer = null;
+        timer = new Timer(_ =>
+        {
+            if (_longPressTimers.TryRemove(new KeyValuePair<(string, string), Timer>(key, timer!)))
+            {
+                timer!.Dispose();
+                _context?.ReportInputEvent(deviceId, controlId, InputCapabilities.LongPress, 1);
+            }
+        });
+        _longPressTimers[key] = timer;
+        timer.Change(LongPressDelay, Timeout.InfiniteTimeSpan);
     }
 
-    private static bool TryMapInput(MiraBoxInputEventArgs input, out string controlId, out InputCapabilities eventType, out int value)
+    // ---------------------------------------------------------------- device tracking
+
+    private void QueueRefresh()
     {
-        switch (input.EventType)
+        // Don't call back into the SDK from inside its callback; coalesce bursts of hot-plug events.
+        if (Interlocked.Exchange(ref _refreshQueued, 1) == 0)
         {
-            case MiraBoxEventType.KeyPress:
-                controlId = $"key.{input.ControlId}";
-                eventType = InputCapabilities.Press;
-                value = 1;
-                return true;
-            case MiraBoxEventType.KeyRelease:
-                controlId = $"key.{input.ControlId}";
-                eventType = InputCapabilities.Release;
-                value = 0;
-                return true;
-            case MiraBoxEventType.KnobLeft:
-                controlId = $"encoder.{input.ControlId}";
-                eventType = InputCapabilities.Rotate;
-                value = -1;
-                return true;
-            case MiraBoxEventType.KnobRight:
-                controlId = $"encoder.{input.ControlId}";
-                eventType = InputCapabilities.Rotate;
-                value = 1;
-                return true;
-            case MiraBoxEventType.KnobPress:
-                controlId = $"encoder.{input.ControlId}";
-                eventType = InputCapabilities.Press;
-                value = 1;
-                return true;
-            case MiraBoxEventType.KnobRelease:
-                controlId = $"encoder.{input.ControlId}";
-                eventType = InputCapabilities.Release;
-                value = 0;
-                return true;
-            case MiraBoxEventType.SwipeLeft:
-            case MiraBoxEventType.SwipeRight:
-            case MiraBoxEventType.ToggleUp:
-            case MiraBoxEventType.ToggleDown:
-            case MiraBoxEventType.DipLeft:
-            case MiraBoxEventType.DipLeftEnd:
-            case MiraBoxEventType.DipRight:
-            case MiraBoxEventType.DipRightEnd:
-            case MiraBoxEventType.DipPress:
-            case MiraBoxEventType.DipRelease:
-                controlId = "touch.0";
-                eventType = InputCapabilities.Touch;
-                value = input.X;
-                return true;
-            default:
-                controlId = string.Empty;
-                eventType = InputCapabilities.None;
-                value = 0;
-                return false;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                Volatile.Write(ref _refreshQueued, 0);
+                try
+                {
+                    RefreshDevices();
+                }
+                catch (Exception ex)
+                {
+                    _context?.Log("Error", $"Refreshing MiraBox devices failed: {ex.Message}");
+                }
+            });
         }
     }
 
-    private static DeviceDefinition CreateDeviceDefinition()
+    private void RefreshDevices()
     {
-        var controls = new List<PhysicalControl>();
-        const double keySize = 72;
-        const double keyGap = 12;
-        const double keyStartX = 32;
-        const double topRowY = 32;
-        const double secondRowY = 116;
-
-        for (var index = 0; index < 10; index++)
+        if (_disposed || !_nativeInitialized)
         {
-            var row = index < 5 ? 0 : 1;
-            var column = index % 5;
-            var y = row == 0 ? topRowY : secondRowY;
-            var x = keyStartX + (column * (keySize + keyGap));
-
-            controls.Add(new PhysicalControl(
-                $"key.{index}",
-                $"Key {index + 1}",
-                ControlType.Key,
-                new Rect(x, y, keySize, keySize),
-                InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.LongPress,
-                OutputCapabilities.ColorImage | OutputCapabilities.Text));
+            return;
         }
 
-        controls.Add(new PhysicalControl(
-            "touch.0",
-            "Touch Display",
-            ControlType.TouchSurface,
-            new Rect(32, 224, 520, 128),
-            InputCapabilities.Touch | InputCapabilities.Swipe,
-            OutputCapabilities.FullDisplay | OutputCapabilities.Text));
-
-        const double encoderSize = 64;
-        const double encoderGap = 28;
-        const double encoderStartX = 66;
-        const double encoderY = 376;
-
-        for (var index = 0; index < 4; index++)
+        var connected = new List<MiraBoxDeviceInfo>();
+        var count = MiraBoxNative.GetDeviceCount();
+        for (var index = 0; index < count; index++)
         {
-            var x = encoderStartX + (index * (encoderSize + encoderGap));
-            controls.Add(new PhysicalControl(
-                $"encoder.{index}",
-                $"Encoder {index + 1}",
-                ControlType.Encoder,
-                new Rect(x, encoderY, encoderSize, encoderSize),
-                InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release,
-                OutputCapabilities.None));
+            var deviceKey = MiraBoxNative.GetDeviceKey(index);
+            if (deviceKey is null)
+            {
+                continue;
+            }
+
+            var info = MiraBoxDeviceInfo.FromJson(MiraBoxNative.GetDeviceInfoJson(deviceKey, out _));
+            if (info is null)
+            {
+                continue;
+            }
+
+            if (!info.IsN4Pro)
+            {
+                if (_reportedUnsupported.Add(deviceKey))
+                {
+                    _context?.Log("Warning", $"StreamDock device {info.VendorId:X4}:{info.ProductId:X4} (model {info.OriginType}) is not supported yet; only the N4 Pro is.");
+                }
+
+                continue;
+            }
+
+            connected.Add(info);
         }
 
-        return new DeviceDefinition(DeviceId, "MiraBox N4 Pro", controls, 800, 480);
+        var statusChanges = new List<(string DeviceId, string State, string Message)>();
+        bool changed;
+        lock (_sync)
+        {
+            changed = AssignSessions(connected, statusChanges);
+            if (changed)
+            {
+                Volatile.Write(ref _devices, BuildDefinitions());
+            }
+        }
+
+        foreach (var (deviceId, state, message) in statusChanges)
+        {
+            _context?.ReportConnectionStatus(deviceId, state, message);
+        }
+
+        if (changed)
+        {
+            DevicesChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Matches connected devices to sessions (by device key, then serial, then a free slot).</summary>
+    private bool AssignSessions(IReadOnlyList<MiraBoxDeviceInfo> connected, List<(string, string, string)> statusChanges)
+    {
+        var changed = false;
+        var matched = new HashSet<DeviceSession>();
+
+        foreach (var info in connected)
+        {
+            var session = _sessions.FirstOrDefault(candidate => candidate.DeviceKey == info.DeviceKey && !matched.Contains(candidate))
+                ?? _sessions.FirstOrDefault(candidate => candidate.DeviceKey is null && candidate.SerialNumber == info.SerialNumber && !matched.Contains(candidate))
+                ?? _sessions.FirstOrDefault(candidate => candidate.DeviceKey is null && candidate.SerialNumber is null && !matched.Contains(candidate));
+
+            if (session is null)
+            {
+                session = new DeviceSession($"{PrimaryDeviceId}-{_sessions.Count + 1}");
+                _sessions.Add(session);
+            }
+
+            matched.Add(session);
+            if (session.DeviceKey == info.DeviceKey && session.Info == info)
+            {
+                continue;
+            }
+
+            changed = true;
+            session.DeviceKey = info.DeviceKey;
+            session.SerialNumber = info.SerialNumber;
+            session.Info = info;
+            if (session.LedColors.Length != info.LedCount * 3)
+            {
+                session.LedColors = new byte[Math.Max(0, info.LedCount) * 3];
+            }
+
+            statusChanges.Add((session.DeviceId, "Connected", $"N4 Pro {info.SerialNumber}, firmware {info.FirmwareVersion}."));
+        }
+
+        foreach (var session in _sessions.Where(session => !matched.Contains(session)))
+        {
+            if (session.DeviceKey is not null || !session.StatusReported)
+            {
+                changed |= session.DeviceKey is not null;
+                session.DeviceKey = null;
+                statusChanges.Add((session.DeviceId, "Disconnected", "Plug in the N4 Pro over USB."));
+            }
+        }
+
+        foreach (var session in _sessions)
+        {
+            session.StatusReported = true;
+        }
+
+        return changed;
+    }
+
+    private DeviceDefinition[] BuildDefinitions() =>
+    [
+        .. _sessions.Select(session => N4ProLayout.Create(
+            session.DeviceId,
+            session.DeviceId == PrimaryDeviceId ? DeviceName : $"{DeviceName} ({session.SerialNumber})",
+            session.Info,
+            session.DeviceKey is not null,
+            session.Info is null ? null : $"Serial {session.Info.SerialNumber}, firmware {session.Info.FirmwareVersion}"))
+    ];
+
+    private DeviceSession? FindSession(string deviceId) =>
+        _sessions.FirstOrDefault(session => string.Equals(session.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+
+    private bool TryGetConnectedKey(string deviceId, out string deviceKey, out string? error)
+    {
+        lock (_sync)
+        {
+            if (FindSession(deviceId)?.DeviceKey is { } key)
+            {
+                deviceKey = key;
+                error = null;
+                return true;
+            }
+        }
+
+        deviceKey = string.Empty;
+        error = "device not connected";
+        return false;
+    }
+
+    private bool CheckResult(string deviceId, int result, out string? error)
+    {
+        if (result >= 0)
+        {
+            error = null;
+            return true;
+        }
+
+        error = MiraBoxNative.Describe(result);
+        if (result == (int)MiraBoxResult.DeviceNotFound)
+        {
+            // Unplugged: re-enumerate so the host stops rendering to it.
+            QueueRefresh();
+        }
+
+        return false;
+    }
+
+    private sealed class DeviceSession(string deviceId)
+    {
+        public string DeviceId { get; } = deviceId;
+
+        public string? DeviceKey { get; set; }
+
+        public string? SerialNumber { get; set; }
+
+        public MiraBoxDeviceInfo? Info { get; set; }
+
+        public byte[] LedColors { get; set; } = new byte[N4ProLayout.EncoderCount * 3];
+
+        public bool StatusReported { get; set; }
     }
 }

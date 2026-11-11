@@ -1,56 +1,65 @@
 ﻿using DeckHost.Core.Rendering.Interfaces;
 using SkiaSharp;
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Text;
 
 namespace DeckHost.Core.Rendering
 {
+    /// <summary>
+    /// Offscreen RGBA8888 surface backed by one pinned buffer that lives as long as the renderer.
+    /// Create one per control size and reuse it; the returned span is overwritten by the next render.
+    /// </summary>
     public sealed class SurfaceRenderer : ISurfaceRenderer, IDisposable
     {
-        private readonly int _width;
-        private readonly int _height;
         private readonly byte[] _frameBuffer;
-        private readonly GCHandle _bufferHandle;
         private readonly SKSurface _surface;
         private bool _disposed;
 
         public SurfaceRenderer(int width, int height)
         {
-            _width = width;
-            _height = height;
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
-            int bufferSize = width * height * 4; // RGBA32 format
-            _frameBuffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-            _bufferHandle = GCHandle.Alloc(_frameBuffer, GCHandleType.Pinned);
+            Width = width;
+            Height = height;
+
+            // Allocated on the pinned object heap: no GCHandle, and the buffer never moves
+            // while Skia holds a pointer to it.
+            _frameBuffer = GC.AllocateUninitializedArray<byte>(width * height * 4, pinned: true);
 
             var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
-            _surface = SKSurface.Create(info, _bufferHandle.AddrOfPinnedObject(), width * 4);
+            unsafe
+            {
+                fixed (byte* pixels = _frameBuffer)
+                {
+                    _surface = SKSurface.Create(info, (nint)pixels, width * 4)
+                        ?? throw new InvalidOperationException($"Could not create a {width}x{height} Skia surface.");
+                }
+            }
         }
+
+        public int Width { get; }
+
+        public int Height { get; }
 
         public ReadOnlySpan<byte> Render(Action<SKCanvas> drawAction)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             var canvas = _surface.Canvas;
             canvas.Clear(SKColors.Black);
-
             drawAction(canvas);
             canvas.Flush();
 
-            return _frameBuffer.AsSpan(0, _width * _height * 4);
+            return _frameBuffer;
         }
 
         public void Dispose()
         {
-            if (_disposed) return;
+            if (_disposed)
+            {
+                return;
+            }
 
             _surface.Dispose();
-            if (_bufferHandle.IsAllocated)
-            {
-                _bufferHandle.Free();
-            }
-            ArrayPool<byte>.Shared.Return(_frameBuffer);
             _disposed = true;
         }
     }

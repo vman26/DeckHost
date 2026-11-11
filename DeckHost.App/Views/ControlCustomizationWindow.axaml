@@ -3,34 +3,22 @@
 		xmlns:vm="using:DeckHost.App.ViewModels"
 		x:Class="DeckHost.App.Views.ControlCustomizationWindow"
 		x:DataType="vm:ControlCustomizationViewModel"
-		Width="460"
-		Height="360"
+		Width="480"
+		SizeToContent="Height"
 		MinWidth="420"
-		MinHeight="320"
 		CanResize="False"
 		Title="Customize Control">
-	<Grid RowDefinitions="Auto,Auto,Auto,*,Auto"
-		  RowSpacing="14"
-		  Margin="20">
+	<StackPanel Spacing="14" Margin="20">
 		<StackPanel Spacing="4">
 			<TextBlock Text="{Binding DisplayName}" FontSize="22" FontWeight="SemiBold" />
 			<TextBlock Text="{Binding ControlType}" Foreground="#64748B" />
 		</StackPanel>
 
-		<Border Grid.Row="1"
-				Padding="12"
-				Background="#F8FAFC"
-				BorderBrush="#CBD5E1"
-				BorderThickness="1"
-				CornerRadius="10">
-			<TextBlock Text="Customize the visible content shown for this control."
-						  IsVisible="{Binding ShowAppearanceEditor}"
-					   TextWrapping="Wrap" />
-		</Border>
-
-		<StackPanel Grid.Row="2"
-					Spacing="10"
+		<StackPanel Spacing="10"
 					IsVisible="{Binding ShowAppearanceEditor}">
+			<TextBlock Text="Changes show on the device right away. Cancel puts the previous content back."
+					   Foreground="#64748B"
+					   TextWrapping="Wrap" />
 			<TextBlock Text="Display text" FontWeight="SemiBold" />
 			<TextBox Name="DisplayTextBox"
 					 Text="{Binding DisplayText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -46,18 +34,47 @@
 			</Grid>
 		</StackPanel>
 
-		<TextBlock Grid.Row="3"
-				   Text="This control does not expose output capabilities that can be customized yet."
+		<StackPanel Spacing="10"
+					IsVisible="{Binding SupportsLight}">
+			<CheckBox Content="Light up the LED when this control is used"
+					  IsChecked="{Binding LightEnabled}" />
+			<Grid ColumnDefinitions="*,*,*"
+				  ColumnSpacing="10"
+				  RowDefinitions="Auto,Auto"
+				  RowSpacing="4"
+				  IsEnabled="{Binding LightEnabled}">
+				<TextBlock Text="Active color" FontWeight="SemiBold" />
+				<TextBlock Grid.Column="1" Text="Idle color" FontWeight="SemiBold" />
+				<TextBlock Grid.Column="2" Text="Active for (ms)" FontWeight="SemiBold" />
+				<TextBox Grid.Row="1"
+						 Text="{Binding ActiveColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+						 PlaceholderText="#00FF00" />
+				<TextBox Grid.Row="1" Grid.Column="1"
+						 Text="{Binding IdleColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+						 PlaceholderText="#0000FF" />
+				<TextBox Grid.Row="1" Grid.Column="2"
+						 Text="{Binding ActiveDurationText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+						 PlaceholderText="200" />
+			</Grid>
+			<CheckBox Content="Blink instead of a steady color"
+					  IsEnabled="{Binding LightEnabled}"
+					  IsChecked="{Binding PulseOnActive}" />
+			<TextBlock Text="{Binding LightError}"
+					   IsVisible="{Binding HasLightError}"
+					   Foreground="#B91C1C"
+					   TextWrapping="Wrap" />
+		</StackPanel>
+
+		<TextBlock Text="This control has no display or light to customize."
 				   Foreground="#64748B"
 				   TextWrapping="Wrap"
-					  IsVisible="{Binding ShowUnsupportedMessage}" />
+				   IsVisible="{Binding ShowUnsupportedMessage}" />
 
-		<StackPanel Grid.Row="4"
-					Orientation="Horizontal"
+		<StackPanel Orientation="Horizontal"
 					HorizontalAlignment="Right"
 					Spacing="10">
 			<Button Content="Cancel" Click="Cancel_OnClick" />
 			<Button Content="Save" Classes="accent" Click="Save_OnClick" />
 		</StackPanel>
-	</Grid>
+	</StackPanel>
 </Window>

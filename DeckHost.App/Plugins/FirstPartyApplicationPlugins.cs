@@ -1,3 +1,4 @@
+using DeckHost.Contracts;
 using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
@@ -40,7 +41,7 @@ internal sealed class MediaApplicationPlugin : IApplicationPlugin
     public IReadOnlyCollection<IDeckAction> Actions { get; } =
     [
         new RenderLabelAction("media.playpause", "Play / Pause", InputCapabilities.Press, OutputCapabilities.Text),
-        new RenderLabelAction("media.scrub", "Track Scrub", InputCapabilities.Touch | InputCapabilities.Swipe, OutputCapabilities.FullDisplay),
+        new RenderLabelAction("media.scrub", "Track Scrub", InputCapabilities.Swipe, OutputCapabilities.None),
     ];
 }
 
@@ -70,46 +71,31 @@ internal sealed class SystemApplicationPlugin : IApplicationPlugin
     ];
 }
 
-internal sealed class DisplayContentAction : DeckActionBase
+internal sealed class DisplayContentAction()
+    : DeckActionBase("builtin.display-content", "Display Content", InputCapabilities.None, OutputCapabilities.None)
 {
-    public DisplayContentAction()
-        : base("builtin.display-content", "Display Content", InputCapabilities.None, OutputCapabilities.None)
+    // Pure content: pressing the control doesn't count as running an action.
+    public override void Execute(ActionContext context)
     {
     }
 
-    public override void Render(IRenderContext context)
-    {
-        var text = ResolveDisplayText(context, Name);
-        context.DrawText(text, 24, context.Height / 2d, 28f);
-    }
+    public override void Render(IRenderContext context) => DrawTitle(context, ResolveDisplayText(context, string.Empty));
 }
 
-internal sealed class MultiActionAction : DeckActionBase
-{
-    public MultiActionAction()
-        : base("builtin.multi-action", "Multi Action", InputCapabilities.None, OutputCapabilities.None)
-    {
-    }
-
-    public override void Render(IRenderContext context)
-    {
-        var text = ResolveDisplayText(context, Name);
-        context.DrawText(text, 24, context.Height / 2d, 26f);
-    }
-}
+internal sealed class MultiActionAction()
+    : DeckActionBase("builtin.multi-action", "Multi Action", InputCapabilities.None, OutputCapabilities.None);
 
 internal sealed class RenderLabelAction(string id, string name, InputCapabilities requiredInputs, OutputCapabilities requiredOutputs)
-    : DeckActionBase(id, name, requiredInputs, requiredOutputs)
-{
-    public override void Render(IRenderContext context)
-    {
-        var text = ResolveDisplayText(context, Name);
-        context.DrawText(text, 24, context.Height / 2d, 28f);
-    }
-}
+    : DeckActionBase(id, name, requiredInputs, requiredOutputs);
 
+/// <summary>
+/// Default action behaviour: record that it ran, and draw its label plus the time it last ran.
+/// Runs on the host's worker thread.
+/// </summary>
 internal abstract class DeckActionBase(string id, string name, InputCapabilities requiredInputs, OutputCapabilities requiredOutputs) : IDeckAction
 {
+    private const uint SecondaryTextColor = 0xFF93C5FD;
+
     public string Id { get; } = id;
 
     public string Name { get; } = name;
@@ -120,27 +106,53 @@ internal abstract class DeckActionBase(string id, string name, InputCapabilities
 
     public virtual void Execute(ActionContext context)
     {
-        context.Variables.Publish($"devices.{context.DeviceId}.{context.ControlId}.lastAction", Name);
-        context.Variables.Publish($"devices.{context.DeviceId}.{context.ControlId}.lastActionAt", DateTimeOffset.UtcNow.ToString("HH:mm:ss"));
-
-        if (context.Variables.TryGetValue<int>($"devices.{context.DeviceId}.{context.ControlId}.executionCount", out var executionCount))
+        // Count each physical activation once: a press/release pair is one activation.
+        if (context.EventType == InputCapabilities.Release)
         {
-            context.Variables.Publish($"devices.{context.DeviceId}.{context.ControlId}.executionCount", executionCount + 1);
+            return;
         }
-        else
+
+        var variables = context.Variables;
+        variables.Publish(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.LastAction), Name);
+        variables.Publish(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.LastActionAt), DateTimeOffset.Now.ToString("HH:mm:ss"));
+
+        var countKey = VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.ExecutionCount);
+        variables.Publish(countKey, variables.TryGetValue<int>(countKey, out var executionCount) ? executionCount + 1 : 1);
+    }
+
+    public virtual void Render(IRenderContext context)
+    {
+        DrawTitle(context, ResolveDisplayText(context, Name));
+
+        if (context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.LastActionAt), out var lastRun) &&
+            !string.IsNullOrWhiteSpace(lastRun))
         {
-            context.Variables.Publish($"devices.{context.DeviceId}.{context.ControlId}.executionCount", 1);
+            context.DrawCenteredText($"✓ {lastRun}", context.Width / 2d, context.Height * 0.78d, Math.Max(10f, context.Height * 0.12f), SecondaryTextColor);
         }
     }
 
-    public abstract void Render(IRenderContext context);
+    protected static void DrawTitle(IRenderContext context, string text)
+    {
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            context.DrawCenteredText(text, context.Width / 2d, context.Height * 0.45d, Math.Max(12f, context.Height * 0.18f));
+        }
+    }
 
+    /// <summary>The binding's custom text; no text when it only shows an image; else the fallback.</summary>
     protected static string ResolveDisplayText(IRenderContext context, string fallback)
     {
-        if (context.Variables.TryGetValue<string>($"devices.{context.DeviceId}.{context.ControlId}.appearance.text", out var displayText) &&
+        var variables = context.Variables;
+        if (variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceText), out var displayText) &&
             !string.IsNullOrWhiteSpace(displayText))
         {
             return displayText;
+        }
+
+        if (variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceImage), out var imagePath) &&
+            !string.IsNullOrWhiteSpace(imagePath))
+        {
+            return string.Empty;
         }
 
         return fallback;
@@ -148,8 +160,7 @@ internal abstract class DeckActionBase(string id, string name, InputCapabilities
 }
 
 /// <summary>
-/// Diagnostic action that displays the SDK key ID for the current control.
-/// Used for debugging key mapping issues.
+/// Shows the logical control id and the SDK/hardware id on the device, to check the key mapping.
 /// </summary>
 internal sealed class KeyIdDiagnosticAction : IDeckAction
 {
@@ -163,32 +174,13 @@ internal sealed class KeyIdDiagnosticAction : IDeckAction
 
     public void Execute(ActionContext context)
     {
-        // Just log for debugging
-        System.Diagnostics.Debug.WriteLine($"Key ID Diagnostic pressed: {context.ControlId}");
     }
 
     public void Render(IRenderContext context)
     {
-        if (!context.ControlId.StartsWith("key.", StringComparison.OrdinalIgnoreCase))
-        {
-            context.DrawText("Not a key", 8, 20f, 14f);
-            return;
-        }
-
-        var keyIndexStr = context.ControlId.AsSpan(4).ToString();
-        if (!int.TryParse(keyIndexStr, out var keyIndex))
-        {
-            context.DrawText("Error", 8, 20f, 14f);
-            return;
-        }
-
-        var sdkKeyId = keyIndex;
-        if (context.Variables.TryGetValue<int>($"devices.{context.DeviceId}.{context.ControlId}.sdkKeyId", out var mappedSdkKeyId))
-        {
-            sdkKeyId = mappedSdkKeyId;
-        }
-
-        context.DrawText($"L:{keyIndex}", 6, 16f, 16f);
-        context.DrawText($"S:{sdkKeyId}", 6, 42f, 16f);
+        context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.HardwareId), out var hardwareId);
+        var size = Math.Max(11f, context.Height * 0.16f);
+        context.DrawCenteredText(context.ControlId, context.Width / 2d, context.Height * 0.38d, size);
+        context.DrawCenteredText($"SDK {hardwareId ?? "?"}", context.Width / 2d, context.Height * 0.66d, size, 0xFFFDE68A);
     }
 }

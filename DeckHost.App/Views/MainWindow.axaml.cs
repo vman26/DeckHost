@@ -6,6 +6,7 @@ using Avalonia.VisualTree;
 using DeckHost.App.ViewModels;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
+using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
 
@@ -63,11 +64,10 @@ public partial class MainWindow : Window
         dataTransfer.Add(DataTransferItem.Create(ActionPayloadFormat, controlItem.AssignedBinding.PrimaryAction.Action));
 
         e.Handled = true;
-        var result = await DragDrop.DoDragDropAsync(e, dataTransfer, DragDropEffects.Copy | DragDropEffects.Move);
-        if (result == DragDropEffects.None)
-        {
-            vm.RemoveAssignment(controlItem.Control);
-        }
+
+        // Removal happens in OnControlDrop when the assignment is dropped anywhere in the window
+        // that isn't a control. A cancelled drag (Esc, or released outside the window) keeps it.
+        await DragDrop.DoDragDropAsync(e, dataTransfer, DragDropEffects.Copy | DragDropEffects.Move);
     }
 
     private void OnControlDragOver(object? sender, DragEventArgs e)
@@ -75,14 +75,19 @@ public partial class MainWindow : Window
         e.DragEffects = DragDropEffects.None;
         e.Handled = true;
 
-        if (DataContext is not MainViewModel vm)
+        if (DataContext is not MainViewModel vm || !TryGetDraggedAction(e, out var action))
         {
             return;
         }
 
-        if (!TryGetDropTargetControl(e, out var targetControl) ||
-            !TryGetDraggedAction(e, out var action))
+        if (!TryGetDropTargetControl(e, out var targetControl))
         {
+            // An assignment dragged off its control can be dropped anywhere to remove it.
+            if (TryGetDraggedSourceControl(e, out _))
+            {
+                e.DragEffects = DragDropEffects.Move;
+            }
+
             return;
         }
 
@@ -96,18 +101,34 @@ public partial class MainWindow : Window
     {
         e.Handled = true;
 
-        if (DataContext is not MainViewModel vm)
+        if (DataContext is not MainViewModel vm || !TryGetDraggedAction(e, out var action))
         {
             return;
         }
 
-        if (!TryGetDropTargetControl(e, out var targetControl) ||
-            !TryGetDraggedAction(e, out var action))
+        if (!TryGetDropTargetControl(e, out var targetControl))
+        {
+            if (TryGetDraggedSourceControl(e, out var sourceControlId))
+            {
+                vm.RemoveAssignment(sourceControlId);
+            }
+
+            return;
+        }
+
+        if (TryGetDraggedSourceControl(e, out var sourceId) &&
+            string.Equals(sourceId, targetControl.Id, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
         vm.AssignActionToControl(targetControl, action);
+    }
+
+    private static bool TryGetDraggedSourceControl(DragEventArgs e, out string controlId)
+    {
+        controlId = e.DataTransfer.TryGetValue(ControlPayloadFormat) ?? string.Empty;
+        return controlId.Length > 0;
     }
 
     private async void CustomizeSelectedControl_OnClick(object? sender, RoutedEventArgs e)
@@ -166,21 +187,26 @@ public partial class MainWindow : Window
 
         void OnCustomizationChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName is nameof(ControlCustomizationViewModel.DisplayText) or nameof(ControlCustomizationViewModel.ImagePath))
+            if (e.PropertyName is nameof(ControlCustomizationViewModel.DisplayText)
+                or nameof(ControlCustomizationViewModel.ImagePath)
+                or nameof(ControlCustomizationViewModel.LightEnabled)
+                or nameof(ControlCustomizationViewModel.ActiveColor)
+                or nameof(ControlCustomizationViewModel.IdleColor)
+                or nameof(ControlCustomizationViewModel.ActiveDurationText)
+                or nameof(ControlCustomizationViewModel.PulseOnActive))
             {
                 vm.ApplyCustomization(customization);
             }
         }
 
+        // Changes preview live on the device, so Cancel has to put the original values back.
+        var original = vm.CreateCustomizationViewModel(controlItem.Id);
         customization.PropertyChanged += OnCustomizationChanged;
 
         try
         {
             var saved = await window.ShowDialog<bool?>(this);
-            if (saved == true)
-            {
-                vm.ApplyCustomization(customization);
-            }
+            vm.ApplyCustomization(saved == true ? customization : original);
         }
         finally
         {

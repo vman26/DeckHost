@@ -35,10 +35,10 @@ public sealed record RgbFeedback(
     /// </summary>
     public static (byte R, byte G, byte B) ParseColor(string hexColor)
     {
-        if (string.IsNullOrWhiteSpace(hexColor) || hexColor.Length < 6)
+        var hex = (hexColor ?? string.Empty).Trim().TrimStart('#');
+        if (hex.Length != 6)
             return (0, 0, 0);
 
-        var hex = hexColor.TrimStart('#');
         if (byte.TryParse(hex[..2], System.Globalization.NumberStyles.HexNumber, null, out var r) &&
             byte.TryParse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber, null, out var g) &&
             byte.TryParse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber, null, out var b))

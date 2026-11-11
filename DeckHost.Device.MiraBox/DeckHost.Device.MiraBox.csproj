@@ -20,7 +20,13 @@
     <NativeBridgeRuntimeDir>$(NativeBridgeBuildDir)/bin/$(Configuration)</NativeBridgeRuntimeDir>
     <NativeBridgeConfigureStamp>$(NativeBridgeBuildDir)/CMakeCache.txt</NativeBridgeConfigureStamp>
     <NativeBridgeBuildStamp>$(NativeBridgeBuildDir)/MiraBoxBridge.$(Configuration).stamp</NativeBridgeBuildStamp>
+    <StreamDockSdkDir>$(MSBuildProjectDirectory)/../native/StreamDock-SDK</StreamDockSdkDir>
+    <StreamDockSdkPatch>$(MSBuildProjectDirectory)/../native/patches/streamdock-sdk.patch</StreamDockSdkPatch>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DeckHost.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
@@ -49,6 +55,23 @@
 
     <Warning Text="Skipping MiraBox native bridge build because CMake could not be found. Set CMakeExePath, use Visual Studio's bundled CMake on Windows, or install CMake on PATH to build and copy MiraBoxBridge runtime binaries."
              Condition="'$(HasCMake)' != 'true'" />
+  </Target>
+
+  <!-- The StreamDock SDK submodule is pinned to an upstream commit; our local fixes live in a patch
+       that is applied here (idempotently) so a fresh recursive clone builds without manual steps. -->
+  <Target Name="ApplyStreamDockSdkPatch"
+          BeforeTargets="ConfigureMiraBoxBridge"
+          Condition="'$(IsSupportedMiraBoxBuildPlatform)' == 'true' and '$(EnableMiraBoxNativeBuild)' == 'true' and '$(HasCMake)' == 'true' and Exists('$(StreamDockSdkPatch)') and Exists('$(StreamDockSdkDir)/CPP-SDK/CMakeLists.txt')">
+    <Exec Command="git -C &quot;$(StreamDockSdkDir)&quot; apply --reverse --check --ignore-whitespace &quot;$(StreamDockSdkPatch)&quot;"
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true"
+          StandardOutputImportance="low"
+          StandardErrorImportance="low"
+          EchoOff="true">
+      <Output TaskParameter="ExitCode" PropertyName="StreamDockSdkPatchReverseCheck" />
+    </Exec>
+    <Exec Command="git -C &quot;$(StreamDockSdkDir)&quot; apply --ignore-whitespace &quot;$(StreamDockSdkPatch)&quot;"
+          Condition="'$(StreamDockSdkPatchReverseCheck)' != '0'" />
   </Target>
 
   <Target Name="ConfigureMiraBoxBridge"
@@ -83,7 +106,7 @@
     <Copy SourceFiles="@(NativeBridgeArtifacts)"
           DestinationFolder="$(OutDir)"
           SkipUnchangedFiles="true"
-          UseHardlinksIfPossible="true" />
+          />
   </Target>
 
 </Project>

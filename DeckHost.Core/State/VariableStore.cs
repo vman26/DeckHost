@@ -5,26 +5,28 @@ using System.Reactive.Subjects;
 
 namespace DeckHost.Core.State
 {
+    /// <summary>
+    /// Thread-safe key/value store with change notifications. Values are boxed; keep it for
+    /// state and telemetry, not per-pixel data.
+    /// </summary>
     public sealed class VariableStore : IVariableStore, IDisposable
     {
-        private readonly ConcurrentDictionary<string, BehaviorSubject<object>> _variables = new();
+        private readonly ConcurrentDictionary<string, BehaviorSubject<object?>> _variables = new(StringComparer.Ordinal);
 
         public IObservable<T> Observe<T>(string key)
         {
-            var subject = _variables.GetOrAdd(key, _ => new BehaviorSubject<object>(default!));
-            return subject.AsObservable().OfType<T>();
+            ArgumentNullException.ThrowIfNull(key);
+            return GetSubject(key, null).AsObservable().OfType<T>();
         }
 
         public void Publish<T>(string key, T value)
         {
-            if (_variables.TryGetValue(key, out var subject))
-            {
-                subject.OnNext(value!);
-            }
-            else
-            {
-                _variables[key] = new BehaviorSubject<object>(value!);
-            }
+            ArgumentNullException.ThrowIfNull(key);
+
+            // GetOrAdd + OnNext on the same subject: a concurrent Observe can never end up
+            // subscribed to a subject that a racing Publish then replaces.
+            var subject = GetSubject(key, value);
+            subject.OnNext(value);
         }
 
         public bool TryGetValue<T>(string key, out T value)
@@ -43,12 +45,14 @@ namespace DeckHost.Core.State
         {
             foreach (var variable in _variables.Values)
             {
-                if (variable is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
+                variable.OnCompleted();
+                variable.Dispose();
             }
+
             _variables.Clear();
         }
+
+        private BehaviorSubject<object?> GetSubject(string key, object? initialValue) =>
+            _variables.GetOrAdd(key, static (_, initial) => new BehaviorSubject<object?>(initial), initialValue);
     }
 }

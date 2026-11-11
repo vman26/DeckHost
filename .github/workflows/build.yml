@@ -1,0 +1,26 @@
+name: build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Builds the C# projects and, through DeckHost.Device.MiraBox.csproj, the native bridge
+      # (the StreamDock SDK patch is applied automatically). CMake ships with the runner image.
+      - name: Build
+        run: dotnet build DeckHost.slnx -c Release
+
+      - name: Test
+        run: dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release --no-build

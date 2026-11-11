@@ -1,3 +1,30 @@
+diff --git a/CPP-SDK/cmake/FetchHid.cmake b/CPP-SDK/cmake/FetchHid.cmake
+index b82a1de..523f24f 100644
+--- a/CPP-SDK/cmake/FetchHid.cmake
++++ b/CPP-SDK/cmake/FetchHid.cmake
+@@ -1,5 +1,13 @@
+ include(FetchContent)
+ 
++set(HIDAPI_LOCAL_ARCHIVE "${CMAKE_SOURCE_DIR}/third_party/hidapi-master.zip")
++
++if(EXISTS "${HIDAPI_LOCAL_ARCHIVE}")
++    set(HIDAPI_SOURCE_URL "${HIDAPI_LOCAL_ARCHIVE}")
++else()
++    set(HIDAPI_SOURCE_URL "https://github.com/libusb/hidapi/archive/refs/heads/master.zip")
++endif()
++
+ # Build hidapi as a shared library
+ set(BUILD_SHARED_LIBS ${USE_SHARED_HIDAPI})
+ 
+@@ -10,7 +18,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
+ 
+ FetchContent_Declare(
+     hidapi
+-    URL "${CMAKE_SOURCE_DIR}/third_party/hidapi-master.zip"
++    URL "${HIDAPI_SOURCE_URL}"
+     # URL_HASH "SHA256=e0a2f8fdaddba3e63f7d47336a584ed416750d55083c0ee0a474e55adb6027d1"
+     # DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+ )
 diff --git a/CPP-SDK/src/DeviceManager/DeviceEnumerator/deviceenumerator.cpp b/CPP-SDK/src/DeviceManager/DeviceEnumerator/deviceenumerator.cpp
 index 6e8d91e..a1152fc 100644
 --- a/CPP-SDK/src/DeviceManager/DeviceEnumerator/deviceenumerator.cpp
