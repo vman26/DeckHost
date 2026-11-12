@@ -149,6 +149,12 @@ else()
         # The SDK links the OpenCV dylibs it ships for macOS; they go along (by their versioned name).
         file(GLOB MIRABOX_OPENCV_DYLIBS "${CMAKE_CURRENT_SOURCE_DIR}/../StreamDock-SDK/CPP-SDK/ImgProcesser/third_party/opencv/mac/lib/libopencv_*.*.dylib")
         list(APPEND MIRABOX_RUNTIME_LIBS ${MIRABOX_OPENCV_DYLIBS})
+
+        # On macOS the bridge also links the hidapi the SDK builds (on Linux it's inside the
+        # transport library). Copied under the name the bridge records (libhidapi.0.dylib).
+        if(TARGET hidapi_darwin)
+            list(APPEND MIRABOX_RUNTIME_LIBS "$<TARGET_SONAME_FILE:hidapi_darwin>")
+        endif()
     endif()
 
     add_custom_command(TARGET MiraBoxBridge POST_BUILD
