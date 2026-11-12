@@ -279,13 +279,15 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                               !string.IsNullOrWhiteSpace(ownImage);
             if (!hasOwnImage && !context.IsCompact)
             {
+                // Drawn for a Stream Deck, where an unlit key is black: that black becomes transparent,
+                // so the control's and the profile's background show around the plugin's picture.
                 if (state?.Image is { } custom)
                 {
-                    context.DrawEncodedImage(custom);
+                    context.DrawEncodedImage(custom, clearEdgeBlack: true);
                 }
                 else if (DefaultImage(manifest, manifestState?.Image ?? action.Icon) is { } defaultImage)
                 {
-                    context.DrawEncodedImage(defaultImage);
+                    context.DrawEncodedImage(defaultImage, clearEdgeBlack: true);
                 }
             }
 
