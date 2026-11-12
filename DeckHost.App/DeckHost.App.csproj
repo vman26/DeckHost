@@ -55,10 +55,10 @@
   </Target>
 
   <Target Name="PreparePluginDirectories" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true'">
-    <MakeDir Directories="$(OutDir)plugins\;$(OutDir)plugins\device\;$(OutDir)plugins\functional\;$(OutDir)plugins\device\deckhost.device.mirabox\" />
+    <MakeDir Directories="$(OutDir)plugins\;$(OutDir)plugins\device\;$(OutDir)plugins\functional\;$(OutDir)plugins\device\deckhost-device-mirabox\" />
   </Target>
 
-  <!-- MiraBoxNative resolves MiraBoxBridge only from plugins/device/deckhost.device.mirabox. -->
+  <!-- MiraBoxNative resolves MiraBoxBridge only from plugins/device/deckhost-device-mirabox. -->
   <Target Name="CopyMiraBoxBridgeRuntimeToPluginOutput" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true' and Exists('$(MiraBoxNativeRuntimeDir)')">
     <ItemGroup>
       <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.dll" Condition="'$(IsWindows)' == 'true'" />
@@ -68,7 +68,7 @@
     </ItemGroup>
 
     <!-- Plain copies: hard links would let a later native rebuild silently change files elsewhere. -->
-    <Copy SourceFiles="@(MiraBoxNativeArtifacts)" DestinationFolder="$(OutDir)plugins\device\deckhost.device.mirabox\" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(MiraBoxNativeArtifacts)" DestinationFolder="$(OutDir)plugins\device\deckhost-device-mirabox\" SkipUnchangedFiles="true" />
   </Target>
 
   <!-- dotnet publish: the same native files, in the same place next to the published app. -->
@@ -78,7 +78,7 @@
       <MiraBoxNativePublish Include="$(MiraBoxNativeRuntimeDir)/*.so" Condition="'$(IsLinux)' == 'true'" />
       <MiraBoxNativePublish Include="$(MiraBoxNativeRuntimeDir)/*.dylib" Condition="'$(IsMacOS)' == 'true'" />
     </ItemGroup>
-    <MakeDir Directories="$(PublishDir)plugins/device/deckhost.device.mirabox;$(PublishDir)plugins/functional" />
-    <Copy SourceFiles="@(MiraBoxNativePublish)" DestinationFolder="$(PublishDir)plugins/device/deckhost.device.mirabox/" />
+    <MakeDir Directories="$(PublishDir)plugins/device/deckhost-device-mirabox;$(PublishDir)plugins/functional" />
+    <Copy SourceFiles="@(MiraBoxNativePublish)" DestinationFolder="$(PublishDir)plugins/device/deckhost-device-mirabox/" />
   </Target>
 </Project>

@@ -171,7 +171,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         catch (DllNotFoundException ex)
         {
             Interlocked.CompareExchange(ref s_active, null, this);
-            throw new InvalidOperationException("MiraBoxBridge native library not found. Build with CMake available so it is copied to plugins/device/deckhost.device.mirabox.", ex);
+            throw new InvalidOperationException("MiraBoxBridge native library not found. Build with CMake available so it is copied to plugins/device/deckhost-device-mirabox.", ex);
         }
         catch
         {

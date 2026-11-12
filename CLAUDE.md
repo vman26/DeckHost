@@ -21,7 +21,7 @@ dotnet run --project .\DeckHost.App -- --check-native                   # load t
 ```
 
 - Versions: MinVer from `v*` tags (`Directory.Build.props`); `AppInfo.Version` is what the app shows. Releases: push a tag; `.github/workflows/release.yml` builds win-x64, linux-x64 (on Ubuntu 22.04, static OpenCV) and osx-arm64, runs `--check-native` on each publish, packages with `packaging/` and `scripts/package.sh`, and creates the GitHub release. `build.yml` builds and tests all three on every PR.
-- `dotnet publish` copies the native bridge into `plugins/device/deckhost.device.mirabox` too (`PublishMiraBoxBridgeRuntime` in the App project).
+- `dotnet publish` copies the native bridge into `plugins/device/deckhost-device-mirabox` too (`PublishMiraBoxBridgeRuntime` in the App project).
 
 - The plugin catalog tests install the real OBS package, so `DeckHost.Tests` builds the OBS project first (`ReferenceOutputAssembly=false`).
 - The tests run on Linux too: `DeckHost.Tests` adds `SkiaSharp.NativeAssets.Linux` there. Wait for the host with `WhenIdleAsync`, not with thread ids or delays: the worker and the test both run on pool threads.
@@ -29,7 +29,7 @@ dotnet run --project .\DeckHost.App -- --check-native                   # load t
 - `DeckHost.Device.MiraBox.csproj` drives the native build. Its targets run in this order: `DetectCMake` → `ApplyStreamDockSdkPatch` (idempotent `git apply` of `native/patches/streamdock-sdk.patch`) → `ConfigureMiraBoxBridge` → `BuildMiraBoxBridge`. CMake is found through `CMakeExePath`, then Visual Studio's bundled CMake, then `PATH`. If none is found, the build only warns and the app runs without device support.
 - `native/MiraBoxBridge/CMakeLists.txt` declares hidapi from the SDK's bundled `third_party/hidapi-master.zip` before adding the SDK (the first declaration wins); otherwise the SDK, which looks for it relative to the top-level project, would download hidapi's moving master branch. It also builds everything position-independent so the SDK's static libraries link into the shared library on Linux/macOS.
 - On Linux and macOS the bridge's RPATH is `$ORIGIN` / `@loader_path`, and the post-build step copies the SDK's transport library (and on macOS the SDK's OpenCV dylibs) next to it, so the plugin folder is self-contained. `MiraBoxCMakeArgs` (MSBuild property) passes extra CMake arguments, e.g. `-DOpenCV_DIR=` for the static OpenCV from `scripts/build-opencv-static.sh`.
-- Native output goes to `native/MiraBoxBridge/out/<Config>/bin/<Config>/`. `DeckHost.App.csproj` copies it to `bin/.../plugins/device/deckhost.device.mirabox/`. `MiraBoxNative`'s `DllImportResolver` loads `MiraBoxBridge` **only** from that folder, after preloading the other native binaries there (hidapi → transport → opencv).
+- Native output goes to `native/MiraBoxBridge/out/<Config>/bin/<Config>/`. `DeckHost.App.csproj` copies it to `bin/.../plugins/device/deckhost-device-mirabox/`. `MiraBoxNative`'s `DllImportResolver` loads `MiraBoxBridge` **only** from that folder, after preloading the other native binaries there (hidapi → transport → opencv).
 - The submodule is pinned to an upstream commit with `ignore = dirty`. Never commit inside it. SDK changes go into the patch file, per the rule below about third-party code.
 - `CMakePresets.json` and the root `CMakeLists.txt` are only for Visual Studio's "Open Folder" mode. Nothing copies from their `out/build/<preset>` output.
 
