@@ -45,6 +45,10 @@ public sealed class ActionSettings : IReadOnlyDictionary<string, string>, IEquat
     public int GetInt(string key, int fallback) =>
         int.TryParse(Get(key), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : fallback;
 
+    /// <summary>A number with decimals (stored with a '.'), for Number settings with a fractional step.</summary>
+    public double GetDouble(string key, double fallback) =>
+        double.TryParse(Get(key), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value) ? value : fallback;
+
     public bool GetBool(string key, bool fallback = false) =>
         bool.TryParse(Get(key), out var value) ? value : fallback;
 

@@ -59,12 +59,7 @@
 			</StackPanel>
 		</DataTemplate>
 		<DataTemplate DataType="vm:NumberSettingField">
-			<StackPanel Spacing="4">
-				<TextBlock Classes="label" Text="{Binding Label}" />
-				<TextBox Text="{Binding Value, Mode=TwoWay}" PlaceholderText="{Binding Placeholder}" Width="140" HorizontalAlignment="Left" />
-				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
-				<TextBlock Classes="error" Text="{Binding Error}" IsVisible="{Binding HasError}" />
-			</StackPanel>
+			<local:NumberSettingEditor />
 		</DataTemplate>
 		<DataTemplate DataType="vm:ToggleSettingField">
 			<StackPanel Spacing="4">

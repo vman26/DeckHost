@@ -47,7 +47,7 @@ internal sealed class VolumeKnobAction() : DeckActionBase(
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
-        new(StepKey, "Volume steps per click", ActionSettingKind.Number, "1", Description: "Each step is 2% on most systems."),
+        new(StepKey, "Volume steps per click", ActionSettingKind.Number, "1", Description: "Each step is 2% on most systems.") { Range = new(1, 10) },
     ];
 
     public override bool CanBeMultiActionStep => false;
