@@ -30,6 +30,12 @@ public sealed record ControlAppearance(
     /// single-color SVG is drawn in white. An init property, so the constructor stays binary-compatible.
     /// </summary>
     public string? IconPath { get; init; }
+
+    /// <summary>
+    /// Draw the action's colored tile behind its icon. Off by default: controls are transparent, so
+    /// the profile background shows, unless the user picks the tile or a <see cref="BackgroundColor"/>.
+    /// </summary>
+    public bool ShowTile { get; init; }
 }
 
 /// <summary>

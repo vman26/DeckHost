@@ -23,6 +23,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     private string _imagePath;
     private string _iconPath;
     private string _backgroundColor;
+    private string _backgroundMode;
     private bool _lightEnabled;
     private string _activeColor;
     private string _idleColor;
@@ -56,6 +57,9 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         _imagePath = binding?.AppearanceImagePath ?? string.Empty;
         _iconPath = binding?.Model.Appearance.IconPath ?? string.Empty;
         _backgroundColor = binding?.Model.Appearance.BackgroundColor ?? string.Empty;
+        _backgroundMode = !string.IsNullOrWhiteSpace(_backgroundColor) ? BackgroundModeColor
+            : binding?.Model.Appearance.ShowTile == true ? BackgroundModeTile
+            : BackgroundModeTransparent;
 
         var style = binding?.Model.Appearance.TextStyle;
         _textColor = style?.Color ?? string.Empty;
@@ -372,6 +376,49 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         }
     }
 
+    public const string BackgroundModeTransparent = "transparent";
+    public const string BackgroundModeTile = "tile";
+    public const string BackgroundModeColor = "color";
+
+    /// <summary>The control's background: transparent (the default; the profile background shows), the action's tile, or a color.</summary>
+    public IReadOnlyList<ActionSettingOption> BackgroundModes { get; } =
+    [
+        new(BackgroundModeTransparent, "Transparent (profile background)"),
+        new(BackgroundModeTile, "The action's colored tile"),
+        new(BackgroundModeColor, "A color of my own"),
+    ];
+
+    public ActionSettingOption SelectedBackgroundMode
+    {
+        get => BackgroundModes.First(mode => mode.Value == _backgroundMode);
+        set
+        {
+            if (value is null || value.Value == _backgroundMode)
+            {
+                return;
+            }
+
+            _backgroundMode = value.Value;
+            if (_backgroundMode == BackgroundModeColor)
+            {
+                if (string.IsNullOrWhiteSpace(BackgroundColor))
+                {
+                    BackgroundColor = "#1E293B";
+                }
+            }
+            else
+            {
+                BackgroundColor = string.Empty;
+            }
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ShowBackgroundColor));
+            RaiseChanged();
+        }
+    }
+
+    public bool ShowBackgroundColor => _backgroundMode == BackgroundModeColor;
+
     public string? BackgroundColorError =>
         string.IsNullOrWhiteSpace(BackgroundColor) || IsHexColor(BackgroundColor, allowAlpha: true) ? null : "Use #RRGGBB (or #AARRGGBB with opacity), for example #1D4ED8.";
 
@@ -485,6 +532,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         {
             ShowOnLinkedDisplay = ShowOnLinkedDisplay,
             IconPath = icon,
+            ShowTile = SupportsAppearance && _backgroundMode == BackgroundModeTile,
         };
 
         if (_original is null || _primaryAction is null)

@@ -91,10 +91,11 @@ public class IconTileTests
 public class ControlBackgroundTests
 {
     [Theory]
-    [InlineData(null, "tile")]
-    [InlineData("#00000000", "profile")] // transparent: the profile background
-    [InlineData("#80000000", "dark profile")] // half black over the profile background
-    public async Task A_background_of_its_own_replaces_the_tile(string? background, string expected)
+    [InlineData(null, false, "profile")] // transparent by default: the profile background
+    [InlineData(null, true, "tile")] // the action's tile, when chosen
+    [InlineData("#00000000", true, "profile")] // a color of its own (even transparent) replaces the tile
+    [InlineData("#80000000", false, "dark profile")] // half black over the profile background
+    public async Task Controls_are_transparent_unless_a_tile_or_color_is_chosen(string? background, bool showTile, string expected)
     {
         var plugins = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
         var device = new KeyDevicePlugin();
@@ -106,7 +107,7 @@ public class ControlBackgroundTests
             DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
         host.SetProfiles([new DeckHost.Contracts.Models.DeviceProfile("p", "P", KeyDevicePlugin.DeviceId,
             [new DeckHost.Contracts.Models.ControlBinding("key.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference,
-                new DeckHost.Contracts.Models.ControlAppearance(BackgroundColor: background), [])],
+                new DeckHost.Contracts.Models.ControlAppearance(BackgroundColor: background) { ShowTile = showTile }, [])],
             Background: new DeckHost.Contracts.Models.ProfileBackground("#FF0000"))]);
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();

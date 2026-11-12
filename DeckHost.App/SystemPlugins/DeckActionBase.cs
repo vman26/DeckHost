@@ -160,12 +160,13 @@ internal abstract class DeckActionBase(
     protected virtual string? Caption(IRenderContext context) => null;
 
     /// <summary>
-    /// On a key without a background color or picture of the user's: the colored tile, for actions
-    /// that draw their own content on it (a clock). Not on a touch zone, which stays one surface.
+    /// The colored tile, for actions that draw their own content on it (a clock): only on a key whose
+    /// user chose the tile (Customize → Background), and without a color or picture of their own.
+    /// Not on a touch zone, which stays one surface.
     /// </summary>
     protected static void DrawTileBackground(IRenderContext context, (uint From, uint To) colors)
     {
-        if (context.IsCompact || context.Width > context.Height * 1.3)
+        if (context.IsCompact || context.Width > context.Height * 1.3 || !WantsTile(context))
         {
             return;
         }
@@ -212,22 +213,36 @@ internal abstract class DeckActionBase(
         var wide = context.IsCompact || context.Width > context.Height * 1.3;
         var caption = error ?? customText ?? (wide ? CompactText(context, Title(context)) : Caption(context));
 
-        // The user's own background color replaces the tile. On a touch zone (no tile) the icon takes
-        // the action's color; a gray one would look dim there, so that becomes white.
-        var (from, to) = Appearance(VariableKeys.AppearanceBackground) is null ? TileColors : (0u, 0u);
-        if (wide && (from, to) == NeutralTile)
+        // Transparent by default: no tile, and the icon in the action's color (white for gray ones,
+        // which would look dim). The tile only when the user chose it; on their own color, white.
+        uint from = 0, to = 0, iconColor;
+        if (Appearance(VariableKeys.AppearanceBackground) is not null)
         {
-            (from, to) = (0xFFFFFFFF, 0xFFFFFFFF);
+            iconColor = 0xFFFFFFFF;
         }
+        else if (!wide && WantsTile(context))
+        {
+            (from, to) = TileColors;
+            iconColor = 0xFFFFFFFF;
+        }
+        else
+        {
+            iconColor = TileColors == NeutralTile ? 0xFFFFFFFF : TileColors.From;
+        }
+
         if (error is not null && !wide)
         {
-            context.DrawTile(icon, from, to);
+            context.DrawTile(icon, from, to, null, iconColor);
             context.DrawCenteredText(error, context.Width / 2d, context.Height * 0.84d, SubtitleSize(context), ErrorTextColor);
             return;
         }
 
-        context.DrawTile(icon, from, to, caption);
+        context.DrawTile(icon, from, to, caption, iconColor);
     }
+
+    /// <summary>The user chose the action's tile as the control's background (<see cref="ControlAppearance.ShowTile"/>).</summary>
+    private static bool WantsTile(IRenderContext context) =>
+        context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceTile), out var tile) && tile == "true";
 
     private static bool MatchesTrigger(ActionContext context) => context.Settings.Get(TriggerKey, "press") switch
     {
