@@ -67,39 +67,39 @@ dotnet build DeckHost.slnx -p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/
 
 ### Versions and releases
 
-Versions come from git tags ([MinVer](https://github.com/adamralph/minver)) and follow [SemVer](https://semver.org):
+Versions come from git ([GitVersion](https://gitversion.net), rules in `GitVersion.yml`) and follow [SemVer](https://semver.org). Tags are releases; between releases, **the branch you work on** says what comes next, so nothing is guessed:
 
-| Commit | Version | Meaning |
+| Where you work | Builds as | Meaning |
 |---|---|---|
-| tagged `v1.2.0` | `1.2.0` | a release |
-| 3 commits after `v1.2.0` | `1.3.0-alpha.0.3+4b09090` | work in progress towards the next version |
-| tagged `v1.3.0-beta.1` | `1.3.0-beta.1+…` | a beta (also `-rc.1` for a release candidate) |
-| 2 commits after `v1.3.0-beta.1` | `1.3.0-beta.1.2+…` | work after that beta |
-| before the first tag | `0.1.0-alpha.0.N+…` | |
+| tagged `v1.3.0` | `1.3.0` | a release |
+| `develop`, `feature/*` | `1.4.0-alpha.N+4b09090` | work towards the next minor |
+| `bugfix/*` | like the branch it starts from: from `develop` `1.4.0-alpha.N`, from a release `1.3.1-alpha.N` | a fix |
+| `hotfix/*`, from a release | `1.3.1-beta.N`; `hotfix/1.3.5` builds `1.3.5-beta.N` | the next patch |
+| `release/1.4.0` | `1.4.0-rc.N` | getting 1.4.0 ready |
+| a commit message with `+semver: major` (or `minor`, `patch`) | `2.0.0-alpha.N` on `develop` | a bigger (or smaller) step than the branch implies |
+| any other branch | like the branch it starts from, label `alpha` | |
+| before the first tag | `0.1.0-alpha.N+…` | |
 
-- The number after the label (`N`, here `3` or `2`) is the number of commits since the last tag (MinVer calls it the "height"). It only counts; two branches can be at the same height, which is why the commit is added.
-- `alpha.0` is only the default for untagged commits. A version is beta or a release candidate when you tag it so (`v1.3.0-beta.1`, `v1.3.0-rc.1`).
-- Between releases, builds count towards the next **minor** version (`MinVerAutoIncrement` in `Directory.Build.props`). That's only the label of work-in-progress builds: the tag you push decides what is released.
+- `N` counts the commits since the version's starting point (the last tag, or where a release branch began). It only counts; two branches can show the same number, which is why the commit is added.
+- Once a `release/*` branch exists, `develop` moves on to the minor after it (`release/1.4.0` → `develop` builds `1.5.0-alpha.N`).
 - Every version that isn't a release ends in `+<commit>`: the first 7 characters of the commit it was built from (`git show 4b09090`). Release versions don't need it, the tag points at the commit.
-- Package file names use `-` instead of `+` (`DeckHost-1.3.0-alpha.0.3-4b09090-linux-x64.tar.gz`), since GitHub renames some characters in release files.
-- The app shows its version in **☰ → DeckHost settings** and in the log.
+- Package file names use `-` instead of `+` (`DeckHost-1.4.0-alpha.3-4b09090-linux-x64.tar.gz`), since GitHub renames some characters in release files.
+- The app shows its version in **☰ → DeckHost settings** and in the log. Builds need the full git history (not a shallow clone); a source archive without `.git` builds as 1.0.0.
 
 To release, tag and push:
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
-The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.2.0-beta.1`, `v1.2.0-rc.1`) becomes a pre-release. Run the workflow by hand to get the packages as build artifacts without releasing.
+The tag is the version. The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.4.0-rc.1`, `v1.3.1-beta.1`) becomes a pre-release; use the label of the branch you tag on (`rc` on `release/*`, `beta` on `hotfix/*`), so the builds after it count on from it. Run the workflow by hand to get the packages as build artifacts without releasing.
 
-Which tag to push:
+The usual flow (git-flow):
 
-| You want | Do |
-|---|---|
-| the next feature release (1.2.0 → 1.3.0) | nothing until it's ready, then tag `v1.3.0` (optionally `v1.3.0-beta.1`, `v1.3.0-rc.1` first) |
-| a bug-fix release (1.2.0 → 1.2.1) | tag `v1.2.1` on the fix: on the main line, or on a branch from `v1.2.0` (`git switch -c release/1.2 v1.2.0`) when the main line already has features you don't want to ship |
-| a major release (1.x → 2.0.0) | set `MinVerMinimumMajorMinor` to `2.0` in `Directory.Build.props` when the work starts, so builds show `2.0.0-alpha.0.N`; tag `v2.0.0` when it's done |
+- **Features:** branch `feature/*` from `develop`, merge back. For a release: branch `release/1.4.0` from `develop`, fix and tag `v1.4.0-rc.1`, … as needed, merge it into `main`, tag `v1.4.0` there, and merge `main` back into `develop`.
+- **Urgent fix for a release:** branch `hotfix/*` from `main` (or from the tag, `git switch -c hotfix/usb v1.3.0`), merge into `main`, tag `v1.3.1`, merge `main` back into `develop`.
+- **Next major:** put `+semver: major` in a commit message on `develop` when the breaking work lands.
 
 ## Plugins
 
