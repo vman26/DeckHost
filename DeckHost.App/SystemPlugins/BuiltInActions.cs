@@ -46,36 +46,55 @@ internal sealed class SwitchProfileAction() : DeckActionBase(
     "Switch Profile",
     InputCapabilities.None,
     OutputCapabilities.None,
-    "Switches the device to another profile. On a knob or swipe it steps through the profiles.")
+    "Switches the device to another profile. On a knob each input can do something else: for example pressed a specific profile, turned left the previous one, turned right the next.")
 {
     private const string ModeKey = "mode";
     private const string ProfileKey = "profile";
+    private const string Next = "next";
+    private const string Previous = "previous";
+    private const string Specific = "specific";
+    private const string Nothing = "none";
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
-        new(ModeKey, "Switch to", ActionSettingKind.Choice, "next", Options:
+        new(ModeKey, "Switch to", ActionSettingKind.Choice, Next, Options:
         [
-            new("next", "Next profile"),
-            new("previous", "Previous profile"),
-            new("specific", "A specific profile"),
-        ]),
-        new(ProfileKey, "Profile name", Placeholder: "Used with 'A specific profile'", Description: "The profile's name as shown in the profile list."),
+            new(Next, "Next profile"),
+            new(Previous, "Previous profile"),
+            new(Specific, "A specific profile"),
+            new(Nothing, "Do nothing"),
+        ])
+        {
+            // Each input its own choice; turning and swiping step through the profiles by direction
+            // unless set otherwise, and holding a key does nothing extra.
+            PerInput = true,
+            InputDefaults = new Dictionary<string, string>
+            {
+                [ControlInputs.LongPress] = Nothing,
+                [ControlInputs.RotateLeft] = Previous,
+                [ControlInputs.RotateRight] = Next,
+                [ControlInputs.SwipeLeft] = Previous,
+                [ControlInputs.SwipeRight] = Next,
+            },
+        },
+        new(ProfileKey, "Profile name", Description: "The profile's name as shown in the profile list.")
+        {
+            PerInput = true,
+            ShowWhen = new(ModeKey, Specific),
+        },
     ];
 
     protected override void Run(ActionContext context)
     {
-        if (context.EventType is InputCapabilities.Rotate or InputCapabilities.Swipe)
+        // The host has already picked this input's choice (see ActionSettingDefinition.PerInput).
+        switch (context.Settings.Get(ModeKey, Next))
         {
-            context.Host.ActivateRelativeProfile(context.DeviceId, Math.Sign(context.Value));
-            return;
-        }
-
-        switch (context.Settings.Get(ModeKey, "next"))
-        {
-            case "previous":
+            case Nothing:
+                break;
+            case Previous:
                 context.Host.ActivateRelativeProfile(context.DeviceId, -1);
                 break;
-            case "specific":
+            case Specific:
                 var profile = context.Settings.Get(ProfileKey);
                 if (!string.IsNullOrWhiteSpace(profile))
                 {
@@ -89,12 +108,18 @@ internal sealed class SwitchProfileAction() : DeckActionBase(
         }
     }
 
-    protected override string Title(IRenderContext context) => context.Settings.Get(ModeKey, "next") switch
+    protected override string Title(IRenderContext context)
     {
-        "previous" => "Prev Profile",
-        "specific" => context.Settings.Get(ProfileKey, "Profile"),
-        _ => "Next Profile",
-    };
+        // What a press does; on a knob without a press choice, that it switches profiles.
+        var settings = context.Settings.ForInput(Settings, ControlInputs.Press);
+        return settings.Get(ModeKey, Next) switch
+        {
+            Previous => "Prev Profile",
+            Specific => settings.Get(ProfileKey, "Profile"),
+            Nothing => "Profiles",
+            _ => "Next Profile",
+        };
+    }
 
     protected override string? Subtitle(IRenderContext context) => null;
 }
