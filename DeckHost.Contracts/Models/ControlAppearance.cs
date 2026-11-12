@@ -13,7 +13,17 @@ public sealed record ControlAppearance(
     string? ImagePath = null,
     RgbFeedback? RgbFeedback = null,
     string? BackgroundColor = null,
-    TextStyle? TextStyle = null);
+    TextStyle? TextStyle = null)
+{
+    /// <summary>
+    /// For a control that borrows another control's display (<see cref="PhysicalControl.DisplayControlId"/>,
+    /// a knob and the touch zone above it): whether its action is shown there. It fills the display
+    /// when that control has no action of its own, and gets a strip along the edge when it has.
+    /// A property rather than a constructor parameter, so plugins built against the earlier
+    /// constructor keep working.
+    /// </summary>
+    public bool ShowOnLinkedDisplay { get; init; } = true;
+}
 
 /// <summary>
 /// A background for a whole profile. The image spans the device layout, so every control shows

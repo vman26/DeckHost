@@ -123,3 +123,103 @@ internal static class Bindings
     public static ControlBinding Single(string controlId, string pluginId, string actionId, RgbFeedback? light = null) =>
         new(controlId, ProfileActionKind.Single, Reference(pluginId, actionId), new ControlAppearance(RgbFeedback: light), []);
 }
+
+/// <summary>Fills its area with one color and records how it was asked to draw.</summary>
+internal sealed class SolidAction(string id, uint argbColor) : IDeckAction
+{
+    public string Id { get; } = id;
+
+    public string Name => Id;
+
+    public InputCapabilities RequiredInputs => InputCapabilities.None;
+
+    public OutputCapabilities RequiredOutputs => OutputCapabilities.None;
+
+    public ConcurrentQueue<(string ControlId, InputCapabilities EventType)> Executions { get; } = new();
+
+    public ConcurrentQueue<(string ControlId, int Width, int Height, bool Compact)> Renders { get; } = new();
+
+    public void Execute(ActionContext context) => Executions.Enqueue((context.ControlId, context.EventType));
+
+    public void Render(IRenderContext context)
+    {
+        Renders.Enqueue((context.ControlId, context.Width, context.Height, context.IsCompact));
+        context.FillRoundedRect(0, 0, context.Width, context.Height, 0, argbColor);
+    }
+}
+
+/// <summary>
+/// A device like the N4 Pro's touch strip: a touch zone with a display, a knob under it that
+/// borrows that display, and a screen backdrop. Records every output call in order.
+/// </summary>
+internal sealed class StripDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput
+{
+    public const string DeviceId = "strip.device";
+    public const string ZoneId = "touch.0";
+    public const string KnobId = "encoder.0";
+    public const int ZoneWidth = 176;
+    public const int ZoneHeight = 112;
+
+    public event EventHandler? DevicesChanged
+    {
+        add { }
+        remove { }
+    }
+
+    public string Id => "strip.plugin";
+
+    public string Name => "Strip";
+
+    public IReadOnlyCollection<DeviceDefinition> Devices { get; } =
+    [
+        new DeviceDefinition(
+            DeviceId,
+            "Strip device",
+            [
+                new PhysicalControl(ZoneId, "Touch 1", ControlType.TouchSurface, new Rect(0, 0, 20, 10), InputCapabilities.Press, OutputCapabilities.ColorImage, ZoneWidth, ZoneHeight),
+                new PhysicalControl(KnobId, "Knob 1", ControlType.Encoder, new Rect(5, 20, 10, 10), InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release, OutputCapabilities.None, DisplayControlId: ZoneId),
+            ],
+            IsConnected: true),
+    ];
+
+    public IDeviceOutput Output => this;
+
+    public IDevicePluginContext? Context { get; private set; }
+
+    /// <summary>"backdrop:r,g,b" and "image:controlId", in the order they were sent.</summary>
+    public ConcurrentQueue<string> Calls { get; } = new();
+
+    public Task InitializeAsync(IDevicePluginContext context, CancellationToken cancellationToken)
+    {
+        Context = context;
+        return Task.CompletedTask;
+    }
+
+    public bool TryPushImage(string deviceId, string controlId, ReadOnlySpan<byte> rgba, int width, int height, out string? error)
+    {
+        Calls.Enqueue($"image:{controlId}");
+        error = null;
+        return true;
+    }
+
+    public bool TrySetLight(string deviceId, string controlId, byte red, byte green, byte blue, out string? error)
+    {
+        error = null;
+        return true;
+    }
+
+    public bool TrySetBackdrop(string deviceId, byte red, byte green, byte blue, out string? error)
+    {
+        Calls.Enqueue($"backdrop:{red},{green},{blue}");
+        error = null;
+        return true;
+    }
+
+    public void Clear(string deviceId)
+    {
+    }
+
+    public void Dispose()
+    {
+    }
+}

@@ -39,7 +39,13 @@ public sealed class SkiaDrawingResources : IDisposable
 
     private readonly Dictionary<(string Family, bool Bold, bool Italic, float Size), SKFont> _styledFonts = [];
 
-    /// <summary>A font for a family/weight/slant; falls back to the default typeface when the family isn't installed.</summary>
+    /// <summary>Horizontal skew that stands in for italic when a font has no italic face (Skia's own fake-italic slant).</summary>
+    private const float SyntheticItalicSkew = -0.25f;
+
+    /// <summary>
+    /// A font for a family/weight/slant; falls back to the default typeface when the family isn't
+    /// installed. Bold and italic always show: a font without such a face is emboldened or slanted.
+    /// </summary>
     public SKFont GetFont(float size, string? family, bool bold, bool italic)
     {
         if (string.IsNullOrWhiteSpace(family) && !bold && !italic)
@@ -51,12 +57,19 @@ public sealed class SkiaDrawingResources : IDisposable
         var key = (family ?? string.Empty, bold, italic, size);
         if (!_styledFonts.TryGetValue(key, out var font))
         {
+            // Look the default font up by its name: without a family name, Windows' font manager
+            // finds no styled face at all and the request silently ends up upright and regular.
             var typeface = SKTypeface.FromFamilyName(
-                string.IsNullOrWhiteSpace(family) ? null : family,
+                string.IsNullOrWhiteSpace(family) ? SKTypeface.Default.FamilyName : family.Trim(),
                 bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
                 SKFontStyleWidth.Normal,
                 italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright) ?? SKTypeface.Default;
-            font = new SKFont(typeface, size) { Subpixel = true, Embolden = bold && !typeface.IsBold };
+            font = new SKFont(typeface, size)
+            {
+                Subpixel = true,
+                Embolden = bold && !typeface.IsBold,
+                SkewX = italic && !typeface.IsItalic ? SyntheticItalicSkew : 0f,
+            };
             _styledFonts[key] = font;
         }
 

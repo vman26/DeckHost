@@ -47,8 +47,12 @@ namespace DeckHost.Core.Rendering
 
             var paint = _resources.TextPaint;
             paint.Color = new SKColor(argbColor);
-            _canvas.DrawText(text, (float)x, (float)y, SKTextAlign.Left, _resources.GetFont(size), paint);
+            _canvas.DrawText(text, (float)x, (float)y, SKTextAlign.Left, StyledFont(size), paint);
         }
+
+        /// <summary>The font for text an action places itself: the binding's family, bold and italic at the action's size.</summary>
+        private SKFont StyledFont(float size) =>
+            _resources.GetFont(size, TextStyle?.FontFamily, TextStyle?.Bold ?? false, TextStyle?.Italic ?? false);
 
         public void DrawCenteredText(string text, double centerX, double centerY, float size, uint argbColor = 0xFFFFFFFF)
         {
@@ -61,12 +65,12 @@ namespace DeckHost.Core.Rendering
             paint.Color = new SKColor(argbColor);
 
             var maxWidth = Width * 0.9f;
-            var font = _resources.GetFont(size);
+            var font = StyledFont(size);
             var measured = font.MeasureText(text, out var bounds, paint);
             if (measured > maxWidth && size > MinTextSize)
             {
                 size = Math.Max(MinTextSize, size * maxWidth / measured);
-                font = _resources.GetFont(size);
+                font = StyledFont(size);
                 font.MeasureText(text, out bounds, paint);
             }
 
@@ -115,8 +119,36 @@ namespace DeckHost.Core.Rendering
 
         public string ProfileId { get; }
 
+        public bool IsCompact { get; private init; }
+
         /// <summary>The binding's text style (set by <see cref="ControlRenderer"/>).</summary>
         public TextStyle? TextStyle { get; set; }
+
+        /// <summary>
+        /// Draws into one rectangle of this control's image, clipped to it, with a context that is
+        /// as large as the rectangle. <paramref name="controlId"/> and <paramref name="settings"/>
+        /// are those of the binding drawn there, which can belong to another control (a knob shown
+        /// on its touch zone), so the action reads its own variables and settings.
+        /// </summary>
+        public void DrawRegion(int x, int y, int width, int height, string controlId, ActionSettings? settings, bool compact, Action<SkiaRenderContext> draw)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                return;
+            }
+
+            _canvas.Save();
+            try
+            {
+                _canvas.ClipRect(SKRect.Create(x, y, width, height));
+                _canvas.Translate(x, y);
+                draw(new SkiaRenderContext(_canvas, width, height, DeviceId, controlId, Variables, _resources, settings, Clock, ProfileId) { IsCompact = compact });
+            }
+            finally
+            {
+                _canvas.Restore();
+            }
+        }
 
         public void DrawLabel(string text, TextVerticalAlignment defaultVertical = TextVerticalAlignment.Middle, float? defaultSize = null, uint defaultColor = 0xFFFFFFFF)
         {
@@ -126,20 +158,29 @@ namespace DeckHost.Core.Rendering
             }
 
             var style = TextStyle;
-            var padding = Math.Max(3f, Width * 0.06f);
-            var maxWidth = Width - (2 * padding);
-            var size = style?.Size ?? defaultSize ?? Math.Max(12f, Height * 0.17f);
+
+            // A strip (see IsCompact) has room for one line: join the lines and shrink that to fit.
+            var singleLine = IsCompact;
+            if (singleLine)
+            {
+                text = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+
+            var padding = singleLine ? Math.Max(2f, Height * 0.08f) : Math.Max(3f, Width * 0.06f);
+            var sidePadding = Math.Max(3f, Width * 0.06f);
+            var maxWidth = Width - (2 * sidePadding);
+            var size = style?.Size ?? defaultSize ?? (singleLine ? Height * 0.5f : Math.Max(12f, Height * 0.17f));
             var color = style?.Color is { Length: > 0 } hex && SKColor.TryParse(hex.Trim(), out var parsed) ? parsed : new SKColor(defaultColor);
 
             // Shrink until the text fits the control (but not below a readable size). With an automatic
             // size, unwrapped lines also shrink until the longest one fits the width.
-            var autoSize = style?.Size is null;
+            var autoSize = style?.Size is null || singleLine;
             List<string> lines;
             SKFont font;
             while (true)
             {
                 font = _resources.GetFont(size, style?.FontFamily, style?.Bold ?? false, style?.Italic ?? false);
-                lines = LayoutLines(text, font, maxWidth, style?.Wrap ?? true);
+                lines = LayoutLines(text, font, maxWidth, !singleLine && (style?.Wrap ?? true));
                 var lineHeight = font.Spacing;
                 var fitsHeight = lines.Count * lineHeight <= Height - padding;
                 var fitsWidth = !autoSize || lines.TrueForAll(line => font.MeasureText(line, _resources.TextPaint) <= maxWidth);
@@ -154,7 +195,7 @@ namespace DeckHost.Core.Rendering
             var lineSpacing = font.Spacing;
             var metrics = font.Metrics;
             var blockHeight = (lines.Count - 1) * lineSpacing + (-metrics.Ascent + metrics.Descent);
-            var top = (style?.Vertical ?? defaultVertical) switch
+            var top = (singleLine ? TextVerticalAlignment.Middle : style?.Vertical ?? defaultVertical) switch
             {
                 TextVerticalAlignment.Top => padding,
                 TextVerticalAlignment.Bottom => Height - padding - blockHeight,
@@ -168,8 +209,8 @@ namespace DeckHost.Core.Rendering
                 var lineWidth = font.MeasureText(line, paint);
                 var x = (style?.Horizontal ?? TextHorizontalAlignment.Center) switch
                 {
-                    TextHorizontalAlignment.Left => padding,
-                    TextHorizontalAlignment.Right => Width - padding - lineWidth,
+                    TextHorizontalAlignment.Left => sidePadding,
+                    TextHorizontalAlignment.Right => Width - sidePadding - lineWidth,
                     _ => (Width - lineWidth) / 2f,
                 };
                 var baseline = top - metrics.Ascent + (index * lineSpacing);

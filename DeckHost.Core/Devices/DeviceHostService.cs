@@ -1,4 +1,5 @@
 using DeckHost.Contracts;
+using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
 using DeckHost.Core.Interfaces;
@@ -21,6 +22,11 @@ namespace DeckHost.Core.Devices;
 /// Rendering: after each batch of work, every "dirty" device is re-rendered control by control,
 /// but a control is only pushed to the device when its pixels differ from the last frame pushed.
 /// </para>
+/// <para>
+/// A control without a display can be linked to another control's display
+/// (<see cref="PhysicalControl.DisplayControlId"/>: a knob and the touch zone above it). Its action
+/// is then drawn there, and a tap on a display that has no action of its own presses it.
+/// </para>
 /// </summary>
 public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 {
@@ -41,6 +47,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private readonly Dictionary<string, DeviceEntry> _devicesById = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _dirtyDevices = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string DeviceId, string ControlId), byte[]> _lastFrames = [];
+    private readonly Dictionary<string, (byte Red, byte Green, byte Blue)> _lastBackdrops = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(int Width, int Height), SurfaceRenderer> _renderers = [];
     private readonly Dictionary<(string DeviceId, string ControlId), int> _lightVersions = [];
     private readonly List<TaskCompletionSource> _idleWaiters = [];
@@ -396,12 +403,24 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             return;
         }
 
-        var dispatched = _actionRouter.Dispatch(activeProfile, inputEvent, _actionHost);
-        Log("Info", $"Input {inputEvent.EventType} ({inputEvent.Value}) on '{inputEvent.ControlId}' {(dispatched ? "dispatched" : "had no matching action")}.");
+        var target = FindTapTarget(activeProfile, inputEvent);
+        bool dispatched;
+        if (target is null)
+        {
+            dispatched = _actionRouter.Dispatch(activeProfile, inputEvent, _actionHost);
+        }
+        else
+        {
+            // The display only shows the linked control's action: a tap is a press of that control.
+            dispatched = _actionRouter.Dispatch(activeProfile, inputEvent with { ControlId = target }, _actionHost);
+            dispatched |= _actionRouter.Dispatch(activeProfile, new DeviceInputEvent(inputEvent.DeviceId, target, InputCapabilities.Release, 0), _actionHost);
+        }
+
+        Log("Info", $"Input {inputEvent.EventType} ({inputEvent.Value}) on '{inputEvent.ControlId}'{(target is null ? string.Empty : $" (as a press of '{target}')")} {(dispatched ? "dispatched" : "had no matching action")}.");
 
         if (dispatched)
         {
-            HandleLightFeedback(activeProfile, inputEvent.ControlId);
+            HandleLightFeedback(activeProfile, target ?? inputEvent.ControlId);
         }
 
         // Actions can change any variable a renderer reads; unchanged controls are skipped at push time.
@@ -574,12 +593,65 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
     }
 
+    /// <summary>Forgets everything sent to the device's screen, so all of it is sent again.</summary>
     private void ForgetFrames(string deviceId)
+    {
+        _lastBackdrops.Remove(deviceId);
+        ForgetControlFrames(deviceId);
+    }
+
+    private void ForgetControlFrames(string deviceId)
     {
         foreach (var key in _lastFrames.Keys.Where(key => string.Equals(key.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase)).ToList())
         {
             _lastFrames.Remove(key);
         }
+    }
+
+    // ---------------------------------------------------------------- linked displays
+
+    private static ControlBinding? FindBinding(DeviceProfile? profile, string controlId) =>
+        profile?.Bindings.FirstOrDefault(candidate => string.Equals(candidate.ControlId, controlId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The binding of a control that shows itself on <paramref name="display"/> (a knob on the
+    /// touch zone above it), or null when the display is only its own.
+    /// </summary>
+    private LinkedBinding? FindLinkedBinding(DeviceDefinition device, DeviceProfile? profile, PhysicalControl display)
+    {
+        if (profile is null)
+        {
+            return null;
+        }
+
+        foreach (var control in device.Controls)
+        {
+            if (string.Equals(control.DisplayControlId, display.Id, StringComparison.OrdinalIgnoreCase) &&
+                FindBinding(profile, control.Id) is { Appearance.ShowOnLinkedDisplay: true } binding)
+            {
+                var above = control.Bounds.Y + (control.Bounds.Height / 2) < display.Bounds.Y + (display.Bounds.Height / 2);
+                return new LinkedBinding(control.Id, binding, _actionRouter.FindAction(binding.Action), StripAtTop: above);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The control a tap really belongs to: when the tapped display has no action of its own and
+    /// shows a linked control's action instead, that control. Null for every other input.
+    /// </summary>
+    private string? FindTapTarget(DeviceProfile profile, DeviceInputEvent inputEvent)
+    {
+        if (inputEvent.EventType != InputCapabilities.Press ||
+            !_devicesById.TryGetValue(inputEvent.DeviceId, out var entry) ||
+            entry.Device.FindControl(inputEvent.ControlId) is not { HasImageOutput: true } display ||
+            FindBinding(profile, display.Id) is not null)
+        {
+            return null;
+        }
+
+        return FindLinkedBinding(entry.Device, profile, display)?.ControlId;
     }
 
     // ---------------------------------------------------------------- rendering
@@ -672,6 +744,11 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         var clock = _clock.Elapsed;
         var pushed = 0;
 
+        if (connected)
+        {
+            PushBackdrop(deviceId, entry, profile);
+        }
+
         foreach (var control in entry.Device.Controls)
         {
             if (!control.HasImageOutput)
@@ -679,9 +756,9 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 continue;
             }
 
-            var binding = profile?.Bindings.FirstOrDefault(candidate =>
-                string.Equals(candidate.ControlId, control.Id, StringComparison.OrdinalIgnoreCase));
+            var binding = FindBinding(profile, control.Id);
             var action = binding is null ? null : _actionRouter.FindAction(binding.Action);
+            var linked = FindLinkedBinding(entry.Device, profile, control);
             var renderer = GetRenderer(control.RenderWidth, control.RenderHeight);
 
             ReadOnlySpan<byte> pixels;
@@ -690,7 +767,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 pixels = renderer.Render(canvas =>
                 {
                     var context = new SkiaRenderContext(canvas, renderer.Width, renderer.Height, deviceId, control.Id, _variableStore, _drawingResources, binding?.Action.EffectiveSettings, clock, profile?.Id ?? string.Empty);
-                    ControlRenderer.Draw(context, binding, action, profile?.Background, layoutBounds, control.Bounds);
+                    ControlRenderer.Draw(context, binding, action, profile?.Background, layoutBounds, control.Bounds, linked);
                 });
             }
             catch (Exception ex)
@@ -732,6 +809,36 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         {
             Log("Debug", $"Pushed {pushed} changed control image(s) to '{deviceId}'.");
         }
+    }
+
+    /// <summary>
+    /// Fills the screen around the control images with the profile's background color. Without
+    /// it a device that stores a picture of its own (the N4 Pro's idle screen) keeps showing that
+    /// picture between the keys, whatever the profile is.
+    /// </summary>
+    private void PushBackdrop(string deviceId, DeviceEntry entry, DeviceProfile? profile)
+    {
+        if (entry.Plugin.Output is not IDeviceBackdropOutput output)
+        {
+            return;
+        }
+
+        var color = ProfileBackdrop.GetColor(profile?.Background);
+        if (_lastBackdrops.TryGetValue(deviceId, out var last) && last == color)
+        {
+            return;
+        }
+
+        // Remembered even when it fails, so a device that can't do this isn't asked on every frame.
+        _lastBackdrops[deviceId] = color;
+        if (!output.TrySetBackdrop(deviceId, color.Red, color.Green, color.Blue, out var error))
+        {
+            Log("Warning", $"Could not set the background of '{deviceId}': {error}");
+            return;
+        }
+
+        // The device may have drawn it over the control images: send those again.
+        ForgetControlFrames(deviceId);
     }
 
     private void RaiseFrame(string deviceId, string controlId, int width, int height, ReadOnlySpan<byte> pixels)

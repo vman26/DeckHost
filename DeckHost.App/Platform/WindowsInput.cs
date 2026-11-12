@@ -10,13 +10,13 @@ namespace DeckHost.App.Platform;
 [SupportedOSPlatform("windows")]
 internal static class WindowsInput
 {
-    public const ushort VkMediaNextTrack = 0xB0;
-    public const ushort VkMediaPrevTrack = 0xB1;
-    public const ushort VkMediaStop = 0xB2;
-    public const ushort VkMediaPlayPause = 0xB3;
-    public const ushort VkVolumeMute = 0xAD;
-    public const ushort VkVolumeDown = 0xAE;
-    public const ushort VkVolumeUp = 0xAF;
+    public const ushort VkMediaNextTrack = VirtualKeys.MediaNextTrack;
+    public const ushort VkMediaPrevTrack = VirtualKeys.MediaPrevTrack;
+    public const ushort VkMediaStop = VirtualKeys.MediaStop;
+    public const ushort VkMediaPlayPause = VirtualKeys.MediaPlayPause;
+    public const ushort VkVolumeMute = VirtualKeys.VolumeMute;
+    public const ushort VkVolumeDown = VirtualKeys.VolumeDown;
+    public const ushort VkVolumeUp = VirtualKeys.VolumeUp;
 
     private const uint InputKeyboard = 1;
     private const uint KeyEventExtendedKey = 0x0001;

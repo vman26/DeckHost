@@ -11,6 +11,11 @@ namespace DeckHost.Contracts.Models;
 /// <param name="RenderHeight">Pixel height of the control's own image on the device; 0 when it has none.</param>
 /// <param name="HardwareId">The id the hardware/SDK uses for this control, for diagnostics.</param>
 /// <param name="LedIndex">Index of the RGB LED tied to this control, when there is one.</param>
+/// <param name="DisplayControlId">
+/// For a control without a display of its own: the id of the control whose display belongs to it
+/// (the touch zone above a knob). The host shows this control's action there; see
+/// <see cref="ControlAppearance.ShowOnLinkedDisplay"/>.
+/// </param>
 public sealed record PhysicalControl(
     string Id,
     string DisplayName,
@@ -21,9 +26,12 @@ public sealed record PhysicalControl(
     int RenderWidth = 0,
     int RenderHeight = 0,
     string? HardwareId = null,
-    int? LedIndex = null)
+    int? LedIndex = null,
+    string? DisplayControlId = null)
 {
     public bool HasImageOutput => RenderWidth > 0 && RenderHeight > 0 && Outputs != OutputCapabilities.None;
 
     public bool HasLight => LedIndex is not null;
+
+    public bool HasLinkedDisplay => !string.IsNullOrEmpty(DisplayControlId);
 }

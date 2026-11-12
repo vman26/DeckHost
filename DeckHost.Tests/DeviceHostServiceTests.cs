@@ -1,3 +1,4 @@
+using DeckHost.Contracts;
 using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Models;
 using DeckHost.Core.Devices;
@@ -37,7 +38,7 @@ public class DeviceHostServiceTests
     }
 
     [Fact]
-    public async Task Input_runs_the_action_off_the_calling_thread_and_pushes_only_changed_controls()
+    public async Task Input_is_queued_for_the_worker_and_pushes_only_changed_controls()
     {
         var (host, plugin, action, store) = Create();
         await using var _ = host;
@@ -46,19 +47,23 @@ public class DeviceHostServiceTests
         await host.WhenIdleAsync();
         plugin.PushedImages.Clear();
 
-        var callingThread = Environment.CurrentManagedThreadId;
-        int? executionThread = null;
+        // The action can't finish until the report call has returned. A host that ran the action
+        // inside ReportInputEvent (on the SDK's callback thread) would time out here. Comparing
+        // thread ids instead doesn't work: this test and the worker both run on pool threads.
+        using var reportReturned = new ManualResetEventSlim();
+        var ranAfterReportReturned = false;
         action.OnExecute = context =>
         {
-            executionThread = Environment.CurrentManagedThreadId;
-            context.Variables.Publish($"devices.{context.DeviceId}.{context.ControlId}.executionCount", action.Executions.Count);
+            ranAfterReportReturned = reportReturned.Wait(TimeSpan.FromSeconds(5));
+            context.Variables.Publish(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.ExecutionCount), action.Executions.Count);
         };
 
         plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1);
+        reportReturned.Set();
         await host.WhenIdleAsync();
 
         Assert.Single(action.Executions);
-        Assert.NotEqual(callingThread, executionThread);
+        Assert.True(ranAfterReportReturned);
         Assert.Equal(["key.0"], plugin.PushedImages);
 
         // Nothing changed visually: no further pushes.
@@ -128,6 +133,9 @@ public class DeviceHostServiceTests
         await using var _ = host;
         using var __ = store;
         await host.StartAsync(CancellationToken.None);
+
+        // Let the worker finish its start-up render: it writes log lines of its own.
+        await host.WhenIdleAsync();
 
         for (var i = 0; i < 2000; i++)
         {

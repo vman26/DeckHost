@@ -48,6 +48,25 @@ public sealed class StreamDeckTests : IDisposable
     }
 
     [Fact]
+    public void Merges_dial_feedback_updates()
+    {
+        static System.Text.Json.Nodes.JsonObject Json(string json) => System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+
+        // Plain values, as most plugins send them.
+        var feedback = DialFeedback.Merge(null, Json("""{ "title": "Volume", "value": "42%", "indicator": 42 }"""));
+        Assert.Equal(new DialFeedback("Volume", "42%", 0.42), feedback);
+
+        // A partial update keeps the rest; items may also be objects with a value and layout details.
+        feedback = DialFeedback.Merge(feedback, Json("""{ "value": { "value": 55, "color": "#fff" }, "indicator": { "value": "130" }, "icon": "ignored" }"""));
+        Assert.Equal(new DialFeedback("Volume", "55", 1d), feedback);
+
+        // An item set to nothing is cleared.
+        feedback = DialFeedback.Merge(feedback, Json("""{ "indicator": null }"""));
+        Assert.Equal(new DialFeedback("Volume", "55", null), feedback);
+        Assert.Equal(feedback, DialFeedback.Merge(feedback, null));
+    }
+
+    [Fact]
     public void Reads_the_manifest_and_recognizes_html_plugins()
     {
         var directory = WritePlugin("plugin.js");

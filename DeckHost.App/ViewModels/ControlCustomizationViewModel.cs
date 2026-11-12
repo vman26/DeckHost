@@ -36,8 +36,11 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         ControlItemViewModel control,
         ControlBindingViewModel? binding,
         IEnumerable<ActionItemViewModel> availableActions,
-        ActionItemViewModel? displayContentAction)
+        ActionItemViewModel? displayContentAction,
+        string? linkedDisplayName = null)
     {
+        LinkedDisplayName = control.Control.HasLinkedDisplay ? linkedDisplayName ?? control.Control.DisplayControlId : null;
+        _showOnLinkedDisplay = binding?.Model.Appearance.ShowOnLinkedDisplay ?? true;
         ControlId = control.Id;
         ControlInputs = control.Control.Inputs;
         DisplayName = control.DisplayName;
@@ -306,7 +309,33 @@ public partial class ControlCustomizationViewModel : ViewModelBase
 
     // ---------------------------------------------------------------- appearance
 
+    private bool _showOnLinkedDisplay;
+
     public bool SupportsAppearance { get; }
+
+    /// <summary>Name of the display this control borrows (the touch zone above a knob); null when it has its own or none.</summary>
+    public string? LinkedDisplayName { get; }
+
+    public bool HasLinkedDisplay => LinkedDisplayName is not null;
+
+    public string ShowOnLinkedDisplayLabel => $"Show this on {LinkedDisplayName}";
+
+    public string LinkedDisplayHint =>
+        $"It fills {LinkedDisplayName} while that has no action of its own, and tapping it then works like pressing this control. " +
+        $"When {LinkedDisplayName} has its own action, this one gets a strip along the edge.";
+
+    /// <summary>Whether the control's action is drawn on the display it borrows.</summary>
+    public bool ShowOnLinkedDisplay
+    {
+        get => _showOnLinkedDisplay;
+        set
+        {
+            if (SetProperty(ref _showOnLinkedDisplay, value))
+            {
+                RaiseChanged();
+            }
+        }
+    }
 
     public string DisplayText
     {
@@ -423,7 +452,10 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         var image = SupportsAppearance && !string.IsNullOrWhiteSpace(ImagePath) ? ImagePath.Trim() : null;
         var light = BuildLight();
         var background = SupportsAppearance && IsHexColor(BackgroundColor) ? "#" + NormalizeColor(BackgroundColor) : null;
-        var appearance = new ControlAppearance(text, image, light, background, SupportsAppearance ? BuildTextStyle() : null);
+        var appearance = new ControlAppearance(text, image, light, background, SupportsAppearance ? BuildTextStyle() : null)
+        {
+            ShowOnLinkedDisplay = ShowOnLinkedDisplay,
+        };
 
         if (_original is null || _primaryAction is null)
         {
