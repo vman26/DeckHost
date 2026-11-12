@@ -57,8 +57,12 @@ jobs:
       - name: Version
         id: version
         run: |
-          dotnet tool install --global minver-cli --version 6.0.0
-          version="$(minver --tag-prefix v --minimum-major-minor 0.1 --default-pre-release-identifiers alpha.0)"
+          # The version the build stamps, with the MinVer settings from Directory.Build.props.
+          version="$(dotnet msbuild DeckHost.Contracts/DeckHost.Contracts.csproj -restore -t:MinVer -getProperty:MinVerVersion -p:EnableMiraBoxNativeBuild=false | tail -n 1 | tr -d '\r')"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "Couldn't read the version (got: $version)." >&2
+            exit 1
+          fi
           if [[ "$GITHUB_REF_TYPE" == "tag" && "v$version" != "$GITHUB_REF_NAME" ]]; then
             echo "The tag $GITHUB_REF_NAME doesn't give the version $version (is it a valid vMAJOR.MINOR.PATCH tag?)." >&2
             exit 1

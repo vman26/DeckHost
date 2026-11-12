@@ -5,8 +5,8 @@
 #
 #   scripts/package.sh <rid> <version> <publish-dir> <output-dir> [display-version]
 #
-# <version> goes into file names (a pre-release: 1.2.1-alpha.0.3-4b09090); the display version
-# is what users see (1.2.1-alpha.0.3+4b09090), by default the same.
+# <version> goes into file names (a pre-release: 1.3.0-alpha.0.3-4b09090); the display version
+# is what users see (1.3.0-alpha.0.3+4b09090), by default the same.
 set -euo pipefail
 
 rid="${1:?rid}"

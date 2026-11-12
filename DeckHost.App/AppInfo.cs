@@ -9,14 +9,14 @@ internal static class AppInfo
 
     /// <summary>
     /// "1.2.0" for a release; for anything else the version plus the commit it was built from,
-    /// "1.2.1-alpha.0.3+4b09090", so a pre-release can be traced to its commit.
+    /// "1.3.0-alpha.0.3+4b09090", so a pre-release can be traced to its commit.
     /// </summary>
     public static string Version { get; } = Describe(
         typeof(AppInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         typeof(AppInfo).Assembly.GetName().Version?.ToString(3));
 
     /// <summary>
-    /// From the informational version ("1.2.1-alpha.0.3+4b09090a5183...", the .NET SDK appends the
+    /// From the informational version ("1.3.0-alpha.0.3+4b09090a5183...", the .NET SDK appends the
     /// commit): releases without the commit, pre-releases with its first 7 characters.
     /// </summary>
     internal static string Describe(string? informationalVersion, string? fallback)
