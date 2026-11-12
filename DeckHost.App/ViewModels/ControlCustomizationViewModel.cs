@@ -349,7 +349,10 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Solid background (#RRGGBB) under the image and text; empty for the profile background.</summary>
+    /// <summary>
+    /// Background (#RRGGBB, or #AARRGGBB below full opacity) under the image and text, in place of
+    /// the action's tile; empty for the action's own look. Transparent shows the profile background.
+    /// </summary>
     public string BackgroundColor
     {
         get => _backgroundColor;
@@ -365,7 +368,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     }
 
     public string? BackgroundColorError =>
-        string.IsNullOrWhiteSpace(BackgroundColor) || IsHexColor(BackgroundColor) ? null : "Use #RRGGBB, for example #1D4ED8.";
+        string.IsNullOrWhiteSpace(BackgroundColor) || IsHexColor(BackgroundColor, allowAlpha: true) ? null : "Use #RRGGBB (or #AARRGGBB with opacity), for example #1D4ED8.";
 
     public bool HasBackgroundColorError => BackgroundColorError is not null;
 
@@ -451,7 +454,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         var text = SupportsAppearance && !string.IsNullOrWhiteSpace(DisplayText) ? DisplayText : null;
         var image = SupportsAppearance && !string.IsNullOrWhiteSpace(ImagePath) ? ImagePath.Trim() : null;
         var light = BuildLight();
-        var background = SupportsAppearance && IsHexColor(BackgroundColor) ? "#" + NormalizeColor(BackgroundColor) : null;
+        var background = SupportsAppearance && IsHexColor(BackgroundColor, allowAlpha: true) ? "#" + NormalizeColor(BackgroundColor) : null;
         var appearance = new ControlAppearance(text, image, light, background, SupportsAppearance ? BuildTextStyle() : null)
         {
             ShowOnLinkedDisplay = ShowOnLinkedDisplay,
@@ -536,10 +539,14 @@ public partial class ControlCustomizationViewModel : ViewModelBase
 
     private static string NormalizeColor(string value) => value.Trim().TrimStart('#').ToUpperInvariant();
 
-    private static bool IsHexColor(string value) => HexColorRegex().IsMatch(value.Trim());
+    private static bool IsHexColor(string value, bool allowAlpha = false) =>
+        (allowAlpha ? HexColorWithAlphaRegex() : HexColorRegex()).IsMatch(value.Trim());
 
     [GeneratedRegex("^#?[0-9A-Fa-f]{6}$")]
     private static partial Regex HexColorRegex();
+
+    [GeneratedRegex("^#?([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$")]
+    private static partial Regex HexColorWithAlphaRegex();
 }
 
 public partial class MultiActionStepEditorViewModel : ViewModelBase
