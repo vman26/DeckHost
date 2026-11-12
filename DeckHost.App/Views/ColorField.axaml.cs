@@ -1,13 +1,15 @@
 using System;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Media;
 
 namespace DeckHost.App.Views;
 
 /// <summary>
-/// A color as #RRGGBB text with a color picker next to it; empty means "not set". While it is not
+/// A color as #RRGGBB text with a color swatch next to it that opens the picker
+/// (<see cref="ColorPickerPanel"/>); empty means "not set". While it is not
 /// set, the box shows <see cref="DefaultHex"/> in a muted style, so it is clear what will be used.
 /// With <see cref="AllowOpacity"/> an opacity slider follows: below 100 % the value is #AARRGGBB,
 /// and 0 % is transparent.
@@ -29,6 +31,8 @@ public partial class ColorField : UserControl
     public static readonly StyledProperty<bool> AllowOpacityProperty =
         AvaloniaProperty.Register<ColorField, bool>(nameof(AllowOpacity));
 
+    private readonly ColorPickerPanel _panel = new();
+
     private bool _syncing;
 
     /// <summary>The text <see cref="Sync"/> last put in the box (the value, or the default while unset).</summary>
@@ -48,15 +52,10 @@ public partial class ColorField : UserControl
                 Hex = HexBox.Text;
             }
         };
-        Picker.ColorChanged += (_, e) =>
-        {
-            var hex = $"#{e.NewColor.R:X2}{e.NewColor.G:X2}{e.NewColor.B:X2}";
-            if (!_syncing && !(TryParse(_syncedText, out var shown) && $"#{shown.R:X2}{shown.G:X2}{shown.B:X2}" == hex))
-            {
-                // A new color keeps the opacity that was set.
-                Hex = Format(new Color(CurrentAlpha(), e.NewColor.R, e.NewColor.G, e.NewColor.B));
-            }
-        };
+        _panel.ColorPicked += (_, color) =>
+            // The picker's opacity only counts where the field allows it.
+            Hex = Format(AllowOpacity ? color : new Color(255, color.R, color.G, color.B));
+        SwatchButton.Flyout = new Flyout { Content = _panel, Placement = PlacementMode.BottomEdgeAlignedLeft };
         ClearButton.Click += (_, _) => Hex = string.Empty;
         OpacitySlider.ValueChanged += (_, e) =>
         {
@@ -128,7 +127,9 @@ public partial class ColorField : UserControl
 
             if (TryParse(shown, out var color))
             {
-                Picker.Color = Color.FromRgb(color.R, color.G, color.B);
+                _panel.ShowAlpha = AllowOpacity;
+                _panel.SetColor(isDefault ? new Color(255, color.R, color.G, color.B) : color);
+                Swatch.Background = new SolidColorBrush(isDefault ? new Color(255, color.R, color.G, color.B) : color);
             }
 
             OpacityRow.IsVisible = AllowOpacity;
