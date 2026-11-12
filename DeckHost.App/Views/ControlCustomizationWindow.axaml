@@ -248,6 +248,13 @@
 						<local:ColorField Hex="{Binding BackgroundColor, Mode=TwoWay}" DefaultHex="#000000" Placeholder="the action's own look" AllowOpacity="True" />
 						<TextBlock Classes="hint" Text="A background of your own replaces the action's colored tile. Lower the opacity (or choose Transparent) to let the profile background show through." />
 						<TextBlock Classes="error" Text="{Binding BackgroundColorError}" IsVisible="{Binding HasBackgroundColorError}" />
+						<TextBlock Classes="label" Text="Icon" />
+						<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+							<TextBlock Text="{Binding IconName}" VerticalAlignment="Center" Foreground="#E2E8F0" TextTrimming="CharacterEllipsis" />
+							<Button Grid.Column="1" Content="Choose…" Click="ChooseIcon_OnClick" />
+							<Button Grid.Column="2" Content="Clear" Command="{Binding ClearIconCommand}" IsEnabled="{Binding HasIcon}" />
+						</Grid>
+						<TextBlock Classes="hint" Text="From your icon packs or Iconify's free icon sets. It takes the place of the action's own icon on its tile; single-color icons are drawn in white." />
 						<TextBlock Classes="label" Text="Image (PNG, JPG, SVG or animated GIF)" />
 						<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
 							<TextBox Name="ImagePathTextBox"

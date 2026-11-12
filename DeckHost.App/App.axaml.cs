@@ -1,3 +1,4 @@
+using System.Net.Http;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls;
@@ -12,6 +13,7 @@ using DeckHost.Contracts.Interfaces;
 using DeckHost.Core.Devices;
 using DeckHost.Core.Interfaces;
 using DeckHost.Core.Models;
+using DeckHost.Core.Icons;
 using DeckHost.Core.Plugins;
 using DeckHost.Core.Profiles;
 using DeckHost.Core.State;
@@ -235,6 +237,15 @@ public partial class App : Application
             SystemPluginSet.Create(),
             SystemPluginSet.RequiredPluginIds,
             provider.GetRequiredService<StreamDeckRuntime>()));
+
+        // Icons: installed packs, and Iconify for searching open-source icon sets online.
+        services.AddSingleton(_ => new IconLibrary(IconLibrary.DefaultRootDirectory));
+        services.AddSingleton(_ =>
+        {
+            var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd($"DeckHost/{AppInfo.Version.Split('+')[0]}");
+            return new IconifyClient(http);
+        });
 
         // Profiles and view models
         services.AddSingleton(_ => ProfileStore.CreateDefault());

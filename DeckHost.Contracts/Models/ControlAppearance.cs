@@ -23,6 +23,13 @@ public sealed record ControlAppearance(
     /// constructor keep working.
     /// </summary>
     public bool ShowOnLinkedDisplay { get; init; } = true;
+
+    /// <summary>
+    /// An icon file (SVG, PNG, ...) from the icon library that takes the place of the action's own
+    /// icon on its tile. Unlike <see cref="ImagePath"/> it keeps the tile and the caption; a
+    /// single-color SVG is drawn in white. An init property, so the constructor stays binary-compatible.
+    /// </summary>
+    public string? IconPath { get; init; }
 }
 
 /// <summary>

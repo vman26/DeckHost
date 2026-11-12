@@ -90,7 +90,7 @@ internal abstract class DeckActionBase(
 
     public virtual void Render(IRenderContext context)
     {
-        if (Icon(context) is { } icon)
+        if (ResolveIcon(context, Icon(context)) is { } icon)
         {
             RenderTile(context, icon);
             return;
@@ -137,8 +137,21 @@ internal abstract class DeckActionBase(
     /// </summary>
     protected virtual string? Icon(IRenderContext context) => null;
 
+    /// <summary>
+    /// The icon the user picked for this control (Customize → Icon), else <paramref name="fallback"/>
+    /// (the action's own). Actions that draw readouts pass their icon through this too.
+    /// </summary>
+    protected static string? ResolveIcon(IRenderContext context, string? fallback) =>
+        context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceIcon), out var custom) &&
+        !string.IsNullOrWhiteSpace(custom)
+            ? custom
+            : fallback;
+
+    /// <summary>The gray tile of actions without colors of their own (Display Content).</summary>
+    private static readonly (uint From, uint To) NeutralTile = (0xFF64748B, 0xFF1E293B);
+
     /// <summary>The tile's gradient, top left to bottom right.</summary>
-    protected virtual (uint From, uint To) TileColors => (0xFF64748B, 0xFF1E293B);
+    protected virtual (uint From, uint To) TileColors => NeutralTile;
 
     /// <summary>
     /// Text under the icon on a key when the user set none; null when the icon says it all (play,
@@ -199,8 +212,13 @@ internal abstract class DeckActionBase(
         var wide = context.IsCompact || context.Width > context.Height * 1.3;
         var caption = error ?? customText ?? (wide ? CompactText(context, Title(context)) : Caption(context));
 
-        // The user's own background color replaces the tile.
+        // The user's own background color replaces the tile. On a touch zone (no tile) the icon takes
+        // the action's color; a gray one would look dim there, so that becomes white.
         var (from, to) = Appearance(VariableKeys.AppearanceBackground) is null ? TileColors : (0u, 0u);
+        if (wide && (from, to) == NeutralTile)
+        {
+            (from, to) = (0xFFFFFFFF, 0xFFFFFFFF);
+        }
         if (error is not null && !wide)
         {
             context.DrawTile(icon, from, to);

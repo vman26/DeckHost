@@ -140,6 +140,29 @@ public partial class ControlCustomizationWindow : Window
         }
     }
 
+    private async void ChooseIcon_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ControlCustomizationViewModel viewModel ||
+            CommunityToolkit.Mvvm.DependencyInjection.Ioc.Default.GetService(typeof(DeckHost.Core.Icons.IconLibrary)) is not DeckHost.Core.Icons.IconLibrary library)
+        {
+            return;
+        }
+
+        var iconify = CommunityToolkit.Mvvm.DependencyInjection.Ioc.Default.GetService(typeof(DeckHost.Core.Icons.IconifyClient)) as DeckHost.Core.Icons.IconifyClient;
+        var picker = new IconPickerWindow { DataContext = new IconPickerViewModel(library, iconify) };
+        if (await picker.ShowDialog<IconChoice?>(this) is { } choice)
+        {
+            if (choice.AsPicture)
+            {
+                viewModel.ImagePath = choice.Path;
+            }
+            else
+            {
+                viewModel.IconPath = choice.Path;
+            }
+        }
+    }
+
     private async void BrowseImage_OnClick(object? sender, RoutedEventArgs e)
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions

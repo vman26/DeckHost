@@ -209,7 +209,7 @@ internal sealed class CounterAction() : DeckActionBase(
     public override void Render(IRenderContext context)
     {
         context.Variables.TryGetValue<int>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.Counter), out var count);
-        context.DrawReading(ResolveDisplayText(context, Name), count.ToString(CultureInfo.CurrentCulture), null, SecondaryTextColor, Icons.Counter);
+        context.DrawReading(ResolveDisplayText(context, Name), count.ToString(CultureInfo.CurrentCulture), null, SecondaryTextColor, ResolveIcon(context, Icons.Counter));
     }
 }
 

@@ -116,7 +116,18 @@ namespace DeckHost.Core.Rendering
 
         public void DrawIcon(string svgPathData, double centerX, double centerY, double size, uint argbColor = 0xFFFFFFFF)
         {
-            if (size <= 0 || _resources.GetIconPath(svgPathData) is not { } path)
+            if (size <= 0 || string.IsNullOrWhiteSpace(svgPathData))
+            {
+                return;
+            }
+
+            if (Path.IsPathRooted(svgPathData))
+            {
+                DrawIconFile(svgPathData, centerX, centerY, size, argbColor);
+                return;
+            }
+
+            if (_resources.GetIconPath(svgPathData) is not { } path)
             {
                 return;
             }
@@ -128,6 +139,28 @@ namespace DeckHost.Core.Rendering
             _canvas.Scale((float)(size / SkiaDrawingResources.IconGrid));
             _canvas.DrawPath(path, paint);
             _canvas.Restore();
+        }
+
+        /// <summary>An icon file fitted into the square; a single-color SVG in <paramref name="argbColor"/>.</summary>
+        private void DrawIconFile(string file, double centerX, double centerY, double size, uint argbColor)
+        {
+            var image = _resources.GetImage(file, Clock);
+            if (image is null)
+            {
+                return;
+            }
+
+            var scale = size / Math.Max(image.Width, image.Height);
+            var width = image.Width * scale;
+            var height = image.Height * scale;
+            var target = SKRect.Create((float)(centerX - (width / 2d)), (float)(centerY - (height / 2d)), (float)width, (float)height);
+            using var paint = new SKPaint { IsAntialias = true };
+            if (_resources.IsSingleColor(file))
+            {
+                paint.ColorFilter = SKColorFilter.CreateBlendMode(new SKColor(argbColor), SKBlendMode.SrcIn);
+            }
+
+            _canvas.DrawImage(image, target, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear), paint);
         }
 
         public void FillGradientRect(double x, double y, double width, double height, double radius, uint fromArgb, uint toArgb)

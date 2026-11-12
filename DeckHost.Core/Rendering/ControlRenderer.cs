@@ -83,14 +83,15 @@ internal static class ControlRenderer
 
     /// <summary>
     /// Whether a display shows something of its own: an action, or text or an image. A binding to
-    /// an appearance-only action with nothing but a background color doesn't count, so a linked
+    /// an appearance-only action with nothing but a background color doesn't count (text, an image or an icon do), so a linked
     /// control can still use the display. (An action that isn't loaded counts: its name is shown.)
     /// </summary>
     public static bool HasOwnContent(ControlBinding? binding, IDeckAction? action) =>
         binding is not null &&
         !(action is { ShowsAppearanceOnly: true } &&
           string.IsNullOrWhiteSpace(binding.Appearance.Text) &&
-          string.IsNullOrWhiteSpace(binding.Appearance.ImagePath));
+          string.IsNullOrWhiteSpace(binding.Appearance.ImagePath) &&
+          string.IsNullOrWhiteSpace(binding.Appearance.IconPath));
 
     /// <summary>Height of a linked control's strip on a display of the given height.</summary>
     public static int LinkedStripHeight(int displayHeight) =>
