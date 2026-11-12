@@ -72,15 +72,16 @@ Versions come from git tags ([MinVer](https://github.com/adamralph/minver)) and 
 | Commit | Version | Meaning |
 |---|---|---|
 | tagged `v1.2.0` | `1.2.0` | a release |
-| 3 commits after `v1.2.0` | `1.2.1-alpha.0.3+4b09090` | work in progress towards 1.2.1 |
+| 3 commits after `v1.2.0` | `1.3.0-alpha.0.3+4b09090` | work in progress towards the next version |
 | tagged `v1.3.0-beta.1` | `1.3.0-beta.1+…` | a beta (also `-rc.1` for a release candidate) |
 | 2 commits after `v1.3.0-beta.1` | `1.3.0-beta.1.2+…` | work after that beta |
 | before the first tag | `0.1.0-alpha.0.N+…` | |
 
 - The number after the label (`N`, here `3` or `2`) is the number of commits since the last tag (MinVer calls it the "height"). It only counts; two branches can be at the same height, which is why the commit is added.
 - `alpha.0` is only the default for untagged commits. A version is beta or a release candidate when you tag it so (`v1.3.0-beta.1`, `v1.3.0-rc.1`).
+- Between releases, builds count towards the next **minor** version (`MinVerAutoIncrement` in `Directory.Build.props`). That's only the label of work-in-progress builds: the tag you push decides what is released.
 - Every version that isn't a release ends in `+<commit>`: the first 7 characters of the commit it was built from (`git show 4b09090`). Release versions don't need it, the tag points at the commit.
-- Package file names use `-` instead of `+` (`DeckHost-1.2.1-alpha.0.3-4b09090-linux-x64.tar.gz`), since GitHub renames some characters in release files.
+- Package file names use `-` instead of `+` (`DeckHost-1.3.0-alpha.0.3-4b09090-linux-x64.tar.gz`), since GitHub renames some characters in release files.
 - The app shows its version in **☰ → DeckHost settings** and in the log.
 
 To release, tag and push:
@@ -92,6 +93,14 @@ git push origin v1.2.0
 
 The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.2.0-beta.1`, `v1.2.0-rc.1`) becomes a pre-release. Run the workflow by hand to get the packages as build artifacts without releasing.
 
+Which tag to push:
+
+| You want | Do |
+|---|---|
+| the next feature release (1.2.0 → 1.3.0) | nothing until it's ready, then tag `v1.3.0` (optionally `v1.3.0-beta.1`, `v1.3.0-rc.1` first) |
+| a bug-fix release (1.2.0 → 1.2.1) | tag `v1.2.1` on the fix: on the main line, or on a branch from `v1.2.0` (`git switch -c release/1.2 v1.2.0`) when the main line already has features you don't want to ship |
+| a major release (1.x → 2.0.0) | set `MinVerMinimumMajorMinor` to `2.0` in `Directory.Build.props` when the work starts, so builds show `2.0.0-alpha.0.N`; tag `v2.0.0` when it's done |
+
 ## Plugins
 
 DeckHost ships with three **system plugins**. You can switch them off in the Plugin Manager, but you can't uninstall them:
@@ -102,7 +111,7 @@ DeckHost ships with three **system plugins**. You can switch them off in the Plu
 | Media Controls | Play / Pause, Next, Previous, Stop, Volume Up / Down, Mute, Volume Knob, Track Swipe |
 | System Controls | Launch App, Open Website or File, Hotkey, Type Text, Lock Computer, System Info (CPU, memory, disk, uptime) |
 
-Media keys, hotkeys, typing and locking use Windows `SendInput`; on other systems those actions show "Windows only".
+Media keys, hotkeys, typing and locking use Windows `SendInput`, the tools listed under "What works where" on Linux, and system key events on macOS.
 
 Actions with settings (the app to launch, a hotkey, a scene name, ...) are set up with **double-click** or **right-click → Customize**. Multi Action steps are added, removed, reordered and configured there too, or added by dropping more actions onto the control. For a Hotkey, click **Record** and press the combination.
 
