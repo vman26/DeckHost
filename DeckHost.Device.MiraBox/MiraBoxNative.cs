@@ -12,7 +12,8 @@ namespace DeckHost.Device.MiraBox;
 internal static unsafe partial class MiraBoxNative
 {
     private const string LibraryName = "MiraBoxBridge";
-    private const string PluginDirectoryName = "deckhost.device.mirabox";
+    // No dots: macOS codesign takes a folder with a dot inside an app bundle for a nested bundle.
+    private const string PluginDirectoryName = "deckhost-device-mirabox";
     private const int StringBufferSize = 4096;
     private static readonly Lock NativeLoadSync = new();
     private static bool s_pluginDependenciesLoaded;
