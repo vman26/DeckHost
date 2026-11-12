@@ -134,8 +134,20 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 - **Run when** (for actions that normally run on a press): only the inputs the control has, so a key offers press, release and long press, a knob also turned left/right, and the swipe bar swiped left/right.
 - **Per input** (actions that support it, such as Switch Profile): on a control with more than one input, a group of settings for each input: **When pressed**, **When held down**, **When turned left/right**, **When swiped left/right**. For example a knob that goes to a specific profile when pressed and steps back and forth through the profiles when turned. "Do nothing" leaves an input unused.
 - **Text**: multi-line, wrapped or not, with color (picker or hex), font, size, bold, italic, and horizontal (left/center/right) and vertical (top/middle/bottom) alignment.
-- **Image**: PNG, JPG, animated GIF or SVG, with a **Clear** button; and a background color.
+- **Icon**: **Choose…** opens the icon picker (see [Icons](#icons)). The icon takes the place of the action's own on its tile; single-color icons are drawn in white.
+- **Image**: PNG, JPG, animated GIF or SVG, with a **Clear** button.
+- **Background**: a color of your own replaces the action's colored tile. The **Opacity** slider (or **Transparent**) lets the profile background or image show through; it's stored as `#AARRGGBB`.
+- **Colors** everywhere use one picker: a saturation/brightness square, hue and opacity sliders, HEX and R/G/B boxes, preset colors and an **eyedropper** that picks a color from anywhere on the screen (click, Space or Enter takes it; Esc cancels). The eyedropper works on Windows, on macOS (it needs the Screen Recording permission, else it only sees the desktop picture) and on Linux with X11; Wayland doesn't let apps read the screen.
 - The action's own settings, and for knobs the LED color. Numeric settings have a slider with a number box next to it for exact values, and **↺** to go back to the default.
+
+### Icons
+
+The icon picker (Customize → Icon → **Choose…**) searches two places:
+
+- **My packs**: icon packs you installed with **Install icon pack…**: a Stream Deck icon pack (`.streamDeckIconPack`, as made for Elgato's Stream Deck app, from the Elgato Marketplace or e.g. GitHub), or a zip or folder of images. Packs are listed with their author, version and license, and can be removed.
+- **Online (Iconify)**: [Iconify](https://iconify.design)'s free, open-source icon sets (Material Design, Lucide, Tabler, brand logos, ...), shown with each set's name and license. A picked icon is saved into a local "Downloaded icons" pack, with its set's license in its `license.txt`, so profiles keep working offline.
+
+**Use as icon** puts it on the action's tile (with the caption); **Use as picture** fills the key, like an image file. Colored pack icons are usually made as whole key pictures; the picker suggests that for them. Check an icon's license before sharing a profile that uses it.
 
 ### Knobs on the touch strip
 
@@ -201,6 +213,7 @@ Only one DeckHost runs at a time: starting it again shows the running one. (Two 
 | DeckHost plugins | `%AppData%/DeckHost/plugins/functional/<id>` |
 | Stream Deck plugins | `%AppData%/DeckHost/plugins/streamdeck/<uuid>.sdPlugin` |
 | Profiles | `%AppData%/DeckHost/profiles.json` |
+| Icon packs and downloaded icons | `%AppData%/DeckHost/icons/<pack id>` (Stream Deck icon pack layout) |
 
 The Plugin Manager shows these paths and has **Plugins folder** and **Logs folder** buttons.
 
