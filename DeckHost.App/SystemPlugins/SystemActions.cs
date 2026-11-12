@@ -64,6 +64,13 @@ internal sealed class LaunchAppAction() : DeckActionBase(
 
     protected override string? Subtitle(IRenderContext context) =>
         string.IsNullOrWhiteSpace(context.Settings.Get(PathKey)) ? "Not set" : null;
+
+    protected override string? Icon(IRenderContext context) => Icons.Apps;
+
+    protected override (uint From, uint To) TileColors => Palette.Apps;
+
+    protected override string? Caption(IRenderContext context) =>
+        string.IsNullOrWhiteSpace(context.Settings.Get(PathKey)) ? "Not set" : Title(context);
 }
 
 internal sealed class OpenUrlAction() : DeckActionBase(
@@ -113,6 +120,12 @@ internal sealed class OpenUrlAction() : DeckActionBase(
     }
 
     protected override string? Subtitle(IRenderContext context) => null;
+
+    protected override string? Icon(IRenderContext context) => Icons.OpenLink;
+
+    protected override (uint From, uint To) TileColors => Palette.Web;
+
+    protected override string? Caption(IRenderContext context) => Title(context);
 }
 
 internal sealed class HotkeyAction() : DeckActionBase(
@@ -146,6 +159,12 @@ internal sealed class HotkeyAction() : DeckActionBase(
     protected override string Title(IRenderContext context) => context.Settings.Get(KeysKey, Name);
 
     protected override string? Subtitle(IRenderContext context) => null;
+
+    protected override string? Icon(IRenderContext context) => Icons.Keyboard;
+
+    protected override (uint From, uint To) TileColors => Palette.Keys;
+
+    protected override string? Caption(IRenderContext context) => Title(context);
 }
 
 internal sealed class TypeTextAction() : DeckActionBase(
@@ -169,6 +188,10 @@ internal sealed class TypeTextAction() : DeckActionBase(
     }
 
     protected override string? Subtitle(IRenderContext context) => null;
+
+    protected override string? Icon(IRenderContext context) => Icons.Text;
+
+    protected override (uint From, uint To) TileColors => Palette.Keys;
 }
 
 internal sealed class LockComputerAction() : DeckActionBase(
@@ -183,6 +206,10 @@ internal sealed class LockComputerAction() : DeckActionBase(
     protected override void Run(ActionContext context) => RunQueued(context, SystemControl.LockScreen);
 
     protected override string? Subtitle(IRenderContext context) => null;
+
+    protected override string? Icon(IRenderContext context) => Icons.Lock;
+
+    protected override (uint From, uint To) TileColors => Palette.Security;
 }
 
 /// <summary>Live CPU, memory, disk or uptime reading with a usage bar.</summary>
@@ -219,7 +246,7 @@ internal sealed class SystemInfoAction() : DeckActionBase(
     {
         var (label, value, fraction) = Read(context.Settings);
         context.DrawReading(ResolveDisplayText(context, label), value, fraction,
-            fraction >= 0.9 ? BarCritical : fraction >= 0.75 ? BarWarning : BarNormal);
+            fraction >= 0.9 ? BarCritical : fraction >= 0.75 ? BarWarning : BarNormal, Icons.Chip);
     }
 
     private static (string Label, string Value, double? Fraction) Read(ActionSettings settings)

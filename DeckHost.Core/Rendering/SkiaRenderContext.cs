@@ -114,6 +114,44 @@ namespace DeckHost.Core.Rendering
             return true;
         }
 
+        public void DrawIcon(string svgPathData, double centerX, double centerY, double size, uint argbColor = 0xFFFFFFFF)
+        {
+            if (size <= 0 || _resources.GetIconPath(svgPathData) is not { } path)
+            {
+                return;
+            }
+
+            var paint = _resources.FillPaint;
+            paint.Color = new SKColor(argbColor);
+            _canvas.Save();
+            _canvas.Translate((float)(centerX - (size / 2d)), (float)(centerY - (size / 2d)));
+            _canvas.Scale((float)(size / SkiaDrawingResources.IconGrid));
+            _canvas.DrawPath(path, paint);
+            _canvas.Restore();
+        }
+
+        public void FillGradientRect(double x, double y, double width, double height, double radius, uint fromArgb, uint toArgb)
+        {
+            var rect = new SKRect((float)x, (float)y, (float)(x + width), (float)(y + height));
+            using var shader = SKShader.CreateLinearGradient(new SKPoint(rect.Left, rect.Top), new SKPoint(rect.Right, rect.Bottom),
+                [new SKColor(fromArgb), new SKColor(toArgb)], SKShaderTileMode.Clamp);
+            using var paint = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Shader = shader };
+            _canvas.DrawRoundRect(rect, (float)radius, (float)radius, paint);
+        }
+
+        public void DrawRightAlignedText(string text, double right, double baselineY, float size, uint argbColor = 0xFFFFFFFF)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            var paint = _resources.TextPaint;
+            paint.Color = new SKColor(argbColor);
+            var font = StyledFont(size);
+            _canvas.DrawText(text, (float)(right - font.MeasureText(text, paint)), (float)baselineY, SKTextAlign.Left, font, paint);
+        }
+
         /// <summary>Time used to pick animated GIF frames.</summary>
         public TimeSpan Clock { get; }
 

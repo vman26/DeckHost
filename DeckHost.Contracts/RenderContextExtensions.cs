@@ -7,39 +7,158 @@ namespace DeckHost.Contracts;
 public static class RenderContextExtensions
 {
     private const uint LabelColor = 0xFF93C5FD;
+    private const uint CaptionColor = 0xFFCBD5E1;
     private const uint BarBackgroundColor = 0xFF1E293B;
+    private const uint WideBarBackgroundColor = 0x40FFFFFF;
+
+    /// <summary>Wider than this (width / height) is a touch zone rather than a key.</summary>
+    private const double WideAspect = 1.3;
 
     /// <summary>
     /// Draws a live reading (a volume, a CPU load, a dial's value): a small label, a large value
     /// and, with a <paramref name="fraction"/> from 0 to 1, a level bar. In a strip
     /// (<see cref="IRenderContext.IsCompact"/>) it becomes one line.
     /// </summary>
-    public static void DrawReading(this IRenderContext context, string label, string value, double? fraction = null, uint barColor = LabelColor)
+    public static void DrawReading(this IRenderContext context, string label, string value, double? fraction = null, uint barColor = LabelColor) =>
+        DrawReading(context, label, value, fraction, barColor, icon: null);
+
+    /// <summary>
+    /// <see cref="DrawReading(IRenderContext, string, string, double?, uint)"/> with an icon
+    /// (<see cref="Icons"/>). On a touch zone it is laid out like a Stream Deck + dial: the label
+    /// small at the top left, the icon on the left, the value on the right with a thin bar under it.
+    /// </summary>
+    public static void DrawReading(this IRenderContext context, string label, string value, double? fraction, uint barColor, string? icon)
     {
         ArgumentNullException.ThrowIfNull(context);
+        var width = context.Width;
+        var height = context.Height;
 
         if (context.IsCompact)
         {
-            context.DrawLabel($"{label} {value}".Trim(), TextVerticalAlignment.Middle, Math.Max(10f, context.Height * 0.46f));
+            DrawCompactLine(context, icon, $"{label} {value}".Trim());
             return;
         }
 
-        var width = context.Width;
-        var height = context.Height;
-        context.DrawCenteredText(label, width / 2d, height * 0.22d, Math.Max(10f, height * 0.12f), LabelColor);
-        context.DrawCenteredText(value, width / 2d, height * 0.52d, Math.Max(14f, height * 0.22f));
+        if (width > height * WideAspect)
+        {
+            var pad = Math.Max(6d, height * 0.09d);
+            context.DrawText(label, pad, pad + (height * 0.12d), (float)Math.Max(10d, height * 0.12d), CaptionColor);
 
+            var left = pad;
+            if (!string.IsNullOrEmpty(icon))
+            {
+                var iconSize = height * 0.36d;
+                context.DrawIcon(icon, pad + (iconSize / 2d), height * 0.6d, iconSize);
+                left = pad + iconSize + pad;
+            }
+
+            context.DrawRightAlignedText(value, width - pad, height * 0.64d, (float)Math.Max(12d, height * 0.21d));
+            if (fraction is { } wideLevel)
+            {
+                DrawBar(context, left, height * 0.76d, width - pad - left, Math.Max(3d, height * 0.045d), wideLevel, WideBarBackgroundColor, barColor);
+            }
+
+            return;
+        }
+
+        var hasIcon = !string.IsNullOrEmpty(icon);
+        if (hasIcon)
+        {
+            context.DrawIcon(icon!, width / 2d, height * 0.27d, height * 0.26d);
+        }
+        else
+        {
+            context.DrawCenteredText(label, width / 2d, height * 0.22d, Math.Max(10f, height * 0.12f), LabelColor);
+        }
+
+        context.DrawCenteredText(value, width / 2d, height * (hasIcon ? 0.58d : 0.52d), Math.Max(14f, height * 0.22f));
         if (fraction is { } level)
         {
-            var barX = width * 0.12d;
-            var barWidth = width * 0.76d;
-            var barY = height * 0.74d;
-            var barHeight = Math.Max(4d, height * 0.08d);
-            context.FillRoundedRect(barX, barY, barWidth, barHeight, barHeight / 2d, BarBackgroundColor);
-            if (level > 0)
+            var barHeight = Math.Max(4d, height * 0.06d);
+            DrawBar(context, width * 0.14d, height * 0.78d, width * 0.72d, barHeight, level, BarBackgroundColor, barColor);
+        }
+    }
+
+    /// <summary>
+    /// Draws an action as an icon. On a key: a rounded tile with a diagonal gradient from
+    /// <paramref name="fromArgb"/> to <paramref name="toArgb"/> and the icon in white, the
+    /// <paramref name="caption"/> (if any) small at the bottom in the binding's text style. With both
+    /// colors 0 there is no tile (the control's own background shows). On a touch zone the strip
+    /// stays one surface: no tile, the caption at the top left and the icon in the middle. In a
+    /// strip (<see cref="IRenderContext.IsCompact"/>) the icon and the caption on one line.
+    /// </summary>
+    public static void DrawTile(this IRenderContext context, string icon, uint fromArgb, uint toArgb, string? caption = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var width = context.Width;
+        var height = context.Height;
+        var hasCaption = !string.IsNullOrWhiteSpace(caption);
+
+        if (context.IsCompact)
+        {
+            DrawCompactLine(context, icon, caption);
+            return;
+        }
+
+        if (width > height * WideAspect)
+        {
+            var pad = Math.Max(6d, height * 0.09d);
+            if (hasCaption)
             {
-                context.FillRoundedRect(barX, barY, Math.Max(barHeight, barWidth * Math.Min(level, 1d)), barHeight, barHeight / 2d, barColor);
+                context.DrawText(caption!, pad, pad + (height * 0.12d), (float)Math.Max(10d, height * 0.12d), CaptionColor);
             }
+
+            context.DrawIcon(icon, width / 2d, height * (hasCaption ? 0.58d : 0.5d), height * 0.42d, fromArgb == 0 ? 0xFFFFFFFF : fromArgb);
+            return;
+        }
+
+        if (fromArgb != 0 || toArgb != 0)
+        {
+            var inset = Math.Max(2d, width * 0.035d);
+            context.FillGradientRect(inset, inset, width - (2 * inset), height - (2 * inset), width * 0.16d, fromArgb, toArgb);
+        }
+
+        context.DrawIcon(icon, width / 2d, height * (hasCaption ? 0.42d : 0.5d), height * (hasCaption ? 0.4d : 0.46d));
+        if (hasCaption)
+        {
+            context.DrawLabel(caption!, TextVerticalAlignment.Bottom, Math.Max(10f, height * 0.13f));
+        }
+    }
+
+    private static void DrawCompactLine(IRenderContext context, string? icon, string? text)
+    {
+        var height = context.Height;
+        var size = (float)Math.Max(10d, height * 0.46d);
+        if (string.IsNullOrEmpty(icon))
+        {
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                context.DrawLabel(text, TextVerticalAlignment.Middle, size);
+            }
+
+            return;
+        }
+
+        var iconSize = height * 0.6d;
+        var pad = Math.Max(4d, height * 0.2d);
+        context.DrawIcon(icon, pad + (iconSize / 2d), height / 2d, iconSize);
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            context.DrawText(text, pad + iconSize + pad, (height / 2d) + (size * 0.36d), size);
+        }
+    }
+
+    private static void DrawBar(IRenderContext context, double x, double y, double width, double height, double level, uint background, uint color)
+    {
+        if (width <= 0)
+        {
+            return;
+        }
+
+        context.FillRoundedRect(x, y, width, height, height / 2d, background);
+        if (level > 0)
+        {
+            context.FillRoundedRect(x, y, Math.Max(height, width * Math.Min(level, 1d)), height, height / 2d, color);
         }
     }
 }

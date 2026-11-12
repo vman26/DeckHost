@@ -21,6 +21,33 @@ public sealed class SkiaDrawingResources : IDisposable
 
     public SKPaint TextPaint { get; } = new() { IsAntialias = true };
 
+    /// <summary>Icons are drawn on a grid of this size (see <c>Contracts.Icons</c>).</summary>
+    public const float IconGrid = 24f;
+
+    private readonly Dictionary<string, SKPath?> _iconPaths = new(StringComparer.Ordinal);
+
+    /// <summary>An icon's path, parsed once; null when the path data is invalid.</summary>
+    public SKPath? GetIconPath(string svgPathData)
+    {
+        if (string.IsNullOrWhiteSpace(svgPathData))
+        {
+            return null;
+        }
+
+        if (!_iconPaths.TryGetValue(svgPathData, out var path))
+        {
+            path = SKPath.ParseSvgPathData(svgPathData);
+            if (path is not null)
+            {
+                path.FillType = SKPathFillType.EvenOdd;
+            }
+
+            _iconPaths[svgPathData] = path;
+        }
+
+        return path;
+    }
+
     public SKPaint ImagePaint { get; } = new() { IsAntialias = true };
 
     public SKSamplingOptions ImageSampling { get; } = new(SKCubicResampler.Mitchell);
@@ -125,6 +152,11 @@ public sealed class SkiaDrawingResources : IDisposable
 
         _fonts.Clear();
         _images.Clear();
+        foreach (var path in _iconPaths.Values)
+        {
+            path?.Dispose();
+        }
+
         FillPaint.Dispose();
         TextPaint.Dispose();
         ImagePaint.Dispose();

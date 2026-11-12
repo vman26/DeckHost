@@ -21,6 +21,34 @@ internal sealed class MediaKeyAction(string id, string name, MediaKey key) : Dec
     protected override void Run(ActionContext context) => RunQueued(context, () => SystemControl.SendMediaKey(key));
 
     protected override string? Subtitle(IRenderContext context) => null;
+
+    protected override string? Icon(IRenderContext context) => key switch
+    {
+        MediaKey.PlayPause => Icons.PlayPause,
+        MediaKey.Next => Icons.Next,
+        MediaKey.Previous => Icons.Previous,
+        MediaKey.Stop => Icons.Stop,
+        MediaKey.VolumeUp => Icons.VolumeUp,
+        MediaKey.VolumeDown => Icons.VolumeDown,
+        _ => Icons.Muted,
+    };
+
+    protected override (uint From, uint To) TileColors =>
+        key is MediaKey.VolumeUp or MediaKey.VolumeDown or MediaKey.Mute ? Palette.Volume : Palette.Media;
+}
+
+/// <summary>The tile colors of DeckHost's own actions.</summary>
+internal static class Palette
+{
+    public static readonly (uint, uint) Media = (0xFFF472B6, 0xFF9333EA);
+    public static readonly (uint, uint) Volume = (0xFF22D3EE, 0xFF2563EB);
+    public static readonly (uint, uint) Apps = (0xFF34D399, 0xFF0E7490);
+    public static readonly (uint, uint) Web = (0xFF60A5FA, 0xFF4F46E5);
+    public static readonly (uint, uint) Keys = (0xFFFBBF24, 0xFFEA580C);
+    public static readonly (uint, uint) Security = (0xFF94A3B8, 0xFF334155);
+    public static readonly (uint, uint) Profiles = (0xFFFB923C, 0xFFDB2777);
+    public static readonly (uint, uint) Multi = (0xFF818CF8, 0xFFA855F7);
+    public static readonly (uint, uint) Clock = (0xFF4F46E5, 0xFF1E1B4B);
 }
 
 /// <summary>Knob: turn for volume, press to mute. Where it has a display it shows the level.</summary>
@@ -68,6 +96,10 @@ internal sealed class VolumeKnobAction() : DeckActionBase(
 
     protected override string Title(IRenderContext context) => "Volume";
 
+    protected override string? Icon(IRenderContext context) => Icons.Speaker;
+
+    protected override (uint From, uint To) TileColors => Palette.Volume;
+
     protected override string? Subtitle(IRenderContext context) => null;
 
     public override void Render(IRenderContext context)
@@ -85,7 +117,8 @@ internal sealed class VolumeKnobAction() : DeckActionBase(
             ResolveDisplayText(context, Title(context)),
             volume.Muted ? "Muted" : volume.Level.ToString("P0", CultureInfo.CurrentCulture),
             volume.Level,
-            volume.Muted ? MutedColor : LevelColor);
+            volume.Muted ? MutedColor : LevelColor,
+            volume.Muted ? Icons.Muted : Icons.Speaker);
     }
 }
 

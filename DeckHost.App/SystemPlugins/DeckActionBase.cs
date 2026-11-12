@@ -90,6 +90,12 @@ internal abstract class DeckActionBase(
 
     public virtual void Render(IRenderContext context)
     {
+        if (Icon(context) is { } icon)
+        {
+            RenderTile(context, icon);
+            return;
+        }
+
         // The label follows the user's text style (color, font, alignment, wrapping) from Customize.
         var title = ResolveDisplayText(context, Title(context));
         var variables = context.Variables;
@@ -123,6 +129,86 @@ internal abstract class DeckActionBase(
 
     protected virtual void Run(ActionContext context)
     {
+    }
+
+    /// <summary>
+    /// The action's icon (<see cref="Icons"/>). With one, the action is drawn as an icon on a
+    /// colored tile (<see cref="TileColors"/>) instead of as text, like the keys of a Stream Deck.
+    /// </summary>
+    protected virtual string? Icon(IRenderContext context) => null;
+
+    /// <summary>The tile's gradient, top left to bottom right.</summary>
+    protected virtual (uint From, uint To) TileColors => (0xFF64748B, 0xFF1E293B);
+
+    /// <summary>
+    /// Text under the icon on a key when the user set none; null when the icon says it all (play,
+    /// lock). On a touch zone and in a strip the title is shown instead.
+    /// </summary>
+    protected virtual string? Caption(IRenderContext context) => null;
+
+    /// <summary>
+    /// On a key without a background color or picture of the user's: the colored tile, for actions
+    /// that draw their own content on it (a clock). Not on a touch zone, which stays one surface.
+    /// </summary>
+    protected static void DrawTileBackground(IRenderContext context, (uint From, uint To) colors)
+    {
+        if (context.IsCompact || context.Width > context.Height * 1.3)
+        {
+            return;
+        }
+
+        foreach (var suffix in new[] { VariableKeys.AppearanceBackground, VariableKeys.AppearanceImage })
+        {
+            if (context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, suffix), out var value) && !string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+        }
+
+        var inset = Math.Max(2d, context.Width * 0.035d);
+        context.FillGradientRect(inset, inset, context.Width - (2 * inset), context.Height - (2 * inset), context.Width * 0.16d, colors.From, colors.To);
+    }
+
+    private void RenderTile(IRenderContext context, string icon)
+    {
+        var variables = context.Variables;
+        string? Appearance(string suffix) =>
+            variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, suffix), out var value) && !string.IsNullOrWhiteSpace(value)
+                ? value
+                : null;
+
+        var customText = Appearance(VariableKeys.AppearanceText);
+        var errorKey = VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.LastError);
+        var error = variables.TryGetValue<string>(errorKey, out var lastError) && !string.IsNullOrWhiteSpace(lastError) ? lastError : null;
+
+        if (Appearance(VariableKeys.AppearanceImage) is not null && !context.IsCompact)
+        {
+            // The user's own picture is the icon: only their text (or the error) goes on top.
+            if (error is not null)
+            {
+                context.DrawCenteredText(error, context.Width / 2d, context.Height * 0.84d, SubtitleSize(context), ErrorTextColor);
+            }
+            else if (customText is not null)
+            {
+                context.DrawLabel(customText, TextVerticalAlignment.Bottom, SubtitleSize(context));
+            }
+
+            return;
+        }
+
+        var wide = context.IsCompact || context.Width > context.Height * 1.3;
+        var caption = error ?? customText ?? (wide ? CompactText(context, Title(context)) : Caption(context));
+
+        // The user's own background color replaces the tile.
+        var (from, to) = Appearance(VariableKeys.AppearanceBackground) is null ? TileColors : (0u, 0u);
+        if (error is not null && !wide)
+        {
+            context.DrawTile(icon, from, to);
+            context.DrawCenteredText(error, context.Width / 2d, context.Height * 0.84d, SubtitleSize(context), ErrorTextColor);
+            return;
+        }
+
+        context.DrawTile(icon, from, to, caption);
     }
 
     private static bool MatchesTrigger(ActionContext context) => context.Settings.Get(TriggerKey, "press") switch
