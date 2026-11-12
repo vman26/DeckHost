@@ -117,9 +117,15 @@
 				</ItemsControl.ItemsPanel>
 				<!-- A heading above each input's group (a knob: when pressed / turned left / turned right);
 				     settings that don't apply right now are hidden. The field itself uses its own template. -->
+				<ItemsControl.Styles>
+					<!-- On the item container, so a hidden setting takes no spacing either. -->
+					<Style Selector="ContentPresenter" x:DataType="vm:SettingFieldViewModel">
+						<Setter Property="IsVisible" Value="{Binding IsVisible}" />
+					</Style>
+				</ItemsControl.Styles>
 				<ItemsControl.ItemTemplate>
 					<DataTemplate x:DataType="vm:SettingFieldViewModel">
-						<StackPanel Spacing="6" IsVisible="{Binding IsVisible}">
+						<StackPanel Spacing="6">
 							<TextBlock Text="{Binding SectionTitle}" IsVisible="{Binding HasSectionTitle}"
 									   FontWeight="SemiBold" Foreground="#93C5FD" Margin="0,6,0,0" />
 							<ContentControl Content="{Binding}" />
