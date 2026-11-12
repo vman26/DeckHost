@@ -439,6 +439,16 @@ extern "C" {
                 return MIRABOX_NOT_SUPPORTED;
             }
 
+            // setFrameBackgroundStream returns nothing and only prints when it can't send; check
+            // what it needs here, so the host hears about it (and tries again on the next connect).
+            if (!device->canTransportWrite()) {
+                return MIRABOX_NOT_READY;
+            }
+
+            if (const auto helper = device->getBackgroundGifHelper(); helper == nullptr || helper->_width == 0 || helper->_height == 0) {
+                return MIRABOX_NOT_SUPPORTED;
+            }
+
             // Lossless and unrotated: the SDK scales it to the screen, rotates it and encodes the JPEG.
             const ImgHelper passThrough(static_cast<uint32_t>(std::max(width, 0)), static_cast<uint32_t>(std::max(height, 0)), 0.0,
                 ResizeOption::Scale, false, false, ImgType::PNG);

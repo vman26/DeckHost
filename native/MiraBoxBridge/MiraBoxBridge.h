@@ -29,6 +29,7 @@ extern "C" {
         MIRABOX_BUFFER_TOO_SMALL = -5,
         MIRABOX_ENCODE_FAILED = -6,
         MIRABOX_EXCEPTION = -7,
+        MIRABOX_NOT_READY = -8,
     };
 
     // Synthetic event type (outside the SDK's RegisterEvent range) raised when the
