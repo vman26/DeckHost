@@ -30,6 +30,13 @@ public interface IDeckAction
     /// <summary>Set for actions whose image changes over time (clocks, system info); the host redraws them this often.</summary>
     TimeSpan? RefreshInterval => null;
 
+    /// <summary>
+    /// True for an action that does nothing but show the control's own text, image and background
+    /// (DeckHost's hidden "Display Content"). A control bound to it with only a background color
+    /// counts as free: a linked control (a knob under a touch zone) may then use its display.
+    /// </summary>
+    bool ShowsAppearanceOnly => false;
+
     /// <summary>Whether the action has its own settings page (for example a Stream Deck property inspector).</summary>
     bool HasSettingsPage => false;
 

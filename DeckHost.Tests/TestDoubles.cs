@@ -223,3 +223,25 @@ internal sealed class StripDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceB
     {
     }
 }
+
+/// <summary>Like DeckHost's Display Content: draws nothing itself, only the control's appearance shows.</summary>
+internal sealed class AppearanceOnlyAction(string id) : IDeckAction
+{
+    public string Id { get; } = id;
+
+    public string Name => Id;
+
+    public InputCapabilities RequiredInputs => InputCapabilities.None;
+
+    public OutputCapabilities RequiredOutputs => OutputCapabilities.None;
+
+    public bool ShowsAppearanceOnly => true;
+
+    public ConcurrentQueue<InputCapabilities> Executions { get; } = new();
+
+    public void Execute(ActionContext context) => Executions.Enqueue(context.EventType);
+
+    public void Render(IRenderContext context)
+    {
+    }
+}

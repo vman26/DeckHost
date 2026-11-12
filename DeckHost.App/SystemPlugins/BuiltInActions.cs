@@ -34,6 +34,8 @@ internal sealed class DisplayContentAction() : DeckActionBase(
 
     public override bool CanBeMultiActionStep => false;
 
+    public override bool ShowsAppearanceOnly => true;
+
     protected override string Title(IRenderContext context) => string.Empty;
 
     protected override string? Subtitle(IRenderContext context) => null;

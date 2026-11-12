@@ -57,8 +57,10 @@ internal static class ControlRenderer
             return;
         }
 
-        if (binding is null)
+        if (!HasOwnContent(binding, action))
         {
+            // The display is free (at most a background color of its own): the linked control fills it.
+            context.FillColor(binding?.Appearance.BackgroundColor);
             context.DrawRegion(0, 0, context.Width, context.Height, linked.ControlId, linked.Binding.Action.EffectiveSettings, compact: false,
                 region => DrawBinding(region, linked.Binding, linked.Action));
             return;
@@ -78,6 +80,17 @@ internal static class ControlRenderer
             DrawBinding(region, linked.Binding, linked.Action);
         });
     }
+
+    /// <summary>
+    /// Whether a display shows something of its own: an action, or text or an image. A binding to
+    /// an appearance-only action with nothing but a background color doesn't count, so a linked
+    /// control can still use the display. (An action that isn't loaded counts: its name is shown.)
+    /// </summary>
+    public static bool HasOwnContent(ControlBinding? binding, IDeckAction? action) =>
+        binding is not null &&
+        !(action is { ShowsAppearanceOnly: true } &&
+          string.IsNullOrWhiteSpace(binding.Appearance.Text) &&
+          string.IsNullOrWhiteSpace(binding.Appearance.ImagePath));
 
     /// <summary>Height of a linked control's strip on a display of the given height.</summary>
     public static int LinkedStripHeight(int displayHeight) =>
