@@ -1,0 +1,90 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:vm="using:DeckHost.App.ViewModels"
+			 x:Class="DeckHost.App.Views.NumberSettingEditor"
+			 x:DataType="vm:NumberSettingField">
+	<UserControl.Styles>
+		<!-- Not set: the slider rests at the default, muted, so it is clear nothing was chosen yet. -->
+		<Style Selector="Slider.unset">
+			<Setter Property="Opacity" Value="0.5" />
+		</Style>
+		<Style Selector="TextBlock.value">
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="#E2E8F0" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+		<Style Selector="TextBlock.value.unset">
+			<Setter Property="Foreground" Value="#64748B" />
+			<Setter Property="FontStyle" Value="Italic" />
+		</Style>
+		<Style Selector="Button.reset">
+			<Setter Property="Padding" Value="8,4" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+	</UserControl.Styles>
+
+	<!-- A number setting: a slider when it has a range (with a number box for exact values unless
+	     the setting hides it), else only a number box. ↺ goes back to the default. -->
+	<StackPanel Spacing="4">
+		<Grid ColumnDefinitions="*,Auto">
+			<TextBlock Classes="label" Text="{Binding Label}" VerticalAlignment="Center" />
+			<TextBlock Grid.Column="1"
+					   Classes="value"
+					   Classes.unset="{Binding IsUnset}"
+					   Text="{Binding ValueText}"
+					   IsVisible="{Binding ShowValueText}" />
+		</Grid>
+
+		<Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding HasSlider}">
+			<Slider Minimum="{Binding Minimum}"
+					Maximum="{Binding Maximum}"
+					Value="{Binding SliderValue, Mode=TwoWay}"
+					SmallChange="{Binding Step}"
+					LargeChange="{Binding LargeStep}"
+					TickFrequency="{Binding Step}"
+					IsSnapToTickEnabled="True"
+					Classes.unset="{Binding IsUnset}"
+					VerticalAlignment="Center" />
+			<NumericUpDown Grid.Column="1"
+						   Width="120"
+						   IsVisible="{Binding ShowSliderWithInput}"
+						   Value="{Binding NumberValue, Mode=TwoWay}"
+						   Minimum="{Binding InputMinimum}"
+						   Maximum="{Binding InputMaximum}"
+						   Increment="{Binding InputIncrement}"
+						   FormatString="{Binding FormatString}"
+						   ClipValueToMinMax="True"
+						   PlaceholderText="{Binding InputPlaceholder}"
+						   VerticalAlignment="Center" />
+			<TextBlock Grid.Column="2"
+					   Classes="value"
+					   Margin="-4,0,0,0"
+					   Text="{Binding UnitText}"
+					   IsVisible="{Binding ShowUnit}" />
+			<Button Grid.Column="3"
+					Classes="reset"
+					Content="↺"
+					ToolTip.Tip="{Binding ResetToolTip}"
+					IsEnabled="{Binding CanReset}"
+					Command="{Binding ResetCommand}" />
+		</Grid>
+
+		<StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding ShowInputOnly}">
+			<NumericUpDown Width="160"
+						   Value="{Binding NumberValue, Mode=TwoWay}"
+						   Minimum="{Binding InputMinimum}"
+						   Maximum="{Binding InputMaximum}"
+						   Increment="{Binding InputIncrement}"
+						   FormatString="{Binding FormatString}"
+						   PlaceholderText="{Binding InputPlaceholder}" />
+			<Button Classes="reset"
+					Content="↺"
+					ToolTip.Tip="{Binding ResetToolTip}"
+					IsEnabled="{Binding CanReset}"
+					Command="{Binding ResetCommand}" />
+		</StackPanel>
+
+		<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+		<TextBlock Classes="error" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+	</StackPanel>
+</UserControl>

@@ -27,6 +27,9 @@ internal static class N4ProDeviceSettings
     private const byte Off = 0xFF;
     private const byte Follow = 0x1F;
 
+    /// <summary>0-100 %. Empty means "the device default" (100), which isn't sent.</summary>
+    private static readonly NumberRange Percentage = new(0, 100) { Unit = "%", UnsetValue = DefaultBrightness };
+
     private static readonly ActionSettingOption[] SwitchOptions =
     [
         new("default", "Default (on)"),
@@ -40,8 +43,8 @@ internal static class N4ProDeviceSettings
         new(BootVideo, "Play the start-up animation", ActionSettingKind.Choice, "default", Options: SwitchOptions),
         new(LedFollowsKeyLight, "LEDs follow the key brightness", ActionSettingKind.Choice, "default", Options: SwitchOptions),
         new(KeyLightWhenDisconnected, "Keep keys lit when DeckHost isn't running", ActionSettingKind.Choice, "default", Options: SwitchOptions),
-        new(KeyBrightness, "Screen brightness (0-100)", ActionSettingKind.Number, Placeholder: "Default (100)"),
-        new(LedBrightness, "LED brightness (0-100)", ActionSettingKind.Number, Placeholder: "Default (100)"),
+        new(KeyBrightness, "Screen brightness", ActionSettingKind.Number, Placeholder: "Default") { Range = Percentage },
+        new(LedBrightness, "LED brightness", ActionSettingKind.Number, Placeholder: "Default") { Range = Percentage },
         new(IdleScreen, "Idle / start-up screen", ActionSettingKind.Choice, "keep",
             Description: "What the device shows when DeckHost isn't running. Choose Black or an image to replace an old picture stored on the device.",
             Options:
