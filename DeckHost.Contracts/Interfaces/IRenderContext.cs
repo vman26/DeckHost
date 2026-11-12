@@ -70,6 +70,14 @@ public interface IRenderContext
     {
     }
 
+    /// <summary>
+    /// Draws an encoded image (PNG, JPG, ...) like <see cref="DrawEncodedImage(byte[])"/>; with
+    /// <paramref name="clearEdgeBlack"/> the black background around it (black that touches the
+    /// image's edge) becomes transparent, so the control's background shows. For images made for a
+    /// Stream Deck, whose keys are black where nothing is drawn.
+    /// </summary>
+    bool DrawEncodedImage(byte[] encodedImage, bool clearEdgeBlack) => DrawEncodedImage(encodedImage);
+
     /// <summary>A rounded rectangle with a diagonal gradient, top left to bottom right.</summary>
     void FillGradientRect(double x, double y, double width, double height, double radius, uint fromArgb, uint toArgb) =>
         FillRoundedRect(x, y, width, height, radius, fromArgb);

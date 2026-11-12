@@ -26,6 +26,35 @@ public sealed class SkiaDrawingResources : IDisposable
 
     private readonly Dictionary<string, SKPath?> _iconPaths = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool> _singleColor = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SKImage?> _edgeCleared = new(StringComparer.Ordinal);
+    private const int MaxEdgeCleared = 256;
+
+    /// <summary>
+    /// The image with its black background made transparent (see <see cref="EdgeBlack.Clear"/>),
+    /// decoded once per distinct image; null when it can't be decoded.
+    /// </summary>
+    public SKImage? GetEdgeClearedImage(byte[] encodedImage)
+    {
+        var key = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(encodedImage));
+        if (_edgeCleared.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        if (_edgeCleared.Count >= MaxEdgeCleared)
+        {
+            foreach (var image in _edgeCleared.Values)
+            {
+                image?.Dispose();
+            }
+
+            _edgeCleared.Clear();
+        }
+
+        var cleared = EdgeBlack.Clear(encodedImage);
+        _edgeCleared[key] = cleared;
+        return cleared;
+    }
 
     /// <summary>
     /// Whether an image file is a single-color SVG that takes the color it's drawn in (it paints
@@ -184,6 +213,11 @@ public sealed class SkiaDrawingResources : IDisposable
 
         FillPaint.Dispose();
         TextPaint.Dispose();
+        foreach (var image in _edgeCleared.Values)
+        {
+            image?.Dispose();
+        }
+
         ImagePaint.Dispose();
     }
 
