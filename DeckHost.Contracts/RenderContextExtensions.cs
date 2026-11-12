@@ -87,7 +87,14 @@ public static class RenderContextExtensions
     /// stays one surface: no tile, the caption at the top left and the icon in the middle. In a
     /// strip (<see cref="IRenderContext.IsCompact"/>) the icon and the caption on one line.
     /// </summary>
-    public static void DrawTile(this IRenderContext context, string icon, uint fromArgb, uint toArgb, string? caption = null)
+    public static void DrawTile(this IRenderContext context, string icon, uint fromArgb, uint toArgb, string? caption = null) =>
+        DrawTile(context, icon, fromArgb, toArgb, caption, iconArgb: null);
+
+    /// <summary>
+    /// <see cref="DrawTile(IRenderContext, string, uint, uint, string?)"/> with the icon's color:
+    /// without a tile (both colors 0) a colored icon reads better than a white one.
+    /// </summary>
+    public static void DrawTile(this IRenderContext context, string icon, uint fromArgb, uint toArgb, string? caption, uint? iconArgb)
     {
         ArgumentNullException.ThrowIfNull(context);
         var width = context.Width;
@@ -108,7 +115,7 @@ public static class RenderContextExtensions
                 context.DrawText(caption!, pad, pad + (height * 0.12d), (float)Math.Max(10d, height * 0.12d), CaptionColor);
             }
 
-            context.DrawIcon(icon, width / 2d, height * (hasCaption ? 0.58d : 0.5d), height * 0.42d, fromArgb == 0 ? 0xFFFFFFFF : fromArgb);
+            context.DrawIcon(icon, width / 2d, height * (hasCaption ? 0.58d : 0.5d), height * 0.42d, iconArgb ?? (fromArgb == 0 ? 0xFFFFFFFF : fromArgb));
             return;
         }
 
@@ -118,7 +125,7 @@ public static class RenderContextExtensions
             context.FillGradientRect(inset, inset, width - (2 * inset), height - (2 * inset), width * 0.16d, fromArgb, toArgb);
         }
 
-        context.DrawIcon(icon, width / 2d, height * (hasCaption ? 0.42d : 0.5d), height * (hasCaption ? 0.4d : 0.46d));
+        context.DrawIcon(icon, width / 2d, height * (hasCaption ? 0.42d : 0.5d), height * (hasCaption ? 0.4d : 0.46d), iconArgb ?? 0xFFFFFFFF);
         if (hasCaption)
         {
             context.DrawLabel(caption!, TextVerticalAlignment.Bottom, Math.Max(10f, height * 0.13f));
