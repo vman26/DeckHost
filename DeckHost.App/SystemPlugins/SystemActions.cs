@@ -21,7 +21,7 @@ internal sealed class LaunchAppAction() : DeckActionBase(
     private const string ArgumentsKey = "arguments";
     private const string WorkingDirectoryKey = "workingDirectory";
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(PathKey, "Program", ActionSettingKind.FilePath, Placeholder: @"C:\Program Files\App\app.exe", Description: "An .exe, a shortcut (.lnk) or any file Windows can open."),
         new(ArgumentsKey, "Arguments", Placeholder: "Optional"),
@@ -74,7 +74,7 @@ internal sealed class OpenUrlAction() : DeckActionBase(
 {
     private const string TargetKey = "target";
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(TargetKey, "Address or path", Placeholder: "https://example.com or C:\\Folder\\file.pdf"),
     ];
@@ -123,7 +123,7 @@ internal sealed class HotkeyAction() : DeckActionBase(
 {
     private const string KeysKey = "keys";
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(KeysKey, "Keys", ActionSettingKind.Hotkey, Placeholder: "Ctrl+Shift+M", Description: "Click Record and press the combination, or type it: Ctrl, Alt, Shift, Win plus one key (A-Z, 0-9, F1-F24, Enter, Tab, Esc, Space, arrows, Home, End, PageUp, PageDown, Delete, PrintScreen, media keys)."),
     ];
@@ -156,7 +156,7 @@ internal sealed class TypeTextAction() : DeckActionBase(
 {
     private const string TextKey = "text";
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(TextKey, "Text", Placeholder: "Text to type"),
     ];
@@ -209,7 +209,7 @@ internal sealed class SystemInfoAction() : DeckActionBase(
     private const uint BarWarning = 0xFFF59E0B;
     private const uint BarCritical = 0xFFEF4444;
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(MetricKey, "Show", ActionSettingKind.Choice, "cpu", Options:
         [

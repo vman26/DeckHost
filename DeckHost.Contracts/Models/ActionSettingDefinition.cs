@@ -14,7 +14,14 @@ public enum ActionSettingKind
     Hotkey,
 }
 
-public sealed record ActionSettingOption(string Value, string Label);
+public sealed record ActionSettingOption(string Value, string Label)
+{
+    /// <summary>
+    /// The input a control needs for this option to make sense (e.g. Rotate for "turned left").
+    /// The editor hides the option on controls without that input. None shows it everywhere.
+    /// </summary>
+    public Enums.InputCapabilities Requires { get; init; }
+}
 
 /// <summary>
 /// Describes one setting an action needs (an app to launch, a scene name, ...). The editor in

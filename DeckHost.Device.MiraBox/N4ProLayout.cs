@@ -116,7 +116,7 @@ internal static class N4ProLayout
                 $"Knob {index + 1}",
                 ControlType.Encoder,
                 new Rect(zoneCenter - (KnobSize / 2), knobTop, KnobSize, KnobSize),
-                InputCapabilities.Rotate | InputCapabilities.Press,
+                InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release,
                 OutputCapabilities.None,
                 HardwareId: $"{FirstKnobLeftId + (index * 2)}/{FirstKnobRightId + (index * 2)}/{FirstKnobPressId + index}",
                 LedIndex: index < ledCount ? index : null));

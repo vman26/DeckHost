@@ -19,6 +19,22 @@ public partial class ControlCustomizationWindow : Window
         // Tunnel so Tab, Enter or Esc reach the recorder before focus navigation or dialog keys.
         AddHandler(KeyDownEvent, OnRecorderKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, OnRecorderKeyUp, RoutingStrategies.Tunnel);
+
+        SettingsBrowser.Failed += message => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            SettingsBrowser.IsVisible = false;
+            SettingsBrowserError.Text = $"The built-in browser couldn't start ({message}). Use Open in browser instead.";
+            SettingsBrowserError.IsVisible = true;
+        });
+
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is ControlCustomizationViewModel { ShowSettingsPage: true })
+            {
+                // Room for the plugin's settings page next to the editor.
+                Width = 1120;
+            }
+        };
     }
 
     private void HotkeyRecord_OnIsCheckedChanged(object? sender, RoutedEventArgs e)
@@ -152,6 +168,21 @@ public partial class ControlCustomizationWindow : Window
         {
             field.Value = path;
         }
+    }
+
+    private void FontBox_OnGotFocus(object? sender, RoutedEventArgs e) => FontBox.IsDropDownOpen = true;
+
+    /// <summary>Opens the whole font list (scroll), while typing in the box still filters it.</summary>
+    private void FontList_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (FontBox.IsDropDownOpen)
+        {
+            FontBox.IsDropDownOpen = false;
+            return;
+        }
+
+        FontBox.Focus();
+        FontBox.IsDropDownOpen = true;
     }
 
     private void Save_OnClick(object? sender, RoutedEventArgs e) => Close(true);

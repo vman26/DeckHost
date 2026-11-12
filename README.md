@@ -51,6 +51,76 @@ Profiles are the pages of a device. **☰ → Open Profile Manager** (or **Manag
 
 **Automatic switching (Windows):** give a profile one or more apps (process names such as `obs64` or `chrome`, or pick a running app) and it becomes active while that app's window is in front. When the focused app isn't listed anywhere, DeckHost returns to the profile you picked yourself. DeckHost's own windows never trigger a switch. Turn it off with the switch in the Profile Manager or the ☰ menu.
 
+Duplicating a profile copies everything: bindings, action settings, Stream Deck plugin settings, apps and background.
+
+### Customizing a control
+
+**Customize** (double-click a control) sets:
+
+- **Run when** (for actions that normally run on a press): only the inputs the control has, so a key offers press, release and long press, a knob also turned left/right, and the swipe bar swiped left/right.
+- **Text**: multi-line, wrapped or not, with color (picker or hex), font, size, bold, italic, and horizontal (left/center/right) and vertical (top/middle/bottom) alignment.
+- **Image**: PNG, JPG, animated GIF or SVG, with a **Clear** button; and a background color.
+- The action's own settings, and for knobs the LED color.
+
+### Plugin store and Stream Deck plugins
+
+**☰ → Open Plugin Manager** (or **Plugins…** next to the action search) → **Store** shows one list, which you can filter by source, category, status and search text:
+
+- **DeckHost**: plugins from the sources under **Store → Sources**, one per line. A source is a catalog URL, a local catalog file, or a local folder such as `E:\Projects\DeckHost\plugins`. Folders are searched for packages (`.zip`, `.dhplugin`, `.streamDeckPlugin`) and built plugin folders (a `plugin.json` next to its assembly, e.g. a project's `bin` output), so plugins you are developing show up without packaging them. A catalog is a JSON object keyed by plugin id (or an array) with `name`, `author`, `description`, `version`, `category`, `download_url`, `repository` and `icon`. There is no official DeckHost catalog yet. The list is saved in `%AppData%/DeckHost/store.json`.
+- **OpenAction**: the open-source Stream Deck plugin catalog (`openactionapi.github.io/plugins`). Packages come from the plugin's download link or its latest GitHub release.
+- **Elgato (community archive)**: an archive of Elgato Marketplace plugins (`plugins.amankhanna.me`). Elgato has no public store API.
+
+The catalogs have no categories, so DeckHost derives one from each plugin's name and description (a category from the catalog or the plugin's manifest wins). **Page** opens the plugin's page: the repository for OpenAction plugins, the Elgato Marketplace for Elgato plugins. Stream Deck plugins from both sources install into the same Stream Deck folder, since they are the same kind of plugin.
+
+Installing, uninstalling and enabling run in the background; the Plugin Manager shows each step (downloading with a percentage, unpacking, starting, stopping, removing files). The Installed tab shows where each plugin came from.
+
+Stream Deck plugins run through DeckHost's Stream Deck compatibility layer:
+
+- Each plugin starts as its own process (native `.exe` or Node.js) and talks to DeckHost over the standard Stream Deck SDK WebSocket protocol.
+- N4 Pro keys act as Stream Deck keys and the knobs as Stream Deck+ dials.
+- `setTitle`, `setImage` (PNG, JPG and SVG), `setState`, settings and global settings work.
+- HTML-based plugins (whose code is a web page) run in a hidden built-in browser page, as in the Stream Deck app. Their console output goes to the DeckHost log.
+- A plugin's own settings page (property inspector) opens inside the Customize window through the built-in browser (Microsoft Edge WebView2, which Windows 10/11 include). **Open in browser** is there as a fallback.
+
+Limits:
+
+- Node.js plugins need Node.js 20 or newer.
+- Settings are kept per device, profile and control.
+
+You can also install a `.streamDeckPlugin` file with **Install plugin…**.
+
+### Device settings
+
+**☰ → Device settings** (or **Settings…** next to a device in the Plugin Manager) holds the device plugin's own settings. For the N4 Pro: vibration, the start-up animation, LED and key-light behavior, screen and LED brightness, and the **idle / start-up screen** the device shows when DeckHost isn't running. Settings start at their default (switches on, brightness 100), which DeckHost doesn't send until you change something; setting a value back to its default sends the default once, so the device really returns to it. After writing the idle screen DeckHost sends all key images again. If an old image is stuck on the display when DeckHost is closed, set the idle screen to **Black** (or pick an image) and save. Settings are stored in `%AppData%/DeckHost/devices/<device>.json` and applied again whenever the device connects.
+
+### DeckHost settings and the tray
+
+**☰ → DeckHost settings** (or **Settings…** in the tray menu):
+
+- **Start DeckHost when I sign in to Windows**: adds DeckHost to your user's start-up programs (the `HKCU\…\Run` key; no admin rights needed).
+- **Start in the tray when started with Windows**: the device works without the window.
+- **Closing the window keeps DeckHost running in the tray**: use **Exit** in the tray menu to quit.
+
+Only one DeckHost runs at a time: starting it again shows the running one. (Two instances would both read the device and run every action twice.)
+
+### Folders and logs
+
+| What | Where |
+|---|---|
+| Log files (NLog, one per day, kept 14 days) | `%AppData%/DeckHost/logs/deckhost-<date>.log` |
+| Stream Deck plugin output | `%AppData%/DeckHost/logs/plugins` |
+| DeckHost plugins | `%AppData%/DeckHost/plugins/functional/<id>` |
+| Stream Deck plugins | `%AppData%/DeckHost/plugins/streamdeck/<uuid>.sdPlugin` |
+| Profiles | `%AppData%/DeckHost/profiles.json` |
+
+The Plugin Manager shows these paths and has **Plugins folder** and **Logs folder** buttons.
+
+### Backgrounds, live preview and test mode
+
+- **Backgrounds:** a profile can have a background color and an image or animated GIF that spans all keys (Profile Manager). Each control can have its own background color, and its image can be an animated GIF (Customize). GIFs play at about 10 frames per second.
+- **Live preview:** the canvas shows the exact images that are on the device, even when it's unplugged, and lights up controls as you press them.
+- **Test mode** (canvas header): click controls to press them, use the mouse wheel to turn knobs, and click the left or right half of the swipe bar to swipe. The real actions run.
+
 ### Installable plugins
 
 Other plugins are installed from a package with **☰ → Open Plugin Manager → Install plugin…**. A package is a `.zip` with a `plugin.json` and the plugin's assemblies:

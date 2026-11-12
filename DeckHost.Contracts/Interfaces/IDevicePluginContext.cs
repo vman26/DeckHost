@@ -1,4 +1,4 @@
-﻿using DeckHost.Contracts.Enums;
+using DeckHost.Contracts.Enums;
 
 namespace DeckHost.Contracts.Interfaces;
 
@@ -14,4 +14,12 @@ public interface IDevicePluginContext
 
     /// <param name="level">Debug, Info, Warning or Error.</param>
     void Log(string level, string message);
+
+    /// <summary>
+    /// Asks the host to send every control image again, e.g. after the plugin drew something over
+    /// them (a full-screen background). Thread-safe; the redraw happens on the host's worker.
+    /// </summary>
+    void RequestRedraw(string deviceId)
+    {
+    }
 }

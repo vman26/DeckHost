@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using DeckHost.App.ViewModels;
 using System;
 
@@ -15,5 +17,25 @@ public partial class ProfileManagerWindow : Window
     {
         (DataContext as ProfileManagerViewModel)?.Detach();
         base.OnClosed(e);
+    }
+
+    private async void BrowseBackground_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ProfileManagerViewModel vm)
+        {
+            return;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select a profile background",
+            AllowMultiple = false,
+            FileTypeFilter = [FilePickerFileTypes.ImageAll],
+        });
+
+        if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
+        {
+            vm.EditingBackgroundImage = path;
+        }
     }
 }

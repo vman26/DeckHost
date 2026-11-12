@@ -37,7 +37,7 @@ internal sealed class VolumeKnobAction() : DeckActionBase(
 {
     private const string StepKey = "step";
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(StepKey, "Volume steps per click", ActionSettingKind.Number, "1", Description: "Each step is 2% on most systems."),
     ];

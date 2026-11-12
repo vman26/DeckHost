@@ -30,6 +30,22 @@ public interface IDeckAction
     /// <summary>Set for actions whose image changes over time (clocks, system info); the host redraws them this often.</summary>
     TimeSpan? RefreshInterval => null;
 
+    /// <summary>Whether the action has its own settings page (for example a Stream Deck property inspector).</summary>
+    bool HasSettingsPage => false;
+
+    /// <summary>Address of the action's own settings page for one binding; DeckHost shows it in its built-in browser.</summary>
+    Uri? GetSettingsPageUri(ActionContext context) => null;
+
+    /// <summary>Called (on the host worker) when the action becomes visible on a device: its profile became active.</summary>
+    void OnAppear(ActionContext context)
+    {
+    }
+
+    /// <summary>Called when the action is no longer visible (profile switched, binding removed, plugin disabled).</summary>
+    void OnDisappear(ActionContext context)
+    {
+    }
+
     void Execute(ActionContext context);
 
     /// <summary>Draws the action's content on top of the control's background and appearance image.</summary>

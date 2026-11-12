@@ -14,11 +14,13 @@ public class ProfileItemViewModel : ViewModelBase
     private readonly Dictionary<string, ControlBinding> _unresolvedBindings = new(StringComparer.OrdinalIgnoreCase);
     private string _name;
 
-    public ProfileItemViewModel(string id, string name, string deviceId, IEnumerable<string>? autoSwitchApps = null)
+    public ProfileItemViewModel(string id, string name, string deviceId, IEnumerable<string>? autoSwitchApps = null, ProfileBackground? background = null)
     {
         Id = id;
         _name = name;
         DeviceId = deviceId;
+        BackgroundColor = background?.Color ?? string.Empty;
+        BackgroundImagePath = background?.ImagePath ?? string.Empty;
         AutoSwitchApps = new ObservableCollection<string>(autoSwitchApps ?? []);
         AutoSwitchApps.CollectionChanged += (_, _) =>
         {
@@ -42,6 +44,12 @@ public class ProfileItemViewModel : ViewModelBase
     }
 
     public string DeviceId { get; }
+
+    /// <summary>Profile background color (#RRGGBB) behind every control.</summary>
+    public string BackgroundColor { get; set; }
+
+    /// <summary>Profile background image or GIF; spans all controls.</summary>
+    public string BackgroundImagePath { get; set; }
 
     /// <summary>Process names that make this profile active while their window has focus.</summary>
     public ObservableCollection<string> AutoSwitchApps { get; }
@@ -107,7 +115,12 @@ public class ProfileItemViewModel : ViewModelBase
             .. _bindingsByControlId.Values.Select(static binding => binding.Model),
             .. _unresolvedBindings.Values,
         ],
-        AutoSwitchApps.Count == 0 ? null : [.. AutoSwitchApps]);
+        AutoSwitchApps.Count == 0 ? null : [.. AutoSwitchApps],
+        string.IsNullOrWhiteSpace(BackgroundColor) && string.IsNullOrWhiteSpace(BackgroundImagePath)
+            ? null
+            : new ProfileBackground(NullIfEmpty(BackgroundColor), NullIfEmpty(BackgroundImagePath)));
+
+    private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private void RaiseCountsChanged()
     {

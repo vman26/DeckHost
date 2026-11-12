@@ -22,6 +22,7 @@ public class MainViewModel : ViewModelBase
     private readonly IDeviceHostService _deviceHostService;
     private readonly PluginCatalog _pluginCatalog;
     private readonly ProfileStore? _profileStore;
+    private readonly IPluginStateTransfer? _pluginState;
     private readonly DispatcherTimer _saveTimer;
     private readonly Dictionary<string, ActionItemViewModel> _actionsByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ControlItemViewModel> _controlsById = new(StringComparer.OrdinalIgnoreCase);
@@ -41,7 +42,7 @@ public class MainViewModel : ViewModelBase
     private bool _autoSwitchEnabled = true;
     private bool _switchingAutomatically;
 
-    public MainViewModel(IDeviceHostService deviceHostService, PluginCatalog pluginCatalog, ProfileStore? profileStore = null)
+    public MainViewModel(IDeviceHostService deviceHostService, PluginCatalog pluginCatalog, ProfileStore? profileStore = null, IPluginStateTransfer? pluginState = null)
     {
         ArgumentNullException.ThrowIfNull(deviceHostService);
         ArgumentNullException.ThrowIfNull(pluginCatalog);
@@ -49,6 +50,7 @@ public class MainViewModel : ViewModelBase
         _deviceHostService = deviceHostService;
         _pluginCatalog = pluginCatalog;
         _profileStore = profileStore;
+        _pluginState = pluginState;
         _saveTimer = new DispatcherTimer { Interval = SaveDelay };
         _saveTimer.Tick += (_, _) => FlushPendingSave();
 
@@ -66,7 +68,9 @@ public class MainViewModel : ViewModelBase
         _deviceHostService.ConnectionStatusChanged += status => Dispatcher.UIThread.Post(() => OnConnectionStatusChanged(status));
         _deviceHostService.DevicesChanged += () => Dispatcher.UIThread.Post(OnDevicesChanged);
         _deviceHostService.ActiveProfileChanged += (deviceId, profileId) => Dispatcher.UIThread.Post(() => OnHostActiveProfileChanged(deviceId, profileId));
-        _pluginCatalog.Changed += (_, _) => OnPluginsChanged();
+        _deviceHostService.ControlFrameRendered += frame => Dispatcher.UIThread.Post(() => OnControlFrameRendered(frame));
+        _deviceHostService.InputReceived += input => Dispatcher.UIThread.Post(() => OnInputReceived(input));
+        _pluginCatalog.Changed += (_, _) => Dispatcher.UIThread.Post(OnPluginsChanged);
 
         RebuildActions();
         LoadProfiles();
@@ -356,20 +360,29 @@ public class MainViewModel : ViewModelBase
 
         var moved = source.Model with { ControlId = targetControlId };
         var existing = SelectedProfile.GetBinding(targetControlId);
+        var deviceId = SelectedDevice!.Id;
+        var profileId = SelectedProfile.Id;
 
+        // Plugin-held settings (Stream Deck plugins) travel with the binding.
         if (copy)
         {
+            _pluginState?.MoveControlSettings(deviceId, profileId, sourceControlId, targetControlId, copy: true);
             ApplyBinding(targetControlId, moved);
             StatusMessage = $"Copied {source.DisplayName} to {targetControl.DisplayName}.";
         }
         else if (existing is null)
         {
+            _pluginState?.MoveControlSettings(deviceId, profileId, sourceControlId, targetControlId, copy: false);
             ApplyBinding(targetControlId, moved);
             ApplyBinding(sourceControlId, null);
             StatusMessage = $"Moved {source.DisplayName} to {targetControl.DisplayName}.";
         }
         else if (existing.PrimaryAction.FitsControl(sourceControl.Control))
         {
+            const string swapSlot = "__swap__";
+            _pluginState?.MoveControlSettings(deviceId, profileId, targetControlId, swapSlot, copy: false);
+            _pluginState?.MoveControlSettings(deviceId, profileId, sourceControlId, targetControlId, copy: false);
+            _pluginState?.MoveControlSettings(deviceId, profileId, swapSlot, sourceControlId, copy: false);
             ApplyBinding(targetControlId, moved);
             ApplyBinding(sourceControlId, existing.Model with { ControlId = sourceControlId });
             StatusMessage = $"Swapped {sourceControl.DisplayName} and {targetControl.DisplayName}.";
@@ -454,6 +467,56 @@ public class MainViewModel : ViewModelBase
         }
     }
 
+    // ---------------------------------------------------------------- live preview and test mode
+
+    private bool _isTestMode;
+
+    /// <summary>When on, clicking a control presses it (and the wheel turns knobs) instead of selecting/dragging.</summary>
+    public bool IsTestMode
+    {
+        get => _isTestMode;
+        set
+        {
+            if (SetProperty(ref _isTestMode, value))
+            {
+                StatusMessage = value
+                    ? "Test mode: click controls to press them, use the mouse wheel on knobs, click the left/right half of the swipe bar."
+                    : "Test mode off.";
+            }
+        }
+    }
+
+    /// <summary>Sends a simulated input for a control through the normal runtime path.</summary>
+    public void Simulate(ControlItemViewModel control, Contracts.Enums.InputCapabilities inputEvent, int value)
+    {
+        if (SelectedDevice is null)
+        {
+            return;
+        }
+
+        _deviceHostService.SimulateInput(new DeviceInputEvent(SelectedDevice.Id, control.Id, inputEvent, value));
+    }
+
+    private void OnControlFrameRendered(ControlFrame frame)
+    {
+        if (SelectedDevice is not null &&
+            string.Equals(frame.DeviceId, SelectedDevice.Id, StringComparison.OrdinalIgnoreCase) &&
+            _controlsById.TryGetValue(frame.ControlId, out var control))
+        {
+            control.SetPreview(frame.Width, frame.Height, frame.Rgba);
+        }
+    }
+
+    private void OnInputReceived(DeviceInputEvent input)
+    {
+        if (SelectedDevice is not null &&
+            string.Equals(input.DeviceId, SelectedDevice.Id, StringComparison.OrdinalIgnoreCase) &&
+            _controlsById.TryGetValue(input.ControlId, out var control))
+        {
+            control.ShowInput(input.EventType, input.Value);
+        }
+    }
+
     // ---------------------------------------------------------------- profile management
 
     /// <summary>Whether profiles follow the focused app (see each profile's AutoSwitchApps).</summary>
@@ -483,10 +546,13 @@ public class MainViewModel : ViewModelBase
 
     public ProfileItemViewModel CreateProfile(string name, ProfileItemViewModel? copyFrom = null)
     {
-        var profile = new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], UniqueProfileName(name), SelectedDevice!.Id);
-        if (copyFrom is not null)
+        // A duplicate is a full working copy: bindings, appearance, background, app rules and plugin settings.
+        var source = copyFrom?.ToModel();
+        var profile = new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], UniqueProfileName(name), SelectedDevice!.Id, source?.AutoSwitchApps, source?.Background);
+        if (copyFrom is not null && source is not null)
         {
-            foreach (var binding in copyFrom.ToModel().Bindings)
+            _pluginState?.CopyProfileSettings(copyFrom.Id, profile.Id);
+            foreach (var binding in source.Bindings)
             {
                 if (Resolve(binding) is { } resolved)
                 {
@@ -669,7 +735,7 @@ public class MainViewModel : ViewModelBase
 
             foreach (var profile in document?.Profiles ?? [])
             {
-                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps);
+                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps, profile.Background);
                 foreach (var binding in profile.Bindings)
                 {
                     if (Resolve(binding) is { } bindingViewModel)
@@ -955,7 +1021,8 @@ public class MainViewModel : ViewModelBase
         var appearance = new ControlAppearance(
             string.IsNullOrWhiteSpace(newText) ? null : newText,
             string.IsNullOrWhiteSpace(newImage) ? null : newImage,
-            existing?.LightFeedback);
+            existing?.LightFeedback,
+            existing?.Model.Appearance.BackgroundColor);
 
         if (existing is null)
         {
@@ -969,7 +1036,7 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
-        if (existing.IsDisplayContentOnly && appearance.Text is null && appearance.ImagePath is null)
+        if (existing.IsDisplayContentOnly && appearance.Text is null && appearance.ImagePath is null && appearance.BackgroundColor is null)
         {
             ApplyBinding(SelectedControl.Id, null);
             return;

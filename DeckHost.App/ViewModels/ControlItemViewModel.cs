@@ -89,6 +89,121 @@ public class ControlItemViewModel : ViewModelBase
         }
     }
 
+    private Avalonia.Media.Imaging.WriteableBitmap? _previewBitmap;
+    private bool _isPressed;
+    private string _inputIndicator = string.Empty;
+    private Avalonia.Threading.DispatcherTimer? _flashTimer;
+
+    /// <summary>The exact image the device shows for this control (null for controls without a display).</summary>
+    public Avalonia.Media.Imaging.WriteableBitmap? PreviewBitmap
+    {
+        get => _previewBitmap;
+        private set
+        {
+            if (SetProperty(ref _previewBitmap, value))
+            {
+                OnPropertyChanged(nameof(HasPreview));
+                OnPropertyChanged(nameof(ShowTextPreview));
+            }
+        }
+    }
+
+    public bool HasPreview => PreviewBitmap is not null;
+
+    /// <summary>Text card for controls without a display (knobs, swipe bar) or before the first frame.</summary>
+    public bool ShowTextPreview => !HasPreview && ShowDetails;
+
+    /// <summary>True while the control is held down on the device (or in test mode).</summary>
+    public bool IsPressed
+    {
+        get => _isPressed;
+        private set => SetProperty(ref _isPressed, value);
+    }
+
+    /// <summary>Short-lived marker for rotations and swipes, e.g. "◀" or "▶".</summary>
+    public string InputIndicator
+    {
+        get => _inputIndicator;
+        private set
+        {
+            if (SetProperty(ref _inputIndicator, value))
+            {
+                OnPropertyChanged(nameof(HasInputIndicator));
+            }
+        }
+    }
+
+    public bool HasInputIndicator => InputIndicator.Length > 0;
+
+    public void SetPreview(int width, int height, byte[] rgba)
+    {
+        var bitmap = PreviewBitmap;
+        if (bitmap is null || bitmap.PixelSize.Width != width || bitmap.PixelSize.Height != height)
+        {
+            bitmap = new Avalonia.Media.Imaging.WriteableBitmap(
+                new Avalonia.PixelSize(width, height),
+                new Avalonia.Vector(96, 96),
+                Avalonia.Platform.PixelFormat.Rgba8888,
+                Avalonia.Platform.AlphaFormat.Premul);
+        }
+
+        using (var buffer = bitmap.Lock())
+        {
+            for (var row = 0; row < height; row++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(rgba, row * width * 4, buffer.Address + (row * buffer.RowBytes), width * 4);
+            }
+        }
+
+        // A new instance makes the Image control redraw.
+        PreviewBitmap = null;
+        PreviewBitmap = bitmap;
+    }
+
+    /// <summary>Shows an input on the canvas: held state for press/release, a short flash for the rest.</summary>
+    public void ShowInput(Contracts.Enums.InputCapabilities inputEvent, int value)
+    {
+        switch (inputEvent)
+        {
+            case Contracts.Enums.InputCapabilities.Press when Type != ControlType.TouchSurface:
+                IsPressed = true;
+                InputIndicator = string.Empty;
+                return;
+            case Contracts.Enums.InputCapabilities.Release:
+                IsPressed = false;
+                return;
+            case Contracts.Enums.InputCapabilities.Rotate:
+            case Contracts.Enums.InputCapabilities.Swipe:
+                Flash(value < 0 ? "◀" : "▶");
+                return;
+            case Contracts.Enums.InputCapabilities.LongPress:
+                Flash("⏱");
+                return;
+            default:
+                // Touch zones only report a tap: flash it.
+                Flash(string.Empty);
+                return;
+        }
+    }
+
+    private void Flash(string indicator)
+    {
+        IsPressed = true;
+        InputIndicator = indicator;
+        _flashTimer ??= new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        _flashTimer.Stop();
+        _flashTimer.Tick -= OnFlashEnded;
+        _flashTimer.Tick += OnFlashEnded;
+        _flashTimer.Start();
+    }
+
+    private void OnFlashEnded(object? sender, EventArgs e)
+    {
+        _flashTimer?.Stop();
+        IsPressed = false;
+        InputIndicator = string.Empty;
+    }
+
     public bool IsSelected
     {
         get => _isSelected;
@@ -97,6 +212,8 @@ public class ControlItemViewModel : ViewModelBase
             if (SetProperty(ref _isSelected, value))
             {
                 OnPropertyChanged(nameof(SurfaceBrush));
+                OnPropertyChanged(nameof(OutlineBrush));
+                OnPropertyChanged(nameof(OutlineThickness));
             }
         }
     }
@@ -125,6 +242,16 @@ public class ControlItemViewModel : ViewModelBase
 
     public IBrush SurfaceBrush => IsSelected ? SelectedBrush : AssignedBinding is null ? DefaultBrush : AssignedBrush;
 
+    private static readonly IBrush OutlineDefaultBrush = new SolidColorBrush(Color.Parse("#334155"));
+
+    public IBrush OutlineBrush => IsSelected ? SelectedBrush : AssignedBinding is null ? OutlineDefaultBrush : AssignedBrush;
+
+    public Avalonia.Thickness OutlineThickness => new(IsSelected ? 3 : 1.5);
+
+    public string ToolTipText => AssignedBinding is null
+        ? $"{DisplayName}: drop an action here. Double-click to customize."
+        : $"{DisplayName}: {AssignedBinding.DisplayName}. Double-click to customize, drag to move, Ctrl+drag to copy.";
+
     public double CornerRadius => Type == ControlType.Encoder ? Width / 2d : Math.Min(14d, Height / 3d);
 
 
@@ -134,8 +261,10 @@ public class ControlItemViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowRemoveHint));
         OnPropertyChanged(nameof(AssignmentLabel));
         OnPropertyChanged(nameof(SurfaceBrush));
+        OnPropertyChanged(nameof(OutlineBrush));
         OnPropertyChanged(nameof(PreviewText));
         OnPropertyChanged(nameof(PreviewImageLabel));
         OnPropertyChanged(nameof(HasPreviewImage));
+        OnPropertyChanged(nameof(ToolTipText));
     }
 }

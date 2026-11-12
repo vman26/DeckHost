@@ -23,17 +23,41 @@ internal abstract class DeckActionBase(
     protected const uint SecondaryTextColor = 0xFF93C5FD;
     protected const uint ErrorTextColor = 0xFFFCA5A5;
 
+    public const string TriggerKey = "trigger";
+
+    private static readonly ActionSettingDefinition TriggerSetting = new(
+        TriggerKey,
+        "Run when",
+        ActionSettingKind.Choice,
+        "press",
+        "Which input on this control runs the action.",
+        [
+            new("press", "Pressed") { Requires = InputCapabilities.Press },
+            new("release", "Released") { Requires = InputCapabilities.Release },
+            new("longpress", "Held down (long press)") { Requires = InputCapabilities.LongPress },
+            new("rotate-left", "Turned left") { Requires = InputCapabilities.Rotate },
+            new("rotate-right", "Turned right") { Requires = InputCapabilities.Rotate },
+            new("swipe-left", "Swiped left") { Requires = InputCapabilities.Swipe },
+            new("swipe-right", "Swiped right") { Requires = InputCapabilities.Swipe },
+        ]);
+
     public string Id { get; } = id;
 
     public string Name { get; } = name;
 
-    public InputCapabilities RequiredInputs { get; } = requiredInputs;
+    /// <summary>One-shot actions accept every input and filter by their "Run when" setting instead.</summary>
+    public InputCapabilities RequiredInputs => UsesTrigger ? InputCapabilities.None : requiredInputs;
 
     public OutputCapabilities RequiredOutputs { get; } = requiredOutputs;
 
     public string? Description { get; } = description;
 
-    public virtual IReadOnlyList<ActionSettingDefinition> Settings => [];
+    public IReadOnlyList<ActionSettingDefinition> Settings => UsesTrigger ? [TriggerSetting, .. OwnSettings] : OwnSettings;
+
+    protected virtual IReadOnlyList<ActionSettingDefinition> OwnSettings => [];
+
+    /// <summary>Actions that fire once per press get a configurable trigger (press, release, long press, ...).</summary>
+    private bool UsesTrigger => requiredInputs == InputCapabilities.Press;
 
     public virtual bool ShowInPalette => true;
 
@@ -46,7 +70,14 @@ internal abstract class DeckActionBase(
 
     public void Execute(ActionContext context)
     {
-        if (context.EventType == InputCapabilities.Release && !RunOnRelease)
+        if (UsesTrigger)
+        {
+            if (!MatchesTrigger(context))
+            {
+                return;
+            }
+        }
+        else if (context.EventType == InputCapabilities.Release && !RunOnRelease)
         {
             return;
         }
@@ -57,10 +88,11 @@ internal abstract class DeckActionBase(
 
     public virtual void Render(IRenderContext context)
     {
+        // The label follows the user's text style (color, font, alignment, wrapping) from Customize.
         var title = ResolveDisplayText(context, Title(context));
         if (!string.IsNullOrWhiteSpace(title))
         {
-            context.DrawCenteredText(title, context.Width / 2d, context.Height * 0.42d, TitleSize(context));
+            context.DrawLabel(title, TextVerticalAlignment.Middle, TitleSize(context));
         }
 
         var variables = context.Variables;
@@ -81,6 +113,17 @@ internal abstract class DeckActionBase(
     protected virtual void Run(ActionContext context)
     {
     }
+
+    private static bool MatchesTrigger(ActionContext context) => context.Settings.Get(TriggerKey, "press") switch
+    {
+        "release" => context.EventType == InputCapabilities.Release,
+        "longpress" => context.EventType == InputCapabilities.LongPress,
+        "rotate-left" => context.EventType == InputCapabilities.Rotate && context.Value < 0,
+        "rotate-right" => context.EventType == InputCapabilities.Rotate && context.Value > 0,
+        "swipe-left" => context.EventType == InputCapabilities.Swipe && context.Value < 0,
+        "swipe-right" => context.EventType == InputCapabilities.Swipe && context.Value > 0,
+        _ => context.EventType == InputCapabilities.Press,
+    };
 
     /// <summary>The title shown when the binding has no custom text.</summary>
     protected virtual string Title(IRenderContext context) => Name;

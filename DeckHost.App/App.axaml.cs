@@ -1,16 +1,27 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.DependencyInjection;
 using DeckHost.App.SystemPlugins;
 using DeckHost.App.ViewModels;
 using DeckHost.App.Views;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Core.Devices;
+using DeckHost.Core.Interfaces;
+using DeckHost.Core.Models;
 using DeckHost.Core.Plugins;
 using DeckHost.Core.Profiles;
 using DeckHost.Core.State;
+using DeckHost.Core.StreamDeck;
 using DeckHost.Device.MiraBox;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using NLog.Extensions.Logging;
 using System;
+using System.IO;
 using System.Threading;
 
 namespace DeckHost.App;
@@ -26,25 +37,70 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Composition root. Device plugins are the only place that knows about hardware.
-            IDevicePlugin[] devicePlugins = [new MiraBoxDevicePlugin()];
-            var pluginCatalog = new PluginCatalog(
-                PluginCatalog.DefaultRootDirectory,
-                devicePlugins,
-                SystemPluginSet.Create(),
-                SystemPluginSet.RequiredPluginIds);
+            var services = ConfigureServices();
+            Ioc.Default.ConfigureServices(services);
+
+            var logger = services.GetRequiredService<ILogger<App>>();
+            var deviceHostService = services.GetRequiredService<DeviceHostService>();
+            var pluginCatalog = services.GetRequiredService<PluginCatalog>();
+
+            // The host's runtime log (shown in the app) also goes to the log files.
+            var runtimeLogger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Runtime");
+            deviceHostService.RuntimeLogReceived += entry => runtimeLogger.Log(ToLogLevel(entry.Level), "{Message}", entry.Message);
+
+            // Loading starts the Stream Deck plugin processes, so the host's device list must exist first.
             pluginCatalog.Load();
+            deviceHostService.SetApplicationPlugins(pluginCatalog.EnabledApplicationPlugins);
 
-            var variableStore = new VariableStore();
-            var deviceHostService = new DeviceHostService(devicePlugins, pluginCatalog.EnabledApplicationPlugins, variableStore);
-            var mainViewModel = new MainViewModel(deviceHostService, pluginCatalog, ProfileStore.CreateDefault());
+            var mainViewModel = services.GetRequiredService<MainViewModel>();
+            var mainWindow = new MainWindow { DataContext = mainViewModel };
+            var settings = Platform.AppSettings.Load();
+            var exiting = false;
+            AppSettingsViewModel.Changed += changed => settings = changed;
 
-            desktop.MainWindow = new MainWindow
+            // DeckHost keeps running in the tray: the device works without the window.
+            desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            mainWindow.Closing += (_, e) =>
             {
-                DataContext = mainViewModel,
+                if (!exiting && settings.CloseToTray)
+                {
+                    e.Cancel = true;
+                    mainWindow.Hide();
+                }
             };
+            mainWindow.Closed += (_, _) => desktop.Shutdown();
 
-            desktop.MainWindow.Opened += async (_, _) => await deviceHostService.StartAsync(CancellationToken.None);
+            void ShowMainWindow()
+            {
+                mainWindow.Show();
+                if (mainWindow.WindowState == WindowState.Minimized)
+                {
+                    mainWindow.WindowState = WindowState.Normal;
+                }
+
+                mainWindow.Activate();
+            }
+
+            void ExitApplication()
+            {
+                exiting = true;
+                desktop.Shutdown();
+            }
+
+            CreateTrayIcon(ShowMainWindow, () => mainWindow.OpenAppSettings(), ExitApplication);
+            ListenForActivation(ShowMainWindow);
+
+            if (Program.StartedAtLogin && settings.StartMinimized)
+            {
+                logger.LogInformation("DeckHost started with Windows; running in the tray.");
+            }
+            else
+            {
+                desktop.MainWindow = mainWindow;
+            }
+
+            logger.LogInformation("DeckHost {Version} started.", typeof(App).Assembly.GetName().Version);
+            _ = deviceHostService.StartAsync(CancellationToken.None);
 
             desktop.Exit += (_, _) =>
             {
@@ -54,10 +110,154 @@ public partial class App : Application
                 // The host's worker never needs the UI thread, so waiting here cannot deadlock.
                 deviceHostService.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
                 pluginCatalog.Dispose();
-                variableStore.Dispose();
+                logger.LogInformation("DeckHost stopped.");
+                services.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+                NLog.LogManager.Shutdown();
             };
         }
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    private void CreateTrayIcon(Action open, Action openSettings, Action exit)
+    {
+        var menu = new NativeMenu();
+        var openItem = new NativeMenuItem("Open DeckHost");
+        openItem.Click += (_, _) => open();
+        var settingsItem = new NativeMenuItem("Settings…");
+        settingsItem.Click += (_, _) => openSettings();
+        var exitItem = new NativeMenuItem("Exit");
+        exitItem.Click += (_, _) => exit();
+        menu.Items.Add(openItem);
+        menu.Items.Add(settingsItem);
+        menu.Items.Add(new NativeMenuItemSeparator());
+        menu.Items.Add(exitItem);
+
+        var tray = new TrayIcon
+        {
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://DeckHost.App/Assets/avalonia-logo.ico"))),
+            ToolTipText = "DeckHost",
+            Menu = menu,
+        };
+        tray.Clicked += (_, _) => open();
+        TrayIcon.SetIcons(this, [tray]);
+    }
+
+    /// <summary>A second launch signals this instance to show its window instead of starting again.</summary>
+    private static void ListenForActivation(Action show)
+    {
+        if (Program.ActivateRequested is not { } activate)
+        {
+            return;
+        }
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                while (activate.WaitOne())
+                {
+                    Dispatcher.UIThread.Post(show);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "DeckHost activation",
+        };
+        thread.Start();
+    }
+
+    /// <summary>
+    /// The composition root. Everything is a singleton except the view models of windows that can
+    /// be opened more than once. Device plugins are the only place that knows about hardware.
+    /// </summary>
+    private static ServiceProvider ConfigureServices()
+    {
+        var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost");
+        var services = new ServiceCollection();
+
+        services.AddLogging(builder =>
+        {
+            builder.ClearProviders();
+            builder.SetMinimumLevel(LogLevel.Debug);
+            builder.AddNLog(Platform.Logging.CreateConfiguration());
+        });
+
+        // Devices
+        services.AddSingleton<MiraBoxDevicePlugin>();
+        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<MiraBoxDevicePlugin>());
+
+        // Runtime
+        services.AddSingleton<VariableStore>();
+        services.AddSingleton<IVariableStore>(provider => provider.GetRequiredService<VariableStore>());
+        services.AddSingleton(provider => new DeviceHostService(
+            provider.GetServices<IDevicePlugin>(),
+            [],
+            provider.GetRequiredService<IVariableStore>()));
+        services.AddSingleton<IDeviceHostService>(provider => provider.GetRequiredService<DeviceHostService>());
+
+        // Plugins: Stream Deck SDK plugins run in their own processes via this runtime.
+        services.AddSingleton(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<StreamDeckRuntime>>();
+            var runtime = new StreamDeckRuntime(
+                Path.Combine(appData, "streamdeck"),
+                Path.Combine(Platform.Logging.LogDirectory, "plugins"),
+                (level, message) =>
+                {
+                    // Shown in the app's runtime log (which also writes to the log file).
+                    if (provider.GetService<DeviceHostService>() is { } host)
+                    {
+                        host.AppendLog(level, message);
+                    }
+                    else
+                    {
+                        logger.Log(ToLogLevel(level), "{Message}", message);
+                    }
+                });
+            runtime.DevicesProvider = () => provider.GetRequiredService<IDeviceHostService>().Devices;
+            if (Platform.WebView2PluginHost.IsSupported)
+            {
+                // HTML-based Stream Deck plugins run in hidden WebView2 pages.
+                runtime.HtmlPluginHost = new Platform.WebView2PluginHost();
+            }
+
+            return runtime;
+        });
+        services.AddSingleton<IPluginStateTransfer>(provider => provider.GetRequiredService<StreamDeckRuntime>());
+        services.AddSingleton(provider => new PluginCatalog(
+            PluginCatalog.DefaultRootDirectory,
+            provider.GetServices<IDevicePlugin>(),
+            SystemPluginSet.Create(),
+            SystemPluginSet.RequiredPluginIds,
+            provider.GetRequiredService<StreamDeckRuntime>()));
+
+        // Profiles and view models
+        services.AddSingleton(_ => ProfileStore.CreateDefault());
+        services.AddSingleton(provider => new MainViewModel(
+            provider.GetRequiredService<IDeviceHostService>(),
+            provider.GetRequiredService<PluginCatalog>(),
+            provider.GetRequiredService<ProfileStore>(),
+            provider.GetRequiredService<IPluginStateTransfer>()));
+        services.AddSingleton(provider => new DeviceSettingsService(provider.GetServices<IDevicePlugin>()));
+        services.AddTransient(provider => new PluginManagerViewModel(
+            provider.GetRequiredService<PluginCatalog>(),
+            provider.GetRequiredService<IDeviceHostService>(),
+            provider.GetRequiredService<DeviceSettingsService>()));
+        services.AddTransient(provider => new ProfileManagerViewModel(provider.GetRequiredService<MainViewModel>()));
+
+        return services.BuildServiceProvider();
+    }
+
+    private static LogLevel ToLogLevel(string level) => level switch
+    {
+        "Debug" => LogLevel.Debug,
+        "Warning" => LogLevel.Warning,
+        "Error" => LogLevel.Error,
+        _ => LogLevel.Information,
+    };
 }

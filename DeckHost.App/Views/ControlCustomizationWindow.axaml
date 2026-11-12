@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
 		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		xmlns:vm="using:DeckHost.App.ViewModels"
+		xmlns:local="using:DeckHost.App.Views"
 		x:Class="DeckHost.App.Views.ControlCustomizationWindow"
 		x:DataType="vm:ControlCustomizationViewModel"
 		Width="560"
@@ -132,7 +133,19 @@
 			</StackPanel>
 		</Border>
 
-		<ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+		<Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+		<!-- The plugin's own settings page (Stream Deck property inspector), shown in the built-in browser. -->
+		<Border Grid.Column="1" Width="560" IsVisible="{Binding ShowSettingsPage}" Background="#2D2D2D" BorderBrush="#1E293B" BorderThickness="1,0,0,0">
+			<Grid RowDefinitions="Auto,*">
+				<DockPanel Margin="12,8">
+					<Button DockPanel.Dock="Right" Content="Open in browser" Padding="10,2" FontSize="12" Command="{Binding OpenSettingsPageInBrowserCommand}" />
+					<TextBlock Text="Plugin settings" FontWeight="SemiBold" Foreground="#E2E8F0" VerticalAlignment="Center" />
+				</DockPanel>
+				<local:WebView2Host Grid.Row="1" Name="SettingsBrowser" Source="{Binding SettingsPageUri}" />
+				<TextBlock Grid.Row="1" Name="SettingsBrowserError" IsVisible="False" Margin="12" Foreground="#FCA5A5" TextWrapping="Wrap" />
+			</Grid>
+		</Border>
+		<ScrollViewer HorizontalScrollBarVisibility="Disabled">
 			<StackPanel Margin="20" Spacing="14">
 
 				<!-- Action and its settings -->
@@ -145,6 +158,8 @@
 							<TextBlock Text="{Binding ActionDescription}" Classes="hint" IsVisible="{Binding HasActionDescription}" />
 						</StackPanel>
 						<ContentControl Content="{Binding ActionSettings}" IsVisible="{Binding HasActionSettings}" />
+						<TextBlock Classes="hint" IsVisible="{Binding ShowSettingsPage}"
+								   Text="This plugin has its own settings, shown on the right. They are saved straight to the plugin." />
 					</StackPanel>
 				</Border>
 
@@ -208,14 +223,55 @@
 						<TextBlock Classes="label" Text="Text" />
 						<TextBox Name="DisplayTextBox"
 								 Text="{Binding DisplayText, Mode=TwoWay}"
-								 PlaceholderText="Optional; replaces the action's own label" />
-						<TextBlock Classes="label" Text="Image" />
-						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+								 AcceptsReturn="True"
+								 TextWrapping="Wrap"
+								 MinHeight="56"
+								 PlaceholderText="Optional; replaces the action's own label. Press Enter for a new line." />
+						<TextBlock Classes="label" Text="Background color" />
+						<local:ColorField Hex="{Binding BackgroundColor, Mode=TwoWay}" DefaultHex="#000000" Placeholder="profile background" />
+						<TextBlock Classes="error" Text="{Binding BackgroundColorError}" IsVisible="{Binding HasBackgroundColorError}" />
+						<TextBlock Classes="label" Text="Image (PNG, JPG, SVG or animated GIF)" />
+						<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
 							<TextBox Name="ImagePathTextBox"
 									 Text="{Binding ImagePath, Mode=TwoWay}"
 									 PlaceholderText="Optional image file" />
 							<Button Grid.Column="1" Content="Browse…" Click="BrowseImage_OnClick" />
+							<Button Grid.Column="2" Content="Clear" Command="{Binding ClearImageCommand}" />
 						</Grid>
+					</StackPanel>
+				</Border>
+
+				<!-- Text style -->
+				<Border Classes="card" IsVisible="{Binding SupportsAppearance}">
+					<StackPanel Spacing="10">
+						<TextBlock Classes="section" Text="TEXT STYLE" />
+						<Grid ColumnDefinitions="*,*" ColumnSpacing="10" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+							<TextBlock Classes="label" Text="Color" />
+							<TextBlock Classes="label" Grid.Column="1" Text="Size (px)" />
+							<local:ColorField Grid.Row="1" Hex="{Binding TextColor, Mode=TwoWay}" DefaultHex="#FFFFFF" Placeholder="action default" />
+							<TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FontSizeText, Mode=TwoWay}" PlaceholderText="Automatic" />
+							<TextBlock Classes="label" Grid.Row="2" Text="Horizontal" />
+							<TextBlock Classes="label" Grid.Row="2" Grid.Column="1" Text="Vertical" />
+							<ComboBox Grid.Row="3" ItemsSource="{Binding HorizontalOptions}" SelectedItem="{Binding Horizontal, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+							<ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding VerticalOptions}" SelectedItem="{Binding Vertical, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+						</Grid>
+						<TextBlock Classes="label" Text="Font" />
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+							<AutoCompleteBox Name="FontBox"
+											 ItemsSource="{Binding FontFamilies}"
+											 Text="{Binding FontFamily, Mode=TwoWay}"
+											 FilterMode="ContainsOrdinal"
+											 MinimumPrefixLength="0"
+											 MaxDropDownHeight="320"
+											 GotFocus="FontBox_OnGotFocus"
+											 PlaceholderText="Default font (type to search, or open the list)" />
+							<Button Grid.Column="1" Content="▾" Padding="10,4" ToolTip.Tip="Show all installed fonts" Click="FontList_OnClick" />
+						</Grid>
+						<WrapPanel ItemSpacing="16">
+							<CheckBox Content="Bold" IsChecked="{Binding Bold}" />
+							<CheckBox Content="Italic" IsChecked="{Binding Italic}" />
+							<CheckBox Content="Wrap long lines" IsChecked="{Binding Wrap}" />
+						</WrapPanel>
 					</StackPanel>
 				</Border>
 
@@ -227,13 +283,13 @@
 								   Text="Assign an action to this control first; the light reacts when the action runs." />
 						<StackPanel Spacing="10" IsVisible="{Binding ShowLightEditor}">
 							<CheckBox Content="Light up the LED when this control is used" IsChecked="{Binding LightEnabled}" />
-							<Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="4" IsEnabled="{Binding LightEnabled}">
+							<Grid ColumnDefinitions="*,*" ColumnSpacing="10" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4" IsEnabled="{Binding LightEnabled}">
 								<TextBlock Classes="label" Text="Active color" />
 								<TextBlock Classes="label" Grid.Column="1" Text="Idle color" />
-								<TextBlock Classes="label" Grid.Column="2" Text="Active for (ms)" />
-								<TextBox Grid.Row="1" Text="{Binding ActiveColor, Mode=TwoWay}" PlaceholderText="#00FF00" />
-								<TextBox Grid.Row="1" Grid.Column="1" Text="{Binding IdleColor, Mode=TwoWay}" PlaceholderText="#0000FF" />
-								<TextBox Grid.Row="1" Grid.Column="2" Text="{Binding ActiveDurationText, Mode=TwoWay}" PlaceholderText="200" />
+								<local:ColorField Grid.Row="1" Hex="{Binding ActiveColor, Mode=TwoWay}" DefaultHex="#00FF00" />
+								<local:ColorField Grid.Row="1" Grid.Column="1" Hex="{Binding IdleColor, Mode=TwoWay}" DefaultHex="#0000FF" />
+								<TextBlock Classes="label" Grid.Row="2" Text="Active for (ms)" />
+								<TextBox Grid.Row="3" Text="{Binding ActiveDurationText, Mode=TwoWay}" PlaceholderText="200" />
 							</Grid>
 							<CheckBox Content="Blink instead of a steady color" IsEnabled="{Binding LightEnabled}" IsChecked="{Binding PulseOnActive}" />
 							<TextBlock Classes="error" Text="{Binding LightError}" IsVisible="{Binding HasLightError}" />
@@ -245,6 +301,7 @@
 						   Text="This control has no display, settings or light to customize." />
 			</StackPanel>
 		</ScrollViewer>
+		</Grid>
 
 		<Border Grid.Row="2" Padding="20,12" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
 			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">

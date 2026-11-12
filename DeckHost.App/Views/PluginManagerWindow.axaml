@@ -41,25 +41,39 @@
 						<StackPanel Orientation="Horizontal" Spacing="8">
 							<TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="#F8FAFC" />
 							<TextBlock Text="{Binding Version}" Foreground="#64748B" VerticalAlignment="Center" />
-							<Border Classes="badge" Background="#1E3A8A" IsVisible="{Binding IsSystem}">
-								<TextBlock Text="System" FontSize="11" Foreground="#BFDBFE" />
-							</Border>
-						</StackPanel>
+								<Border Classes="badge" Background="#1E3A8A" IsVisible="{Binding IsSystem}">
+									<TextBlock Text="System" FontSize="11" Foreground="#BFDBFE" />
+								</Border>
+								<Border Classes="badge" Background="{Binding OriginColor}" IsVisible="{Binding !IsSystem}">
+									<TextBlock Text="{Binding Origin}" FontSize="11" Foreground="#E2E8F0" />
+								</Border>
+							</StackPanel>
 						<TextBlock Text="{Binding Details}" FontSize="12" Foreground="#94A3B8" />
 						<TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Foreground="#CBD5E1" TextWrapping="Wrap" />
 						<TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="#FCA5A5" TextWrapping="Wrap" />
-						<TextBlock Text="{Binding Id}" FontSize="11" Foreground="#475569" />
-					</StackPanel>
+							<TextBlock Text="{Binding Id}" FontSize="11" Foreground="#475569" />
+							<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsBusy}">
+								<ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" />
+								<TextBlock Text="{Binding BusyText}" FontSize="12" Foreground="#93C5FD" />
+							</StackPanel>
+						</StackPanel>
 					<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
 						<ToggleSwitch IsChecked="{Binding IsEnabled}"
 									  IsVisible="{Binding CanToggle}"
+									  IsEnabled="{Binding IsIdle}"
 									  OnContent="Enabled"
 									  OffContent="Disabled" />
 						<Border Classes="badge" Background="#1E293B" IsVisible="{Binding IsLocked}" HorizontalAlignment="Right">
 							<TextBlock Text="{Binding LockedReason}" FontSize="11" Foreground="#94A3B8" />
 						</Border>
+						<Button Content="Open folder"
+								IsVisible="{Binding HasInstallDirectory}"
+								HorizontalAlignment="Right"
+								ToolTip.Tip="{Binding InstallDirectory}"
+								Command="{Binding OpenFolderCommand}" />
 						<Button Content="Uninstall"
 								IsVisible="{Binding CanUninstall}"
+								IsEnabled="{Binding IsIdle}"
 								HorizontalAlignment="Right"
 								Command="{Binding UninstallCommand}" />
 					</StackPanel>
@@ -80,23 +94,31 @@
 							   Foreground="#94A3B8"
 							   TextWrapping="Wrap" />
 				</StackPanel>
-				<Button Grid.Column="1"
-						Classes="accent"
-						VerticalAlignment="Center"
-						Content="Install plugin…"
-						Click="InstallPlugin_OnClick" />
+				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+					<Button Content="Plugins folder" Command="{Binding OpenPluginFolderCommand}" ToolTip.Tip="{Binding InstallDirectory}" />
+					<Button Content="Logs folder" Command="{Binding OpenLogFolderCommand}" ToolTip.Tip="{Binding LogDirectory}" />
+					<Button Classes="accent"
+							Content="Install plugin…"
+							IsEnabled="{Binding !IsBusy}"
+							Click="InstallPlugin_OnClick" />
+				</StackPanel>
 				<Border Grid.Row="1"
 						Grid.ColumnSpan="2"
 						Padding="10,6"
 						CornerRadius="8"
 						Background="#1E293B"
 						IsVisible="{Binding HasStatus}">
-					<TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#E2E8F0" />
+					<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+						<ProgressBar IsIndeterminate="True" Width="80" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+						<TextBlock Grid.Column="1" Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#E2E8F0" />
+					</Grid>
 				</Border>
 			</Grid>
 		</Border>
 
-		<ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+		<TabControl Grid.Row="1" Margin="12,8,12,0" SelectionChanged="Tabs_OnSelectionChanged">
+			<TabItem Header="Installed">
+		<ScrollViewer HorizontalScrollBarVisibility="Disabled">
 			<StackPanel Margin="20" Spacing="12">
 				<TextBlock Classes="section" Text="DEVICES" />
 				<ItemsControl ItemsSource="{Binding Devices}">
@@ -113,7 +135,11 @@
 											<TextBlock Text="{Binding State}" FontSize="11" Foreground="#94A3B8" />
 										</Border>
 									</StackPanel>
-									<TextBlock Text="{Binding Detail}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+									<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+										<TextBlock Text="{Binding Detail}" Foreground="#CBD5E1" TextWrapping="Wrap" VerticalAlignment="Center" />
+										<Button Grid.Column="1" Content="Settings…" IsVisible="{Binding HasSettings}" Click="DeviceSettings_OnClick"
+												ToolTip.Tip="Vibration, brightness, LEDs and the idle screen" />
+									</Grid>
 									<TextBlock Foreground="#64748B" FontSize="12" TextWrapping="Wrap"
 											   Text="Firmware updates: the StreamDock SDK can read the firmware version but has no update function, so DeckHost can't check for or install firmware. Use MiraBox's own Stream Dock software to update, then reconnect the device here." />
 								</StackPanel>
@@ -146,11 +172,86 @@
 						</ItemsPanelTemplate>
 					</ItemsControl.ItemsPanel>
 				</ItemsControl>
-				<TextBlock FontSize="11" Foreground="#475569" TextWrapping="Wrap">
-					<Run Text="Installed plugins live in " />
-					<Run Text="{Binding InstallDirectory}" />
-				</TextBlock>
+				<TextBlock Classes="section" Text="FOLDERS" Margin="0,8,0,0" />
+				<Border Classes="card">
+					<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+						<TextBlock Text="DeckHost plugins" Foreground="#94A3B8" />
+						<SelectableTextBlock Grid.Column="1" Text="{Binding InstallDirectory}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+						<TextBlock Grid.Row="1" Text="Stream Deck plugins (Elgato, OpenAction)" Foreground="#94A3B8" />
+						<SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StreamDeckDirectory}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+						<TextBlock Grid.Row="2" Text="Log files" Foreground="#94A3B8" />
+						<SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LogDirectory}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+					</Grid>
+				</Border>
 			</StackPanel>
 		</ScrollViewer>
+			</TabItem>
+			<TabItem Header="Store">
+				<Grid RowDefinitions="Auto,Auto,*" RowSpacing="10" Margin="8,12,8,8" DataContext="{Binding Store}" x:DataType="vm:PluginStoreViewModel">
+					<Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+						<TextBox Text="{Binding SearchText, Mode=TwoWay}" PlaceholderText="Search by name, author or description" />
+						<ComboBox Grid.Column="1" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource, Mode=TwoWay}" MinWidth="170" />
+						<ComboBox Grid.Column="2" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory, Mode=TwoWay}" MinWidth="150" />
+						<ComboBox Grid.Column="3" ItemsSource="{Binding Statuses}" SelectedItem="{Binding SelectedStatus, Mode=TwoWay}" MinWidth="120" />
+						<Button Grid.Column="4" Content="↻" ToolTip.Tip="Reload the catalogs" Command="{Binding RefreshCommand}" />
+					</Grid>
+					<StackPanel Grid.Row="1" Spacing="6">
+						<TextBlock Text="{Binding Summary}" Foreground="#94A3B8" FontSize="12" TextWrapping="Wrap" />
+						<Expander Header="Sources" HorizontalAlignment="Stretch">
+							<StackPanel Spacing="8">
+								<TextBlock Foreground="#94A3B8" FontSize="12" TextWrapping="Wrap"
+										   Text="DeckHost plugins come from the sources below, one per line: a catalog URL, a local catalog file, or a local folder (for example your plugin projects). Folders are searched for packages (.zip, .dhplugin, .streamDeckPlugin) and built plugin folders (plugin.json next to the plugin's .dll). A catalog is a JSON object keyed by plugin id, or an array, with name, author, description, version, category, download_url, repository and icon. There is no official DeckHost catalog yet, so this list starts empty." />
+								<TextBox Text="{Binding CatalogUrlsText, Mode=TwoWay}" AcceptsReturn="True" MinHeight="70" TextWrapping="NoWrap"
+										 PlaceholderText="https://example.com/deckhost-catalog.json or E:\Projects\MyPlugins" />
+								<Button Content="Save and reload" Command="{Binding SaveCatalogUrlsCommand}" HorizontalAlignment="Left" />
+								<TextBlock Foreground="#64748B" FontSize="11" TextWrapping="Wrap"
+										   Text="Stream Deck plugins come from the OpenAction catalog and a community archive of the Elgato store (Elgato has no public store API). They run as separate programs with your user's rights, so only install what you trust. Node.js plugins need Node.js 20 or newer." />
+							</StackPanel>
+						</Expander>
+					</StackPanel>
+					<ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+						<ItemsControl ItemsSource="{Binding Items}">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<StackPanel Spacing="8" />
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:StoreItemViewModel">
+									<Border Classes="card">
+										<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+											<Border Width="44" Height="44" CornerRadius="10" Background="#1E293B" VerticalAlignment="Top">
+												<TextBlock Text="{Binding Initials}" FontWeight="SemiBold" Foreground="#CBD5E1" HorizontalAlignment="Center" VerticalAlignment="Center" />
+											</Border>
+											<StackPanel Grid.Column="1" Spacing="3">
+												<StackPanel Orientation="Horizontal" Spacing="8">
+													<TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" Foreground="#F8FAFC" />
+													<Border Classes="badge" Background="{Binding SourceColor}">
+														<TextBlock Text="{Binding Source}" FontSize="11" Foreground="#E2E8F0" />
+													</Border>
+												</StackPanel>
+												<TextBlock Text="{Binding Details}" FontSize="11" Foreground="#64748B" TextTrimming="CharacterEllipsis" />
+												<TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Foreground="#CBD5E1" TextWrapping="Wrap" MaxLines="3" />
+												<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasProgress}">
+													<ProgressBar IsIndeterminate="{Binding IsInstalling}" Width="120" VerticalAlignment="Center" />
+													<TextBlock Text="{Binding Progress}" FontSize="12" Foreground="#93C5FD" />
+												</StackPanel>
+											</StackPanel>
+											<StackPanel Grid.Column="2" Spacing="6" VerticalAlignment="Center">
+<Button Content="Install" Classes="accent" IsVisible="{Binding !IsInstalled}" IsEnabled="{Binding CanInstall}" Command="{Binding InstallCommand}" HorizontalAlignment="Right" />
+												<Border Classes="badge" Background="#14532D" IsVisible="{Binding IsInstalled}" HorizontalAlignment="Right">
+													<TextBlock Text="Installed" FontSize="11" Foreground="#BBF7D0" />
+												</Border>
+												<Button Content="Page" IsVisible="{Binding HasPage}" ToolTip.Tip="{Binding PageToolTip}" Command="{Binding OpenPageCommand}" HorizontalAlignment="Right" />
+											</StackPanel>
+										</Grid>
+									</Border>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</ScrollViewer>
+				</Grid>
+			</TabItem>
+		</TabControl>
 	</Grid>
 </Window>

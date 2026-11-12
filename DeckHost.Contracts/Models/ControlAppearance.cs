@@ -1,20 +1,25 @@
 namespace DeckHost.Contracts.Models;
 
 /// <summary>
-/// Visual appearance configuration for a control.
+/// Visual appearance of a control, drawn under the action's own content.
 /// </summary>
+/// <param name="Text">Label text; replaces the action's own title.</param>
+/// <param name="ImagePath">PNG, JPG, WebP or (animated) GIF, scaled to cover the control.</param>
+/// <param name="RgbFeedback">LED feedback for controls with a light.</param>
+/// <param name="BackgroundColor">Solid fill (#RRGGBB) drawn over the profile background.</param>
+/// <param name="TextStyle">Color, font and alignment of the label (see <see cref="Interfaces.IRenderContext.DrawLabel"/>).</param>
 public sealed record ControlAppearance(
-    /// <summary>
-    /// Label text to display on the control.
-    /// </summary>
     string? Text = null,
-
-    /// <summary>
-    /// Path to an image file to display.
-    /// </summary>
     string? ImagePath = null,
+    RgbFeedback? RgbFeedback = null,
+    string? BackgroundColor = null,
+    TextStyle? TextStyle = null);
 
-    /// <summary>
-    /// RGB LED feedback configuration (optional).
-    /// </summary>
-    RgbFeedback? RgbFeedback = null);
+/// <summary>
+/// A background for a whole profile. The image spans the device layout, so every control shows
+/// its own slice of it (one picture across all keys). GIFs animate.
+/// </summary>
+public sealed record ProfileBackground(string? Color = null, string? ImagePath = null)
+{
+    public bool IsEmpty => string.IsNullOrWhiteSpace(Color) && string.IsNullOrWhiteSpace(ImagePath);
+}

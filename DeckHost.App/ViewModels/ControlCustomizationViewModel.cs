@@ -21,12 +21,16 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     private readonly ActionItemViewModel? _displayContentAction;
     private string _displayText;
     private string _imagePath;
+    private string _backgroundColor;
     private bool _lightEnabled;
     private string _activeColor;
     private string _idleColor;
     private string _activeDurationText;
     private bool _pulseOnActive;
     private ActionItemViewModel? _selectedStepAction;
+
+    /// <summary>The inputs this control has (used to offer only the triggers it can produce).</summary>
+    public DeckHost.Contracts.Enums.InputCapabilities ControlInputs { get; }
 
     public ControlCustomizationViewModel(
         ControlItemViewModel control,
@@ -35,6 +39,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         ActionItemViewModel? displayContentAction)
     {
         ControlId = control.Id;
+        ControlInputs = control.Control.Inputs;
         DisplayName = control.DisplayName;
         ControlType = control.TypeLabel;
         SupportsAppearance = control.SupportsAppearance;
@@ -45,10 +50,21 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         _displayContentAction = displayContentAction;
         _displayText = binding?.AppearanceText ?? string.Empty;
         _imagePath = binding?.AppearanceImagePath ?? string.Empty;
+        _backgroundColor = binding?.Model.Appearance.BackgroundColor ?? string.Empty;
+
+        var style = binding?.Model.Appearance.TextStyle;
+        _textColor = style?.Color ?? string.Empty;
+        _fontFamily = style?.FontFamily ?? string.Empty;
+        _fontSizeText = style?.Size?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        _bold = style?.Bold ?? false;
+        _italic = style?.Italic ?? false;
+        _wrap = style?.Wrap ?? true;
+        _horizontal = style?.Horizontal?.ToString() ?? AutomaticAlignment;
+        _vertical = style?.Vertical?.ToString() ?? AutomaticAlignment;
 
         if (binding is not null && !binding.IsMultiAction && binding.PrimaryAction.HasSettings)
         {
-            ActionSettings = new SettingsEditorViewModel(binding.PrimaryAction.SettingDefinitions, binding.Settings);
+            ActionSettings = new SettingsEditorViewModel(binding.PrimaryAction.SettingDefinitions, binding.Settings, ControlInputs);
             ActionSettings.Changed += (_, _) => RaiseChanged();
         }
 
@@ -104,6 +120,138 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     public bool HasActionDescription => HasAction && !string.IsNullOrWhiteSpace(_primaryAction?.Description);
 
     public SettingsEditorViewModel? ActionSettings { get; }
+
+    /// <summary>Whether the action has its own settings page (Stream Deck property inspector).</summary>
+    public bool HasSettingsPage => HasAction && !IsMultiAction && _primaryAction?.Action.HasSettingsPage == true;
+
+    private Uri? _settingsPageUri;
+
+    /// <summary>The plugin's settings page, shown in the built-in browser next to the editor.</summary>
+    public Uri? SettingsPageUri
+    {
+        get => _settingsPageUri;
+        set
+        {
+            if (SetProperty(ref _settingsPageUri, value))
+            {
+                OnPropertyChanged(nameof(ShowSettingsPage));
+            }
+        }
+    }
+
+    public bool ShowSettingsPage => SettingsPageUri is not null;
+
+    [RelayCommand]
+    private void OpenSettingsPageInBrowser()
+    {
+        if (SettingsPageUri is { } uri)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+        }
+    }
+
+    [RelayCommand]
+    private void ClearImage() => ImagePath = string.Empty;
+
+    // ---------------------------------------------------------------- text style
+
+    public const string AutomaticAlignment = "Automatic";
+
+    private string _textColor;
+    private string _fontFamily;
+    private string _fontSizeText;
+    private bool _bold;
+    private bool _italic;
+    private bool _wrap;
+    private string _horizontal;
+    private string _vertical;
+
+    public IReadOnlyList<string> HorizontalOptions { get; } = [AutomaticAlignment, nameof(TextHorizontalAlignment.Left), nameof(TextHorizontalAlignment.Center), nameof(TextHorizontalAlignment.Right)];
+
+    public IReadOnlyList<string> VerticalOptions { get; } = [AutomaticAlignment, nameof(TextVerticalAlignment.Top), nameof(TextVerticalAlignment.Middle), nameof(TextVerticalAlignment.Bottom)];
+
+    /// <summary>Installed font families (empty = the default font).</summary>
+    public IReadOnlyList<string> FontFamilies { get; } = LoadFontFamilies();
+
+    public string TextColor
+    {
+        get => _textColor;
+        set => SetStyle(ref _textColor, value ?? string.Empty);
+    }
+
+    public string FontFamily
+    {
+        get => _fontFamily;
+        set => SetStyle(ref _fontFamily, value ?? string.Empty);
+    }
+
+    public string FontSizeText
+    {
+        get => _fontSizeText;
+        set => SetStyle(ref _fontSizeText, value ?? string.Empty);
+    }
+
+    public bool Bold
+    {
+        get => _bold;
+        set => SetStyle(ref _bold, value);
+    }
+
+    public bool Italic
+    {
+        get => _italic;
+        set => SetStyle(ref _italic, value);
+    }
+
+    public bool Wrap
+    {
+        get => _wrap;
+        set => SetStyle(ref _wrap, value);
+    }
+
+    public string Horizontal
+    {
+        get => _horizontal;
+        set => SetStyle(ref _horizontal, value ?? AutomaticAlignment);
+    }
+
+    public string Vertical
+    {
+        get => _vertical;
+        set => SetStyle(ref _vertical, value ?? AutomaticAlignment);
+    }
+
+    private void SetStyle<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
+    {
+        if (SetProperty(ref field, value, propertyName))
+        {
+            RaiseChanged();
+        }
+    }
+
+    private TextStyle? BuildTextStyle()
+    {
+        var color = IsHexColor(TextColor) ? "#" + NormalizeColor(TextColor) : null;
+        float? size = float.TryParse(FontSizeText, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && parsed is >= 6 and <= 200 ? parsed : null;
+        TextHorizontalAlignment? horizontal = Enum.TryParse<TextHorizontalAlignment>(Horizontal, out var h) ? h : null;
+        TextVerticalAlignment? vertical = Enum.TryParse<TextVerticalAlignment>(Vertical, out var v) ? v : null;
+        var family = string.IsNullOrWhiteSpace(FontFamily) ? null : FontFamily.Trim();
+
+        var style = new TextStyle(color, family, size, Bold, Italic, horizontal, vertical, Wrap);
+        return style == new TextStyle() ? null : style;
+    }
+
+    private static IReadOnlyList<string> LoadFontFamilies()
+    {
+        try
+        {
+            return [.. SkiaSharp.SKFontManager.Default.FontFamilies.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.CurrentCultureIgnoreCase)];
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException)
+        {
+            return [];
+        }
+    }
 
     public bool HasActionSettings => ActionSettings?.HasFields == true;
 
@@ -171,6 +319,26 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             }
         }
     }
+
+    /// <summary>Solid background (#RRGGBB) under the image and text; empty for the profile background.</summary>
+    public string BackgroundColor
+    {
+        get => _backgroundColor;
+        set
+        {
+            if (SetProperty(ref _backgroundColor, value))
+            {
+                OnPropertyChanged(nameof(BackgroundColorError));
+                OnPropertyChanged(nameof(HasBackgroundColorError));
+                RaiseChanged();
+            }
+        }
+    }
+
+    public string? BackgroundColorError =>
+        string.IsNullOrWhiteSpace(BackgroundColor) || IsHexColor(BackgroundColor) ? null : "Use #RRGGBB, for example #1D4ED8.";
+
+    public bool HasBackgroundColorError => BackgroundColorError is not null;
 
     public string ImagePath
     {
@@ -254,17 +422,18 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         var text = SupportsAppearance && !string.IsNullOrWhiteSpace(DisplayText) ? DisplayText : null;
         var image = SupportsAppearance && !string.IsNullOrWhiteSpace(ImagePath) ? ImagePath.Trim() : null;
         var light = BuildLight();
-        var appearance = new ControlAppearance(text, image, light);
+        var background = SupportsAppearance && IsHexColor(BackgroundColor) ? "#" + NormalizeColor(BackgroundColor) : null;
+        var appearance = new ControlAppearance(text, image, light, background, SupportsAppearance ? BuildTextStyle() : null);
 
         if (_original is null || _primaryAction is null)
         {
             // An empty control that only shows text/an image.
-            return (text is null && image is null) || _displayContentAction is null
+            return (text is null && image is null && background is null) || _displayContentAction is null
                 ? null
                 : new ControlBinding(ControlId, ProfileActionKind.Single, _displayContentAction.ToActionReference(), appearance, []);
         }
 
-        if (_primaryAction.IsDisplayContentAction && text is null && image is null)
+        if (_primaryAction.IsDisplayContentAction && text is null && image is null && background is null)
         {
             return null;
         }
@@ -351,7 +520,7 @@ public partial class MultiActionStepEditorViewModel : ViewModelBase
         Action = action;
         if (action.HasSettings)
         {
-            Settings = new SettingsEditorViewModel(action.SettingDefinitions, settings);
+            Settings = new SettingsEditorViewModel(action.SettingDefinitions, settings, owner.ControlInputs);
             Settings.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
         }
     }

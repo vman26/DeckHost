@@ -17,6 +17,12 @@ public interface IDeviceHostService : IAsyncDisposable
     /// <summary>(deviceId, profileId) when the active profile changes, also when an action switched it.</summary>
     event Action<string, string>? ActiveProfileChanged;
 
+    /// <summary>A control was rendered differently than before (also while the device is unplugged): the live preview.</summary>
+    event Action<ControlFrame>? ControlFrameRendered;
+
+    /// <summary>Every input from a device or from <see cref="SimulateInput"/>.</summary>
+    event Action<DeviceInputEvent>? InputReceived;
+
     IReadOnlyCollection<DeviceDefinition> Devices { get; }
     IReadOnlyCollection<DeviceProfile> Profiles { get; }
     IReadOnlyCollection<RuntimeLogEntry> RuntimeLogs { get; }
@@ -26,6 +32,15 @@ public interface IDeviceHostService : IAsyncDisposable
     void SetProfiles(IEnumerable<DeviceProfile> profiles);
 
     void SetActiveProfile(string profileId);
+
+    /// <summary>Handles an input as if it came from the device (test mode in the editor).</summary>
+    void SimulateInput(DeviceInputEvent inputEvent);
+
+    /// <summary>Adds a line to the runtime log (for parts of the app outside the host).</summary>
+    void AppendLog(string level, string message);
+
+    /// <summary>Opens the own settings page of the action bound to a control in the active profile.</summary>
+    Task<Uri?> GetActionSettingsPageAsync(string deviceId, string controlId);
 
     /// <summary>Replaces the enabled application plugins (after enabling, disabling, installing or uninstalling one).</summary>
     void SetApplicationPlugins(IEnumerable<DeckHost.Contracts.Interfaces.IApplicationPlugin> applicationPlugins);
