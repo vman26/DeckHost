@@ -17,6 +17,12 @@ public interface IRenderContext
     /// <summary>The profile being drawn.</summary>
     string ProfileId { get; }
 
+    /// <summary>
+    /// True when the action only has a low, wide strip to draw in (a knob's status line under the
+    /// action of the touch zone it shares): draw one short line instead of the full layout.
+    /// </summary>
+    bool IsCompact => false;
+
     /// <summary>Draws an encoded image (PNG, JPG, GIF, WebP bytes) scaled to cover the control.</summary>
     bool DrawEncodedImage(byte[] encodedImage);
 
@@ -33,9 +39,16 @@ public interface IRenderContext
 
     void Clear(uint argbColor);
 
+    /// <summary>
+    /// Draws text at a position the action chooses, in the user's font, bold and italic (the size,
+    /// color and place are the action's; use <see cref="DrawLabel"/> for the control's label).
+    /// </summary>
     void DrawText(string text, double x, double y, float size, uint argbColor = 0xFFFFFFFF);
 
-    /// <summary>Draws text centered on a point. The size shrinks when needed so the text fits the control's width.</summary>
+    /// <summary>
+    /// Draws text centered on a point, like <see cref="DrawText"/>. The size shrinks when needed
+    /// so the text fits the control's width.
+    /// </summary>
     void DrawCenteredText(string text, double centerX, double centerY, float size, uint argbColor = 0xFFFFFFFF);
 
     void FillRoundedRect(double x, double y, double width, double height, double radius, uint argbColor);

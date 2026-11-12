@@ -90,16 +90,25 @@ internal abstract class DeckActionBase(
     {
         // The label follows the user's text style (color, font, alignment, wrapping) from Customize.
         var title = ResolveDisplayText(context, Title(context));
+        var variables = context.Variables;
+        var hasError = variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.LastError), out var error) &&
+                       !string.IsNullOrWhiteSpace(error);
+
+        if (context.IsCompact)
+        {
+            // A strip under another control's action: one line, the error instead of the title.
+            DrawCompact(context, hasError ? error! : CompactText(context, title), hasError ? ErrorTextColor : 0xFFFFFFFF);
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(title))
         {
             context.DrawLabel(title, TextVerticalAlignment.Middle, TitleSize(context));
         }
 
-        var variables = context.Variables;
-        if (variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.LastError), out var error) &&
-            !string.IsNullOrWhiteSpace(error))
+        if (hasError)
         {
-            context.DrawCenteredText(error, context.Width / 2d, context.Height * 0.76d, SubtitleSize(context), ErrorTextColor);
+            context.DrawCenteredText(error!, context.Width / 2d, context.Height * 0.76d, SubtitleSize(context), ErrorTextColor);
             return;
         }
 
@@ -127,6 +136,18 @@ internal abstract class DeckActionBase(
 
     /// <summary>The title shown when the binding has no custom text.</summary>
     protected virtual string Title(IRenderContext context) => Name;
+
+    /// <summary>The single line shown in a strip (<see cref="IRenderContext.IsCompact"/>); by default the title.</summary>
+    protected virtual string CompactText(IRenderContext context, string title) => title;
+
+    /// <summary>Draws the one line of a strip, in the user's text style.</summary>
+    protected static void DrawCompact(IRenderContext context, string text, uint color = 0xFFFFFFFF)
+    {
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            context.DrawLabel(text, TextVerticalAlignment.Middle, Math.Max(10f, context.Height * 0.46f), color);
+        }
+    }
 
     /// <summary>Second line; by default the time the action last ran.</summary>
     protected virtual string? Subtitle(IRenderContext context) =>

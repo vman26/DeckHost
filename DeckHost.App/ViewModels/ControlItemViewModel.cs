@@ -28,7 +28,7 @@ public class ControlItemViewModel : ViewModelBase
         Height = control.Bounds.Height;
         InputsLabel = CapabilityFormatter.Format(control.Inputs, "None");
         OutputsLabel = CapabilityFormatter.Format(control.Outputs, "None");
-        SupportsAppearance = control.Outputs != OutputCapabilities.None;
+        SupportsAppearance = control.Outputs != OutputCapabilities.None || control.HasLinkedDisplay;
     }
 
     public PhysicalControl Control { get; }
@@ -47,6 +47,7 @@ public class ControlItemViewModel : ViewModelBase
 
     public double Height { get; }
 
+    /// <summary>Whether text and images can be set: the control has a display, or borrows one (a knob and its touch zone).</summary>
     public bool SupportsAppearance { get; }
 
     public bool SupportsLight => Control.HasLight;

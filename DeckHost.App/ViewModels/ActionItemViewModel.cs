@@ -85,7 +85,7 @@ public class ActionItemViewModel : ViewModelBase
     /// <summary>Whether the action fits on the control (its inputs and outputs are available there).</summary>
     public bool FitsControl(PhysicalControl control)
     {
-        if (RequiresOutputCapableControl && control.Outputs == OutputCapabilities.None)
+        if (RequiresOutputCapableControl && control.Outputs == OutputCapabilities.None && !control.HasLinkedDisplay)
         {
             return false;
         }

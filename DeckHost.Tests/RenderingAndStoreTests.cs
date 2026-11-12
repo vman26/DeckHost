@@ -61,6 +61,82 @@ public sealed class RenderingAndStoreTests : IDisposable
     }
 
     [Fact]
+    public void Italic_and_bold_always_show()
+    {
+        using var resources = new SkiaDrawingResources();
+
+        // The default font, a named font and a family that isn't installed: a real italic or bold
+        // face when the font has one, else the text is slanted or emboldened.
+        foreach (var family in new[] { null, SKTypeface.Default.FamilyName, "No Such Font Family" })
+        {
+            var italic = resources.GetFont(14, family, bold: false, italic: true);
+            Assert.True(italic.Typeface.IsItalic || italic.SkewX < 0, $"italic, family '{family}'");
+
+            var bold = resources.GetFont(14, family, bold: true, italic: false);
+            Assert.True(bold.Typeface.IsBold || bold.Embolden, $"bold, family '{family}'");
+            Assert.Equal(0f, bold.SkewX);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Italic_changes_the_text_an_action_draws(bool label)
+    {
+        byte[] Draw(bool italic)
+        {
+            using var resources = new SkiaDrawingResources();
+            using var bitmap = new SKBitmap(new SKImageInfo(96, 96, SKColorType.Rgba8888, SKAlphaType.Premul));
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(SKColors.Black);
+            var context = new SkiaRenderContext(canvas, 96, 96, "dev", "key.0", new VariableStore(), resources)
+            {
+                TextStyle = new TextStyle(Italic: italic),
+            };
+
+            // The control's label, and text an action places itself (a clock, a counter).
+            if (label)
+            {
+                context.DrawLabel("Hello");
+            }
+            else
+            {
+                context.DrawCenteredText("12:34", 48, 48, 20);
+            }
+
+            canvas.Flush();
+            return bitmap.Bytes;
+        }
+
+        Assert.NotEqual(Draw(italic: false), Draw(italic: true));
+    }
+
+    [Fact]
+    public void A_strip_shows_one_line()
+    {
+        using var resources = new SkiaDrawingResources();
+        using var bitmap = new SKBitmap(new SKImageInfo(176, 112, SKColorType.Rgba8888, SKAlphaType.Premul));
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Black);
+        var context = new SkiaRenderContext(canvas, 176, 112, "dev", "touch.0", new VariableStore(), resources);
+
+        // The bottom 36 pixels, drawn compact: two lines of large text become one line that fits.
+        context.DrawRegion(0, 76, 176, 36, "encoder.0", null, compact: true, region =>
+        {
+            Assert.True(region.IsCompact);
+            Assert.Equal((176, 36, "encoder.0"), (region.Width, region.Height, region.ControlId));
+            region.TextStyle = new TextStyle(Color: "#00FF00", Size: 40);
+            region.DrawLabel("Master volume\n42%");
+        });
+        canvas.Flush();
+
+        Assert.Equal(0, CountGreen(bitmap, 0, 76));
+        Assert.True(CountGreen(bitmap, 76, 112) > 40);
+        var edgeColumns = new[] { 0, 1, 174, 175 };
+        Assert.DoesNotContain(edgeColumns, x => Enumerable.Range(76, 36).Any(y => bitmap.GetPixel(x, y).Green > 160));
+    }
+
+    [Fact]
     public void Wraps_long_text_onto_several_lines()
     {
         using var resources = new SkiaDrawingResources();

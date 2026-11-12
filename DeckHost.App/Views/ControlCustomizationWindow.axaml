@@ -220,6 +220,11 @@
 				<Border Classes="card" IsVisible="{Binding SupportsAppearance}">
 					<StackPanel Spacing="10">
 						<TextBlock Classes="section" Text="DISPLAY" />
+						<!-- A control without a display of its own (a knob) shows itself on the one next to it. -->
+						<StackPanel Spacing="4" IsVisible="{Binding HasLinkedDisplay}">
+							<CheckBox Content="{Binding ShowOnLinkedDisplayLabel}" IsChecked="{Binding ShowOnLinkedDisplay}" />
+							<TextBlock Classes="hint" Text="{Binding LinkedDisplayHint}" />
+						</StackPanel>
 						<TextBlock Classes="label" Text="Text" />
 						<TextBox Name="DisplayTextBox"
 								 Text="{Binding DisplayText, Mode=TwoWay}"

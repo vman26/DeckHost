@@ -17,6 +17,19 @@ foreach(config Debug Release RelWithDebInfo MinSizeRel)
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/lib/${config}")
 endforeach()
 
+# The SDK's static libraries end up inside this shared library, so they must be position
+# independent (Linux and macOS; it changes nothing for MSVC).
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# The SDK looks for its bundled hidapi archive relative to the top-level project, which is this
+# folder and not the SDK's. Declaring it first (the first declaration wins) makes the SDK use its
+# own copy instead of downloading whatever hidapi's master branch is at build time.
+set(MIRABOX_BUNDLED_HIDAPI "${CMAKE_CURRENT_SOURCE_DIR}/../StreamDock-SDK/CPP-SDK/third_party/hidapi-master.zip")
+if(EXISTS "${MIRABOX_BUNDLED_HIDAPI}")
+    include(FetchContent)
+    FetchContent_Declare(hidapi URL "${MIRABOX_BUNDLED_HIDAPI}")
+endif()
+
 # 1. Add the vendor's SDK folder. 
 # This runs the CMakeLists.txt shown in your image.
 # (The second argument is just a temporary build folder name for their stuff)

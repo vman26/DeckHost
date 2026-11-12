@@ -124,6 +124,12 @@ internal sealed class ClockAction() : DeckActionBase(
     public override void Render(IRenderContext context)
     {
         var now = DateTime.Now;
+        if (context.IsCompact)
+        {
+            DrawCompact(context, now.ToString(context.Settings.Get(FormatKey, "HH:mm"), CultureInfo.CurrentCulture));
+            return;
+        }
+
         var label = ResolveDisplayText(context, now.ToString("ddd d MMM", CultureInfo.CurrentCulture));
         context.DrawCenteredText(now.ToString(context.Settings.Get(FormatKey, "HH:mm"), CultureInfo.CurrentCulture), context.Width / 2d, context.Height * 0.44d, Math.Max(14f, context.Height * 0.24f));
         context.DrawCenteredText(label, context.Width / 2d, context.Height * 0.76d, SubtitleSize(context), SecondaryTextColor);
@@ -165,6 +171,12 @@ internal sealed class CounterAction() : DeckActionBase(
     public override void Render(IRenderContext context)
     {
         context.Variables.TryGetValue<int>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.Counter), out var count);
+        if (context.IsCompact)
+        {
+            DrawCompact(context, $"{ResolveDisplayText(context, Name)} {count.ToString(CultureInfo.CurrentCulture)}".Trim());
+            return;
+        }
+
         context.DrawCenteredText(ResolveDisplayText(context, Name), context.Width / 2d, context.Height * 0.28d, SubtitleSize(context), SecondaryTextColor);
         context.DrawCenteredText(count.ToString(CultureInfo.CurrentCulture), context.Width / 2d, context.Height * 0.62d, Math.Max(16f, context.Height * 0.3f));
     }
@@ -183,6 +195,12 @@ internal sealed class KeyIdDiagnosticAction() : DeckActionBase(
     public override void Render(IRenderContext context)
     {
         context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.HardwareId), out var hardwareId);
+        if (context.IsCompact)
+        {
+            DrawCompact(context, $"{context.ControlId} · SDK {hardwareId ?? "?"}");
+            return;
+        }
+
         var size = Math.Max(11f, context.Height * 0.16f);
         context.DrawCenteredText(context.ControlId, context.Width / 2d, context.Height * 0.38d, size);
         context.DrawCenteredText($"SDK {hardwareId ?? "?"}", context.Width / 2d, context.Height * 0.66d, size, 0xFFFDE68A);
