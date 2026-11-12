@@ -192,6 +192,31 @@ internal static unsafe partial class MiraBoxNative
         return IntPtr.Zero;
     }
 
+    /// <summary>
+    /// Why the bridge doesn't load, in the system loader's own words (a missing dependency, a wrong
+    /// architecture, ...), with the plugin folder's contents. Null when it loads after all.
+    /// </summary>
+    public static string? DescribeLoadFailure()
+    {
+        var directory = GetPluginDirectory();
+        if (!Directory.Exists(directory))
+        {
+            return $"The device plugin folder is missing: {directory}";
+        }
+
+        var files = string.Join(", ", Directory.EnumerateFiles(directory).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        var path = Path.Combine(directory, GetPlatformLibraryFileName());
+        try
+        {
+            NativeLibrary.Free(NativeLibrary.Load(path));
+            return null;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
+        {
+            return $"The MiraBox bridge at {path} could not be loaded: {ex.Message}{Environment.NewLine}Files there: {(files.Length == 0 ? "none" : files)}";
+        }
+    }
+
     private static string GetPluginDirectory() =>
         Path.Combine(AppContext.BaseDirectory, "plugins", "device", PluginDirectoryName);
 
