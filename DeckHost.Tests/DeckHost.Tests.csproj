@@ -27,6 +27,8 @@
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
     <ProjectReference Include="..\DeckHost.Core\DeckHost.Core.csproj" />
     <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
+    <!-- For the platform code's pure parts (tool output parsing, key tables, sign-in entries). -->
+    <ProjectReference Include="..\DeckHost.App\DeckHost.App.csproj" />
     <!-- Only built so the plugin catalog tests can install its package. -->
     <ProjectReference Include="..\plugins\DeckHost.Plugin.Obs\DeckHost.Plugin.Obs.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>

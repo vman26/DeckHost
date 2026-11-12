@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- LibraryImport (Platform/MacNative) generates unsafe marshalling code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsWindows>$([MSBuild]::IsOsPlatform('Windows'))</IsWindows>
     <IsLinux>$([MSBuild]::IsOsPlatform('Linux'))</IsLinux>
     <IsMacOS>$([MSBuild]::IsOsPlatform('OSX'))</IsMacOS>
@@ -12,6 +14,10 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DeckHost.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,8 +32,12 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <!-- PrivateAssets: the tests reference this project; WebView2 (and its WPF wrapper) stays here. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" PrivateAssets="all" />
     <PackageReference Include="NLog" Version="6.2.2" />
+    <!-- Avalonia brings an older native Skia for Linux; DeckHost.Core uses SkiaSharp 4.151, which needs
+         its own. (Windows and macOS get it from SkiaSharp itself.) -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.1" />
     <PackageReference Include="NLog.Extensions.Logging" Version="6.3.0" />
   </ItemGroup>
 
@@ -59,5 +69,16 @@
 
     <!-- Plain copies: hard links would let a later native rebuild silently change files elsewhere. -->
     <Copy SourceFiles="@(MiraBoxNativeArtifacts)" DestinationFolder="$(OutDir)plugins\device\deckhost.device.mirabox\" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- dotnet publish: the same native files, in the same place next to the published app. -->
+  <Target Name="PublishMiraBoxBridgeRuntime" AfterTargets="Publish" Condition="'$(PublishDir)' != '' and Exists('$(MiraBoxNativeRuntimeDir)')">
+    <ItemGroup>
+      <MiraBoxNativePublish Include="$(MiraBoxNativeRuntimeDir)/*.dll" Condition="'$(IsWindows)' == 'true'" />
+      <MiraBoxNativePublish Include="$(MiraBoxNativeRuntimeDir)/*.so" Condition="'$(IsLinux)' == 'true'" />
+      <MiraBoxNativePublish Include="$(MiraBoxNativeRuntimeDir)/*.dylib" Condition="'$(IsMacOS)' == 'true'" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)plugins/device/deckhost.device.mirabox;$(PublishDir)plugins/functional" />
+    <Copy SourceFiles="@(MiraBoxNativePublish)" DestinationFolder="$(PublishDir)plugins/device/deckhost.device.mirabox/" />
   </Target>
 </Project>

@@ -9,7 +9,7 @@ namespace DeckHost.App.ViewModels;
 /// <summary>The DeckHost settings window: start-up and tray behavior. Changes apply right away.</summary>
 public sealed partial class AppSettingsViewModel : ViewModelBase
 {
-    private bool _startWithWindows;
+    private bool _startAtLogin;
     private bool _startMinimized;
     private bool _closeToTray;
     private string _status = string.Empty;
@@ -18,33 +18,33 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
     {
         var settings = AppSettings.Load();
         _startMinimized = settings.StartMinimized;
-        _closeToTray = settings.CloseToTray;
-        _startWithWindows = AppSettings.IsStartWithWindowsEnabled();
+        _closeToTray = settings.KeepsRunningInTray;
+        _startAtLogin = AppSettings.IsStartAtLoginEnabled();
     }
 
     /// <summary>Raised after a change, so the app can update its tray and close behavior.</summary>
     public static event Action<AppSettingsData>? Changed;
 
-    public bool CanStartWithWindows => AppSettings.CanStartWithWindows;
+    public bool CanStartAtLogin => AppSettings.CanStartAtLogin;
 
-    public bool StartWithWindows
+    public bool StartAtLogin
     {
-        get => _startWithWindows;
+        get => _startAtLogin;
         set
         {
-            if (!SetProperty(ref _startWithWindows, value))
+            if (!SetProperty(ref _startAtLogin, value))
             {
                 return;
             }
 
             try
             {
-                AppSettings.SetStartWithWindows(value);
-                Status = value ? "DeckHost starts when you sign in to Windows." : "DeckHost no longer starts with Windows.";
+                AppSettings.SetStartAtLogin(value);
+                Status = value ? "DeckHost starts when you sign in." : "DeckHost no longer starts when you sign in.";
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
             {
-                Status = $"Could not change the Windows start-up entry: {ex.Message}";
+                Status = $"Could not change the start-up entry: {ex.Message}";
             }
         }
     }
@@ -86,6 +86,8 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
     }
 
     public bool HasStatus => Status.Length > 0;
+
+    public string VersionText { get; } = $"DeckHost {AppInfo.Version} on {System.Runtime.InteropServices.RuntimeInformation.OSDescription}";
 
     public string DataDirectory { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost");
 

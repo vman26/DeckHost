@@ -22,6 +22,9 @@
     <NativeBridgeBuildStamp>$(NativeBridgeBuildDir)/MiraBoxBridge.$(Configuration).stamp</NativeBridgeBuildStamp>
     <StreamDockSdkDir>$(MSBuildProjectDirectory)/../native/StreamDock-SDK</StreamDockSdkDir>
     <StreamDockSdkPatch>$(MSBuildProjectDirectory)/../native/patches/streamdock-sdk.patch</StreamDockSdkPatch>
+    <!-- Extra CMake arguments for the bridge, e.g. -DOpenCV_DIR=... for a static OpenCV on Linux
+         (scripts/build-opencv-static.sh). -->
+    <MiraBoxCMakeArgs Condition="'$(MiraBoxCMakeArgs)' == ''"></MiraBoxCMakeArgs>
   </PropertyGroup>
 
   <ItemGroup>
@@ -80,7 +83,7 @@
           Outputs="$(NativeBridgeConfigureStamp)"
           Condition="'$(IsSupportedMiraBoxBuildPlatform)' == 'true' and '$(EnableMiraBoxNativeBuild)' == 'true' and '$(HasCMake)' == 'true'">
     <MakeDir Directories="$(NativeBridgeBuildDir)" />
-    <Exec Command="$(CMakeCommand) -S &quot;$(NativeBridgeProjectDir)&quot; -B &quot;$(NativeBridgeBuildDir)&quot;" />
+    <Exec Command="$(CMakeCommand) -S &quot;$(NativeBridgeProjectDir)&quot; -B &quot;$(NativeBridgeBuildDir)&quot; -DCMAKE_BUILD_TYPE=$(Configuration) $(MiraBoxCMakeArgs)" />
   </Target>
 
   <Target Name="BuildMiraBoxBridge"

@@ -1,0 +1,8 @@
+# MiraBox / StreamDock N4 Pro (both USB ids): give the person signed in at the computer access to the
+# device, so DeckHost can run without root. "uaccess" (systemd-logind) grants it to the active
+# session only, unlike the SDK's sample rule, which makes the device writable for every user.
+# The number must stay below 73, where systemd applies uaccess.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1008", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1021", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1008", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1021", TAG+="uaccess"

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=DeckHost
+GenericName=Control surface host
+Comment=Map actions onto the MiraBox / StreamDock N4 Pro
+Exec="@EXEC@"
+Icon=deckhost
+Terminal=false
+Categories=Utility;
+StartupWMClass=DeckHost.App
