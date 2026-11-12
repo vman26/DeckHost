@@ -58,4 +58,21 @@ public interface IRenderContext
 
     /// <summary>Draws an image file scaled to cover the control. Returns false when the file can't be decoded.</summary>
     bool DrawImageFile(string path);
+
+    /// <summary>
+    /// Draws an icon: SVG path data on a 24×24 grid (see <see cref="Icons"/>), filled with the
+    /// even-odd rule, centered on the point and scaled to <paramref name="size"/> pixels.
+    /// (Default members: plugins built against earlier versions keep loading.)
+    /// </summary>
+    void DrawIcon(string svgPathData, double centerX, double centerY, double size, uint argbColor = 0xFFFFFFFF)
+    {
+    }
+
+    /// <summary>A rounded rectangle with a diagonal gradient, top left to bottom right.</summary>
+    void FillGradientRect(double x, double y, double width, double height, double radius, uint fromArgb, uint toArgb) =>
+        FillRoundedRect(x, y, width, height, radius, fromArgb);
+
+    /// <summary>Draws text with its right edge at <paramref name="right"/> (<paramref name="baselineY"/> is the baseline).</summary>
+    void DrawRightAlignedText(string text, double right, double baselineY, float size, uint argbColor = 0xFFFFFFFF) =>
+        DrawText(text, right - (text.Length * size * 0.55), baselineY, size, argbColor);
 }

@@ -17,6 +17,10 @@ internal sealed class MultiActionAction() : DeckActionBase(
     "Runs several actions in order. Add steps in Customize, or drop actions onto the control.")
 {
     public override bool CanBeMultiActionStep => false;
+
+    protected override string? Icon(IRenderContext context) => Icons.Stack;
+
+    protected override (uint From, uint To) TileColors => Palette.Multi;
 }
 
 /// <summary>
@@ -122,6 +126,12 @@ internal sealed class SwitchProfileAction() : DeckActionBase(
     }
 
     protected override string? Subtitle(IRenderContext context) => null;
+
+    protected override string? Icon(IRenderContext context) => Icons.SwitchProfile;
+
+    protected override (uint From, uint To) TileColors => Palette.Profiles;
+
+    protected override string? Caption(IRenderContext context) => Title(context);
 }
 
 internal sealed class ClockAction() : DeckActionBase(
@@ -157,9 +167,10 @@ internal sealed class ClockAction() : DeckActionBase(
             return;
         }
 
+        DrawTileBackground(context, Palette.Clock);
         var label = ResolveDisplayText(context, now.ToString("ddd d MMM", CultureInfo.CurrentCulture));
         context.DrawCenteredText(now.ToString(context.Settings.Get(FormatKey, "HH:mm"), CultureInfo.CurrentCulture), context.Width / 2d, context.Height * 0.44d, Math.Max(14f, context.Height * 0.24f));
-        context.DrawCenteredText(label, context.Width / 2d, context.Height * 0.76d, SubtitleSize(context), SecondaryTextColor);
+        context.DrawCenteredText(label, context.Width / 2d, context.Height * 0.74d, SubtitleSize(context), 0xFFC7D2FE);
     }
 }
 
@@ -198,14 +209,7 @@ internal sealed class CounterAction() : DeckActionBase(
     public override void Render(IRenderContext context)
     {
         context.Variables.TryGetValue<int>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.Counter), out var count);
-        if (context.IsCompact)
-        {
-            DrawCompact(context, $"{ResolveDisplayText(context, Name)} {count.ToString(CultureInfo.CurrentCulture)}".Trim());
-            return;
-        }
-
-        context.DrawCenteredText(ResolveDisplayText(context, Name), context.Width / 2d, context.Height * 0.28d, SubtitleSize(context), SecondaryTextColor);
-        context.DrawCenteredText(count.ToString(CultureInfo.CurrentCulture), context.Width / 2d, context.Height * 0.62d, Math.Max(16f, context.Height * 0.3f));
+        context.DrawReading(ResolveDisplayText(context, Name), count.ToString(CultureInfo.CurrentCulture), null, SecondaryTextColor, Icons.Counter);
     }
 }
 
