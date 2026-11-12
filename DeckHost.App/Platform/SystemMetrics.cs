@@ -9,7 +9,7 @@ namespace DeckHost.App.Platform;
 
 /// <summary>
 /// System readings for the System Info action. CPU usage is measured between calls, so the
-/// first reading after start is 0. Windows and Linux are supported; elsewhere values are null.
+/// first reading after start is 0. Windows, Linux and macOS are supported; elsewhere values are null.
 /// </summary>
 internal static class SystemMetrics
 {
@@ -70,6 +70,11 @@ internal static class SystemMetrics
             return total == 0 ? null : (total - available, total);
         }
 
+        if (OperatingSystem.IsMacOS())
+        {
+            return MacNative.Memory();
+        }
+
         return null;
     }
 
@@ -122,6 +127,11 @@ internal static class SystemMetrics
                 .Select(value => ulong.Parse(value, CultureInfo.InvariantCulture)).ToArray();
             var idle = fields[3] + (fields.Length > 4 ? fields[4] : 0);
             return (idle, fields.Aggregate(0UL, (sum, value) => sum + value));
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return MacNative.CpuTicks();
         }
 
         return null;

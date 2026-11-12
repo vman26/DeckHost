@@ -6,26 +6,19 @@ using DeckHost.Contracts.Models;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace DeckHost.App.SystemPlugins;
 
 /// <summary>Sends a media key, which the active media app (Spotify, a browser, ...) responds to.</summary>
-internal sealed class MediaKeyAction(string id, string name, ushort virtualKey) : DeckActionBase(
+internal sealed class MediaKeyAction(string id, string name, MediaKey key) : DeckActionBase(
     id,
     name,
     InputCapabilities.Press,
     OutputCapabilities.None,
     $"Sends the {name} media key to the app that is playing.")
 {
-    protected override void Run(ActionContext context) => RunGuarded(context, () =>
-    {
-        RequireWindows();
-        if (OperatingSystem.IsWindows())
-        {
-            WindowsInput.TapKey(virtualKey);
-        }
-    });
+    protected override void Run(ActionContext context) => RunQueued(context, () => SystemControl.SendMediaKey(key));
 
     protected override string? Subtitle(IRenderContext context) => null;
 }
@@ -47,7 +40,7 @@ internal sealed class VolumeKnobAction() : DeckActionBase(
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
-        new(StepKey, "Volume steps per click", ActionSettingKind.Number, "1", Description: "Each step is 2% on most systems.") { Range = new(1, 10) },
+        new(StepKey, "Volume steps per click", ActionSettingKind.Number, "1", Description: "One step is one press of a volume key: 2% on Windows and Linux, 1/16 on macOS.") { Range = new(1, 10) },
     ];
 
     public override bool CanBeMultiActionStep => false;
@@ -57,25 +50,20 @@ internal sealed class VolumeKnobAction() : DeckActionBase(
 
     protected override void Run(ActionContext context)
     {
-        RunGuarded(context, () =>
-        {
-            RequireWindows();
-            if (!OperatingSystem.IsWindows())
+        var steps = Math.Clamp(context.Settings.GetInt(StepKey, 1), 1, 10) * Math.Max(1, Math.Abs(context.Value));
+        var key = context.EventType == InputCapabilities.Press ? MediaKey.Mute
+            : context.Value < 0 ? MediaKey.VolumeDown
+            : MediaKey.VolumeUp;
+
+        // After the change, read the level again so the display follows right away.
+        RunQueued(
+            context,
+            () => SystemControl.SendMediaKey(key, key == MediaKey.Mute ? 1 : steps),
+            () =>
             {
-                return;
-            }
-
-            if (context.EventType == InputCapabilities.Press)
-            {
-                WindowsInput.TapKey(WindowsInput.VkVolumeMute);
-                return;
-            }
-
-            var steps = Math.Clamp(context.Settings.GetInt(StepKey, 1), 1, 10) * Math.Abs(context.Value);
-            WindowsInput.TapKey(context.Value < 0 ? WindowsInput.VkVolumeDown : WindowsInput.VkVolumeUp, steps);
-        });
-
-        _ = Task.Delay(LevelSettleDelay).ContinueWith(_ => context.Host.RequestRender(context.DeviceId), TaskScheduler.Default);
+                Thread.Sleep(LevelSettleDelay);
+                SystemVolume.Refresh();
+            });
     }
 
     protected override string Title(IRenderContext context) => "Volume";
@@ -111,12 +99,6 @@ internal sealed class TrackSwipeAction() : DeckActionBase(
 {
     public override bool CanBeMultiActionStep => false;
 
-    protected override void Run(ActionContext context) => RunGuarded(context, () =>
-    {
-        RequireWindows();
-        if (OperatingSystem.IsWindows())
-        {
-            WindowsInput.TapKey(context.Value < 0 ? WindowsInput.VkMediaPrevTrack : WindowsInput.VkMediaNextTrack);
-        }
-    });
+    protected override void Run(ActionContext context) =>
+        RunQueued(context, () => SystemControl.SendMediaKey(context.Value < 0 ? MediaKey.Previous : MediaKey.Next));
 }

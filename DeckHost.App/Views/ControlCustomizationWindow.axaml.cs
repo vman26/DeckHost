@@ -20,6 +20,15 @@ public partial class ControlCustomizationWindow : Window
         AddHandler(KeyDownEvent, OnRecorderKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, OnRecorderKeyUp, RoutingStrategies.Tunnel);
 
+        if (!WebView2Host.IsSupported)
+        {
+            // WebView2 is Windows-only; elsewhere the plugin's page opens in the default browser.
+            SettingsBrowser.IsVisible = false;
+            SettingsBrowserError.Text = "Plugin settings pages open in your web browser on this system. Use Open in browser above; changes there are saved straight to the plugin.";
+            SettingsBrowserError.Foreground = Avalonia.Media.Brushes.LightSteelBlue;
+            SettingsBrowserError.IsVisible = true;
+        }
+
         SettingsBrowser.Failed += message => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             SettingsBrowser.IsVisible = false;
@@ -29,7 +38,7 @@ public partial class ControlCustomizationWindow : Window
 
         DataContextChanged += (_, _) =>
         {
-            if (DataContext is ControlCustomizationViewModel { ShowSettingsPage: true })
+            if (DataContext is ControlCustomizationViewModel { ShowSettingsPage: true } && WebView2Host.IsSupported)
             {
                 // Room for the plugin's settings page next to the editor.
                 Width = 1120;

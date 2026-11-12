@@ -7,22 +7,64 @@ on:
   # Run it by hand on any branch from the Actions tab.
   workflow_dispatch:
 
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  OPENCV_VERSION: 4.10.0
+
 jobs:
   build:
-    runs-on: windows-latest
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux builds on the oldest supported Ubuntu, so the binaries also run on older glibc.
+        # macOS: Apple Silicon only; the StreamDock SDK ships its transport library for arm64 only.
+        os: [windows-latest, ubuntu-22.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
+          fetch-depth: 0 # MinVer reads the version from the tags
 
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
-      # Builds the C# projects and, through DeckHost.Device.MiraBox.csproj, the native bridge
-      # (the StreamDock SDK patch is applied automatically). CMake ships with the runner image.
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev libgif-dev
+
+      # A small static OpenCV, so the bridge doesn't depend on the distribution's OpenCV.
+      - name: Cache static OpenCV
+        if: runner.os == 'Linux'
+        id: opencv
+        uses: actions/cache@v4
+        with:
+          path: ~/opencv-static
+          key: opencv-${{ env.OPENCV_VERSION }}-static-${{ matrix.os }}-${{ hashFiles('scripts/build-opencv-static.sh') }}
+
+      - name: Build static OpenCV
+        if: runner.os == 'Linux' && steps.opencv.outputs.cache-hit != 'true'
+        run: scripts/build-opencv-static.sh "$HOME/opencv-static"
+
       - name: Build
-        run: dotnet build DeckHost.slnx -c Release
+        run: |
+          args=()
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            args+=("-p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4")
+          fi
+          dotnet build DeckHost.slnx -c Release "${args[@]}"
 
       - name: Test
         run: dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release --no-build
+
+      # Loads the native bridge from the app's plugin folder, as the app does, and lists devices.
+      - name: Check the native bridge
+        run: dotnet DeckHost.App/bin/Release/net10.0/DeckHost.App.dll --check-native

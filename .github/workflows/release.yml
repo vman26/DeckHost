@@ -1,0 +1,151 @@
+name: release
+
+# Push a tag like v1.2.0 (or v1.2.0-beta.1 for a pre-release) to build, package and publish a
+# GitHub release. Started by hand it only builds the packages, as workflow artifacts.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  OPENCV_VERSION: 4.10.0
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: package (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-22.04
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Version
+        id: version
+        run: |
+          dotnet tool install --global minver-cli --version 6.0.0
+          version="$(minver --tag-prefix v --minimum-major-minor 0.1 --default-pre-release-identifiers alpha.0)"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "v$version" != "$GITHUB_REF_NAME" ]]; then
+            echo "The tag $GITHUB_REF_NAME doesn't give the version $version (is it a valid vMAJOR.MINOR.PATCH tag?)." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "numeric=${version%%-*}" >> "$GITHUB_OUTPUT"
+          echo "DeckHost $version"
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev libgif-dev imagemagick
+
+      - name: Cache static OpenCV
+        if: runner.os == 'Linux'
+        id: opencv
+        uses: actions/cache@v4
+        with:
+          path: ~/opencv-static
+          key: opencv-${{ env.OPENCV_VERSION }}-static-${{ matrix.os }}-${{ hashFiles('scripts/build-opencv-static.sh') }}
+
+      - name: Build static OpenCV
+        if: runner.os == 'Linux' && steps.opencv.outputs.cache-hit != 'true'
+        run: scripts/build-opencv-static.sh "$HOME/opencv-static"
+
+      - name: Test
+        run: |
+          args=()
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            args+=("-p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4")
+          fi
+          dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release "${args[@]}"
+
+      - name: Publish
+        run: |
+          args=()
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            args+=("-p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4")
+          fi
+          dotnet publish DeckHost.App/DeckHost.App.csproj -c Release -r ${{ matrix.rid }} --self-contained \
+            -o publish/DeckHost "${args[@]}"
+
+      # The published app must load its native bridge on a clean machine.
+      - name: Check the native bridge
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            publish/DeckHost/DeckHost.App.exe --check-native
+          else
+            publish/DeckHost/DeckHost.App --check-native
+          fi
+
+      - name: Package (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: scripts/package.sh ${{ matrix.rid }} ${{ steps.version.outputs.version }} publish/DeckHost artifacts/release
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          New-Item -ItemType Directory -Force artifacts/release | Out-Null
+          Compress-Archive -Path publish/DeckHost -DestinationPath "artifacts/release/DeckHost-$version-win-x64.zip"
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress | Out-Null
+            $env:Path += ";${env:ProgramFiles(x86)}\Inno Setup 6"
+          }
+          iscc /Qp "/DAppVersion=$version" "/DNumericVersion=${{ steps.version.outputs.numeric }}" `
+            "/DSourceDir=$PWD\publish\DeckHost" "/DOutputDir=$PWD\artifacts\release" packaging/windows/DeckHost.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeckHost-${{ steps.version.outputs.version }}-${{ matrix.rid }}
+          path: artifacts/release/*
+          if-no-files-found: error
+
+  release:
+    needs: package
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: artifacts
+        run: sha256sum * > SHA256SUMS.txt
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=()
+          if [[ "$TAG" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "DeckHost ${TAG#v}" --generate-notes "${prerelease[@]}"

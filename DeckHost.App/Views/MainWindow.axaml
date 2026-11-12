@@ -231,8 +231,10 @@
 								  Content="Test mode"
 								  ToolTip.Tip="Click controls to press them, mouse wheel turns knobs. Runs the real actions." />
 					<TextBlock DockPanel.Dock="Right"
+							   Margin="16,0,0,0"
 							   Text="{Binding StatusMessage}"
 							   VerticalAlignment="Center"
+							   TextAlignment="Right"
 							   Foreground="#94A3B8"
 							   TextTrimming="CharacterEllipsis" />
 				</DockPanel>

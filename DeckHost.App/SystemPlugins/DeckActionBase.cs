@@ -199,12 +199,22 @@ internal abstract class DeckActionBase(
         }
     }
 
-    protected static void RequireWindows()
+    /// <summary>
+    /// Runs simulated input (keys, media, volume, locking) on <see cref="Platform.SystemControl"/>'s
+    /// queue: in order with other input, off the host worker. A failure is shown on the control
+    /// until the next successful run; <paramref name="after"/> runs either way.
+    /// </summary>
+    protected static void RunQueued(ActionContext context, Action work, Action? after = null)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            throw new PlatformNotSupportedException("Windows only");
-        }
+        var errorKey = VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.LastError);
+        _ = Platform.SystemControl.Enqueue(work).ContinueWith(
+            task =>
+            {
+                context.Variables.Publish(errorKey, task.Exception is { } failure ? ShortError(failure) : string.Empty);
+                after?.Invoke();
+                context.Host.RequestRender(context.DeviceId);
+            },
+            TaskScheduler.Default);
     }
 
     /// <summary>The binding's custom text; no text when it only shows an image; else the fallback.</summary>
@@ -250,7 +260,7 @@ internal sealed class SystemPlugin(string id, string name, string description, p
 
     public string? Description { get; } = description;
 
-    public string Version => typeof(SystemPlugin).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+    public string Version => AppInfo.Version;
 
     public string? Author => "DeckHost";
 

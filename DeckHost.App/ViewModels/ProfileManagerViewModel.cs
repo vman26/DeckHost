@@ -153,6 +153,8 @@ public partial class ProfileManagerViewModel : ViewModelBase
 
     public bool AutoSwitchUnsupported => !_main.AutoSwitchSupported;
 
+    public string AutoSwitchUnsupportedReason => Platform.ForegroundAppWatcher.UnsupportedReason;
+
     public string CurrentAppName => _main.CurrentAppName;
 
     public string NewAppName

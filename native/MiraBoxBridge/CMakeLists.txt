@@ -27,7 +27,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(MIRABOX_BUNDLED_HIDAPI "${CMAKE_CURRENT_SOURCE_DIR}/../StreamDock-SDK/CPP-SDK/third_party/hidapi-master.zip")
 if(EXISTS "${MIRABOX_BUNDLED_HIDAPI}")
     include(FetchContent)
-    FetchContent_Declare(hidapi URL "${MIRABOX_BUNDLED_HIDAPI}")
+    FetchContent_Declare(hidapi URL "${MIRABOX_BUNDLED_HIDAPI}" DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 endif()
 
 # 1. Add the vendor's SDK folder. 
@@ -111,6 +111,30 @@ endif()
 if(WIN32)
     add_custom_command(TARGET MiraBoxBridge POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:MiraBoxBridge> $<TARGET_FILE_DIR:MiraBoxBridge>
+        COMMAND_EXPAND_LISTS
+    )
+else()
+    # Linux and macOS: the bridge finds its libraries next to itself (the app's plugin folder),
+    # not at the absolute paths of this build machine. Everything it loads is copied there.
+    if(APPLE)
+        set(MIRABOX_RPATH "@loader_path")
+    else()
+        set(MIRABOX_RPATH "$ORIGIN")
+    endif()
+    set_target_properties(MiraBoxBridge PROPERTIES
+        BUILD_WITH_INSTALL_RPATH ON
+        INSTALL_RPATH "${MIRABOX_RPATH}"
+    )
+
+    set(MIRABOX_RUNTIME_LIBS "$<TARGET_FILE:TransportDLL>")
+    if(APPLE)
+        # The SDK links the OpenCV dylibs it ships for macOS; they go along (by their versioned name).
+        file(GLOB MIRABOX_OPENCV_DYLIBS "${CMAKE_CURRENT_SOURCE_DIR}/../StreamDock-SDK/CPP-SDK/ImgProcesser/third_party/opencv/mac/lib/libopencv_*.*.dylib")
+        list(APPEND MIRABOX_RUNTIME_LIBS ${MIRABOX_OPENCV_DYLIBS})
+    endif()
+
+    add_custom_command(TARGET MiraBoxBridge POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MIRABOX_RUNTIME_LIBS} $<TARGET_FILE_DIR:MiraBoxBridge>
         COMMAND_EXPAND_LISTS
     )
 endif()
