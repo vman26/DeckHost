@@ -15,7 +15,9 @@
     <key>CFBundleShortVersionString</key>
     <string>@SHORT_VERSION@</string>
     <key>CFBundleVersion</key>
-    <string>@VERSION@</string>
+    <string>@SHORT_VERSION@</string>
+    <key>DeckHostVersion</key>
+    <string>@FULL_VERSION@</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>NSHighResolutionCapable</key>

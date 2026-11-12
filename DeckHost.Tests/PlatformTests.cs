@@ -120,3 +120,16 @@ public class PlatformTests
         Assert.DoesNotContain("/usr/bin/open", bare);
     }
 }
+
+public class AppVersionTests
+{
+    [Theory]
+    [InlineData("1.2.0+4b09090a51839e513f29debdadc8d634e737d2f3", "1.2.0")]
+    [InlineData("1.2.1-alpha.0.3+4b09090a51839e513f29debdadc8d634e737d2f3", "1.2.1-alpha.0.3+4b09090")]
+    [InlineData("1.0.0-beta.1+4b09090a51839e513f29debdadc8d634e737d2f3", "1.0.0-beta.1+4b09090")]
+    [InlineData("1.0.0-rc.2.5+build.4b09090a51839e513f29debdadc8d634e737d2f3", "1.0.0-rc.2.5+4b09090")]
+    [InlineData("1.2.1-alpha.0.3", "1.2.1-alpha.0.3")]
+    [InlineData(null, "0.0.0")]
+    public void Pre_releases_show_their_commit(string? informational, string expected) =>
+        Assert.Equal(expected, DeckHost.App.AppInfo.Describe(informational, null));
+}

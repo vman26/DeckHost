@@ -46,6 +46,9 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          # On a pull request: the branch's commit, not GitHub's temporary merge commit, so the
+          # commit in a pre-release's version can be looked up.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -60,9 +63,20 @@ jobs:
             echo "The tag $GITHUB_REF_NAME doesn't give the version $version (is it a valid vMAJOR.MINOR.PATCH tag?)." >&2
             exit 1
           fi
+          # Pre-releases carry the commit they were built from (as the app shows it):
+          # display 0.1.0-alpha.0.11+4b09090, file names 0.1.0-alpha.0.11-4b09090.
+          display="$version"
+          file="$version"
+          if [[ "$version" == *-* ]]; then
+            commit="$(git rev-parse --short=7 HEAD)"
+            display="$version+$commit"
+            file="$version-$commit"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "display=$display" >> "$GITHUB_OUTPUT"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
           echo "numeric=${version%%-*}" >> "$GITHUB_OUTPUT"
-          echo "DeckHost $version"
+          echo "DeckHost $display"
 
       - name: Linux build dependencies
         if: runner.os == 'Linux'
@@ -111,25 +125,25 @@ jobs:
 
       - name: Package (Linux, macOS)
         if: runner.os != 'Windows'
-        run: scripts/package.sh ${{ matrix.rid }} ${{ steps.version.outputs.version }} publish/DeckHost artifacts/release
+        run: scripts/package.sh ${{ matrix.rid }} "${{ steps.version.outputs.file }}" publish/DeckHost artifacts/release "${{ steps.version.outputs.display }}"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.version }}"
+          $file = "${{ steps.version.outputs.file }}"
           New-Item -ItemType Directory -Force artifacts/release | Out-Null
-          Compress-Archive -Path publish/DeckHost -DestinationPath "artifacts/release/DeckHost-$version-win-x64.zip"
+          Compress-Archive -Path publish/DeckHost -DestinationPath "artifacts/release/DeckHost-$file-win-x64.zip"
           if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
             choco install innosetup -y --no-progress | Out-Null
             $env:Path += ";${env:ProgramFiles(x86)}\Inno Setup 6"
           }
-          iscc /Qp "/DAppVersion=$version" "/DNumericVersion=${{ steps.version.outputs.numeric }}" `
+          iscc /Qp "/DAppVersion=${{ steps.version.outputs.display }}" "/DFileVersion=$file" "/DNumericVersion=${{ steps.version.outputs.numeric }}" `
             "/DSourceDir=$PWD\publish\DeckHost" "/DOutputDir=$PWD\artifacts\release" packaging/windows/DeckHost.iss
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DeckHost-${{ steps.version.outputs.version }}-${{ matrix.rid }}
+          name: DeckHost-${{ steps.version.outputs.file }}-${{ matrix.rid }}
           path: artifacts/release/*
           if-no-files-found: error
 

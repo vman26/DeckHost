@@ -3,7 +3,10 @@
 #   linux-*  DeckHost-<version>-<rid>.tar.gz  the app, install.sh, desktop entry, udev rule
 #   osx-*    DeckHost-<version>-<rid>.zip     DeckHost.app (ad-hoc signed)
 #
-#   scripts/package.sh <rid> <version> <publish-dir> <output-dir>
+#   scripts/package.sh <rid> <version> <publish-dir> <output-dir> [display-version]
+#
+# <version> goes into file names (a pre-release: 1.2.1-alpha.0.3-4b09090); the display version
+# is what users see (1.2.1-alpha.0.3+4b09090), by default the same.
 set -euo pipefail
 
 rid="${1:?rid}"
@@ -11,6 +14,7 @@ version="${2:?version}"
 publish="$(cd "${3:?publish dir}" && pwd)"
 mkdir -p "${4:?output dir}"
 output="$(cd "$4" && pwd)"
+display="${5:-$version}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
@@ -28,7 +32,7 @@ case "$rid" in
             convert "$root/DeckHost.App/Assets/avalonia-logo.ico[0]" -resize 256x256 "$folder/deckhost.png" 2>/dev/null || true
         fi
         cat > "$folder/README.txt" <<TEXT
-DeckHost ${version} for Linux (${rid})
+DeckHost ${display} for Linux (${rid})
 
 Install for your user (asks for sudo once, for the device rule):
     ./install.sh
@@ -48,8 +52,10 @@ TEXT
         app="$stage/DeckHost.app"
         mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
         cp -a "$publish/." "$app/Contents/MacOS/"
+        # CFBundleShortVersionString and CFBundleVersion must be plain numbers (1.2.1); the full
+        # version, with a pre-release's commit, goes in DeckHostVersion.
         short="${version%%-*}"
-        sed -e "s|@SHORT_VERSION@|${short}|" -e "s|@VERSION@|${version}|" "$root/packaging/macos/Info.plist" > "$app/Contents/Info.plist"
+        sed -e "s|@SHORT_VERSION@|${short}|" -e "s|@FULL_VERSION@|${display}|" "$root/packaging/macos/Info.plist" > "$app/Contents/Info.plist"
         chmod +x "$app/Contents/MacOS/DeckHost.App"
         # Apple Silicon only runs signed code; an ad-hoc signature is enough without a developer ID.
         # codesign counts every file in Contents/MacOS as code (the .NET .dll files too), so each
