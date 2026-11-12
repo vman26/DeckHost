@@ -638,15 +638,21 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     }
 
     /// <summary>
-    /// The control a tap really belongs to: when the tapped display has no action of its own and
-    /// shows a linked control's action instead, that control. Null for every other input.
+    /// The control a tap really belongs to: when the tapped display has nothing of its own (see
+    /// <see cref="ControlRenderer.HasOwnContent"/>) and shows a linked control's action instead,
+    /// that control. Null for every other input.
     /// </summary>
     private string? FindTapTarget(DeviceProfile profile, DeviceInputEvent inputEvent)
     {
         if (inputEvent.EventType != InputCapabilities.Press ||
             !_devicesById.TryGetValue(inputEvent.DeviceId, out var entry) ||
-            entry.Device.FindControl(inputEvent.ControlId) is not { HasImageOutput: true } display ||
-            FindBinding(profile, display.Id) is not null)
+            entry.Device.FindControl(inputEvent.ControlId) is not { HasImageOutput: true } display)
+        {
+            return null;
+        }
+
+        var own = FindBinding(profile, display.Id);
+        if (ControlRenderer.HasOwnContent(own, own is null ? null : _actionRouter.FindAction(own.Action)))
         {
             return null;
         }
