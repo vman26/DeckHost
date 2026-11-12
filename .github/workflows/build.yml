@@ -22,6 +22,7 @@ jobs:
         # macOS: Apple Silicon only; the StreamDock SDK ships its transport library for arm64 only.
         os: [windows-latest, ubuntu-22.04, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     defaults:
       run:
         shell: bash
@@ -39,7 +40,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libudev-dev libgif-dev
+          sudo apt-get install -y --no-install-recommends libudev-dev libgif-dev libusb-1.0-0-dev
 
       # A small static OpenCV, so the bridge doesn't depend on the distribution's OpenCV.
       - name: Cache static OpenCV
@@ -67,4 +68,5 @@ jobs:
 
       # Loads the native bridge from the app's plugin folder, as the app does, and lists devices.
       - name: Check the native bridge
+        timeout-minutes: 2
         run: dotnet DeckHost.App/bin/Release/net10.0/DeckHost.App.dll --check-native
