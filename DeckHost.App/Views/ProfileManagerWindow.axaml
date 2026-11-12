@@ -49,7 +49,7 @@
 						<Run Text="Active app: " />
 						<Run Text="{Binding CurrentAppName}" FontWeight="SemiBold" Foreground="#E2E8F0" />
 					</TextBlock>
-					<TextBlock Classes="hint" IsVisible="{Binding AutoSwitchUnsupported}" Text="Automatic switching is Windows only." />
+					<TextBlock Classes="hint" IsVisible="{Binding AutoSwitchUnsupported}" Text="{Binding AutoSwitchUnsupportedReason}" />
 				</StackPanel>
 			</Grid>
 		</Border>

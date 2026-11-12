@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>DeckHost</string>
+    <key>CFBundleDisplayName</key>
+    <string>DeckHost</string>
+    <key>CFBundleIdentifier</key>
+    <string>app.deckhost.DeckHost</string>
+    <key>CFBundleExecutable</key>
+    <string>DeckHost.App</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@SHORT_VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@VERSION@</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright (c) 2026 Marco Veltman. MIT License.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>DeckHost sends keys and text to other apps through System Events when you press a Hotkey, Type Text or Lock action.</string>
+</dict>
+</plist>

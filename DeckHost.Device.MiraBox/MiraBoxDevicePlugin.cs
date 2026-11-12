@@ -60,6 +60,48 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         return problems;
     }
 
+    /// <summary>
+    /// Loads the native bridge, lists the connected StreamDock devices and unloads it again: checks
+    /// an installation without opening the app (<c>DeckHost --check-native</c>). Not while the
+    /// plugin itself is initialized.
+    /// </summary>
+    public static (bool Ok, string Report) CheckNativeBridge()
+    {
+        try
+        {
+            var result = MiraBoxNative.Initialize();
+            if (result != 0)
+            {
+                return (false, $"The MiraBox bridge loaded but could not start: {MiraBoxNative.Describe(result)}.");
+            }
+
+            try
+            {
+                var lines = new List<string> { "MiraBox bridge loaded." };
+                var count = MiraBoxNative.GetDeviceCount();
+                lines.Add($"StreamDock devices found: {Math.Max(0, count)}");
+                for (var index = 0; index < count; index++)
+                {
+                    if (MiraBoxNative.GetDeviceKey(index) is { } key &&
+                        MiraBoxDeviceInfo.FromJson(MiraBoxNative.GetDeviceInfoJson(key, out _)) is { } info)
+                    {
+                        lines.Add($"  {(info.IsN4Pro ? "N4 Pro" : $"model {info.OriginType}")} {info.VendorId:X4}:{info.ProductId:X4}, serial {info.SerialNumber}, firmware {info.FirmwareVersion}");
+                    }
+                }
+
+                return (true, string.Join(Environment.NewLine, lines));
+            }
+            finally
+            {
+                MiraBoxNative.Shutdown();
+            }
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        {
+            return (false, $"The MiraBox bridge could not be loaded from {Path.Combine(AppContext.BaseDirectory, "plugins", "device", "deckhost.device.mirabox")}: {ex.Message}");
+        }
+    }
+
     public const string PrimaryDeviceId = "mirabox.n4pro";
     private const string DeviceName = "MiraBox N4 Pro";
     private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);

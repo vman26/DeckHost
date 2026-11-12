@@ -10,13 +10,42 @@ The first supported device is the **MiraBox / StreamDock N4 Pro**: 10 LCD keys, 
 - **One runtime worker:** input, actions, rendering and USB I/O run on a single background worker, so native SDK callbacks return immediately and the UI thread never waits on the device.
 - **Reactive state:** a thread-safe Rx.NET variable store connects actions and renderers.
 - **Saved profiles:** mappings are stored in `%AppData%/DeckHost/profiles.json` (or the platform equivalent).
-- **Cross-platform:** .NET 10 and Avalonia UI. The native bridge builds on Windows, Linux and macOS; Windows is the primary development platform.
+- **Cross-platform:** .NET 10 and Avalonia UI on Windows, Linux and macOS (Apple Silicon). Windows is the primary development platform.
+
+## Download and install
+
+Releases are on the repository's **Releases** page, one package per platform:
+
+| Platform | Package | Install |
+|---|---|---|
+| Windows 10/11 (x64) | `DeckHost-<version>-win-x64-setup.exe` | Run it. Installs for your user (no administrator rights), with a Start menu entry and uninstaller. A plain `.zip` is there too. |
+| Linux (x64) | `DeckHost-<version>-linux-x64.tar.gz` | Unpack and run `./install.sh`: installs to `~/.local/share/deckhost` with a menu entry, and (with sudo, once) the udev rule that lets you use the N4 Pro without root. `./install.sh --uninstall` removes it. |
+| macOS 12+ (Apple Silicon) | `DeckHost-<version>-osx-arm64.zip` | Unzip and move **DeckHost.app** to Applications. It isn't notarized: the first time, right-click → **Open**, or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`. |
+
+`SHA256SUMS.txt` lists the checksums. To check that the device support is installed without opening the window, run DeckHost with `--check-native`: it loads the native bridge and lists the StreamDock devices it finds.
+
+### What works where
+
+| | Windows | Linux | macOS |
+|---|---|---|---|
+| N4 Pro (keys, touch strip, knobs, LEDs, settings) | ✓ | ✓ (udev rule) | ✓ |
+| Media keys, volume | ✓ | playerctl; wpctl, pactl or amixer | ✓ (volume HUD) |
+| Hotkey, Type Text | ✓ | xdotool (X11) or wtype (Wayland) | ✓ (Accessibility permission) |
+| Lock computer | ✓ | loginctl or xdg-screensaver | ✓ (Accessibility permission) |
+| Volume Knob level on the touch strip | ✓ | wpctl, pactl or amixer | ✓ |
+| Automatic profile switching | ✓ | X11 / XWayland apps, needs xprop | ✓ |
+| Start at sign-in, tray | ✓ | XDG autostart; tray needs a StatusNotifier host (KDE, most desktops; GNOME with the AppIndicator extension) | ✓ (LaunchAgent) |
+| Stream Deck plugins (native and Node.js) | ✓ | ✓ when the plugin ships a Linux build | ✓ when the plugin ships a macOS build |
+| Stream Deck HTML plugins, settings pages inside DeckHost | ✓ (WebView2) | settings pages open in your browser; HTML plugins don't run | same as Linux |
+
+On Linux, "close to tray" starts off, since not every desktop shows a tray icon; turn it on in DeckHost settings if yours does. The Linux tools above are optional: an action whose tool is missing shows which one to install.
 
 ## Building from source
 
 ### Prerequisites
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- CMake 3.21+ and a C++20 compiler (MSVC on Windows; Visual Studio's bundled CMake is detected automatically)
+- CMake 3.21+ and a C++20 compiler (MSVC on Windows; Visual Studio's bundled CMake is detected automatically; GCC or Clang on Linux; Xcode command line tools on macOS)
+- Linux only: OpenCV, giflib and libudev development packages (Ubuntu: `libopencv-dev libgif-dev libudev-dev`), or a static OpenCV from `scripts/build-opencv-static.sh` (what releases use).
 
 ### Steps
 ```powershell
@@ -29,7 +58,25 @@ dotnet test .\DeckHost.Tests
 
 `dotnet build` also configures and builds the native bridge (`native/MiraBoxBridge`) with CMake and copies it to `plugins/device/deckhost.device.mirabox/` next to the app. To build only the C# code, add `-p:EnableMiraBoxNativeBuild=false`; the app then starts without device support.
 
-The tests also run on Linux (`dotnet test DeckHost.Tests -p:EnableMiraBoxNativeBuild=false`). Building the native bridge there needs OpenCV, giflib and libudev development packages (on Ubuntu: `libopencv-dev libgif-dev libudev-dev`).
+The tests run on all three systems. On Linux, to build against the static OpenCV releases use:
+
+```bash
+scripts/build-opencv-static.sh ~/opencv-static
+dotnet build DeckHost.slnx -p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4
+```
+
+### Versions and releases
+
+Versions come from git tags ([MinVer](https://github.com/adamralph/minver)): building the commit tagged `v1.2.0` gives 1.2.0, later commits 1.2.1-alpha.0.N, and before the first tag 0.1.0-alpha.0.N. The app shows its version in **☰ → DeckHost settings** and in the log.
+
+To release, tag and push:
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.2.0-beta.1`) becomes a pre-release. Run the workflow by hand to get the packages as build artifacts without releasing.
 
 ## Plugins
 
@@ -110,13 +157,17 @@ You can also install a `.streamDeckPlugin` file with **Install plugin…**.
 
 **☰ → DeckHost settings** (or **Settings…** in the tray menu):
 
-- **Start DeckHost when I sign in to Windows**: adds DeckHost to your user's start-up programs (the `HKCU\…\Run` key; no admin rights needed).
-- **Start in the tray when started with Windows**: the device works without the window.
+- **Start DeckHost when I sign in**: Windows: the `HKCU\…\Run` key; Linux: `~/.config/autostart/deckhost.desktop`; macOS: a LaunchAgent (`~/Library/LaunchAgents/app.deckhost.DeckHost.plist`). No admin rights needed.
+- **Start in the tray when started at sign-in**: the device works without the window.
 - **Closing the window keeps DeckHost running in the tray**: use **Exit** in the tray menu to quit.
+
+The settings window also shows DeckHost's version.
 
 Only one DeckHost runs at a time: starting it again shows the running one. (Two instances would both read the device and run every action twice.)
 
 ### Folders and logs
+
+`%AppData%` is `~/.config` on Linux and `~/Library/Application Support` on macOS.
 
 | What | Where |
 |---|---|

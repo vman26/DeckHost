@@ -62,7 +62,7 @@ public partial class App : Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             mainWindow.Closing += (_, e) =>
             {
-                if (!exiting && settings.CloseToTray)
+                if (!exiting && settings.KeepsRunningInTray)
                 {
                     e.Cancel = true;
                     mainWindow.Hide();
@@ -99,7 +99,7 @@ public partial class App : Application
                 desktop.MainWindow = mainWindow;
             }
 
-            logger.LogInformation("DeckHost {Version} started.", typeof(App).Assembly.GetName().Version);
+            logger.LogInformation("DeckHost {Version} started on {OS}.", AppInfo.Version, System.Runtime.InteropServices.RuntimeInformation.OSDescription);
             _ = deviceHostService.StartAsync(CancellationToken.None);
 
             desktop.Exit += (_, _) =>

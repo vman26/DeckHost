@@ -129,19 +129,19 @@ internal sealed class HotkeyAction() : DeckActionBase(
         new(KeysKey, "Keys", ActionSettingKind.Hotkey, Placeholder: "Ctrl+Shift+M", Description: "Click Record and press the combination, or type it: Ctrl, Alt, Shift, Win plus one key (A-Z, 0-9, F1-F24, Enter, Tab, Esc, Space, arrows, Home, End, PageUp, PageDown, Delete, PrintScreen, media keys)."),
     ];
 
-    protected override void Run(ActionContext context) => RunGuarded(context, () =>
+    protected override void Run(ActionContext context)
     {
-        RequireWindows();
-        if (!Hotkey.TryParse(context.Settings.Get(KeysKey), out var hotkey, out var error))
+        var keys = context.Settings.Get(KeysKey);
+        RunQueued(context, () =>
         {
-            throw new InvalidOperationException(error);
-        }
+            if (!Hotkey.TryParse(keys, out var hotkey, out var error))
+            {
+                throw new InvalidOperationException(error);
+            }
 
-        if (OperatingSystem.IsWindows())
-        {
-            WindowsInput.SendChord(hotkey.Modifiers, hotkey.Key);
-        }
-    });
+            SystemControl.SendHotkey(hotkey);
+        });
+    }
 
     protected override string Title(IRenderContext context) => context.Settings.Get(KeysKey, Name);
 
@@ -162,14 +162,11 @@ internal sealed class TypeTextAction() : DeckActionBase(
         new(TextKey, "Text", Placeholder: "Text to type"),
     ];
 
-    protected override void Run(ActionContext context) => RunGuarded(context, () =>
+    protected override void Run(ActionContext context)
     {
-        RequireWindows();
-        if (OperatingSystem.IsWindows())
-        {
-            WindowsInput.TypeText(context.Settings.Get(TextKey));
-        }
-    });
+        var text = context.Settings.Get(TextKey);
+        RunQueued(context, () => SystemControl.TypeText(text));
+    }
 
     protected override string? Subtitle(IRenderContext context) => null;
 }
@@ -179,18 +176,11 @@ internal sealed class LockComputerAction() : DeckActionBase(
     "Lock Computer",
     InputCapabilities.Press,
     OutputCapabilities.None,
-    "Locks Windows, like Win+L.")
+    "Locks the computer (Win+L on Windows).")
 {
     public override bool CanBeMultiActionStep => true;
 
-    protected override void Run(ActionContext context) => RunGuarded(context, () =>
-    {
-        RequireWindows();
-        if (OperatingSystem.IsWindows())
-        {
-            WindowsInput.LockWorkstation();
-        }
-    });
+    protected override void Run(ActionContext context) => RunQueued(context, SystemControl.LockScreen);
 
     protected override string? Subtitle(IRenderContext context) => null;
 }
