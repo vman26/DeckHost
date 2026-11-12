@@ -1,10 +1,19 @@
-﻿#include "MiraBoxBridge.h"
+﻿#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
+#include "MiraBoxBridge.h"
 #include "DeviceManager/devicemanager.h"
 #include "OpenCVImageEncoder.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
+#include <thread>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -121,6 +130,31 @@ namespace {
         }
     }
 
+#ifdef _WIN32
+    // DeviceManager::listen (Windows) starts a thread that creates a message window and only then
+    // listens; stopListen ends it by closing that window. Stopping before the window exists (a
+    // quick start and stop, like DeckHost --check-native) left stopListen joining a thread that
+    // went on to wait for messages forever. Waiting here for the window closes that gap.
+    void WaitForListenerWindow()
+    {
+        const auto processId = GetCurrentProcessId();
+        for (int attempt = 0; attempt < 300; ++attempt) {
+            HWND window = nullptr;
+            while ((window = FindWindowExW(nullptr, window, L"USBDeviceListener", nullptr)) != nullptr) {
+                DWORD owner = 0;
+                GetWindowThreadProcessId(window, &owner);
+                if (owner == processId) {
+                    // Let CreateWindowEx return, so the manager has stored the handle stopListen uses.
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    return;
+                }
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+#endif
+
     std::shared_ptr<StreamDock> GetDevice(const char* deviceKey)
     {
         if (deviceKey == nullptr) {
@@ -232,6 +266,9 @@ extern "C" {
                     catch (...) {
                     }
                 });
+#ifdef _WIN32
+                WaitForListenerWindow();
+#endif
             }
 
             RegisterConnectedDeviceCallbacks();

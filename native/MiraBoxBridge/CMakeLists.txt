@@ -35,6 +35,24 @@ endif()
 # (The second argument is just a temporary build folder name for their stuff)
 add_subdirectory("../StreamDock-SDK/CPP-SDK" "build_sdk")
 
+# The SDK's opencv.zip stores the macOS dylib symlinks (libopencv_core.dylib, ...412.dylib) as small
+# text files that name their target, so the linker rejects them ("unknown file type"). The SDK has
+# extracted the archive by now: turn those stubs into the symlinks they stand for.
+if(APPLE)
+    file(GLOB MIRABOX_OPENCV_STUBS "${CMAKE_CURRENT_SOURCE_DIR}/../StreamDock-SDK/CPP-SDK/ImgProcesser/third_party/opencv/mac/lib/libopencv_*.dylib")
+    foreach(stub IN LISTS MIRABOX_OPENCV_STUBS)
+        if(NOT IS_SYMLINK "${stub}")
+            file(SIZE "${stub}" stub_size)
+            if(stub_size LESS 256)
+                file(READ "${stub}" stub_target)
+                string(STRIP "${stub_target}" stub_target)
+                file(REMOVE "${stub}")
+                file(CREATE_LINK "${stub_target}" "${stub}" SYMBOLIC)
+            endif()
+        endif()
+    endforeach()
+endif()
+
 if(WIN32 AND TARGET TransportDLL)
     set_target_properties(TransportDLL PROPERTIES
         MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
