@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.1" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
@@ -24,6 +25,10 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <PackageReference Include="NLog" Version="6.2.2" />
+    <PackageReference Include="NLog.Extensions.Logging" Version="6.3.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -32,16 +37,19 @@
     <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
   </ItemGroup>
 
-  <Target Name="PreparePluginDirectories"
-          BeforeTargets="CopyFilesToOutputDirectory"
-          Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true'">
+  <!-- Only WebView2's Core API is used (Views/WebView2Host); drop its WPF and WinForms wrappers. -->
+  <Target Name="RemoveWebView2UiFrameworkReferences" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf' or '%(Filename)' == 'Microsoft.Web.WebView2.WinForms'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="PreparePluginDirectories" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true'">
     <MakeDir Directories="$(OutDir)plugins\;$(OutDir)plugins\device\;$(OutDir)plugins\functional\;$(OutDir)plugins\device\deckhost.device.mirabox\" />
   </Target>
 
   <!-- MiraBoxNative resolves MiraBoxBridge only from plugins/device/deckhost.device.mirabox. -->
-  <Target Name="CopyMiraBoxBridgeRuntimeToPluginOutput"
-          BeforeTargets="CopyFilesToOutputDirectory"
-          Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true' and Exists('$(MiraBoxNativeRuntimeDir)')">
+  <Target Name="CopyMiraBoxBridgeRuntimeToPluginOutput" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true' and Exists('$(MiraBoxNativeRuntimeDir)')">
     <ItemGroup>
       <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.dll" Condition="'$(IsWindows)' == 'true'" />
       <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.pdb" Condition="'$(IsWindows)' == 'true' and '$(Configuration)' == 'Debug'" />
@@ -50,8 +58,6 @@
     </ItemGroup>
 
     <!-- Plain copies: hard links would let a later native rebuild silently change files elsewhere. -->
-    <Copy SourceFiles="@(MiraBoxNativeArtifacts)"
-          DestinationFolder="$(OutDir)plugins\device\deckhost.device.mirabox\"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(MiraBoxNativeArtifacts)" DestinationFolder="$(OutDir)plugins\device\deckhost.device.mirabox\" SkipUnchangedFiles="true" />
   </Target>
 </Project>

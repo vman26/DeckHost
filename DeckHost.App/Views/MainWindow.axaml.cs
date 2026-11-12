@@ -3,7 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using CommunityToolkit.Mvvm.DependencyInjection;
 using DeckHost.App.ViewModels;
+using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
 using System;
@@ -25,6 +27,7 @@ public partial class MainWindow : Window
     private PluginManagerWindow? _pluginManagerWindow;
     private ProfileManagerWindow? _profileManagerWindow;
     private (ControlItemViewModel Control, Point Start, PointerPressedEventArgs Press)? _pendingControlDrag;
+    private ControlItemViewModel? _simulatedPress;
 
     public MainWindow()
     {
@@ -58,14 +61,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        vm.SelectControl(controlItem.Control);
-
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
+            vm.SelectControl(controlItem.Control);
             return;
         }
 
         e.Handled = true;
+
+        if (vm.IsTestMode)
+        {
+            SimulatePress(vm, controlItem, control, e);
+            return;
+        }
+
+        vm.SelectControl(controlItem.Control);
 
         if (e.ClickCount >= 2)
         {
@@ -111,7 +121,56 @@ public partial class MainWindow : Window
         await DragDrop.DoDragDropAsync(pending.Press, dataTransfer, DragDropEffects.Copy | DragDropEffects.Move);
     }
 
-    private void ControlCard_OnPointerReleased(object? sender, PointerReleasedEventArgs e) => _pendingControlDrag = null;
+    private void ControlCard_OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _pendingControlDrag = null;
+
+        if (_simulatedPress is { } pressed && DataContext is MainViewModel vm)
+        {
+            _simulatedPress = null;
+            vm.Simulate(pressed, InputCapabilities.Release, 0);
+        }
+    }
+
+    private void ControlCard_OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (DataContext is not MainViewModel { IsTestMode: true } vm ||
+            sender is not Control { DataContext: ControlItemViewModel controlItem } ||
+            !controlItem.Control.Inputs.HasFlag(InputCapabilities.Rotate) ||
+            e.Delta.Y == 0)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        vm.Simulate(controlItem, InputCapabilities.Rotate, e.Delta.Y > 0 ? 1 : -1);
+    }
+
+    /// <summary>Test mode: turns a click into the input the hardware would send for this control.</summary>
+    private void SimulatePress(MainViewModel vm, ControlItemViewModel controlItem, Control control, PointerPressedEventArgs e)
+    {
+        var inputs = controlItem.Control.Inputs;
+        if (inputs.HasFlag(InputCapabilities.Swipe) && !inputs.HasFlag(InputCapabilities.Press))
+        {
+            var leftHalf = e.GetPosition(control).X < control.Bounds.Width / 2;
+            vm.Simulate(controlItem, InputCapabilities.Swipe, leftHalf ? -1 : 1);
+            return;
+        }
+
+        if (!inputs.HasFlag(InputCapabilities.Press))
+        {
+            return;
+        }
+
+        vm.Simulate(controlItem, InputCapabilities.Press, 1);
+
+        // Hold until the mouse button is released, for controls that report a release.
+        if (inputs.HasFlag(InputCapabilities.Release))
+        {
+            _simulatedPress = controlItem;
+            e.Pointer.Capture(control);
+        }
+    }
 
     private void OnControlDragOver(object? sender, DragEventArgs e)
     {
@@ -219,9 +278,44 @@ public partial class MainWindow : Window
         vm.RemoveAssignment(controlItem.Control);
     }
 
+    private AppSettingsWindow? _appSettingsWindow;
+
+    private void OpenAppSettings_OnClick(object? sender, RoutedEventArgs e) => OpenAppSettings();
+
+    /// <summary>Opens the DeckHost settings window (also from the tray, when this window is hidden).</summary>
+    public void OpenAppSettings()
+    {
+        if (_appSettingsWindow is { IsVisible: true })
+        {
+            _appSettingsWindow.Activate();
+            return;
+        }
+
+        _appSettingsWindow = new AppSettingsWindow { DataContext = new AppSettingsViewModel() };
+        _appSettingsWindow.Closed += (_, _) => _appSettingsWindow = null;
+        if (IsVisible)
+        {
+            _appSettingsWindow.Show(this);
+        }
+        else
+        {
+            _appSettingsWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            _appSettingsWindow.Show();
+        }
+    }
+
+    private void OpenDeviceSettings_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel { SelectedDevice: { } device }
+            && Ioc.Default.GetRequiredService<DeviceSettingsService>().Create(device) is { } settings)
+        {
+            new DeviceSettingsWindow { DataContext = settings }.Show(this);
+        }
+    }
+
     private void OpenPluginManager_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm)
+        if (DataContext is not MainViewModel)
         {
             return;
         }
@@ -234,7 +328,7 @@ public partial class MainWindow : Window
 
         _pluginManagerWindow = new PluginManagerWindow
         {
-            DataContext = new PluginManagerViewModel(vm.PluginCatalog, vm.DeviceHost),
+            DataContext = Ioc.Default.GetRequiredService<PluginManagerViewModel>(),
         };
         _pluginManagerWindow.Closed += (_, _) => _pluginManagerWindow = null;
         _pluginManagerWindow.Show(this);
@@ -242,7 +336,7 @@ public partial class MainWindow : Window
 
     private void OpenProfileManager_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm)
+        if (DataContext is not MainViewModel)
         {
             return;
         }
@@ -255,7 +349,7 @@ public partial class MainWindow : Window
 
         _profileManagerWindow = new ProfileManagerWindow
         {
-            DataContext = new ProfileManagerViewModel(vm),
+            DataContext = Ioc.Default.GetRequiredService<ProfileManagerViewModel>(),
         };
         _profileManagerWindow.Closed += (_, _) => _profileManagerWindow = null;
         _profileManagerWindow.Show(this);
@@ -264,6 +358,12 @@ public partial class MainWindow : Window
     private async Task OpenCustomizationDialogAsync(MainViewModel vm, ControlItemViewModel controlItem)
     {
         var customization = vm.CreateCustomizationViewModel(controlItem.Id);
+        if (customization.HasSettingsPage && vm.SelectedDevice is { } device)
+        {
+            // Plugin settings pages are shown inside the Customize window.
+            customization.SettingsPageUri = await vm.DeviceHost.GetActionSettingsPageAsync(device.Id, controlItem.Id);
+        }
+
         var window = new ControlCustomizationWindow
         {
             DataContext = customization,

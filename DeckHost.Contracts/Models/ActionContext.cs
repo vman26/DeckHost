@@ -16,5 +16,8 @@ namespace DeckHost.Contracts.Models
         public ActionSettings Settings { get; init; } = ActionSettings.Empty;
 
         public IActionHost Host { get; init; } = NullActionHost.Instance;
+
+        /// <summary>The profile the binding belongs to (empty when unknown).</summary>
+        public string ProfileId { get; init; } = string.Empty;
     }
 }

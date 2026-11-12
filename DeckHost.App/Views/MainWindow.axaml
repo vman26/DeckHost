@@ -52,6 +52,12 @@
 								<Button Content="Open Plugin Manager"
 										HorizontalAlignment="Stretch"
 										Click="OpenPluginManager_OnClick" />
+								<Button Content="Device settings"
+										HorizontalAlignment="Stretch"
+										Click="OpenDeviceSettings_OnClick" />
+								<Button Content="DeckHost settings"
+										HorizontalAlignment="Stretch"
+										Click="OpenAppSettings_OnClick" />
 							</StackPanel>
 						</Flyout>
 					</Button.Flyout>
@@ -135,9 +141,15 @@
 					</ComboBox>
 				</StackPanel>
 
-				<TextBox Grid.Row="2"
-						 PlaceholderText="Search plugin actions..."
-						 Text="{Binding SearchText, Mode=TwoWay}" />
+				<DockPanel Grid.Row="2">
+					<Button DockPanel.Dock="Right"
+							Margin="8,0,0,0"
+							Content="Plugins…"
+							ToolTip.Tip="Install, enable or remove plugins"
+							Click="OpenPluginManager_OnClick" />
+					<TextBox PlaceholderText="Search plugin actions..."
+							 Text="{Binding SearchText, Mode=TwoWay}" />
+				</DockPanel>
 
 				<ScrollViewer Grid.Row="3"
 							  HorizontalScrollBarVisibility="Disabled">
@@ -212,6 +224,12 @@
 								   FontSize="12"
 								   Foreground="#64748B" />
 					</StackPanel>
+					<ToggleButton DockPanel.Dock="Right"
+								  Margin="12,0,0,0"
+								  VerticalAlignment="Center"
+								  IsChecked="{Binding IsTestMode, Mode=TwoWay}"
+								  Content="Test mode"
+								  ToolTip.Tip="Click controls to press them, mouse wheel turns knobs. Runs the real actions." />
 					<TextBlock DockPanel.Dock="Right"
 							   Text="{Binding StatusMessage}"
 							   VerticalAlignment="Center"
@@ -241,23 +259,26 @@
 										  Height="{Binding CanvasHeight}">
 								<ItemsControl.ItemsPanel>
 									<ItemsPanelTemplate>
-										<Canvas Background="#111827" />
+										<Canvas Background="#020617" />
 									</ItemsPanelTemplate>
 								</ItemsControl.ItemsPanel>
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:ControlItemViewModel">
+										<!-- Shows the exact image the device shows (rendered by the host), with live press feedback. -->
 										<Border Width="{Binding Width}"
 												Height="{Binding Height}"
-												Padding="8,4"
 												Background="{Binding SurfaceBrush}"
-												BorderBrush="#E2E8F0"
-												BorderThickness="1"
+												BorderBrush="{Binding OutlineBrush}"
+												BorderThickness="{Binding OutlineThickness}"
 												CornerRadius="{Binding CornerRadius}"
+												ClipToBounds="True"
 												Cursor="Hand"
+												Focusable="True"
 												PointerPressed="ControlCard_OnPointerPressed"
 												PointerMoved="ControlCard_OnPointerMoved"
 												PointerReleased="ControlCard_OnPointerReleased"
-												ToolTip.Tip="Double-click to customize. Drag to move, Ctrl+drag to copy.">
+												PointerWheelChanged="ControlCard_OnPointerWheelChanged"
+												ToolTip.Tip="{Binding ToolTipText}">
 											<Border.ContextMenu>
 												<ContextMenu DataContext="{Binding}">
 													<MenuItem Header="Customize"
@@ -271,50 +292,49 @@
 											<Border.RenderTransform>
 												<TranslateTransform X="{Binding X}" Y="{Binding Y}" />
 											</Border.RenderTransform>
-											<Grid RowDefinitions="Auto,*,Auto"
-												  RowSpacing="6">
-												<DockPanel>
+											<Grid>
+												<Image Source="{Binding PreviewBitmap}"
+													   IsVisible="{Binding HasPreview}"
+													   Stretch="Fill" />
+
+												<Grid RowDefinitions="Auto,*,Auto"
+													  RowSpacing="4"
+													  Margin="8,4"
+													  IsVisible="{Binding !HasPreview}">
 													<TextBlock Text="{Binding DisplayName}"
 															   FontSize="11"
 															   FontWeight="SemiBold"
+															   HorizontalAlignment="Center"
 															   Foreground="#F8FAFC" />
-													<TextBlock DockPanel.Dock="Right"
-															   IsVisible="{Binding ShowRemoveHint}"
-															   Text="Drag off to remove"
-															   FontSize="10"
-															   Foreground="#BFDBFE" />
-												</DockPanel>
-
-												<StackPanel Grid.Row="1"
-															IsVisible="{Binding ShowDetails}"
-															Spacing="4"
-															HorizontalAlignment="Center"
-															VerticalAlignment="Center">
-													<Border IsVisible="{Binding HasPreviewImage}"
-															Padding="8,4"
-															Background="#1E293B"
-															CornerRadius="8">
-														<TextBlock Text="{Binding PreviewImageLabel}"
-																   FontSize="10"
-																   Foreground="#BFDBFE"
-																   TextWrapping="Wrap"
-																   TextAlignment="Center" />
-													</Border>
-													<TextBlock Text="{Binding PreviewText}"
-															   FontSize="12"
-															   FontWeight="SemiBold"
-															   Foreground="#F8FAFC"
+													<TextBlock Grid.Row="1"
+															   IsVisible="{Binding ShowTextPreview}"
+															   Text="{Binding PreviewText}"
+															   FontSize="11"
+															   Foreground="#E2E8F0"
 															   TextWrapping="Wrap"
 															   TextAlignment="Center"
-															   MaxWidth="150" />
-												</StackPanel>
+															   HorizontalAlignment="Center"
+															   VerticalAlignment="Center" />
+													<TextBlock Grid.Row="2"
+															   IsVisible="{Binding ShowDetails}"
+															   Text="{Binding TypeLabel}"
+															   HorizontalAlignment="Center"
+															   FontSize="10"
+															   Foreground="#94A3B8" />
+												</Grid>
 
-												<TextBlock Grid.Row="2"
-														   IsVisible="{Binding ShowDetails}"
-														   Text="{Binding TypeLabel}"
+												<!-- Press feedback from the device or test mode. -->
+												<Border Background="#66FFFFFF"
+														IsVisible="{Binding IsPressed}"
+														IsHitTestVisible="False" />
+												<TextBlock Text="{Binding InputIndicator}"
+														   IsVisible="{Binding HasInputIndicator}"
+														   IsHitTestVisible="False"
+														   FontSize="28"
+														   FontWeight="Bold"
+														   Foreground="#0F172A"
 														   HorizontalAlignment="Center"
-														   FontSize="10"
-														   Foreground="#CBD5E1" />
+														   VerticalAlignment="Center" />
 											</Grid>
 										</Border>
 									</DataTemplate>

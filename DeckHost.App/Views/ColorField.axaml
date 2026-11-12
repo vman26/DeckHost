@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 x:Class="DeckHost.App.Views.ColorField">
+	<UserControl.Styles>
+		<!-- Not set: the default color is shown muted, so the box is never blank. -->
+		<Style Selector="TextBox.isDefault">
+			<Setter Property="Foreground" Value="#64748B" />
+			<Setter Property="FontStyle" Value="Italic" />
+		</Style>
+	</UserControl.Styles>
+	<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+		<ColorPicker Name="Picker"
+					 IsAlphaEnabled="False"
+					 IsAlphaVisible="False"
+					 VerticalAlignment="Center" />
+		<TextBox Name="HexBox" Grid.Column="1" />
+		<Button Name="ClearButton" Grid.Column="2" Content="✕" ToolTip.Tip="Back to the default" Padding="8,4" />
+	</Grid>
+</UserControl>

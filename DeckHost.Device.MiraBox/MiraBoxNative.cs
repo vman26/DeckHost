@@ -71,6 +71,22 @@ internal static unsafe partial class MiraBoxNative
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int SetLedBrightness(string deviceKey, byte brightness);
 
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SetDeviceConfig", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    private static partial int SetDeviceConfigNative(string deviceKey, byte* states, int count);
+
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SendBackgroundFile", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial int SendBackgroundFile(string deviceKey, string imagePath);
+
+    public static int SetDeviceConfig(string deviceKey, ReadOnlySpan<byte> states)
+    {
+        fixed (byte* values = states)
+        {
+            return SetDeviceConfigNative(deviceKey, values, states.Length);
+        }
+    }
+
     public static string? GetDeviceKey(int index)
     {
         var buffer = stackalloc byte[StringBufferSize];

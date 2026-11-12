@@ -52,10 +52,18 @@ extern "C" {
     EXPORT int32_t MIRABOX_CALL MiraBox_SendKeyImage(const char* deviceKey, int32_t keyId, const uint8_t* rgba, int32_t bufferLength, int32_t width, int32_t height);
     // RGBA8888 full background image.
     EXPORT int32_t MIRABOX_CALL MiraBox_SendBackground(const char* deviceKey, const uint8_t* rgba, int32_t bufferLength, int32_t width, int32_t height);
+    // Background from an image file (PNG/JPG/...), scaled to the screen. The N4 Pro keeps the last
+    // background as its idle/start-up screen.
+    EXPORT int32_t MIRABOX_CALL MiraBox_SendBackgroundFile(const char* deviceKey, const char* imagePath);
     EXPORT int32_t MIRABOX_CALL MiraBox_ClearAllKeys(const char* deviceKey);
     EXPORT int32_t MIRABOX_CALL MiraBox_SetKeyBrightness(const char* deviceKey, uint8_t brightness);
 
     // rgb holds ledCount * 3 bytes (R, G, B per LED). Sends the whole LED state at once.
     EXPORT int32_t MIRABOX_CALL MiraBox_SetLedColors(const char* deviceKey, const uint8_t* rgb, int32_t ledCount);
     EXPORT int32_t MIRABOX_CALL MiraBox_SetLedBrightness(const char* deviceKey, uint8_t brightness);
+
+    // Device configuration (Configer). states holds one byte per config item in the device's
+    // order (N4 Pro: LedFollowKeyLight, KeyLightOnDisconnect, CheckUsbPower, EnableVibration,
+    // ResetUsbReport, EnableBootVideo); values 0x11 = on, 0xFF = off, 0x1F = follow default.
+    EXPORT int32_t MIRABOX_CALL MiraBox_SetDeviceConfig(const char* deviceKey, const uint8_t* states, int32_t count);
 }

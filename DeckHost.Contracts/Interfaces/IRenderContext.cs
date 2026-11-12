@@ -14,6 +14,23 @@ public interface IRenderContext
     /// <summary>The settings of the action being drawn.</summary>
     Models.ActionSettings Settings { get; }
 
+    /// <summary>The profile being drawn.</summary>
+    string ProfileId { get; }
+
+    /// <summary>Draws an encoded image (PNG, JPG, GIF, WebP bytes) scaled to cover the control.</summary>
+    bool DrawEncodedImage(byte[] encodedImage);
+
+    /// <summary>
+    /// Draws the control's label (multi-line, wrapped to the control's width) using the user's text
+    /// style from Customize: color, font, size, bold/italic and alignment. Values the user didn't
+    /// set fall back to the arguments, which describe how the action would draw it by default.
+    /// </summary>
+    void DrawLabel(
+        string text,
+        Models.TextVerticalAlignment defaultVertical = Models.TextVerticalAlignment.Middle,
+        float? defaultSize = null,
+        uint defaultColor = 0xFFFFFFFF);
+
     void Clear(uint argbColor);
 
     void DrawText(string text, double x, double y, float size, uint argbColor = 0xFFFFFFFF);

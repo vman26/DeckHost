@@ -1,4 +1,5 @@
 using DeckHost.Contracts.Interfaces;
+using DeckHost.Core.StreamDeck;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text.Json;
@@ -12,6 +13,8 @@ public enum PluginKind
 }
 
 /// <summary>What the Plugin Manager shows for one plugin.</summary>
+/// <param name="Source">Plugin format: "DeckHost" or "Stream Deck" (Elgato SDK plugins).</param>
+/// <param name="Origin">Where it was installed from: a store source, "File" or "Built into DeckHost".</param>
 public sealed record PluginEntry(
     string Id,
     string Name,
@@ -24,39 +27,57 @@ public sealed record PluginEntry(
     bool CanDisable,
     bool CanUninstall,
     int? ActionCount,
-    string? Error);
+    string? Error,
+    string Source = PluginCatalog.DeckHostSource,
+    string? Origin = null,
+    string? Category = null,
+    string? InstallDirectory = null);
 
 /// <summary>
-/// Keeps track of all plugins: the system plugins compiled into DeckHost and the plugins
-/// installed from packages into <c>%AppData%/DeckHost/plugins/functional/&lt;id&gt;</c>.
-/// System plugins can be disabled (except required ones) but never uninstalled.
-/// Not thread-safe: use it from the UI thread.
+/// Keeps track of all plugins:
+/// <list type="bullet">
+/// <item>system plugins compiled into DeckHost (can be disabled unless required, never uninstalled);</item>
+/// <item>DeckHost plugin packages (.zip with plugin.json) in <c>plugins/functional/&lt;id&gt;</c>;</item>
+/// <item>Elgato Stream Deck SDK plugins (.streamDeckPlugin with a &lt;uuid&gt;.sdPlugin folder)
+/// in <c>plugins/streamdeck</c>, run by <see cref="StreamDeckRuntime"/>.</item>
+/// </list>
+/// Thread-safe: install/uninstall can run on a background thread (Changed is raised on that thread).
 /// </summary>
 public sealed class PluginCatalog : IDisposable
 {
+    public const string DeckHostSource = "DeckHost";
+    public const string StreamDeckSource = "Stream Deck";
+
     private const string StateFileName = "state.json";
     private const string StagingDirectoryName = ".staging";
 
     private readonly string _rootDirectory;
     private readonly IReadOnlyList<IDevicePlugin> _devicePlugins;
+    private readonly StreamDeckRuntime? _streamDeck;
     private readonly List<Slot> _slots = [];
     private readonly HashSet<string> _disabled = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _pendingRemoval = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _origins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lock _sync = new();
+    private IProgress<string>? _progress;
+    private bool _changed;
 
     public PluginCatalog(
         string rootDirectory,
         IEnumerable<IDevicePlugin> devicePlugins,
         IEnumerable<IApplicationPlugin> systemPlugins,
-        IEnumerable<string> requiredPluginIds)
+        IEnumerable<string> requiredPluginIds,
+        StreamDeckRuntime? streamDeckRuntime = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootDirectory);
         _rootDirectory = rootDirectory;
         _devicePlugins = devicePlugins.ToList();
+        _streamDeck = streamDeckRuntime;
 
         var required = requiredPluginIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var plugin in systemPlugins)
         {
-            _slots.Add(new Slot(plugin.Id, IsSystem: true, IsRequired: required.Contains(plugin.Id), Directory: null) { Instance = plugin });
+            _slots.Add(new Slot(plugin.Id, SlotKind.System, IsRequired: required.Contains(plugin.Id), Directory: null) { Instance = plugin });
         }
     }
 
@@ -69,10 +90,131 @@ public sealed class PluginCatalog : IDisposable
 
     public string InstallDirectory => Path.Combine(_rootDirectory, "functional");
 
-    public IReadOnlyList<IApplicationPlugin> EnabledApplicationPlugins =>
+    public string StreamDeckDirectory => Path.Combine(_rootDirectory, "streamdeck");
+
+    public bool SupportsStreamDeckPlugins => _streamDeck is not null;
+
+    // ---------------------------------------------------------------- thread-safe public surface
+    // Installing and uninstalling can take seconds (downloads, unpacking, stopping processes), so
+    // callers run them on a background thread. Every public member takes the same (re-entrant) lock,
+    // and Changed is raised after it is released, on the calling thread.
+
+    public IReadOnlyList<IApplicationPlugin> EnabledApplicationPlugins
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return EnabledApplicationPluginsCore;
+            }
+        }
+    }
+
+    public IReadOnlyList<PluginEntry> Entries
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return EntriesCore;
+            }
+        }
+    }
+
+    public bool IsInstalled(string id)
+    {
+        lock (_sync)
+        {
+            return IsInstalledCore(id);
+        }
+    }
+
+    /// <summary>Finishes pending removals and loads (and starts) the enabled installed plugins.</summary>
+    public void Load() => Run(null, LoadCore);
+
+    /// <summary>
+    /// Installs (or upgrades) a DeckHost package (.zip with plugin.json) or a Stream Deck plugin
+    /// (.streamDeckPlugin / .zip with a &lt;uuid&gt;.sdPlugin folder), checked in a staging folder first.
+    /// </summary>
+    /// <param name="fallbackId">Plugin id for Stream Deck archives without a .sdPlugin folder.</param>
+    /// <param name="origin">Where the package came from (store source or "File"), shown in the Plugin Manager.</param>
+    public PluginEntry Install(string packagePath, string? fallbackId = null, IProgress<string>? progress = null, string? origin = null)
+    {
+        PluginEntry? entry = null;
+        Run(progress, () =>
+        {
+            entry = InstallCore(packagePath, fallbackId);
+            _origins[entry.Id] = origin ?? "File";
+            SaveState();
+            entry = ToEntry(FindSlot(entry.Id));
+        });
+        return entry!;
+    }
+
+    /// <summary>
+    /// Records where installed plugins came from when that is unknown (e.g. installed by an older
+    /// DeckHost), matching them against the store catalogs by id. Known origins are kept.
+    /// </summary>
+    public void RecordUnknownOrigins(IEnumerable<(string Id, string Origin)> candidates) => Run(null, () =>
+    {
+        var updated = false;
+        foreach (var (id, origin) in candidates)
+        {
+            if (_slots.Any(slot => slot.Kind != SlotKind.System && string.Equals(slot.Id, id, StringComparison.OrdinalIgnoreCase))
+                && !_origins.ContainsKey(id))
+            {
+                _origins[id] = origin;
+                updated = true;
+            }
+        }
+
+        if (updated)
+        {
+            SaveState();
+            OnChanged();
+        }
+    });
+
+    public void Uninstall(string id, IProgress<string>? progress = null) => Run(progress, () => UninstallCore(id));
+
+    public void SetEnabled(string id, bool enabled, IProgress<string>? progress = null) => Run(progress, () => SetEnabledCore(id, enabled));
+
+    public void Dispose() => Run(null, DisposeCore);
+
+    private void Run(IProgress<string>? progress, Action work)
+    {
+        bool changed;
+        lock (_sync)
+        {
+            _progress = progress;
+            _changed = false;
+            try
+            {
+                work();
+            }
+            finally
+            {
+                _progress = null;
+                changed = _changed;
+            }
+        }
+
+        if (changed)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void OnChanged() => _changed = true;
+
+    private void Report(string message) => _progress?.Report(message);
+
+    // ---------------------------------------------------------------- implementation (called under the lock)
+
+    private IReadOnlyList<IApplicationPlugin> EnabledApplicationPluginsCore =>
         [.. _slots.Where(slot => slot.Instance is not null && !_disabled.Contains(slot.Id)).Select(slot => slot.Instance!)];
 
-    public IReadOnlyList<PluginEntry> Entries =>
+    private IReadOnlyList<PluginEntry> EntriesCore =>
     [
         .. _devicePlugins.Select(plugin => new PluginEntry(
             plugin.Id,
@@ -90,14 +232,15 @@ public sealed class PluginCatalog : IDisposable
         .. _slots.Select(ToEntry),
     ];
 
-    /// <summary>Finishes pending removals and loads the enabled installed plugins.</summary>
-    public void Load()
+    private bool IsInstalledCore(string id) => _slots.Any(slot => string.Equals(slot.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    private void LoadCore()
     {
         LoadState();
 
         foreach (var id in _pendingRemoval.ToList())
         {
-            if (TryDeleteDirectory(Path.Combine(InstallDirectory, id)))
+            if (TryDeleteDirectory(Path.Combine(InstallDirectory, id)) && TryDeleteDirectory(Path.Combine(StreamDeckDirectory, id + ".sdPlugin")))
             {
                 _pendingRemoval.Remove(id);
             }
@@ -108,12 +251,12 @@ public sealed class PluginCatalog : IDisposable
             foreach (var directory in Directory.EnumerateDirectories(InstallDirectory).Order(StringComparer.OrdinalIgnoreCase))
             {
                 var id = Path.GetFileName(directory);
-                if (_pendingRemoval.Contains(id) || _slots.Any(slot => string.Equals(slot.Id, id, StringComparison.OrdinalIgnoreCase)))
+                if (_pendingRemoval.Contains(id) || IsInstalled(id))
                 {
                     continue;
                 }
 
-                var slot = new Slot(id, IsSystem: false, IsRequired: false, directory);
+                var slot = new Slot(id, SlotKind.Package, IsRequired: false, directory);
                 _slots.Add(slot);
                 try
                 {
@@ -130,82 +273,61 @@ public sealed class PluginCatalog : IDisposable
             }
         }
 
+        if (_streamDeck is not null && Directory.Exists(StreamDeckDirectory))
+        {
+            foreach (var directory in Directory.EnumerateDirectories(StreamDeckDirectory, "*.sdPlugin").Order(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var manifest = StreamDeckManifest.Load(directory);
+                    if (_pendingRemoval.Contains(manifest.Uuid) || IsInstalled(manifest.Uuid))
+                    {
+                        continue;
+                    }
+
+                    var slot = new Slot(manifest.Uuid, SlotKind.StreamDeck, IsRequired: false, directory) { StreamDeckManifest = manifest };
+                    _slots.Add(slot);
+                    if (!_disabled.Contains(slot.Id))
+                    {
+                        StartStreamDeck(slot);
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidDataException or IOException or JsonException)
+                {
+                    _slots.Add(new Slot(Path.GetFileName(directory), SlotKind.StreamDeck, IsRequired: false, directory) { Error = $"Invalid plugin: {ex.Message}" });
+                }
+            }
+        }
+
         TryDeleteDirectory(Path.Combine(_rootDirectory, StagingDirectoryName));
         SaveState();
     }
 
-    /// <summary>
-    /// Installs (or upgrades) a plugin package. The package is checked and loaded in a staging
-    /// folder first, so a broken package never replaces a working installation.
-    /// </summary>
-    public PluginEntry Install(string packagePath)
+    private PluginEntry InstallCore(string packagePath, string? fallbackId)
     {
         if (!File.Exists(packagePath))
         {
             throw new PluginException($"Package not found: {packagePath}");
         }
 
-        PluginManifest manifest;
-        try
-        {
-            using var archive = ZipFile.OpenRead(packagePath);
-            var manifestEntry = archive.GetEntry(PluginManifest.FileName)
-                ?? throw new PluginException($"The package has no {PluginManifest.FileName} in its root.");
-            using var reader = new StreamReader(manifestEntry.Open());
-            manifest = PluginManifest.Parse(reader.ReadToEnd());
-        }
-        catch (InvalidDataException ex)
-        {
-            throw new PluginException($"The file is not a valid plugin package (zip): {ex.Message}");
-        }
-
-        if (_slots.Any(slot => slot.IsSystem && string.Equals(slot.Id, manifest.Id, StringComparison.OrdinalIgnoreCase)) ||
-            _devicePlugins.Any(plugin => string.Equals(plugin.Id, manifest.Id, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new PluginException($"'{manifest.Id}' is a system plugin and is already part of DeckHost.");
-        }
-
         var stagingDirectory = Path.Combine(_rootDirectory, StagingDirectoryName, Guid.NewGuid().ToString("N"));
         try
         {
-            try
-            {
-                ZipFile.ExtractToDirectory(packagePath, stagingDirectory);
-            }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
-            {
-                throw new PluginException($"Could not unpack the package: {ex.Message}");
-            }
+            Report("Unpacking…");
+            ExtractPackage(packagePath, stagingDirectory, depth: 0);
 
-            // Trial load: proves the package contains a working plugin before anything is replaced.
-            var trial = new Slot(manifest.Id, IsSystem: false, IsRequired: false, stagingDirectory) { Manifest = manifest };
-            LoadInstance(trial);
-            Unload(trial);
-
-            var existing = _slots.FirstOrDefault(slot => string.Equals(slot.Id, manifest.Id, StringComparison.OrdinalIgnoreCase));
-            var targetDirectory = Path.Combine(InstallDirectory, manifest.Id);
-            if (existing is not null)
+            if (File.Exists(Path.Combine(stagingDirectory, PluginManifest.FileName)))
             {
-                Unload(existing);
-                _slots.Remove(existing);
+                return InstallDeckHostPackage(stagingDirectory);
             }
 
-            if (Directory.Exists(targetDirectory) && !TryDeleteDirectory(targetDirectory))
+            var sdPluginDirectory = FindStreamDeckFolder(stagingDirectory, fallbackId);
+            if (sdPluginDirectory is not null)
             {
-                throw new PluginException("The previous version's files are in use; restart DeckHost and install again.");
+                return InstallStreamDeckPlugin(sdPluginDirectory);
             }
 
-            Directory.CreateDirectory(InstallDirectory);
-            Directory.Move(stagingDirectory, targetDirectory);
-
-            var slot = new Slot(manifest.Id, IsSystem: false, IsRequired: false, targetDirectory) { Manifest = manifest };
-            _slots.Add(slot);
-            _disabled.Remove(manifest.Id);
-            _pendingRemoval.Remove(manifest.Id);
-            LoadInstance(slot);
-            SaveState();
-            OnChanged();
-            return ToEntry(slot);
+            throw new PluginException("This isn't a DeckHost plugin (no plugin.json) or a Stream Deck plugin (no .sdPlugin folder with a manifest.json).");
         }
         finally
         {
@@ -213,10 +335,10 @@ public sealed class PluginCatalog : IDisposable
         }
     }
 
-    public void Uninstall(string id)
+    private void UninstallCore(string id)
     {
         var slot = FindSlot(id);
-        if (slot.IsSystem)
+        if (slot.Kind == SlotKind.System)
         {
             throw new PluginException($"{slot.DisplayName} is a system plugin and can't be uninstalled. You can disable it instead.");
         }
@@ -224,6 +346,8 @@ public sealed class PluginCatalog : IDisposable
         Unload(slot);
         _slots.Remove(slot);
         _disabled.Remove(slot.Id);
+        _origins.Remove(slot.Id);
+        Report("Removing files…");
         if (slot.Directory is not null && !TryDeleteDirectory(slot.Directory))
         {
             _pendingRemoval.Add(slot.Id);
@@ -233,7 +357,7 @@ public sealed class PluginCatalog : IDisposable
         OnChanged();
     }
 
-    public void SetEnabled(string id, bool enabled)
+    private void SetEnabledCore(string id, bool enabled)
     {
         var slot = FindSlot(id);
         if (slot.IsRequired && !enabled)
@@ -249,33 +373,183 @@ public sealed class PluginCatalog : IDisposable
         if (enabled)
         {
             _disabled.Remove(slot.Id);
-            if (!slot.IsSystem)
+            switch (slot.Kind)
             {
-                LoadInstance(slot);
+                case SlotKind.Package:
+                    LoadInstance(slot);
+                    break;
+                case SlotKind.StreamDeck:
+                    StartStreamDeck(slot);
+                    break;
             }
         }
         else
         {
             _disabled.Add(slot.Id);
-            if (!slot.IsSystem)
-            {
-                Unload(slot);
-            }
+            Unload(slot);
         }
 
         SaveState();
         OnChanged();
     }
 
-    public void Dispose()
+    private void DisposeCore()
     {
-        foreach (var slot in _slots.Where(static slot => !slot.IsSystem))
+        foreach (var slot in _slots)
         {
             Unload(slot);
         }
     }
 
+    // ---------------------------------------------------------------- installing
+
+    private static void ExtractPackage(string packagePath, string target, int depth)
+    {
+        try
+        {
+            ZipFile.ExtractToDirectory(packagePath, target);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            throw new PluginException($"Could not unpack the package: {ex.Message}");
+        }
+
+        // Some downloads wrap the real package in another archive (a single .streamDeckPlugin or .zip inside).
+        var entries = Directory.GetFileSystemEntries(target);
+        if (depth == 0 && entries.Length == 1 && File.Exists(entries[0]) &&
+            (entries[0].EndsWith(".streamDeckPlugin", StringComparison.OrdinalIgnoreCase) || entries[0].EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+        {
+            var inner = entries[0] + ".inner";
+            File.Move(entries[0], inner);
+            ExtractPackage(inner, target, depth + 1);
+            File.Delete(inner);
+        }
+    }
+
+    private static string? FindStreamDeckFolder(string root, string? fallbackId)
+    {
+        var folder = Directory.EnumerateDirectories(root, "*.sdPlugin", SearchOption.AllDirectories)
+            .FirstOrDefault(directory => File.Exists(Path.Combine(directory, "manifest.json")));
+        if (folder is not null)
+        {
+            return folder;
+        }
+
+        if (fallbackId is not null && File.Exists(Path.Combine(root, "manifest.json")))
+        {
+            var renamed = Path.Combine(Path.GetDirectoryName(root)!, fallbackId + ".sdPlugin");
+            Directory.Move(root, renamed);
+            Directory.CreateDirectory(root);
+            return renamed;
+        }
+
+        return null;
+    }
+
+    private PluginEntry InstallDeckHostPackage(string stagingDirectory)
+    {
+        var manifest = PluginManifest.Parse(File.ReadAllText(Path.Combine(stagingDirectory, PluginManifest.FileName)));
+        EnsureNotSystem(manifest.Id);
+
+        // Trial load: proves the package contains a working plugin before anything is replaced.
+        var trial = new Slot(manifest.Id, SlotKind.Package, IsRequired: false, stagingDirectory) { Manifest = manifest };
+        LoadInstance(trial);
+        Unload(trial);
+
+        var targetDirectory = Path.Combine(InstallDirectory, manifest.Id);
+        ReplaceExisting(manifest.Id, targetDirectory);
+        Directory.CreateDirectory(InstallDirectory);
+        Directory.Move(stagingDirectory, targetDirectory);
+
+        var slot = new Slot(manifest.Id, SlotKind.Package, IsRequired: false, targetDirectory) { Manifest = manifest };
+        _slots.Add(slot);
+        _disabled.Remove(manifest.Id);
+        _pendingRemoval.Remove(manifest.Id);
+        LoadInstance(slot);
+        SaveState();
+        OnChanged();
+        return ToEntry(slot);
+    }
+
+    private PluginEntry InstallStreamDeckPlugin(string sdPluginDirectory)
+    {
+        if (_streamDeck is null)
+        {
+            throw new PluginException("Stream Deck plugins aren't supported in this build.");
+        }
+
+        StreamDeckManifest manifest;
+        try
+        {
+            manifest = StreamDeckManifest.Load(sdPluginDirectory);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or JsonException or IOException)
+        {
+            throw new PluginException($"The Stream Deck plugin's manifest.json can't be read: {ex.Message}");
+        }
+
+        EnsureNotSystem(manifest.Uuid);
+        var targetDirectory = Path.Combine(StreamDeckDirectory, manifest.Uuid + ".sdPlugin");
+        ReplaceExisting(manifest.Uuid, targetDirectory);
+        Directory.CreateDirectory(StreamDeckDirectory);
+        Directory.Move(sdPluginDirectory, targetDirectory);
+
+        var slot = new Slot(manifest.Uuid, SlotKind.StreamDeck, IsRequired: false, targetDirectory) { StreamDeckManifest = StreamDeckManifest.Load(targetDirectory) };
+        _slots.Add(slot);
+        _disabled.Remove(slot.Id);
+        _pendingRemoval.Remove(slot.Id);
+        StartStreamDeck(slot);
+        SaveState();
+        OnChanged();
+        return ToEntry(slot);
+    }
+
+    private void EnsureNotSystem(string id)
+    {
+        if (_slots.Any(slot => slot.Kind == SlotKind.System && string.Equals(slot.Id, id, StringComparison.OrdinalIgnoreCase)) ||
+            _devicePlugins.Any(plugin => string.Equals(plugin.Id, id, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new PluginException($"'{id}' is a system plugin and is already part of DeckHost.");
+        }
+    }
+
+    private void ReplaceExisting(string id, string targetDirectory)
+    {
+        var existing = _slots.FirstOrDefault(slot => string.Equals(slot.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            Unload(existing);
+            _slots.Remove(existing);
+        }
+
+        if (Directory.Exists(targetDirectory) && !TryDeleteDirectory(targetDirectory))
+        {
+            throw new PluginException("The previous version's files are in use; restart DeckHost and install again.");
+        }
+    }
+
     // ---------------------------------------------------------------- loading
+
+    private void StartStreamDeck(Slot slot)
+    {
+        if (_streamDeck is null || slot.StreamDeckManifest is not { } manifest)
+        {
+            return;
+        }
+
+        slot.Error = null;
+        slot.Instance = _streamDeck.CreatePlugin(manifest);
+        try
+        {
+            Report($"Starting {manifest.Name}…");
+            _streamDeck.Start(manifest);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
+        {
+            // Keep the actions visible so existing mappings stay resolved; they just do nothing.
+            slot.Error = ex.Message;
+        }
+    }
 
     private static void LoadInstance(Slot slot)
     {
@@ -331,11 +605,17 @@ public sealed class PluginCatalog : IDisposable
         }
     }
 
-    private static void Unload(Slot slot)
+    private void Unload(Slot slot)
     {
-        if (slot.IsSystem)
+        switch (slot.Kind)
         {
-            return;
+            case SlotKind.System:
+                return;
+            case SlotKind.StreamDeck:
+                Report($"Stopping {slot.DisplayName}…");
+                _streamDeck?.Stop(slot.Id);
+                slot.Instance = null;
+                return;
         }
 
         try
@@ -361,22 +641,25 @@ public sealed class PluginCatalog : IDisposable
     private PluginEntry ToEntry(Slot slot)
     {
         var instance = slot.Instance;
+        var sd = slot.StreamDeckManifest;
         return new PluginEntry(
             slot.Id,
-            instance?.Name ?? slot.Manifest?.Name ?? slot.Id,
-            slot.Manifest?.Version ?? instance?.Version ?? "?",
-            slot.Manifest?.Author ?? instance?.Author,
-            slot.Manifest?.Description ?? instance?.Description,
+            instance?.Name ?? slot.Manifest?.Name ?? sd?.Name ?? slot.Id,
+            slot.Manifest?.Version ?? sd?.Version ?? instance?.Version ?? "?",
+            slot.Manifest?.Author ?? sd?.Author ?? instance?.Author,
+            slot.Manifest?.Description ?? sd?.Description ?? instance?.Description,
             PluginKind.Application,
-            slot.IsSystem,
-            IsEnabled: !_disabled.Contains(slot.Id) && slot.Error is null,
+            slot.Kind == SlotKind.System,
+            IsEnabled: !_disabled.Contains(slot.Id) && (slot.Error is null || slot.Kind == SlotKind.StreamDeck),
             CanDisable: !slot.IsRequired,
-            CanUninstall: !slot.IsSystem,
+            CanUninstall: slot.Kind != SlotKind.System,
             instance?.Actions.Count,
-            slot.Error);
+            slot.Error,
+            slot.Kind == SlotKind.StreamDeck ? StreamDeckSource : DeckHostSource,
+            slot.Kind == SlotKind.System ? "Built into DeckHost" : _origins.GetValueOrDefault(slot.Id, "File"),
+            slot.StreamDeckManifest?.Category,
+            slot.Directory);
     }
-
-    private void OnChanged() => Changed?.Invoke(this, EventArgs.Empty);
 
     private void LoadState()
     {
@@ -391,6 +674,10 @@ public sealed class PluginCatalog : IDisposable
             var state = JsonSerializer.Deserialize<CatalogState>(File.ReadAllText(path));
             _disabled.UnionWith(state?.Disabled ?? []);
             _pendingRemoval.UnionWith(state?.PendingRemoval ?? []);
+            foreach (var (id, origin) in state?.Origins ?? [])
+            {
+                _origins[id] = origin;
+            }
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -403,7 +690,7 @@ public sealed class PluginCatalog : IDisposable
         try
         {
             Directory.CreateDirectory(_rootDirectory);
-            var state = new CatalogState([.. _disabled.Order()], [.. _pendingRemoval.Order()]);
+            var state = new CatalogState([.. _disabled.Order()], [.. _pendingRemoval.Order()], new Dictionary<string, string>(_origins));
             File.WriteAllText(Path.Combine(_rootDirectory, StateFileName), JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -429,11 +716,20 @@ public sealed class PluginCatalog : IDisposable
         }
     }
 
-    private sealed record CatalogState(string[] Disabled, string[] PendingRemoval);
+    private enum SlotKind
+    {
+        System,
+        Package,
+        StreamDeck,
+    }
 
-    private sealed record Slot(string Id, bool IsSystem, bool IsRequired, string? Directory)
+    private sealed record CatalogState(string[] Disabled, string[] PendingRemoval, Dictionary<string, string>? Origins = null);
+
+    private sealed record Slot(string Id, SlotKind Kind, bool IsRequired, string? Directory)
     {
         public PluginManifest? Manifest { get; set; }
+
+        public StreamDeckManifest? StreamDeckManifest { get; set; }
 
         public IApplicationPlugin? Instance { get; set; }
 
@@ -441,6 +737,6 @@ public sealed class PluginCatalog : IDisposable
 
         public string? Error { get; set; }
 
-        public string DisplayName => Instance?.Name ?? Manifest?.Name ?? Id;
+        public string DisplayName => Instance?.Name ?? Manifest?.Name ?? StreamDeckManifest?.Name ?? Id;
     }
 }

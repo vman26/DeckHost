@@ -79,19 +79,19 @@ namespace DeckHost.Core
             if (binding.ActionKind == ProfileActionKind.MultiAction)
             {
                 // The Multi Action itself runs too (it records the activation for its own label).
-                var dispatched = DispatchActionReference(binding.Action, inputEvent, host);
+                var dispatched = DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
                 foreach (var step in binding.Steps.OrderBy(static step => step.Order))
                 {
-                    dispatched |= DispatchActionReference(step.Action, inputEvent, host);
+                    dispatched |= DispatchActionReference(step.Action, inputEvent, host, profile.Id);
                 }
 
                 return dispatched;
             }
 
-            return DispatchActionReference(binding.Action, inputEvent, host);
+            return DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
         }
 
-        private bool DispatchActionReference(ActionReference actionReference, DeviceInputEvent inputEvent, IActionHost host)
+        private bool DispatchActionReference(ActionReference actionReference, DeviceInputEvent inputEvent, IActionHost host, string profileId)
         {
             var action = FindAction(actionReference);
             if (action is null)
@@ -111,6 +111,7 @@ namespace DeckHost.Core
                 {
                     Settings = actionReference.EffectiveSettings,
                     Host = host,
+                    ProfileId = profileId,
                 });
                 return true;
             }

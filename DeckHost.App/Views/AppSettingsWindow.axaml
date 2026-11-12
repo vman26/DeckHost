@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		x:Class="DeckHost.App.Views.AppSettingsWindow"
+		x:DataType="vm:AppSettingsViewModel"
+		Width="520"
+		SizeToContent="Height"
+		CanResize="False"
+		Background="#111827"
+		RequestedThemeVariant="Dark"
+		Icon="/Assets/avalonia-logo.ico"
+		WindowStartupLocation="CenterOwner"
+		Title="DeckHost Settings">
+
+	<Window.Styles>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+			<Setter Property="Margin" Value="28,0,0,0" />
+		</Style>
+		<Style Selector="Border.card">
+			<Setter Property="Background" Value="#0F172A" />
+			<Setter Property="BorderBrush" Value="#1E293B" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="12" />
+			<Setter Property="Padding" Value="14" />
+		</Style>
+	</Window.Styles>
+
+	<StackPanel Margin="20" Spacing="14">
+		<TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold" Foreground="#F8FAFC" />
+
+		<Border Classes="card">
+			<StackPanel Spacing="10">
+				<CheckBox Content="Start DeckHost when I sign in to Windows" IsChecked="{Binding StartWithWindows}" IsEnabled="{Binding CanStartWithWindows}" />
+				<TextBlock Classes="hint" Text="Adds DeckHost to your user's start-up programs, so your device works right after sign-in." />
+				<CheckBox Content="Start in the tray when started with Windows" IsChecked="{Binding StartMinimized}" />
+				<TextBlock Classes="hint" Text="The device works without the window. Open DeckHost from the tray icon." />
+				<CheckBox Content="Closing the window keeps DeckHost running in the tray" IsChecked="{Binding CloseToTray}" />
+				<TextBlock Classes="hint" Text="Use Exit in the tray menu to quit. When off, closing the window stops DeckHost and blanks the device." />
+			</StackPanel>
+		</Border>
+
+		<Border Classes="card">
+			<StackPanel Spacing="8">
+				<TextBlock Text="Data" FontWeight="SemiBold" Foreground="#E2E8F0" />
+				<SelectableTextBlock Text="{Binding DataDirectory}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+				<StackPanel Orientation="Horizontal" Spacing="8">
+					<Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" />
+					<Button Content="Open logs folder" Command="{Binding OpenLogFolderCommand}" />
+				</StackPanel>
+			</StackPanel>
+		</Border>
+
+		<Grid ColumnDefinitions="*,Auto">
+			<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" Foreground="#93C5FD" VerticalAlignment="Center" TextWrapping="Wrap" />
+			<Button Grid.Column="1" Content="Close" Click="Close_OnClick" />
+		</Grid>
+	</StackPanel>
+</Window>

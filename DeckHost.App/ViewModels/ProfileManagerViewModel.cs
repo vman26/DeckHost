@@ -42,6 +42,10 @@ public partial class ProfileManagerViewModel : ViewModelBase
             {
                 ConfirmingDelete = false;
                 OnPropertyChanged(nameof(EditingName));
+                OnPropertyChanged(nameof(EditingBackgroundColor));
+                OnPropertyChanged(nameof(EditingBackgroundImage));
+                OnPropertyChanged(nameof(BackgroundColorError));
+                OnPropertyChanged(nameof(HasBackgroundColorError));
                 OnPropertyChanged(nameof(HasEditingProfile));
                 OnPropertyChanged(nameof(IsEditingActiveProfile));
                 OnPropertyChanged(nameof(CanDelete));
@@ -65,6 +69,60 @@ public partial class ProfileManagerViewModel : ViewModelBase
             _main.NotifyProfilesEdited();
             OnPropertyChanged();
         }
+    }
+
+    /// <summary>Profile background color (#RRGGBB); applied when valid or empty.</summary>
+    public string EditingBackgroundColor
+    {
+        get => EditingProfile?.BackgroundColor ?? string.Empty;
+        set
+        {
+            if (EditingProfile is null || value == EditingProfile.BackgroundColor)
+            {
+                return;
+            }
+
+            EditingProfile.BackgroundColor = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(BackgroundColorError));
+            OnPropertyChanged(nameof(HasBackgroundColorError));
+            if (BackgroundColorError is null)
+            {
+                _main.NotifyProfilesEdited();
+            }
+        }
+    }
+
+    public string? BackgroundColorError =>
+        string.IsNullOrWhiteSpace(EditingBackgroundColor) ||
+        System.Text.RegularExpressions.Regex.IsMatch(EditingBackgroundColor.Trim(), "^#?[0-9A-Fa-f]{6}$")
+            ? null
+            : "Use #RRGGBB, for example #0F172A.";
+
+    public bool HasBackgroundColorError => BackgroundColorError is not null;
+
+    /// <summary>Profile background image or GIF; spans all controls.</summary>
+    public string EditingBackgroundImage
+    {
+        get => EditingProfile?.BackgroundImagePath ?? string.Empty;
+        set
+        {
+            if (EditingProfile is null || value == EditingProfile.BackgroundImagePath)
+            {
+                return;
+            }
+
+            EditingProfile.BackgroundImagePath = value ?? string.Empty;
+            OnPropertyChanged();
+            _main.NotifyProfilesEdited();
+        }
+    }
+
+    [RelayCommand]
+    private void ClearBackground()
+    {
+        EditingBackgroundColor = string.Empty;
+        EditingBackgroundImage = string.Empty;
     }
 
     public bool IsEditingActiveProfile => EditingProfile is not null && EditingProfile == _main.SelectedProfile;

@@ -49,7 +49,7 @@ internal sealed class SwitchProfileAction() : DeckActionBase(
     private const string ModeKey = "mode";
     private const string ProfileKey = "profile";
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(ModeKey, "Switch to", ActionSettingKind.Choice, "next", Options:
         [
@@ -106,7 +106,7 @@ internal sealed class ClockAction() : DeckActionBase(
 {
     private const string FormatKey = "format";
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(FormatKey, "Format", ActionSettingKind.Choice, "HH:mm", Options:
         [
@@ -139,7 +139,7 @@ internal sealed class CounterAction() : DeckActionBase(
 {
     private const string StepKey = "step";
 
-    public override IReadOnlyList<ActionSettingDefinition> Settings { get; } =
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(StepKey, "Step", ActionSettingKind.Number, "1", Description: "Added per press or knob step."),
     ];

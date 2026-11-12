@@ -99,6 +99,16 @@ namespace {
         }
 
         reader->startReadLoop();
+
+        // Same start-up as the SDK's own N4 Pro sample. Without the heartbeat the device treats
+        // the host as gone: it keeps its own standby behaviour (a key press blanks the screen or
+        // brings the last images back) instead of reporting presses to us.
+        if (auto* heartbeat = device->heartbeater()) {
+            heartbeat->startHeartBeatLoop();
+        }
+
+        device->wakeupScreen();
+        device->refresh();
     }
 
     void RegisterConnectedDeviceCallbacks()
@@ -326,6 +336,8 @@ extern "C" {
             }
 
             device->setKeyImgFileStream(encoded, sdkKey);
+            // The device only shows newly sent images after a refresh (as in the SDK samples).
+            device->refresh();
             return MIRABOX_OK;
         }
         catch (...) {
@@ -361,6 +373,43 @@ extern "C" {
             }
 
             device->setBackgroundImgStream(encoded);
+            return MIRABOX_OK;
+        }
+        catch (...) {
+            return MIRABOX_EXCEPTION;
+        }
+    }
+
+    EXPORT int32_t MIRABOX_CALL MiraBox_SendBackgroundFile(const char* deviceKey, const char* imagePath) {
+        try {
+            if (imagePath == nullptr) {
+                return MIRABOX_INVALID_ARGUMENT;
+            }
+
+            auto device = GetDevice(deviceKey);
+            if (device == nullptr) {
+                return MIRABOX_DEVICE_NOT_FOUND;
+            }
+
+            auto imgHelper = device->getBgImgHelper();
+            if (imgHelper == nullptr) {
+                return MIRABOX_NOT_SUPPORTED;
+            }
+
+            const auto fileData = StreamDock::readImgToString(imagePath);
+            if (fileData.empty()) {
+                return MIRABOX_INVALID_ARGUMENT;
+            }
+
+            std::vector<uint8_t> input(fileData.begin(), fileData.end());
+            std::vector<uint8_t> encoded;
+            OpenCVImageEncoder encoder;
+            if (!encoder.encodeToMemory(encoded, input, 85, *imgHelper)) {
+                return MIRABOX_ENCODE_FAILED;
+            }
+
+            device->setBackgroundImgStream(std::string(reinterpret_cast<const char*>(encoded.data()), encoded.size()));
+            device->refresh();
             return MIRABOX_OK;
         }
         catch (...) {
@@ -448,6 +497,30 @@ extern "C" {
         }
     }
 
+    EXPORT int32_t MIRABOX_CALL MiraBox_SetDeviceConfig(const char* deviceKey, const uint8_t* states, int32_t count) {
+        try {
+            if (states == nullptr || count <= 0 || count > 64) {
+                return MIRABOX_INVALID_ARGUMENT;
+            }
+
+            auto device = GetDevice(deviceKey);
+            if (device == nullptr) {
+                return MIRABOX_DEVICE_NOT_FOUND;
+            }
+
+            auto* configer = device->configer();
+            if (configer == nullptr || device->feature() == nullptr || !device->feature()->supportConfig) {
+                return MIRABOX_NOT_SUPPORTED;
+            }
+
+            configer->setDeviceConfig(std::vector<uint8_t>(states, states + count));
+            return MIRABOX_OK;
+        }
+        catch (...) {
+            return MIRABOX_EXCEPTION;
+        }
+    }
+
     EXPORT void MIRABOX_CALL MiraBox_Shutdown() {
         g_CSharpCallback = nullptr;
 
@@ -460,6 +533,10 @@ extern "C" {
             for (const auto& [_, device] : deviceManager.getStreamDocks()) {
                 if (device != nullptr && device->reader() != nullptr) {
                     device->reader()->stopReadLoop();
+                }
+
+                if (device != nullptr && device->heartbeater() != nullptr) {
+                    device->heartbeater()->stopHeartBeatLoop();
                 }
             }
 

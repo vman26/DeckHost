@@ -1,3 +1,4 @@
+using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Models;
 using System;
 using System.Collections.Generic;
@@ -10,7 +11,8 @@ namespace DeckHost.App.ViewModels;
 /// <summary>Editor for an action's settings, generated from its <see cref="ActionSettingDefinition"/>s.</summary>
 public sealed class SettingsEditorViewModel : ViewModelBase
 {
-    public SettingsEditorViewModel(IReadOnlyList<ActionSettingDefinition> definitions, ActionSettings current)
+    /// <param name="controlInputs">The control's inputs; choice options needing another input are hidden.</param>
+    public SettingsEditorViewModel(IReadOnlyList<ActionSettingDefinition> definitions, ActionSettings current, InputCapabilities controlInputs = InputCapabilities.All)
     {
         foreach (var definition in definitions)
         {
@@ -18,7 +20,7 @@ public sealed class SettingsEditorViewModel : ViewModelBase
             SettingFieldViewModel field = definition.Kind switch
             {
                 ActionSettingKind.Toggle => new ToggleSettingField(definition, value),
-                ActionSettingKind.Choice => new ChoiceSettingField(definition, value),
+                ActionSettingKind.Choice => new ChoiceSettingField(definition, value, controlInputs),
                 ActionSettingKind.FilePath => new FilePathSettingField(definition, value),
                 ActionSettingKind.Hotkey => new HotkeySettingField(definition, value),
                 ActionSettingKind.Secret => new SecretSettingField(definition, value),
@@ -152,10 +154,18 @@ public sealed class ToggleSettingField(ActionSettingDefinition definition, strin
 
 public sealed class ChoiceSettingField : SettingFieldViewModel
 {
-    public ChoiceSettingField(ActionSettingDefinition definition, string value)
+    public ChoiceSettingField(ActionSettingDefinition definition, string value, InputCapabilities controlInputs = InputCapabilities.All)
         : base(definition, value)
     {
-        Options = definition.Options ?? [];
+        Options = (definition.Options ?? [])
+            .Where(option => option.Requires == InputCapabilities.None || (controlInputs & option.Requires) != 0)
+            .ToList();
+
+        // A stored choice this control can't produce (e.g. "press" on the swipe bar) falls back to the first option.
+        if (Options.Count > 0 && Options.All(option => option.Value != Value))
+        {
+            Value = Options[0].Value;
+        }
     }
 
     public IReadOnlyList<ActionSettingOption> Options { get; }

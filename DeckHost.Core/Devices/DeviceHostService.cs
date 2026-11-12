@@ -26,6 +26,9 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 {
     private const int MaxLogEntries = 500;
 
+    /// <summary>Frame interval for animated GIFs (10 fps keeps USB traffic reasonable).</summary>
+    private static readonly TimeSpan AnimationInterval = TimeSpan.FromMilliseconds(100);
+
     private readonly IVariableStore _variableStore;
     private readonly IReadOnlyList<IDevicePlugin> _devicePlugins;
     private readonly IActionRouter _actionRouter;
@@ -45,6 +48,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private bool _pluginsInitialized;
     private readonly IActionHost _actionHost;
     private readonly CancellationTokenSource _refreshCancellation = new();
+    private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+    private Dictionary<string, (IDeckAction Action, ActionContext Context)> _appeared = new(StringComparer.Ordinal);
     private readonly Dictionary<(string DeviceId, string ControlId), DateTimeOffset> _nextLiveRender = [];
 
     // Thread-safe published state.
@@ -61,6 +66,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     public event Action<DeviceConnectionStatus>? ConnectionStatusChanged;
     public event Action? DevicesChanged;
     public event Action<string, string>? ActiveProfileChanged;
+    public event Action<ControlFrame>? ControlFrameRendered;
+    public event Action<DeviceInputEvent>? InputReceived;
 
     public DeviceHostService(
         IEnumerable<IDevicePlugin> devicePlugins,
@@ -132,6 +139,38 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     {
         ArgumentNullException.ThrowIfNull(inputEvent);
         Enqueue(() => HandleInput(inputEvent));
+    }
+
+    public void SimulateInput(DeviceInputEvent inputEvent) => ReportInput(inputEvent);
+
+    public void AppendLog(string level, string message) => Log(level, message);
+
+    public Task<Uri?> GetActionSettingsPageAsync(string deviceId, string controlId)
+    {
+        var completion = new TaskCompletionSource<Uri?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_work.Writer.TryWrite(() =>
+            {
+                Uri? uri = null;
+                if (GetActiveProfile(deviceId) is { } profile &&
+                    profile.Bindings.FirstOrDefault(candidate => string.Equals(candidate.ControlId, controlId, StringComparison.OrdinalIgnoreCase)) is { } binding &&
+                    _actionRouter.FindAction(binding.Action) is { HasSettingsPage: true } action)
+                {
+                    SafeInvoke(() => uri = action.GetSettingsPageUri(new ActionContext(deviceId, controlId, _variableStore)
+                    {
+                        Settings = binding.Action.EffectiveSettings,
+                        Host = _actionHost,
+                        ProfileId = profile.Id,
+                    }));
+                }
+
+                completion.TrySetResult(uri);
+                return ValueTask.CompletedTask;
+            }))
+        {
+            completion.TrySetResult(null);
+        }
+
+        return completion.Task;
     }
 
     public void SetApplicationPlugins(IEnumerable<IApplicationPlugin> applicationPlugins)
@@ -309,7 +348,12 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         foreach (var plugin in _devicePlugins)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var context = new DevicePluginContext(this, Log, ReportConnectionStatus);
+            var context = new DevicePluginContext(this, Log, ReportConnectionStatus, deviceId => Enqueue(() =>
+            {
+                // The device's own screen was overwritten: push every image again.
+                ForgetFrames(deviceId);
+                _dirtyDevices.Add(deviceId);
+            }));
             try
             {
                 await plugin.InitializeAsync(context, cancellationToken).ConfigureAwait(false);
@@ -342,15 +386,18 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     private void HandleInput(DeviceInputEvent inputEvent)
     {
+        // Reported for every press (also unbound controls) so the editor can show it live.
+        SafeInvoke(() => InputReceived?.Invoke(inputEvent));
+
         var activeProfile = GetActiveProfile(inputEvent.DeviceId);
         if (activeProfile is null)
         {
-            Log("Debug", $"Input from '{inputEvent.DeviceId}/{inputEvent.ControlId}' ignored: no active profile.");
+            Log("Info", $"Input from '{inputEvent.DeviceId}/{inputEvent.ControlId}' ignored: no active profile.");
             return;
         }
 
         var dispatched = _actionRouter.Dispatch(activeProfile, inputEvent, _actionHost);
-        Log("Debug", $"Input {inputEvent.EventType} ({inputEvent.Value}) on '{inputEvent.ControlId}' {(dispatched ? "dispatched" : "had no matching action")}.");
+        Log("Info", $"Input {inputEvent.EventType} ({inputEvent.Value}) on '{inputEvent.ControlId}' {(dispatched ? "dispatched" : "had no matching action")}.");
 
         if (dispatched)
         {
@@ -537,12 +584,71 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     // ---------------------------------------------------------------- rendering
 
+    /// <summary>
+    /// Tells actions when they become visible or hidden (Stream Deck willAppear / willDisappear):
+    /// compares the bindings of every device's active profile with the previous batch.
+    /// </summary>
+    private void UpdateAppearances()
+    {
+        var visible = new Dictionary<string, (IDeckAction Action, ActionContext Context)>(StringComparer.Ordinal);
+        foreach (var deviceId in _devicesById.Keys)
+        {
+            if (GetActiveProfile(deviceId) is not { } profile)
+            {
+                continue;
+            }
+
+            foreach (var binding in profile.Bindings)
+            {
+                var references = binding.ActionKind == ProfileActionKind.MultiAction
+                    ? binding.Steps.OrderBy(static step => step.Order).Select(static step => step.Action)
+                    : [binding.Action];
+                var index = 0;
+                foreach (var reference in references)
+                {
+                    if (_actionRouter.FindAction(reference) is { } action)
+                    {
+                        var key = $"{deviceId}|{profile.Id}|{binding.ControlId}|{index}|{reference.PluginId}:{reference.ActionId}|{reference.Settings?.GetHashCode()}";
+                        visible[key] = (action, new ActionContext(deviceId, binding.ControlId, _variableStore)
+                        {
+                            Settings = reference.EffectiveSettings,
+                            Host = _actionHost,
+                            ProfileId = profile.Id,
+                        });
+                    }
+
+                    index++;
+                }
+            }
+        }
+
+        foreach (var (key, (action, context)) in _appeared)
+        {
+            if (!visible.ContainsKey(key))
+            {
+                SafeInvoke(() => action.OnDisappear(context));
+            }
+        }
+
+        foreach (var (key, (action, context)) in visible)
+        {
+            if (!_appeared.ContainsKey(key))
+            {
+                SafeInvoke(() => action.OnAppear(context));
+            }
+        }
+
+        _appeared = visible;
+    }
+
     private void RenderDirtyDevices()
     {
         if (!_pluginsInitialized || _dirtyDevices.Count == 0)
         {
             return;
         }
+
+        UpdateAppearances();
 
         foreach (var deviceId in _dirtyDevices)
         {
@@ -554,12 +660,16 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     private void RenderDevice(string deviceId)
     {
-        if (!_devicesById.TryGetValue(deviceId, out var entry) || !entry.Device.IsConnected)
+        if (!_devicesById.TryGetValue(deviceId, out var entry))
         {
             return;
         }
 
+        // Rendered even while the device is unplugged: the editor shows the same frames as a preview.
+        var connected = entry.Device.IsConnected;
         var profile = GetActiveProfile(deviceId);
+        var layoutBounds = ControlRenderer.LayoutBounds(entry.Device);
+        var clock = _clock.Elapsed;
         var pushed = 0;
 
         foreach (var control in entry.Device.Controls)
@@ -579,8 +689,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             {
                 pixels = renderer.Render(canvas =>
                 {
-                    var context = new SkiaRenderContext(canvas, renderer.Width, renderer.Height, deviceId, control.Id, _variableStore, _drawingResources, binding?.Action.EffectiveSettings);
-                    ControlRenderer.Draw(context, binding, action);
+                    var context = new SkiaRenderContext(canvas, renderer.Width, renderer.Height, deviceId, control.Id, _variableStore, _drawingResources, binding?.Action.EffectiveSettings, clock, profile?.Id ?? string.Empty);
+                    ControlRenderer.Draw(context, binding, action, profile?.Background, layoutBounds, control.Bounds);
                 });
             }
             catch (Exception ex)
@@ -595,11 +705,17 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 continue;
             }
 
-            if (!entry.Plugin.Output.TryPushImage(deviceId, control.Id, pixels, renderer.Width, renderer.Height, out var error))
+            if (connected)
             {
-                _lastFrames.Remove(key);
-                Log("Warning", $"Could not update '{deviceId}/{control.Id}': {error}");
-                continue;
+                if (!entry.Plugin.Output.TryPushImage(deviceId, control.Id, pixels, renderer.Width, renderer.Height, out var error))
+                {
+                    _lastFrames.Remove(key);
+                    Log("Warning", $"Could not update '{deviceId}/{control.Id}': {error}");
+                    RaiseFrame(deviceId, control.Id, renderer.Width, renderer.Height, pixels);
+                    continue;
+                }
+
+                pushed++;
             }
 
             if (lastFrame is null || lastFrame.Length != pixels.Length)
@@ -609,12 +725,21 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             }
 
             pixels.CopyTo(lastFrame);
-            pushed++;
+            RaiseFrame(deviceId, control.Id, renderer.Width, renderer.Height, pixels);
         }
 
         if (pushed > 0)
         {
             Log("Debug", $"Pushed {pushed} changed control image(s) to '{deviceId}'.");
+        }
+    }
+
+    private void RaiseFrame(string deviceId, string controlId, int width, int height, ReadOnlySpan<byte> pixels)
+    {
+        if (ControlFrameRendered is { } handler)
+        {
+            var frame = new ControlFrame(deviceId, controlId, width, height, pixels.ToArray());
+            SafeInvoke(() => handler(frame));
         }
     }
 
@@ -776,7 +901,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     /// <summary>Redraws controls whose action has a <see cref="IDeckAction.RefreshInterval"/> (clocks, system info).</summary>
     private async Task RunLiveRefreshAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
+        using var timer = new PeriodicTimer(AnimationInterval);
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
@@ -794,14 +919,31 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         var now = DateTimeOffset.UtcNow;
         foreach (var (deviceId, entry) in _devicesById)
         {
-            if (!entry.Device.IsConnected || GetActiveProfile(deviceId) is not { } profile)
+            if (GetActiveProfile(deviceId) is not { } profile)
             {
                 continue;
             }
 
+            // An animated profile background changes every control.
+            if (_drawingResources.IsAnimated(profile.Background?.ImagePath))
+            {
+                var backgroundKey = (deviceId, "*background*");
+                if (!_nextLiveRender.TryGetValue(backgroundKey, out var backgroundDue) || backgroundDue <= now)
+                {
+                    _nextLiveRender[backgroundKey] = now + AnimationInterval;
+                    _dirtyDevices.Add(deviceId);
+                }
+            }
+
             foreach (var binding in profile.Bindings)
             {
-                if (_actionRouter.FindAction(binding.Action)?.RefreshInterval is not { } interval)
+                var interval = _actionRouter.FindAction(binding.Action)?.RefreshInterval;
+                if (_drawingResources.IsAnimated(binding.Appearance.ImagePath))
+                {
+                    interval = interval is null || interval > AnimationInterval ? AnimationInterval : interval;
+                }
+
+                if (interval is null)
                 {
                     continue;
                 }
@@ -812,7 +954,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                     continue;
                 }
 
-                _nextLiveRender[key] = now + (interval < TimeSpan.FromMilliseconds(250) ? TimeSpan.FromMilliseconds(250) : interval);
+                _nextLiveRender[key] = now + (interval.Value < AnimationInterval ? AnimationInterval : interval.Value);
                 _dirtyDevices.Add(deviceId);
             }
         }

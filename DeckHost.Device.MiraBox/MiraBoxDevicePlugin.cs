@@ -15,8 +15,51 @@ namespace DeckHost.Device.MiraBox;
 /// The primary definition always exists, connected or not, so profiles can be edited offline.
 /// </para>
 /// </summary>
-public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput
+public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin
 {
+    public IReadOnlyList<ActionSettingDefinition> GetDeviceSettingDefinitions(string deviceId) => N4ProDeviceSettings.Definitions;
+
+    public ActionSettings GetDeviceSettings(string deviceId) => N4ProDeviceSettings.Load(deviceId);
+
+    public string? ApplyDeviceSettings(string deviceId, ActionSettings settings)
+    {
+        // Keep the markers of what was already sent to the device.
+        var stored = N4ProDeviceSettings.Load(deviceId);
+        foreach (var marker in N4ProDeviceSettings.Markers)
+        {
+            settings = settings.With(marker, stored.TryGetValue(marker, out var applied) ? applied : null);
+        }
+
+        N4ProDeviceSettings.Save(deviceId, settings);
+
+        if (!TryGetConnectedKey(deviceId, out var deviceKey, out _))
+        {
+            return null; // Saved; applied when the device connects.
+        }
+
+        var problems = ApplyStoredSettings(deviceId, deviceKey);
+        return problems.Count == 0 ? null : "Not everything could be applied: " + string.Join("; ", problems);
+    }
+
+    private List<string> ApplyStoredSettings(string deviceId, string deviceKey)
+    {
+        var settings = N4ProDeviceSettings.Load(deviceId);
+        var (problems, idleScreenWritten) = N4ProDeviceSettings.Apply(deviceKey, settings, (marker, value) =>
+            N4ProDeviceSettings.Save(deviceId, N4ProDeviceSettings.Load(deviceId).With(marker, value)));
+        if (idleScreenWritten)
+        {
+            // Writing the idle screen also blanks the keys on the device: send their images again.
+            _context?.RequestRedraw(deviceId);
+        }
+
+        foreach (var problem in problems)
+        {
+            _context?.Log("Warning", $"{deviceId}: could not apply {problem}");
+        }
+
+        return problems;
+    }
+
     public const string PrimaryDeviceId = "mirabox.n4pro";
     private const string DeviceName = "MiraBox N4 Pro";
     private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);
@@ -343,6 +386,11 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput
         foreach (var (deviceId, state, message) in statusChanges)
         {
             _context?.ReportConnectionStatus(deviceId, state, message);
+            if (state == "Connected" && TryGetConnectedKey(deviceId, out var deviceKey, out _))
+            {
+                // Device settings (vibration, brightness, idle screen) are re-applied on every connect.
+                ApplyStoredSettings(deviceId, deviceKey);
+            }
         }
 
         if (changed)

@@ -10,9 +10,11 @@ public sealed class DevicePluginContext : IDevicePluginContext
     private readonly IDeviceInputSink _inputSink;
     private readonly Action<string, string> _log;
     private readonly Action<DeviceConnectionStatus> _reportStatus;
+    private readonly Action<string>? _requestRedraw;
 
-    public DevicePluginContext(IDeviceInputSink inputSink, Action<string, string> log, Action<DeviceConnectionStatus> reportStatus)
+    public DevicePluginContext(IDeviceInputSink inputSink, Action<string, string> log, Action<DeviceConnectionStatus> reportStatus, Action<string>? requestRedraw = null)
     {
+        _requestRedraw = requestRedraw;
         ArgumentNullException.ThrowIfNull(inputSink);
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(reportStatus);
@@ -28,4 +30,6 @@ public sealed class DevicePluginContext : IDevicePluginContext
         _reportStatus(new DeviceConnectionStatus(deviceId, state, message));
 
     public void Log(string level, string message) => _log(level, message);
+
+    public void RequestRedraw(string deviceId) => _requestRedraw?.Invoke(deviceId);
 }
