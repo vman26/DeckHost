@@ -118,6 +118,51 @@ public partial class ProfileManagerViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Background color for every profile without one of its own.</summary>
+    public string DefaultBackgroundColor
+    {
+        get => _main.DefaultBackgroundColor;
+        set
+        {
+            if (value != _main.DefaultBackgroundColor)
+            {
+                _main.DefaultBackgroundColor = value ?? string.Empty;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DefaultBackgroundColorError));
+                OnPropertyChanged(nameof(HasDefaultBackgroundColorError));
+            }
+        }
+    }
+
+    public string? DefaultBackgroundColorError =>
+        string.IsNullOrWhiteSpace(DefaultBackgroundColor) ||
+        System.Text.RegularExpressions.Regex.IsMatch(DefaultBackgroundColor.Trim(), "^#?[0-9A-Fa-f]{6}$")
+            ? null
+            : "Use #RRGGBB, for example #0F172A.";
+
+    public bool HasDefaultBackgroundColorError => DefaultBackgroundColorError is not null;
+
+    /// <summary>Background image for every profile without a background of its own.</summary>
+    public string DefaultBackgroundImage
+    {
+        get => _main.DefaultBackgroundImage;
+        set
+        {
+            if (value != _main.DefaultBackgroundImage)
+            {
+                _main.DefaultBackgroundImage = value ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void ClearDefaultBackground()
+    {
+        DefaultBackgroundColor = string.Empty;
+        DefaultBackgroundImage = string.Empty;
+    }
+
     [RelayCommand]
     private void ClearBackground()
     {

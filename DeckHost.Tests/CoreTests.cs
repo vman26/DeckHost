@@ -172,6 +172,29 @@ public class ProfileStoreTests
     }
 
     [Fact]
+    public void The_default_background_and_new_appearance_fields_round_trip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}", "profiles.json");
+        try
+        {
+            var store = new ProfileStore(path);
+            var appearance = new ControlAppearance(BackgroundColor: "#80112233") { IconPath = "/icons/mic.svg", ShowTile = true };
+            var binding = new ControlBinding("key.0", ProfileActionKind.Single, Bindings.Reference("p", "a"), appearance, []);
+            store.Save(new ProfileDocument(ProfileDocument.CurrentVersion, "profile", [new DeviceProfile("profile", "Profile", "dev", [binding])],
+                DefaultBackground: new ProfileBackground("#0F766E", "/images/wall.png")));
+
+            var loaded = store.Load()!;
+
+            Assert.Equal(new ProfileBackground("#0F766E", "/images/wall.png"), loaded.DefaultBackground);
+            Assert.Equal(appearance, Assert.Single(Assert.Single(loaded.Profiles).Bindings).Appearance);
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Load_returns_null_when_there_is_no_file()
     {
         Assert.Null(new ProfileStore(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.json")).Load());
