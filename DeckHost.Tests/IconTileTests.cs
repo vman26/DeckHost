@@ -173,3 +173,75 @@ public class ControlBackgroundTests
         }
     }
 }
+
+/// <summary>An icon picked from the library, on the tile in place of the action's own.</summary>
+public sealed class ChosenIconTests : IDisposable
+{
+    private readonly string _folder = Directory.CreateTempSubdirectory("deckhost-chosen-icon").FullName;
+
+    public void Dispose() => Directory.Delete(_folder, recursive: true);
+
+    [Fact]
+    public void A_single_color_svg_file_is_drawn_in_the_given_color()
+    {
+        var path = Path.Combine(_folder, "square.svg");
+        File.WriteAllText(path, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M2 2h20v20H2z\"/></svg>");
+
+        using var resources = new SkiaDrawingResources();
+        using var bitmap = new SKBitmap(new SKImageInfo(112, 112, SKColorType.Rgba8888, SKAlphaType.Premul));
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Black);
+        new SkiaRenderContext(canvas, 112, 112, "dev", "key.0", new VariableStore(), resources).DrawIcon(path, 56, 56, 48, 0xFF00FF00);
+        canvas.Flush();
+
+        Assert.Equal(new SKColor(0xFF00FF00), bitmap.GetPixel(56, 56));
+        Assert.Equal(SKColors.Black, bitmap.GetPixel(10, 10)); // only the icon's square
+    }
+
+    [Fact]
+    public void A_colored_icon_keeps_its_colors()
+    {
+        var path = Path.Combine(_folder, "red.svg");
+        File.WriteAllText(path, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill=\"#FF0000\" d=\"M2 2h20v20H2z\"/></svg>");
+
+        using var resources = new SkiaDrawingResources();
+        using var bitmap = new SKBitmap(new SKImageInfo(112, 112, SKColorType.Rgba8888, SKAlphaType.Premul));
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Black);
+        new SkiaRenderContext(canvas, 112, 112, "dev", "key.0", new VariableStore(), resources).DrawIcon(path, 56, 56, 48, 0xFF00FF00);
+        canvas.Flush();
+
+        Assert.Equal(SKColors.Red, bitmap.GetPixel(56, 56));
+    }
+
+    [Fact]
+    public void A_zone_with_only_an_icon_has_content_of_its_own()
+    {
+        var reference = new DeckHost.Contracts.Models.ActionReference("p", "P", "display", "Display", DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
+        var iconOnly = new DeckHost.Contracts.Models.ControlBinding("touch.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference,
+            new DeckHost.Contracts.Models.ControlAppearance { IconPath = "/icons/mic.svg" }, []);
+
+        Assert.True(ControlRenderer.HasOwnContent(iconOnly, new AppearanceOnlyAction("display")));
+        Assert.False(ControlRenderer.HasOwnContent(iconOnly with { Appearance = new DeckHost.Contracts.Models.ControlAppearance() }, new AppearanceOnlyAction("display")));
+    }
+
+    [Fact]
+    public void Choosing_an_icon_for_an_empty_control_creates_a_display_binding_with_it()
+    {
+        var builtIns = DeckHost.App.SystemPlugins.SystemPluginSet.Create().First(plugin => plugin.Id == DeckHost.App.SystemPlugins.SystemPluginSet.BuiltInPluginId);
+        var display = DeckHost.App.ViewModels.ActionItemViewModel.Create(builtIns.Id, builtIns.Name, builtIns.Actions.First(action => action.Id == "builtin.display-content"));
+        var control = new DeckHost.App.ViewModels.ControlItemViewModel(new DeckHost.Contracts.Models.PhysicalControl("key.0", "Key 1", DeckHost.Contracts.Models.ControlType.Key,
+            new DeckHost.Contracts.Models.Rect(0, 0, 10, 10), DeckHost.Contracts.Enums.InputCapabilities.Press, DeckHost.Contracts.Enums.OutputCapabilities.ColorImage));
+        var customize = new DeckHost.App.ViewModels.ControlCustomizationViewModel(control, null, [display], display);
+
+        Assert.Null(customize.BuildBinding());
+        customize.IconPath = "/icons/mic.svg";
+        var binding = customize.BuildBinding();
+
+        Assert.NotNull(binding);
+        Assert.Equal("builtin.display-content", binding!.Action.ActionId);
+        Assert.Equal("/icons/mic.svg", binding.Appearance.IconPath);
+        customize.ClearIconCommand.Execute(null);
+        Assert.Null(customize.BuildBinding());
+    }
+}

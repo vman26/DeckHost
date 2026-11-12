@@ -61,7 +61,9 @@ public interface IRenderContext
 
     /// <summary>
     /// Draws an icon: SVG path data on a 24×24 grid (see <see cref="Icons"/>), filled with the
-    /// even-odd rule, centered on the point and scaled to <paramref name="size"/> pixels.
+    /// even-odd rule, centered on the point and scaled to <paramref name="size"/> pixels. An absolute
+    /// file path (an icon from the library) draws that image fitted into the same square; a
+    /// single-color SVG (one that uses <c>currentColor</c>) takes <paramref name="argbColor"/>.
     /// (Default members: plugins built against earlier versions keep loading.)
     /// </summary>
     void DrawIcon(string svgPathData, double centerX, double centerY, double size, uint argbColor = 0xFFFFFFFF)
