@@ -104,7 +104,7 @@
 							<TextBlock Classes="section" Text="BACKGROUND" />
 							<TextBlock Classes="hint" Text="Shown behind every control of this profile. An image spans the whole device, so each key shows its own part of it. Animated GIFs play (about 10 frames per second)." />
 							<TextBlock Text="Color" FontWeight="SemiBold" Foreground="#E2E8F0" />
-							<local:ColorField Hex="{Binding EditingBackgroundColor, Mode=TwoWay}" DefaultHex="#000000" Placeholder="black" Width="280" HorizontalAlignment="Left" />
+							<local:ColorField Hex="{Binding EditingBackgroundColor, Mode=TwoWay}" DefaultHex="#0B1220" Placeholder="DeckHost dark blue" Width="280" HorizontalAlignment="Left" />
 							<TextBlock Text="{Binding BackgroundColorError}" IsVisible="{Binding HasBackgroundColorError}" Foreground="#FCA5A5" FontSize="12" />
 							<TextBlock Text="Image (PNG, JPG, SVG or animated GIF)" FontWeight="SemiBold" Foreground="#E2E8F0" />
 							<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">

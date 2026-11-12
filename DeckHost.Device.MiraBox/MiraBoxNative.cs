@@ -153,6 +153,7 @@ internal static unsafe partial class MiraBoxNative
         (int)MiraBoxResult.BufferSizeMismatch => "buffer size does not match width x height",
         (int)MiraBoxResult.DeviceNotFound => "device not connected",
         (int)MiraBoxResult.NotSupported => "not supported by this device or key",
+        (int)MiraBoxResult.NotReady => "the device isn't ready to receive yet",
         (int)MiraBoxResult.BufferTooSmall => "buffer too small",
         (int)MiraBoxResult.EncodeFailed => "image encoding failed",
         (int)MiraBoxResult.Exception => "native exception",
@@ -294,4 +295,5 @@ internal enum MiraBoxResult
     BufferTooSmall = -5,
     EncodeFailed = -6,
     Exception = -7,
+    NotReady = -8,
 }
