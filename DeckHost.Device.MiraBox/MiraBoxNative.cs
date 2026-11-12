@@ -79,6 +79,26 @@ internal static unsafe partial class MiraBoxNative
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int SendBackgroundFile(string deviceKey, string imagePath);
 
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_SetTemporaryBackground", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    private static partial int SetTemporaryBackgroundNative(string deviceKey, byte* rgba, int bufferLength, int width, int height);
+
+    [LibraryImport(LibraryName, EntryPoint = "MiraBox_ClearTemporaryBackground", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial int ClearTemporaryBackground(string deviceKey);
+
+    /// <summary>
+    /// Draws a background that covers the stored idle screen until it is cleared. Any size: the
+    /// device scales it to its screen.
+    /// </summary>
+    public static int SetTemporaryBackground(string deviceKey, ReadOnlySpan<byte> rgba, int width, int height)
+    {
+        fixed (byte* pixels = rgba)
+        {
+            return SetTemporaryBackgroundNative(deviceKey, pixels, rgba.Length, width, height);
+        }
+    }
+
     public static int SetDeviceConfig(string deviceKey, ReadOnlySpan<byte> states)
     {
         fixed (byte* values = states)

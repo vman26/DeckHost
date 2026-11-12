@@ -26,20 +26,25 @@ sealed class Program
         using var mutex = new Mutex(initiallyOwned: true, InstanceMutexName, out var isFirstInstance);
         if (!isFirstInstance)
         {
-            try
+            if (OperatingSystem.IsWindows())
             {
-                using var activate = EventWaitHandle.OpenExisting(ActivateEventName);
-                activate.Set();
-            }
-            catch (WaitHandleCannotBeOpenedException)
-            {
+                try
+                {
+                    using var activate = EventWaitHandle.OpenExisting(ActivateEventName);
+                    activate.Set();
+                }
+                catch (WaitHandleCannotBeOpenedException)
+                {
+                }
             }
 
             return 0;
         }
 
         StartedAtLogin = Array.Exists(args, static arg => string.Equals(arg, Platform.AppSettings.StartupArgument, StringComparison.OrdinalIgnoreCase));
-        using var activateRequested = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+
+        // Named events only exist on Windows; elsewhere a second launch simply exits.
+        using var activateRequested = OperatingSystem.IsWindows() ? new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName) : null;
         ActivateRequested = activateRequested;
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

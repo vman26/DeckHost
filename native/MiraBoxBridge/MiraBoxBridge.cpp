@@ -98,6 +98,9 @@ namespace {
             }
         }
 
+        // setFrameBackgroundStream (the temporary background) encodes through the device's encoder.
+        device->setEncoder(std::make_shared<OpenCVImageEncoder>());
+
         reader->startReadLoop();
 
         // Same start-up as the SDK's own N4 Pro sample. Without the heartbeat the device treats
@@ -191,8 +194,16 @@ namespace {
             return MIRABOX_BUFFER_SIZE_MISMATCH;
         }
 
+        // The host renders R, G, B, A; OpenCV (and so the SDK's canvas) expects B, G, R, A.
+        // Copying the bytes as they are showed red as blue and blue as red on the device.
         RawCanvas canvas(width, height, true);
-        std::memcpy(canvas.pixels.data(), rgba, expectedLength);
+        auto* destination = canvas.pixels.data();
+        for (size_t offset = 0; offset < expectedLength; offset += 4) {
+            destination[offset] = rgba[offset + 2];
+            destination[offset + 1] = rgba[offset + 1];
+            destination[offset + 2] = rgba[offset];
+            destination[offset + 3] = rgba[offset + 3];
+        }
 
         OpenCVImageEncoder encoder;
         std::vector<uint8_t> encodedBuffer;
@@ -409,6 +420,55 @@ extern "C" {
             }
 
             device->setBackgroundImgStream(std::string(reinterpret_cast<const char*>(encoded.data()), encoded.size()));
+            device->refresh();
+            return MIRABOX_OK;
+        }
+        catch (...) {
+            return MIRABOX_EXCEPTION;
+        }
+    }
+
+    EXPORT int32_t MIRABOX_CALL MiraBox_SetTemporaryBackground(const char* deviceKey, const uint8_t* rgba, int32_t bufferLength, int32_t width, int32_t height) {
+        try {
+            auto device = GetDevice(deviceKey);
+            if (device == nullptr) {
+                return MIRABOX_DEVICE_NOT_FOUND;
+            }
+
+            if (device->feature() == nullptr || !device->feature()->isDualDevice || !device->feature()->supportBackGroundGif) {
+                return MIRABOX_NOT_SUPPORTED;
+            }
+
+            // Lossless and unrotated: the SDK scales it to the screen, rotates it and encodes the JPEG.
+            const ImgHelper passThrough(static_cast<uint32_t>(std::max(width, 0)), static_cast<uint32_t>(std::max(height, 0)), 0.0,
+                ResizeOption::Scale, false, false, ImgType::PNG);
+            std::string encoded;
+            const auto result = EncodeRgba(rgba, bufferLength, width, height, 95, passThrough, encoded);
+            if (result != MIRABOX_OK) {
+                return result;
+            }
+
+            device->setFrameBackgroundStream(encoded);
+            device->refresh();
+            return MIRABOX_OK;
+        }
+        catch (...) {
+            return MIRABOX_EXCEPTION;
+        }
+    }
+
+    EXPORT int32_t MIRABOX_CALL MiraBox_ClearTemporaryBackground(const char* deviceKey) {
+        try {
+            auto device = GetDevice(deviceKey);
+            if (device == nullptr) {
+                return MIRABOX_DEVICE_NOT_FOUND;
+            }
+
+            if (device->feature() == nullptr || !device->feature()->isDualDevice || !device->feature()->supportBackGroundGif) {
+                return MIRABOX_NOT_SUPPORTED;
+            }
+
+            device->gifer()->clearBackgroundGifStream();
             device->refresh();
             return MIRABOX_OK;
         }

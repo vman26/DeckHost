@@ -254,12 +254,14 @@
 								BorderBrush="#334155"
 								BorderThickness="1"
 								CornerRadius="24">
+							<!-- The background is the color the device shows between its controls for this profile. -->
 							<ItemsControl ItemsSource="{Binding ControlItems}"
 										  Width="{Binding CanvasWidth}"
-										  Height="{Binding CanvasHeight}">
+										  Height="{Binding CanvasHeight}"
+										  Background="{Binding CanvasBackground}">
 								<ItemsControl.ItemsPanel>
 									<ItemsPanelTemplate>
-										<Canvas Background="#020617" />
+										<Canvas Background="Transparent" />
 									</ItemsPanelTemplate>
 								</ItemsControl.ItemsPanel>
 								<ItemsControl.ItemTemplate>

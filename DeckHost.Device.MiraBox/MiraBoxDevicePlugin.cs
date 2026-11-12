@@ -15,7 +15,7 @@ namespace DeckHost.Device.MiraBox;
 /// The primary definition always exists, connected or not, so profiles can be edited offline.
 /// </para>
 /// </summary>
-public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin
+public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IConfigurableDevicePlugin
 {
     public IReadOnlyList<ActionSettingDefinition> GetDeviceSettingDefinitions(string deviceId) => N4ProDeviceSettings.Definitions;
 
@@ -63,6 +63,12 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
     public const string PrimaryDeviceId = "mirabox.n4pro";
     private const string DeviceName = "MiraBox N4 Pro";
     private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>The N4 Pro reports a knob press but never its release; one is reported this long after the press.</summary>
+    private static readonly TimeSpan KnobReleaseDelay = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>The backdrop is one color, so a few pixels are enough: the device scales them to its screen.</summary>
+    private const int BackdropSize = 8;
 
     // The native callback is a static function pointer, so it needs a static route back to the plugin.
     private static MiraBoxDevicePlugin? s_active;
@@ -184,12 +190,38 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         return CheckResult(deviceId, MiraBoxNative.SetLedColors(deviceKey, colors), out error);
     }
 
+    /// <summary>
+    /// Draws a temporary background behind the keys. The N4 Pro shows its stored idle screen
+    /// everywhere no key image is, also while DeckHost runs; this covers it until <see cref="Clear"/>.
+    /// </summary>
+    public bool TrySetBackdrop(string deviceId, byte red, byte green, byte blue, out string? error)
+    {
+        if (!TryGetConnectedKey(deviceId, out var deviceKey, out error))
+        {
+            return false;
+        }
+
+        Span<byte> pixels = stackalloc byte[BackdropSize * BackdropSize * 4];
+        for (var offset = 0; offset < pixels.Length; offset += 4)
+        {
+            pixels[offset] = red;
+            pixels[offset + 1] = green;
+            pixels[offset + 2] = blue;
+            pixels[offset + 3] = 255;
+        }
+
+        return CheckResult(deviceId, MiraBoxNative.SetTemporaryBackground(deviceKey, pixels, BackdropSize, BackdropSize), out error);
+    }
+
     public void Clear(string deviceId)
     {
         if (!TryGetConnectedKey(deviceId, out var deviceKey, out _))
         {
             return;
         }
+
+        // Back to the device's own idle screen.
+        MiraBoxNative.ClearTemporaryBackground(deviceKey);
 
         byte[] colors;
         lock (_sync)
@@ -280,6 +312,20 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
         TrackLongPress(deviceId, controlId, inputEvent);
         _context.ReportInputEvent(deviceId, controlId, inputEvent, value);
+
+        if (eventType == MiraBoxEventType.KnobPress)
+        {
+            // Without a release the knob would stay "held" for the editor and for "Released" triggers.
+            _ = Task.Delay(KnobReleaseDelay).ContinueWith(
+                _ =>
+                {
+                    if (!_disposed)
+                    {
+                        _context?.ReportInputEvent(deviceId, controlId, InputCapabilities.Release, 0);
+                    }
+                },
+                TaskScheduler.Default);
+        }
     }
 
     /// <summary>Raises LongPress when a key stays down for <see cref="LongPressDelay"/>.</summary>

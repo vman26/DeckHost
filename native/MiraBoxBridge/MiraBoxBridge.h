@@ -50,11 +50,17 @@ extern "C" {
 
     // RGBA8888, width * height * 4 bytes. keyId is the SDK key id (main keys or second-screen keys).
     EXPORT int32_t MIRABOX_CALL MiraBox_SendKeyImage(const char* deviceKey, int32_t keyId, const uint8_t* rgba, int32_t bufferLength, int32_t width, int32_t height);
-    // RGBA8888 full background image.
+    // RGBA8888 full background image, stored on the device (see MiraBox_SendBackgroundFile).
     EXPORT int32_t MIRABOX_CALL MiraBox_SendBackground(const char* deviceKey, const uint8_t* rgba, int32_t bufferLength, int32_t width, int32_t height);
-    // Background from an image file (PNG/JPG/...), scaled to the screen. The N4 Pro keeps the last
-    // background as its idle/start-up screen.
+    // Background from an image file (PNG/JPG/...), scaled to the screen. The N4 Pro stores it and
+    // keeps showing it as its idle/start-up screen, also behind the keys.
     EXPORT int32_t MIRABOX_CALL MiraBox_SendBackgroundFile(const char* deviceKey, const char* imagePath);
+    // RGBA8888 background that is only drawn, not stored: it covers the stored background behind
+    // and between the keys until it is cleared or the device loses power. Any size; it is scaled
+    // to the screen. Send the key images again afterwards.
+    EXPORT int32_t MIRABOX_CALL MiraBox_SetTemporaryBackground(const char* deviceKey, const uint8_t* rgba, int32_t bufferLength, int32_t width, int32_t height);
+    // Removes the temporary background, so the stored one shows again.
+    EXPORT int32_t MIRABOX_CALL MiraBox_ClearTemporaryBackground(const char* deviceKey);
     EXPORT int32_t MIRABOX_CALL MiraBox_ClearAllKeys(const char* deviceKey);
     EXPORT int32_t MIRABOX_CALL MiraBox_SetKeyBrightness(const char* deviceKey, uint8_t brightness);
 

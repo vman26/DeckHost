@@ -222,6 +222,19 @@ public class MainViewModel : ViewModelBase
 
     public bool HasRuntimeLogs => RuntimeLogs.Count > 0;
 
+    /// <summary>
+    /// The device's screen color between the controls for the selected profile (its background
+    /// color, else the base color), so the canvas shows what the device shows.
+    /// </summary>
+    public Avalonia.Media.IBrush CanvasBackground
+    {
+        get
+        {
+            var (red, green, blue) = Core.Rendering.ProfileBackdrop.GetColor(SelectedProfile is null ? null : new ProfileBackground(SelectedProfile.BackgroundColor));
+            return new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(red, green, blue));
+        }
+    }
+
     public double CanvasWidth => ControlItems.Count == 0 ? 0d : ControlItems.Max(static control => control.X + control.Width) + 24;
 
     public double CanvasHeight => ControlItems.Count == 0 ? 0d : ControlItems.Max(static control => control.Y + control.Height) + 24;
@@ -433,7 +446,10 @@ public class MainViewModel : ViewModelBase
         }
 
         _actionsByKey.TryGetValue(EditorActionIds.Key(EditorActionIds.BuiltInPluginId, EditorActionIds.DisplayContent), out var displayContent);
-        return new ControlCustomizationViewModel(controlItem, SelectedProfile?.GetBinding(controlId), _actionsByKey.Values, displayContent);
+        var linkedDisplayName = controlItem.Control.DisplayControlId is { } displayId && _controlsById.TryGetValue(displayId, out var display)
+            ? display.DisplayName
+            : null;
+        return new ControlCustomizationViewModel(controlItem, SelectedProfile?.GetBinding(controlId), _actionsByKey.Values, displayContent, linkedDisplayName);
     }
 
     public void SelectControl(PhysicalControl control)
@@ -842,6 +858,7 @@ public class MainViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(SelectedProfileSummary));
         OnPropertyChanged(nameof(CurrentPageName));
+        OnPropertyChanged(nameof(CanvasBackground));
         _saveTimer.Stop();
         _saveTimer.Start();
     }
@@ -968,6 +985,7 @@ public class MainViewModel : ViewModelBase
         RaiseSelectedAssignmentChanged();
         OnPropertyChanged(nameof(CurrentPageName));
         OnPropertyChanged(nameof(SelectedProfileSummary));
+        OnPropertyChanged(nameof(CanvasBackground));
         StatusMessage = SelectedProfile is null ? "No profile selected." : $"Editing profile {SelectedProfile.Name}.";
     }
 
@@ -1018,11 +1036,12 @@ public class MainViewModel : ViewModelBase
         var existing = SelectedProfile.GetBinding(SelectedControl.Id);
         var newText = text ?? existing?.AppearanceText ?? string.Empty;
         var newImage = imagePath ?? existing?.AppearanceImagePath ?? string.Empty;
-        var appearance = new ControlAppearance(
-            string.IsNullOrWhiteSpace(newText) ? null : newText,
-            string.IsNullOrWhiteSpace(newImage) ? null : newImage,
-            existing?.LightFeedback,
-            existing?.Model.Appearance.BackgroundColor);
+        // Everything else (text style, background color, light) stays as it is.
+        var appearance = (existing?.Model.Appearance ?? new ControlAppearance()) with
+        {
+            Text = string.IsNullOrWhiteSpace(newText) ? null : newText,
+            ImagePath = string.IsNullOrWhiteSpace(newImage) ? null : newImage,
+        };
 
         if (existing is null)
         {

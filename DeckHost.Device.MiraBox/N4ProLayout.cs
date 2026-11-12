@@ -12,7 +12,8 @@ namespace DeckHost.Device.MiraBox;
 /// <item>A touch strip with 4 zones, 176x112, SDK key ids 1..4 (only a release event per tap),
 /// plus swipe left (28) and swipe right (29) for the whole strip.</item>
 /// <item>4 knobs: rotate left 16/18/20/22, rotate right 17/19/21/23, press 24..27
-/// (the N4 Pro sends no knob release).</item>
+/// (the N4 Pro sends no knob release). Each knob sits under one touch zone, which is its
+/// display (<see cref="PhysicalControl.DisplayControlId"/>).</item>
 /// <item>4 RGB LEDs.</item>
 /// </list>
 /// The positions below are designer coordinates (not device pixels). If a key lights up in the
@@ -119,7 +120,8 @@ internal static class N4ProLayout
                 InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release,
                 OutputCapabilities.None,
                 HardwareId: $"{FirstKnobLeftId + (index * 2)}/{FirstKnobRightId + (index * 2)}/{FirstKnobPressId + index}",
-                LedIndex: index < ledCount ? index : null));
+                LedIndex: index < ledCount ? index : null,
+                DisplayControlId: $"{TouchPrefix}{index}"));
         }
 
         return new DeviceDefinition(deviceId, name, controls, isConnected, detail);

@@ -19,6 +19,25 @@ public class N4ProLayoutTests
         Assert.Equal([0, 1, 2, 3], device.Controls.Where(control => control.HasLight).Select(control => control.LedIndex!.Value));
     }
 
+    [Fact]
+    public void Each_knob_shows_on_the_touch_zone_above_it()
+    {
+        var device = N4ProLayout.Create("dev", "N4 Pro", info: null, isConnected: false, detail: null);
+
+        for (var index = 0; index < 4; index++)
+        {
+            var knob = device.FindControl($"encoder.{index}")!;
+            var zone = device.FindControl($"touch.{index}")!;
+            Assert.Equal(zone.Id, knob.DisplayControlId);
+
+            // The zone is directly above the knob, which is what the strip placement relies on.
+            Assert.True(zone.Bounds.Y < knob.Bounds.Y);
+            Assert.InRange(knob.Bounds.X + (knob.Bounds.Width / 2), zone.Bounds.X, zone.Bounds.X + zone.Bounds.Width);
+        }
+
+        Assert.All(device.Controls.Where(control => control.Type != ControlType.Encoder), control => Assert.Null(control.DisplayControlId));
+    }
+
     [Theory]
     [InlineData("key.0", 11)]
     [InlineData("key.4", 15)]

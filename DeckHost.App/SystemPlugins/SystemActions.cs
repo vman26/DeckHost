@@ -1,4 +1,5 @@
 using DeckHost.App.Platform;
+using DeckHost.Contracts;
 using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
@@ -204,7 +205,6 @@ internal sealed class SystemInfoAction() : DeckActionBase(
 {
     private const string MetricKey = "metric";
     private const string DriveKey = "drive";
-    private const uint BarBackground = 0xFF1E293B;
     private const uint BarNormal = 0xFF22C55E;
     private const uint BarWarning = 0xFFF59E0B;
     private const uint BarCritical = 0xFFEF4444;
@@ -228,22 +228,8 @@ internal sealed class SystemInfoAction() : DeckActionBase(
     public override void Render(IRenderContext context)
     {
         var (label, value, fraction) = Read(context.Settings);
-        var width = context.Width;
-        var height = context.Height;
-
-        context.DrawCenteredText(ResolveDisplayText(context, label), width / 2d, height * 0.22d, SubtitleSize(context), SecondaryTextColor);
-        context.DrawCenteredText(value, width / 2d, height * 0.52d, Math.Max(14f, height * 0.22f));
-
-        if (fraction is { } usage)
-        {
-            var barX = width * 0.12d;
-            var barWidth = width * 0.76d;
-            var barY = height * 0.74d;
-            var barHeight = Math.Max(4d, height * 0.08d);
-            context.FillRoundedRect(barX, barY, barWidth, barHeight, barHeight / 2d, BarBackground);
-            context.FillRoundedRect(barX, barY, Math.Max(barHeight, barWidth * usage), barHeight, barHeight / 2d,
-                usage >= 0.9 ? BarCritical : usage >= 0.75 ? BarWarning : BarNormal);
-        }
+        context.DrawReading(ResolveDisplayText(context, label), value, fraction,
+            fraction >= 0.9 ? BarCritical : fraction >= 0.75 ? BarWarning : BarNormal);
     }
 
     private static (string Label, string Value, double? Fraction) Read(ActionSettings settings)

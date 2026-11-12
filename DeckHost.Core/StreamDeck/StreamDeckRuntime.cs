@@ -260,29 +260,40 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         var stateIndex = Math.Clamp(state?.State ?? 0, 0, Math.Max(0, action.States.Count - 1));
         var manifestState = action.States.Count > 0 ? action.States[stateIndex] : null;
 
-        // The user's own image (Customize) replaces the plugin's image.
-        var hasOwnImage = context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceImage), out var ownImage) &&
-                          !string.IsNullOrWhiteSpace(ownImage);
-        if (!hasOwnImage)
-        {
-            if (state?.Image is { } custom)
-            {
-                context.DrawEncodedImage(custom);
-            }
-            else if (DefaultImage(manifest, manifestState?.Image ?? action.Icon) is { } defaultImage)
-            {
-                context.DrawEncodedImage(defaultImage);
-            }
-        }
-
         // Custom text from Customize wins over the plugin's title, like a title override in Stream Deck.
-        var title = context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceText), out var ownText) &&
-                    !string.IsNullOrWhiteSpace(ownText)
+        var ownTitle = context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceText), out var ownText) &&
+                       !string.IsNullOrWhiteSpace(ownText)
             ? ownText
-            : state?.Title ?? manifestState?.Title;
-        if (!string.IsNullOrWhiteSpace(title))
+            : null;
+
+        if (state is { Controller: "Encoder", Feedback: { } feedback })
         {
-            context.DrawLabel(title, TextVerticalAlignment.Bottom, Math.Max(10f, context.Height * 0.14f));
+            // A dial action: what it shows on its touch-strip segment on a Stream Deck +, drawn where
+            // DeckHost shows the knob (the touch zone above it).
+            context.DrawReading(ownTitle ?? feedback.Title ?? state.Title ?? manifestState?.Title ?? action.Name, feedback.Value ?? string.Empty, feedback.Indicator);
+        }
+        else
+        {
+            // The user's own image (Customize) replaces the plugin's image. A strip is too low for one.
+            var hasOwnImage = context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceImage), out var ownImage) &&
+                              !string.IsNullOrWhiteSpace(ownImage);
+            if (!hasOwnImage && !context.IsCompact)
+            {
+                if (state?.Image is { } custom)
+                {
+                    context.DrawEncodedImage(custom);
+                }
+                else if (DefaultImage(manifest, manifestState?.Image ?? action.Icon) is { } defaultImage)
+                {
+                    context.DrawEncodedImage(defaultImage);
+                }
+            }
+
+            var title = ownTitle ?? state?.Title ?? manifestState?.Title ?? (context.IsCompact ? action.Name : null);
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                context.DrawLabel(title, TextVerticalAlignment.Bottom, Math.Max(10f, context.Height * 0.14f));
+            }
         }
 
         if (state?.Flash is { } flash && flash.Until > DateTime.UtcNow)
@@ -458,6 +469,10 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                 break;
             case "setImage" when state is not null:
                 state.Image = DecodeImage(payload?["image"]?.GetValue<string>());
+                state.RequestRender();
+                break;
+            case "setFeedback" when state is not null:
+                state.Feedback = DialFeedback.Merge(state.Feedback, payload);
                 state.RequestRender();
                 break;
             case "setState" when state is not null:
@@ -923,6 +938,9 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         public string? Title { get; set; }
 
         public byte[]? Image { get; set; }
+
+        /// <summary>What a dial action sent with setFeedback; null until it does.</summary>
+        public DialFeedback? Feedback { get; set; }
 
         public int State { get; set; }
 

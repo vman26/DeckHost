@@ -29,6 +29,8 @@ dotnet test .\DeckHost.Tests
 
 `dotnet build` also configures and builds the native bridge (`native/MiraBoxBridge`) with CMake and copies it to `plugins/device/deckhost.device.mirabox/` next to the app. To build only the C# code, add `-p:EnableMiraBoxNativeBuild=false`; the app then starts without device support.
 
+The tests also run on Linux (`dotnet test DeckHost.Tests -p:EnableMiraBoxNativeBuild=false`). Building the native bridge there needs OpenCV, giflib and libudev development packages (on Ubuntu: `libopencv-dev libgif-dev libudev-dev`).
+
 ## Plugins
 
 DeckHost ships with three **system plugins**. You can switch them off in the Plugin Manager, but you can't uninstall them:
@@ -62,6 +64,16 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 - **Image**: PNG, JPG, animated GIF or SVG, with a **Clear** button; and a background color.
 - The action's own settings, and for knobs the LED color.
 
+### Knobs on the touch strip
+
+The N4 Pro's knobs have no screen of their own, so like on a Stream Deck +, each knob shows its action on the touch zone above it:
+
+- **Touch zone empty:** the knob's action fills the zone, for example the Volume Knob shows the volume and a level bar. Tapping the zone then works like pressing the knob.
+- **Touch zone has its own action:** the zone keeps its action, and the knob gets a one-line strip along its bottom edge. A tap stays with the zone's action.
+- **Show this on Touch N** (Customize, on the knob) turns this off for a knob, leaving the zone to its own action.
+
+Text, image and text style set on a knob are used there too. Actions that show a value (Volume Knob, Clock, Counter, System Info, and Stream Deck dial actions through `setFeedback`) draw it as a compact one-liner in the strip.
+
 ### Plugin store and Stream Deck plugins
 
 **☰ → Open Plugin Manager** (or **Plugins…** next to the action search) → **Store** shows one list, which you can filter by source, category, status and search text:
@@ -78,7 +90,7 @@ Stream Deck plugins run through DeckHost's Stream Deck compatibility layer:
 
 - Each plugin starts as its own process (native `.exe` or Node.js) and talks to DeckHost over the standard Stream Deck SDK WebSocket protocol.
 - N4 Pro keys act as Stream Deck keys and the knobs as Stream Deck+ dials.
-- `setTitle`, `setImage` (PNG, JPG and SVG), `setState`, settings and global settings work.
+- `setTitle`, `setImage` (PNG, JPG and SVG), `setState`, settings and global settings work. Dial actions' `setFeedback` (title, value and indicator bar) is shown on the knob's touch zone.
 - HTML-based plugins (whose code is a web page) run in a hidden built-in browser page, as in the Stream Deck app. Their console output goes to the DeckHost log.
 - A plugin's own settings page (property inspector) opens inside the Customize window through the built-in browser (Microsoft Edge WebView2, which Windows 10/11 include). **Open in browser** is there as a fallback.
 
@@ -117,7 +129,7 @@ The Plugin Manager shows these paths and has **Plugins folder** and **Logs folde
 
 ### Backgrounds, live preview and test mode
 
-- **Backgrounds:** a profile can have a background color and an image or animated GIF that spans all keys (Profile Manager). Each control can have its own background color, and its image can be an animated GIF (Customize). GIFs play at about 10 frames per second.
+- **Backgrounds:** a profile can have a background color and an image or animated GIF that spans all keys (Profile Manager). Each control can have its own background color, and its image can be an animated GIF (Customize). GIFs play at about 10 frames per second. The profile's background color also fills the screen between the keys, as a temporary background that covers the device's idle screen while DeckHost runs; the idle screen comes back when DeckHost exits. A background *image* is drawn on the keys and zones only.
 - **Live preview:** the canvas shows the exact images that are on the device, even when it's unplugged, and lights up controls as you press them.
 - **Test mode** (canvas header): click controls to press them, use the mouse wheel to turn knobs, and click the left or right half of the swipe bar to swipe. The real actions run.
 
