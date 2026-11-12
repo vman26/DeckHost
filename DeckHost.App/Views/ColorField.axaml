@@ -10,10 +10,10 @@
 	</UserControl.Styles>
 	<StackPanel Spacing="6">
 		<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-			<ColorPicker Name="Picker"
-						 IsAlphaEnabled="False"
-						 IsAlphaVisible="False"
-						 VerticalAlignment="Center" />
+			<!-- The swatch opens the picker (ColorPickerPanel). -->
+			<Button Name="SwatchButton" Width="48" Height="32" Padding="3" VerticalAlignment="Center" ToolTip.Tip="Pick a color">
+				<Border Name="Swatch" CornerRadius="3" BorderBrush="#475569" BorderThickness="1" />
+			</Button>
 			<TextBox Name="HexBox" Grid.Column="1" />
 			<Button Name="ClearButton" Grid.Column="2" Content="✕" ToolTip.Tip="Back to the default" Padding="8,4" />
 		</Grid>
