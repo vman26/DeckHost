@@ -37,6 +37,7 @@ jobs:
           - os: macos-latest
             rid: osx-arm64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
@@ -67,7 +68,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libudev-dev libgif-dev imagemagick
+          sudo apt-get install -y --no-install-recommends libudev-dev libgif-dev libusb-1.0-0-dev imagemagick
 
       - name: Cache static OpenCV
         if: runner.os == 'Linux'
@@ -100,6 +101,7 @@ jobs:
 
       # The published app must load its native bridge on a clean machine.
       - name: Check the native bridge
+        timeout-minutes: 2
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             publish/DeckHost/DeckHost.App.exe --check-native
