@@ -246,7 +246,7 @@ internal sealed class SystemInfoAction() : DeckActionBase(
     {
         var (label, value, fraction) = Read(context.Settings);
         context.DrawReading(ResolveDisplayText(context, label), value, fraction,
-            fraction >= 0.9 ? BarCritical : fraction >= 0.75 ? BarWarning : BarNormal, Icons.Chip);
+            fraction >= 0.9 ? BarCritical : fraction >= 0.75 ? BarWarning : BarNormal, ResolveIcon(context, Icons.Chip));
     }
 
     private static (string Label, string Value, double? Fraction) Read(ActionSettings settings)

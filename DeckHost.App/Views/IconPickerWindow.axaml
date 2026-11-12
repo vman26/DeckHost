@@ -1,0 +1,128 @@
+<Window xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		x:Class="DeckHost.App.Views.IconPickerWindow"
+		x:DataType="vm:IconPickerViewModel"
+		Width="760"
+		Height="640"
+		MinWidth="560"
+		MinHeight="420"
+		Background="#111827"
+		RequestedThemeVariant="Dark"
+		Icon="/Assets/avalonia-logo.ico"
+		WindowStartupLocation="CenterOwner"
+		Title="Choose an icon">
+
+	<Window.Styles>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+		<Style Selector="ListBox.icons ListBoxItem">
+			<Setter Property="Padding" Value="4" />
+			<Setter Property="Margin" Value="3" />
+			<Setter Property="CornerRadius" Value="8" />
+		</Style>
+		<Style Selector="ListBox.icons ListBoxItem:selected /template/ ContentPresenter">
+			<Setter Property="Background" Value="#1D4ED8" />
+		</Style>
+	</Window.Styles>
+
+	<Grid RowDefinitions="Auto,*,Auto">
+		<!-- Search and source -->
+		<Border Padding="16,14" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+			<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+				<TextBox Text="{Binding SearchText}" PlaceholderText="Search icons (play, microphone, spotify, ...)" />
+				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+					<ToggleButton Content="My packs" IsChecked="{Binding !IsOnline}" />
+					<ToggleButton Content="Online (Iconify)" IsChecked="{Binding IsOnline}" IsEnabled="{Binding CanSearchOnline}"
+								  ToolTip.Tip="Free open-source icon sets from iconify.design; each set's license is shown and kept" />
+				</StackPanel>
+				<Button Grid.Column="2" Content="Install icon pack…" Click="InstallPack_OnClick"
+						ToolTip.Tip="A Stream Deck icon pack (.streamDeckIconPack), or a zip or folder of images" />
+			</Grid>
+		</Border>
+
+		<Grid Grid.Row="1" ColumnDefinitions="*,220">
+			<!-- Results -->
+			<Grid RowDefinitions="Auto,*" Margin="12,8,6,8">
+				<TextBlock Classes="hint" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}" Margin="4,0,4,8" />
+				<ListBox Grid.Row="1" Classes="icons" ItemsSource="{Binding Results}" SelectedItem="{Binding Selected}"
+						 Background="Transparent" DoubleTapped="Results_OnDoubleTapped">
+					<ListBox.ItemsPanel>
+						<ItemsPanelTemplate>
+							<WrapPanel />
+						</ItemsPanelTemplate>
+					</ListBox.ItemsPanel>
+					<ListBox.ItemTemplate>
+						<DataTemplate x:DataType="vm:IconResultViewModel">
+							<StackPanel Width="78" Spacing="4" ToolTip.Tip="{Binding ToolTip}">
+								<Border Width="64" Height="64" CornerRadius="10" Background="#1E293B" HorizontalAlignment="Center">
+									<Image Source="{Binding Preview}" Width="44" Height="44" />
+								</Border>
+								<TextBlock Text="{Binding Name}" FontSize="11" Foreground="#CBD5E1" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" MaxWidth="76" />
+							</StackPanel>
+						</DataTemplate>
+					</ListBox.ItemTemplate>
+				</ListBox>
+			</Grid>
+
+			<!-- Installed packs -->
+			<Border Grid.Column="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1,0,0,0" Padding="12">
+				<Grid RowDefinitions="Auto,*">
+					<TextBlock Text="Installed packs" FontWeight="SemiBold" Foreground="#E2E8F0" Margin="0,0,0,8" />
+					<ScrollViewer Grid.Row="1">
+						<ItemsControl ItemsSource="{Binding Packs}">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<StackPanel Spacing="8" />
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:IconPackItemViewModel">
+									<Border Background="#111827" CornerRadius="8" Padding="8">
+										<StackPanel Spacing="2">
+											<TextBlock Text="{Binding Title}" Foreground="#F1F5F9" TextWrapping="Wrap" />
+											<TextBlock Text="{Binding Detail}" Classes="hint" />
+											<StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+												<Button Content="License" Padding="8,2" FontSize="12">
+													<Button.Flyout>
+														<Flyout>
+															<ScrollViewer MaxHeight="300" MaxWidth="420">
+																<TextBlock Text="{Binding License}" TextWrapping="Wrap" FontSize="12" />
+															</ScrollViewer>
+														</Flyout>
+													</Button.Flyout>
+												</Button>
+												<Button Content="Remove" Padding="8,2" FontSize="12"
+														Command="{Binding $parent[Window].((vm:IconPickerViewModel)DataContext).UninstallCommand}"
+														CommandParameter="{Binding}" />
+											</StackPanel>
+										</StackPanel>
+									</Border>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</ScrollViewer>
+				</Grid>
+			</Border>
+		</Grid>
+
+		<!-- Selection and actions -->
+		<Border Grid.Row="2" Padding="16,12" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
+			<Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+				<StackPanel VerticalAlignment="Center" Spacing="2">
+					<TextBlock Text="{Binding SelectionText}" Foreground="#E2E8F0" TextTrimming="CharacterEllipsis" />
+					<TextBlock Classes="hint" IsVisible="{Binding SuggestPicture}"
+							   Text="A colored icon: usually made as the whole key picture." />
+				</StackPanel>
+				<Button Grid.Column="1" Content="Cancel" Click="Cancel_OnClick" />
+				<Button Grid.Column="2" Content="Use as picture" Command="{Binding UseAsPictureCommand}"
+						ToolTip.Tip="Fills the key, like an image file" />
+				<Button Grid.Column="3" Content="Use as icon" Classes="accent" Command="{Binding UseAsIconCommand}"
+						ToolTip.Tip="On the action's tile, with its caption; single-color icons are drawn in white" />
+			</Grid>
+		</Border>
+	</Grid>
+</Window>

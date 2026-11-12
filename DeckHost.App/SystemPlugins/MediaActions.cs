@@ -118,7 +118,7 @@ internal sealed class VolumeKnobAction() : DeckActionBase(
             volume.Muted ? "Muted" : volume.Level.ToString("P0", CultureInfo.CurrentCulture),
             volume.Level,
             volume.Muted ? MutedColor : LevelColor,
-            volume.Muted ? Icons.Muted : Icons.Speaker);
+            ResolveIcon(context, volume.Muted ? Icons.Muted : Icons.Speaker));
     }
 }
 

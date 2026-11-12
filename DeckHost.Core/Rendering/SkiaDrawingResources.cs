@@ -25,6 +25,31 @@ public sealed class SkiaDrawingResources : IDisposable
     public const float IconGrid = 24f;
 
     private readonly Dictionary<string, SKPath?> _iconPaths = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> _singleColor = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether an image file is a single-color SVG that takes the color it's drawn in (it paints
+    /// with <c>currentColor</c>, as monochrome icon sets do); such icons are tinted, others drawn as they are.
+    /// </summary>
+    public bool IsSingleColor(string path)
+    {
+        if (!_singleColor.TryGetValue(path, out var single))
+        {
+            try
+            {
+                single = path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) && File.Exists(path) &&
+                         File.ReadAllText(path).Contains("currentColor", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (IOException)
+            {
+                single = false;
+            }
+
+            _singleColor[path] = single;
+        }
+
+        return single;
+    }
 
     /// <summary>An icon's path, parsed once; null when the path data is invalid.</summary>
     public SKPath? GetIconPath(string svgPathData)

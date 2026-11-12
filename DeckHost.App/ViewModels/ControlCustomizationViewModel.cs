@@ -21,6 +21,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     private readonly ActionItemViewModel? _displayContentAction;
     private string _displayText;
     private string _imagePath;
+    private string _iconPath;
     private string _backgroundColor;
     private bool _lightEnabled;
     private string _activeColor;
@@ -53,6 +54,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         _displayContentAction = displayContentAction;
         _displayText = binding?.AppearanceText ?? string.Empty;
         _imagePath = binding?.AppearanceImagePath ?? string.Empty;
+        _iconPath = binding?.Model.Appearance.IconPath ?? string.Empty;
         _backgroundColor = binding?.Model.Appearance.BackgroundColor ?? string.Empty;
 
         var style = binding?.Model.Appearance.TextStyle;
@@ -155,6 +157,9 @@ public partial class ControlCustomizationViewModel : ViewModelBase
 
     [RelayCommand]
     private void ClearImage() => ImagePath = string.Empty;
+
+    [RelayCommand]
+    private void ClearIcon() => IconPath = string.Empty;
 
     // ---------------------------------------------------------------- text style
 
@@ -384,7 +389,27 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         }
     }
 
-    // ---------------------------------------------------------------- light
+    /// <summary>An icon from the icon library on the action's tile, in place of its own icon; empty for the action's own.</summary>
+    public string IconPath
+    {
+        get => _iconPath;
+        set
+        {
+            if (SetProperty(ref _iconPath, value ?? string.Empty))
+            {
+                OnPropertyChanged(nameof(HasIcon));
+                OnPropertyChanged(nameof(IconName));
+                RaiseChanged();
+            }
+        }
+    }
+
+    public bool HasIcon => !string.IsNullOrWhiteSpace(IconPath);
+
+    /// <summary>The icon's file name, shown next to the Choose button.</summary>
+    public string IconName => HasIcon ? System.IO.Path.GetFileNameWithoutExtension(IconPath) : "The action's own icon";
+
+        // ---------------------------------------------------------------- light
 
     public bool SupportsLight { get; }
 
@@ -455,20 +480,22 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         var image = SupportsAppearance && !string.IsNullOrWhiteSpace(ImagePath) ? ImagePath.Trim() : null;
         var light = BuildLight();
         var background = SupportsAppearance && IsHexColor(BackgroundColor, allowAlpha: true) ? "#" + NormalizeColor(BackgroundColor) : null;
+        var icon = SupportsAppearance && !string.IsNullOrWhiteSpace(IconPath) ? IconPath.Trim() : null;
         var appearance = new ControlAppearance(text, image, light, background, SupportsAppearance ? BuildTextStyle() : null)
         {
             ShowOnLinkedDisplay = ShowOnLinkedDisplay,
+            IconPath = icon,
         };
 
         if (_original is null || _primaryAction is null)
         {
-            // An empty control that only shows text/an image.
-            return (text is null && image is null && background is null) || _displayContentAction is null
+            // An empty control that only shows text, an image or an icon.
+            return (text is null && image is null && background is null && icon is null) || _displayContentAction is null
                 ? null
                 : new ControlBinding(ControlId, ProfileActionKind.Single, _displayContentAction.ToActionReference(), appearance, []);
         }
 
-        if (_primaryAction.IsDisplayContentAction && text is null && image is null && background is null)
+        if (_primaryAction.IsDisplayContentAction && text is null && image is null && background is null && icon is null)
         {
             return null;
         }
