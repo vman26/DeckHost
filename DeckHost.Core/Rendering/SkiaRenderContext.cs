@@ -359,6 +359,22 @@ namespace DeckHost.Core.Rendering
             return true;
         }
 
+        public bool DrawEncodedImage(byte[] encodedImage, bool clearEdgeBlack)
+        {
+            if (!clearEdgeBlack)
+            {
+                return DrawEncodedImage(encodedImage);
+            }
+
+            if (encodedImage is not { Length: > 0 } || _resources.GetEdgeClearedImage(encodedImage) is not { } image)
+            {
+                return false;
+            }
+
+            DrawCover(image);
+            return true;
+        }
+
         /// <summary>Fills the control with a #RRGGBB / #AARRGGBB color. Returns false for an invalid color.</summary>
         public bool FillColor(string? color)
         {

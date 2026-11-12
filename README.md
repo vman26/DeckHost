@@ -111,7 +111,7 @@ DeckHost ships with three **system plugins**. You can switch them off in the Plu
 | Media Controls | Play / Pause, Next, Previous, Stop, Volume Up / Down, Mute, Volume Knob, Track Swipe |
 | System Controls | Launch App, Open Website or File, Hotkey, Type Text, Lock Computer, System Info (CPU, memory, disk, uptime) |
 
-On the device the actions look like Stream Deck keys: an icon on a colored tile, with a short caption only where the icon needs one (the app to launch, the site, the hotkey). Your own text becomes the caption, your own background color replaces the tile, and your own image replaces the icon. On the touch strip, readouts (volume, CPU, a counter, Stream Deck dials) are laid out like a Stream Deck +: the name small at the top left, the icon on the left, the value on the right with a thin level bar under it.
+On the device the actions are drawn as an icon in the action's color on the profile background, with a short caption only where the icon needs one (the app to launch, the site, the hotkey). In Customize a control can get the action's colored tile (like a Stream Deck key) or a color of its own instead; your own text becomes the caption and your own image or icon replaces the action's icon. Stream Deck plugin images lose their black background (black that touches the edge of the picture), so the backgrounds show around them; black inside a picture stays. On the touch strip, readouts (volume, CPU, a counter, Stream Deck dials) are laid out like a Stream Deck +: the name small at the top left, the icon on the left, the value on the right with a thin level bar under it.
 
 Media keys, hotkeys, typing and locking use Windows `SendInput`, the tools listed under "What works where" on Linux, and system key events on macOS.
 
@@ -136,7 +136,7 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 - **Text**: multi-line, wrapped or not, with color (picker or hex), font, size, bold, italic, and horizontal (left/center/right) and vertical (top/middle/bottom) alignment.
 - **Icon**: **Choose…** opens the icon picker (see [Icons](#icons)). The icon takes the place of the action's own on its tile; single-color icons are drawn in white.
 - **Image**: PNG, JPG, animated GIF or SVG, with a **Clear** button.
-- **Background**: a color of your own replaces the action's colored tile. The **Opacity** slider (or **Transparent**) lets the profile background or image show through; it's stored as `#AARRGGBB`.
+- **Background**: **Transparent** (the default: the profile background shows behind the icon, which is drawn in the action's color), **The action's colored tile**, or **A color of my own**. A color has an **Opacity** slider (and **Transparent**) and is stored as `#AARRGGBB` below 100 %.
 - **Colors** everywhere use one picker: a saturation/brightness square, hue and opacity sliders, HEX and R/G/B boxes, preset colors and an **eyedropper** that picks a color from anywhere on the screen (click, Space or Enter takes it; Esc cancels). The eyedropper works on Windows, on macOS (it needs the Screen Recording permission, else it only sees the desktop picture) and on Linux with X11; Wayland doesn't let apps read the screen.
 - The action's own settings, and for knobs the LED color. Numeric settings have a slider with a number box next to it for exact values, and **↺** to go back to the default.
 
