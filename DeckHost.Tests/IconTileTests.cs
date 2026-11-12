@@ -86,3 +86,90 @@ public class IconTileTests
         return bitmap;
     }
 }
+
+/// <summary>A control's own background: it replaces the action's tile, and with opacity lets the profile show.</summary>
+public class ControlBackgroundTests
+{
+    [Theory]
+    [InlineData(null, "tile")]
+    [InlineData("#00000000", "profile")] // transparent: the profile background
+    [InlineData("#80000000", "dark profile")] // half black over the profile background
+    public async Task A_background_of_its_own_replaces_the_tile(string? background, string expected)
+    {
+        var plugins = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
+        var device = new KeyDevicePlugin();
+        using var store = new VariableStore();
+        await using var host = new DeckHost.Core.Devices.DeviceHostService([device], plugins, store);
+        var frames = new System.Collections.Concurrent.ConcurrentDictionary<string, DeckHost.Core.Models.ControlFrame>();
+        host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
+        var reference = new DeckHost.Contracts.Models.ActionReference(DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId, "Media", "media.playpause", "Play",
+            DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
+        host.SetProfiles([new DeckHost.Contracts.Models.DeviceProfile("p", "P", KeyDevicePlugin.DeviceId,
+            [new DeckHost.Contracts.Models.ControlBinding("key.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference,
+                new DeckHost.Contracts.Models.ControlAppearance(BackgroundColor: background), [])],
+            Background: new DeckHost.Contracts.Models.ProfileBackground("#FF0000"))]);
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+
+        var frame = frames["key.0"];
+        var offset = ((20 * frame.Width) + 20) * 4; // inside the tile, away from the icon
+        var (red, green, blue) = (frame.Rgba[offset], frame.Rgba[offset + 1], frame.Rgba[offset + 2]);
+        switch (expected)
+        {
+            case "tile":
+                Assert.True(blue > 100, $"the media tile (pink to purple): {red},{green},{blue}");
+                break;
+            case "profile":
+                Assert.True(red > 240 && green < 20 && blue < 20, $"profile red: {red},{green},{blue}");
+                break;
+            default:
+                Assert.True(red is > 100 and < 160 && green < 20 && blue < 20, $"darkened profile red: {red},{green},{blue}");
+                break;
+        }
+    }
+
+    private sealed class KeyDevicePlugin : DeckHost.Contracts.Interfaces.IDevicePlugin, DeckHost.Contracts.Interfaces.IDeviceOutput
+    {
+        public const string DeviceId = "key.device";
+
+        public event EventHandler? DevicesChanged { add { } remove { } }
+
+        public string Id => "key.plugin";
+
+        public string Name => "Keys";
+
+        public IReadOnlyCollection<DeckHost.Contracts.Models.DeviceDefinition> Devices { get; } =
+        [
+            new(DeviceId, "Key device",
+            [
+                new("key.0", "Key 1", DeckHost.Contracts.Models.ControlType.Key, new DeckHost.Contracts.Models.Rect(0, 0, 10, 10),
+                    DeckHost.Contracts.Enums.InputCapabilities.Press, DeckHost.Contracts.Enums.OutputCapabilities.ColorImage, 112, 112),
+            ],
+            IsConnected: true),
+        ];
+
+        public DeckHost.Contracts.Interfaces.IDeviceOutput Output => this;
+
+        public Task InitializeAsync(DeckHost.Contracts.Interfaces.IDevicePluginContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public bool TryPushImage(string deviceId, string controlId, ReadOnlySpan<byte> rgba, int width, int height, out string? error)
+        {
+            error = null;
+            return true;
+        }
+
+        public bool TrySetLight(string deviceId, string controlId, byte red, byte green, byte blue, out string? error)
+        {
+            error = null;
+            return true;
+        }
+
+        public void Clear(string deviceId)
+        {
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+}

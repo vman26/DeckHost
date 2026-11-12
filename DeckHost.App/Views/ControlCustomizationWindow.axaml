@@ -244,8 +244,9 @@
 								 TextWrapping="Wrap"
 								 MinHeight="56"
 								 PlaceholderText="Optional; replaces the action's own label. Press Enter for a new line." />
-						<TextBlock Classes="label" Text="Background color" />
-						<local:ColorField Hex="{Binding BackgroundColor, Mode=TwoWay}" DefaultHex="#000000" Placeholder="profile background" />
+						<TextBlock Classes="label" Text="Background" />
+						<local:ColorField Hex="{Binding BackgroundColor, Mode=TwoWay}" DefaultHex="#000000" Placeholder="the action's own look" AllowOpacity="True" />
+						<TextBlock Classes="hint" Text="A background of your own replaces the action's colored tile. Lower the opacity (or choose Transparent) to let the profile background show through." />
 						<TextBlock Classes="error" Text="{Binding BackgroundColorError}" IsVisible="{Binding HasBackgroundColorError}" />
 						<TextBlock Classes="label" Text="Image (PNG, JPG, SVG or animated GIF)" />
 						<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
