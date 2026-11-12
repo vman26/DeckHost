@@ -28,6 +28,8 @@ public class LinkedDisplayTests
 
         public SolidAction ZoneAction { get; } = new("zone", Blue);
 
+        public AppearanceOnlyAction DisplayOnly { get; } = new("display");
+
         public VariableStore Store { get; } = new();
 
         public DeviceHostService Host { get; }
@@ -36,7 +38,7 @@ public class LinkedDisplayTests
 
         public Fixture()
         {
-            Host = new DeviceHostService([Plugin], [new TestApplicationPlugin("p", KnobAction, ZoneAction)], Store);
+            Host = new DeviceHostService([Plugin], [new TestApplicationPlugin("p", KnobAction, ZoneAction, DisplayOnly)], Store);
             Host.ControlFrameRendered += frame => Frames[frame.ControlId] = frame;
         }
 
@@ -99,6 +101,47 @@ public class LinkedDisplayTests
 
         Assert.Contains((StripDevicePlugin.ZoneId, StripDevicePlugin.ZoneWidth, own, false), fixture.ZoneAction.Renders);
         Assert.Contains((StripDevicePlugin.KnobId, StripDevicePlugin.ZoneWidth, strip, true), fixture.KnobAction.Renders);
+    }
+
+    [Fact]
+    public async Task A_zone_with_only_a_background_color_is_still_free_for_the_knob()
+    {
+        await using var fixture = new Fixture();
+        var greenZone = Bindings.Single(StripDevicePlugin.ZoneId, "p", "display") with { Appearance = new ControlAppearance(BackgroundColor: "#00FF00") };
+        await fixture.ShowAsync(Profile("one", null, Knob(), greenZone));
+
+        // The knob fills the whole zone: no strip, the zone's own action area is empty.
+        Assert.Contains((StripDevicePlugin.KnobId, StripDevicePlugin.ZoneWidth, StripDevicePlugin.ZoneHeight, false), fixture.KnobAction.Renders);
+        Assert.DoesNotContain(fixture.KnobAction.Renders, render => render.Compact);
+        Assert.Equal(RedPixel, fixture.ZonePixel(2, StripDevicePlugin.ZoneHeight - 1));
+
+        // And a tap there is the knob's.
+        fixture.Plugin.Context!.ReportInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.ZoneId, InputCapabilities.Press, 1);
+        await fixture.Host.WhenIdleAsync();
+        Assert.Contains((StripDevicePlugin.KnobId, InputCapabilities.Press), fixture.KnobAction.Executions);
+        Assert.Empty(fixture.DisplayOnly.Executions);
+    }
+
+    [Fact]
+    public async Task The_zone_color_shows_under_a_knob_that_draws_nothing_there()
+    {
+        await using var fixture = new Fixture();
+        var greenZone = Bindings.Single(StripDevicePlugin.ZoneId, "p", "display") with { Appearance = new ControlAppearance(BackgroundColor: "#00FF00") };
+        var knobShowingNothing = Bindings.Single(StripDevicePlugin.KnobId, "p", "display");
+        await fixture.ShowAsync(Profile("one", null, knobShowingNothing, greenZone));
+
+        Assert.Equal(new byte[] { 0, 255, 0, 255 }, fixture.ZonePixel(2, 2));
+    }
+
+    [Fact]
+    public async Task A_zone_with_its_own_text_shares_with_the_knob()
+    {
+        await using var fixture = new Fixture();
+        var labelledZone = Bindings.Single(StripDevicePlugin.ZoneId, "p", "display") with { Appearance = new ControlAppearance(Text: "Mute", BackgroundColor: "#00FF00") };
+        await fixture.ShowAsync(Profile("one", null, Knob(), labelledZone));
+
+        Assert.Contains(fixture.KnobAction.Renders, render => render.Compact);
+        Assert.Equal(new byte[] { 0, 255, 0, 255 }, fixture.ZonePixel(2, 2));
     }
 
     [Fact]

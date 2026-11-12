@@ -69,7 +69,7 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 The N4 Pro's knobs have no screen of their own, so like on a Stream Deck +, each knob shows its action on the touch zone above it:
 
 - **Touch zone empty:** the knob's action fills the zone, for example the Volume Knob shows the volume and a level bar. Tapping the zone then works like pressing the knob.
-- **Touch zone has its own action:** the zone keeps its action, and the knob gets a one-line strip along its bottom edge. A tap stays with the zone's action.
+- **Touch zone has its own action, text or image:** the zone keeps it, and the knob gets a one-line strip along its bottom edge. A tap stays with the zone. A background color alone doesn't count: the knob then fills the zone on that color.
 - **Show this on Touch N** (Customize, on the knob) turns this off for a knob, leaving the zone to its own action.
 
 Text, image and text style set on a knob are used there too. Actions that show a value (Volume Knob, Clock, Counter, System Info, and Stream Deck dial actions through `setFeedback`) draw it as a compact one-liner in the strip.

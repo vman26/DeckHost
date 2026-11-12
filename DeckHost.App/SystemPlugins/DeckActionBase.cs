@@ -65,6 +65,8 @@ internal abstract class DeckActionBase(
 
     public virtual TimeSpan? RefreshInterval => null;
 
+    public virtual bool ShowsAppearanceOnly => false;
+
     /// <summary>Most actions fire on press; a release only ends the press.</summary>
     protected virtual bool RunOnRelease => false;
 
