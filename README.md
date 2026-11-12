@@ -60,6 +60,7 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 **Customize** (double-click a control) sets:
 
 - **Run when** (for actions that normally run on a press): only the inputs the control has, so a key offers press, release and long press, a knob also turned left/right, and the swipe bar swiped left/right.
+- **Per input** (actions that support it, such as Switch Profile): on a control with more than one input, a group of settings for each input: **When pressed**, **When held down**, **When turned left/right**, **When swiped left/right**. For example a knob that goes to a specific profile when pressed and steps back and forth through the profiles when turned. "Do nothing" leaves an input unused.
 - **Text**: multi-line, wrapped or not, with color (picker or hex), font, size, bold, italic, and horizontal (left/center/right) and vertical (top/middle/bottom) alignment.
 - **Image**: PNG, JPG, animated GIF or SVG, with a **Clear** button; and a background color.
 - The action's own settings, and for knobs the LED color. Numeric settings have a slider with a number box next to it for exact values, and **↺** to go back to the default.

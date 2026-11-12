@@ -11,26 +11,78 @@ namespace DeckHost.App.ViewModels;
 /// <summary>Editor for an action's settings, generated from its <see cref="ActionSettingDefinition"/>s.</summary>
 public sealed class SettingsEditorViewModel : ViewModelBase
 {
-    /// <param name="controlInputs">The control's inputs; choice options needing another input are hidden.</param>
+    /// <param name="controlInputs">
+    /// The control's inputs: choice options needing another input are hidden, and settings that
+    /// can differ per input (<see cref="ActionSettingDefinition.PerInput"/>) are shown once for each
+    /// input when the control has more than one (a knob: pressed, turned left, turned right).
+    /// </param>
     public SettingsEditorViewModel(IReadOnlyList<ActionSettingDefinition> definitions, ActionSettings current, InputCapabilities controlInputs = InputCapabilities.All)
     {
-        foreach (var definition in definitions)
+        var inputs = ControlInputs.Of(controlInputs);
+        var splitByInput = inputs.Count > 1 && definitions.Any(static definition => definition.PerInput);
+
+        // Settings shared by all inputs first, then a group per input.
+        foreach (var definition in definitions.Where(definition => !splitByInput || !definition.PerInput))
         {
             var value = current.TryGetValue(definition.Key, out var stored) ? stored : definition.DefaultValue;
-            SettingFieldViewModel field = definition.Kind switch
+            if (definition.PerInput && inputs.Count == 1)
             {
-                ActionSettingKind.Toggle => new ToggleSettingField(definition, value),
-                ActionSettingKind.Choice => new ChoiceSettingField(definition, value, controlInputs),
-                ActionSettingKind.FilePath => new FilePathSettingField(definition, value),
-                ActionSettingKind.Hotkey => new HotkeySettingField(definition, value),
-                ActionSettingKind.Secret => new SecretSettingField(definition, value),
-                ActionSettingKind.Number => new NumberSettingField(definition, value),
-                _ => new TextSettingField(definition, value),
-            };
+                // One input: its value is the setting's value (as the host resolves it for that input).
+                value = current.ForInput(definitions, inputs[0]).Get(definition.Key, definition.DefaultValue);
+            }
 
-            field.ValueChanged += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
-            Fields.Add(field);
+            AddField(definition, value, controlInputs, sectionTitle: null);
         }
+
+        if (splitByInput)
+        {
+            foreach (var input in inputs)
+            {
+                var resolved = current.ForInput(definitions, input);
+                var first = true;
+                foreach (var definition in definitions.Where(static definition => definition.PerInput))
+                {
+                    var inputDefault = definition.InputDefaults is { } defaults && defaults.TryGetValue(input, out var forInput) ? forInput : definition.DefaultValue;
+                    var forThisInput = definition with
+                    {
+                        Key = ControlInputs.SettingKey(definition.Key, input),
+                        DefaultValue = inputDefault,
+                        ShowWhen = definition.ShowWhen is { } condition
+                            ? condition with { Key = ControlInputs.SettingKey(condition.Key, input) }
+                            : null,
+                    };
+                    AddField(forThisInput, resolved.Get(definition.Key, definition.DefaultValue), controlInputs, first ? ControlInputs.Describe(input) : null);
+                    first = false;
+                }
+            }
+        }
+
+        foreach (var field in Fields)
+        {
+            if (field.Definition.ShowWhen is { } condition &&
+                Fields.FirstOrDefault(candidate => candidate.Definition.Key == condition.Key) is { } source)
+            {
+                field.ShowWhen(source, condition);
+            }
+        }
+    }
+
+    private void AddField(ActionSettingDefinition definition, string value, InputCapabilities controlInputs, string? sectionTitle)
+    {
+        SettingFieldViewModel field = definition.Kind switch
+        {
+            ActionSettingKind.Toggle => new ToggleSettingField(definition, value),
+            ActionSettingKind.Choice => new ChoiceSettingField(definition, value, controlInputs),
+            ActionSettingKind.FilePath => new FilePathSettingField(definition, value),
+            ActionSettingKind.Hotkey => new HotkeySettingField(definition, value),
+            ActionSettingKind.Secret => new SecretSettingField(definition, value),
+            ActionSettingKind.Number => new NumberSettingField(definition, value),
+            _ => new TextSettingField(definition, value),
+        };
+
+        field.SectionTitle = sectionTitle;
+        field.ValueChanged += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+        Fields.Add(field);
     }
 
     public event EventHandler? Changed;
@@ -80,6 +132,30 @@ public abstract class SettingFieldViewModel(ActionSettingDefinition definition, 
     public virtual string? Error => null;
 
     public bool HasError => Error is not null;
+
+    /// <summary>A heading shown above the field: the input a group of per-input settings is for.</summary>
+    public string? SectionTitle { get; set; }
+
+    public bool HasSectionTitle => !string.IsNullOrEmpty(SectionTitle);
+
+    /// <summary>False while the setting doesn't apply (<see cref="ActionSettingDefinition.ShowWhen"/>).</summary>
+    public bool IsVisible { get; private set; } = true;
+
+    internal void ShowWhen(SettingFieldViewModel source, SettingCondition condition)
+    {
+        void Update()
+        {
+            var visible = condition.IsMetBy(source.Value);
+            if (visible != IsVisible)
+            {
+                IsVisible = visible;
+                OnPropertyChanged(nameof(IsVisible));
+            }
+        }
+
+        source.ValueChanged += (_, _) => Update();
+        Update();
+    }
 
     protected virtual void OnValueSet()
     {

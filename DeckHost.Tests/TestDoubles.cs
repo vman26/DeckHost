@@ -16,6 +16,8 @@ internal sealed class RecordingAction(string id, InputCapabilities requiredInput
 
     public OutputCapabilities RequiredOutputs => OutputCapabilities.None;
 
+    public IReadOnlyList<ActionSettingDefinition> Settings { get; init; } = [];
+
     public List<ActionContext> Executions { get; } = [];
 
     public Action<ActionContext>? OnExecute { get; set; }

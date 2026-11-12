@@ -109,7 +109,8 @@ namespace DeckHost.Core
             {
                 action.Execute(new ActionContext(inputEvent.DeviceId, inputEvent.ControlId, _variableStore, inputEvent.EventType, inputEvent.Value)
                 {
-                    Settings = actionReference.EffectiveSettings,
+                    // Settings that differ per input (a knob turned left or right) as they are for this one.
+                    Settings = actionReference.EffectiveSettings.ForInput(action.Settings, ControlInputs.FromEvent(inputEvent.EventType, inputEvent.Value)),
                     Host = host,
                     ProfileId = profileId,
                 });

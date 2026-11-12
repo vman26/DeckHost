@@ -45,6 +45,35 @@ public sealed record ActionSettingDefinition(
     /// plugins built against the earlier constructor keep working.
     /// </summary>
     public NumberRange? Range { get; init; }
+
+    /// <summary>
+    /// The setting can have its own value for each input of the control: on a knob, one for
+    /// pressing, one for turning left and one for turning right (see <see cref="ControlInputs"/>).
+    /// The editor then shows the setting once per input, and the host hands the action the value
+    /// for the input that happened, under the plain <see cref="Key"/>, so the action reads it as
+    /// usual. Stored as <c>key@input</c> (<see cref="ControlInputs.SettingKey"/>).
+    /// </summary>
+    public bool PerInput { get; init; }
+
+    /// <summary>
+    /// For a <see cref="PerInput"/> setting: defaults that differ per input, by
+    /// <see cref="ControlInputs"/> id (e.g. turning left: previous, turning right: next). An input
+    /// without one uses the binding's plain value, then <see cref="DefaultValue"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? InputDefaults { get; init; }
+
+    /// <summary>
+    /// Shows the setting only while another setting has one of the given values (e.g. a profile
+    /// name only for "a specific profile"). For a <see cref="PerInput"/> setting, the other setting
+    /// of the same input.
+    /// </summary>
+    public SettingCondition? ShowWhen { get; init; }
+}
+
+/// <summary>A condition on another setting's value: <paramref name="Key"/> is one of <paramref name="Values"/>.</summary>
+public sealed record SettingCondition(string Key, params string[] Values)
+{
+    public bool IsMetBy(string? value) => Values.Contains(value ?? string.Empty, StringComparer.Ordinal);
 }
 
 /// <summary>

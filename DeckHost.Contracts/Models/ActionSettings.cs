@@ -67,6 +67,48 @@ public sealed class ActionSettings : IReadOnlyDictionary<string, string>, IEquat
         return new ActionSettings(copy);
     }
 
+    /// <summary>
+    /// The settings as the action sees them for one input (<see cref="ControlInputs"/>): each
+    /// <see cref="ActionSettingDefinition.PerInput"/> setting gets its value for that input under
+    /// its plain key. Order: the value stored for the input, the definition's default for the
+    /// input, then the plain value as stored (and the action's own default).
+    /// </summary>
+    public ActionSettings ForInput(IEnumerable<ActionSettingDefinition> definitions, string? input)
+    {
+        ArgumentNullException.ThrowIfNull(definitions);
+        if (string.IsNullOrEmpty(input))
+        {
+            return this;
+        }
+
+        Dictionary<string, string>? copy = null;
+        foreach (var definition in definitions)
+        {
+            if (!definition.PerInput)
+            {
+                continue;
+            }
+
+            string? value = null;
+            if (_values.TryGetValue(ControlInputs.SettingKey(definition.Key, input), out var stored) && !string.IsNullOrWhiteSpace(stored))
+            {
+                value = stored;
+            }
+            else if (definition.InputDefaults is { } defaults && defaults.TryGetValue(input, out var inputDefault))
+            {
+                value = inputDefault;
+            }
+
+            if (value is not null)
+            {
+                copy ??= new Dictionary<string, string>(_values, StringComparer.Ordinal);
+                copy[definition.Key] = value;
+            }
+        }
+
+        return copy is null ? this : new ActionSettings(copy);
+    }
+
     public bool ContainsKey(string key) => _values.ContainsKey(key);
 
     public bool TryGetValue(string key, [MaybeNullWhen(false)] out string value) => _values.TryGetValue(key, out value);
