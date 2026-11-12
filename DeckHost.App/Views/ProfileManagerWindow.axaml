@@ -101,8 +101,8 @@
 
 					<Border Classes="card">
 						<StackPanel Spacing="10">
-							<TextBlock Classes="section" Text="BACKGROUND" />
-							<TextBlock Classes="hint" Text="Shown behind every control of this profile. An image spans the whole device, so each key shows its own part of it. Animated GIFs play (about 10 frames per second)." />
+							<TextBlock Classes="section" Text="BACKGROUND OF THIS PROFILE" />
+							<TextBlock Classes="hint" Text="Shown behind every control of this profile. Leave it empty to use the default background for all profiles (below). An image spans the whole device, so each key shows its own part of it. Animated GIFs play (about 10 frames per second)." />
 							<TextBlock Text="Color" FontWeight="SemiBold" Foreground="#E2E8F0" />
 							<local:ColorField Hex="{Binding EditingBackgroundColor, Mode=TwoWay}" DefaultHex="#0B1220" Placeholder="DeckHost dark blue" Width="280" HorizontalAlignment="Left" />
 							<TextBlock Text="{Binding BackgroundColorError}" IsVisible="{Binding HasBackgroundColorError}" Foreground="#FCA5A5" FontSize="12" />
@@ -111,6 +111,22 @@
 								<TextBox Text="{Binding EditingBackgroundImage, Mode=TwoWay}" PlaceholderText="Optional image file" />
 								<Button Grid.Column="1" Content="Browse…" Click="BrowseBackground_OnClick" />
 								<Button Grid.Column="2" Content="Clear" Command="{Binding ClearBackgroundCommand}" />
+							</Grid>
+						</StackPanel>
+					</Border>
+
+					<Border Classes="card">
+						<StackPanel Spacing="10">
+							<TextBlock Classes="section" Text="DEFAULT BACKGROUND FOR ALL PROFILES" />
+							<TextBlock Classes="hint" Text="Used by every profile that has no background of its own, so one background can serve all profiles while some override it." />
+							<TextBlock Text="Color" FontWeight="SemiBold" Foreground="#E2E8F0" />
+							<local:ColorField Hex="{Binding DefaultBackgroundColor, Mode=TwoWay}" DefaultHex="#0B1220" Placeholder="DeckHost dark blue" Width="280" HorizontalAlignment="Left" />
+							<TextBlock Text="{Binding DefaultBackgroundColorError}" IsVisible="{Binding HasDefaultBackgroundColorError}" Foreground="#FCA5A5" FontSize="12" />
+							<TextBlock Text="Image (PNG, JPG, SVG or animated GIF)" FontWeight="SemiBold" Foreground="#E2E8F0" />
+							<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+								<TextBox Text="{Binding DefaultBackgroundImage, Mode=TwoWay}" PlaceholderText="Optional image file" />
+								<Button Grid.Column="1" Content="Browse…" Click="BrowseDefaultBackground_OnClick" />
+								<Button Grid.Column="2" Content="Clear" Command="{Binding ClearDefaultBackgroundCommand}" />
 							</Grid>
 						</StackPanel>
 					</Border>

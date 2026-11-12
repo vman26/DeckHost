@@ -38,4 +38,24 @@ public partial class ProfileManagerWindow : Window
             vm.EditingBackgroundImage = path;
         }
     }
+
+    private async void BrowseDefaultBackground_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ProfileManagerViewModel vm)
+        {
+            return;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select the default background for all profiles",
+            AllowMultiple = false,
+            FileTypeFilter = [FilePickerFileTypes.ImageAll],
+        });
+
+        if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
+        {
+            vm.DefaultBackgroundImage = path;
+        }
+    }
 }
