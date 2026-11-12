@@ -133,12 +133,146 @@ public sealed class HotkeySettingField(ActionSettingDefinition definition, strin
     }
 }
 
-public sealed class NumberSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value)
+/// <summary>
+/// A number. With a <see cref="NumberRange"/> it is edited with a slider and (optionally) a number
+/// box next to it; without one only with a number box. An empty value means "the default".
+/// </summary>
+public sealed partial class NumberSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value)
 {
-    public override string? Error =>
-        string.IsNullOrWhiteSpace(Value) || int.TryParse(Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)
-            ? null
-            : "Enter a whole number.";
+    /// <summary>Used for the number box when the setting has no range: whole numbers, unbounded.</summary>
+    private static readonly NumberRange Unbounded = new(-1_000_000_000, 1_000_000_000);
+
+    public NumberRange? Range => Definition.Range;
+
+    private NumberRange Effective => Range ?? Unbounded;
+
+    public bool HasSlider => Range is not null;
+
+    /// <summary>Number box next to the slider, or alone when there is no slider.</summary>
+    public bool ShowInput => Range is null || Range.ShowInput;
+
+    public bool ShowSliderWithInput => HasSlider && ShowInput;
+
+    public bool ShowSliderOnly => HasSlider && !ShowInput;
+
+    public bool ShowInputOnly => !HasSlider;
+
+    public double Minimum => Effective.Minimum;
+
+    public double Maximum => Effective.Maximum;
+
+    public double Step => Effective.Step > 0 ? Effective.Step : 1;
+
+    public double LargeStep => HasSlider ? Math.Max(Step, Effective.Snap(Minimum + ((Maximum - Minimum) / 10)) - Minimum) : Step * 10;
+
+    public decimal InputMinimum => (decimal)Minimum;
+
+    public decimal InputMaximum => (decimal)Maximum;
+
+    public decimal InputIncrement => (decimal)Step;
+
+    public string FormatString => Effective.IsWholeNumber ? "0" : "0.#########";
+
+    /// <summary>True while the setting is empty, so the action (or device) uses its own default.</summary>
+    public bool IsUnset => string.IsNullOrWhiteSpace(Value);
+
+    /// <summary>What the slider shows while the setting is empty.</summary>
+    private double RestingValue =>
+        Effective.Snap(Range?.UnsetValue ?? (TryParse(Definition.DefaultValue, out var fallback) ? fallback : Minimum));
+
+    /// <summary>The slider position: the value, or where an empty setting rests.</summary>
+    public double SliderValue
+    {
+        get => TryParse(Value, out var number) ? Effective.Snap(number) : RestingValue;
+        set
+        {
+            if (!double.IsFinite(value))
+            {
+                return;
+            }
+
+            var snapped = Effective.Snap(value);
+
+            // The slider reports its first position too; that must not turn "default" into a value.
+            if (IsUnset && Math.Abs(snapped - RestingValue) < Step / 2)
+            {
+                return;
+            }
+
+            Value = Effective.Format(snapped);
+        }
+    }
+
+    /// <summary>The number box's value; empty when the setting is empty.</summary>
+    public decimal? NumberValue
+    {
+        get => TryParse(Value, out var number) ? (decimal)number : null;
+        set => Value = value is null ? string.Empty : Effective.Format(Range is { } range ? range.Snap((double)value.Value) : (double)value.Value);
+    }
+
+    /// <summary>The value with its unit, shown next to a slider without a number box.</summary>
+    public string ValueText => IsUnset
+        ? Range?.UnsetValue is { } unset ? $"Default ({Effective.Describe(unset)})" : "Default"
+        : TryParse(Value, out var number) ? Effective.Describe(number) : Value;
+
+    /// <summary>Above the slider: the value when there is no number box, and "Default (…)" while unset.</summary>
+    public bool ShowValueText => ShowSliderOnly || (HasSlider && IsUnset);
+
+    /// <summary>Placeholder of the empty number box: the value used meanwhile, if known.</summary>
+    public string InputPlaceholder => Range?.UnsetValue is { } unset
+        ? Effective.Format(unset)
+        : string.IsNullOrEmpty(Placeholder) ? "Default" : Placeholder;
+
+    public string UnitText => Range?.Unit ?? string.Empty;
+
+    public bool ShowUnit => ShowInput && !string.IsNullOrEmpty(UnitText);
+
+    public bool CanReset => !string.Equals(Value, Definition.DefaultValue, StringComparison.Ordinal);
+
+    public string ResetToolTip => string.IsNullOrEmpty(Definition.DefaultValue)
+        ? "Back to the default"
+        : $"Back to the default ({Effective.Describe(TryParse(Definition.DefaultValue, out var fallback) ? fallback : 0)})";
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void Reset() => Value = Definition.DefaultValue;
+
+    public override string? Error
+    {
+        get
+        {
+            if (IsUnset)
+            {
+                return null;
+            }
+
+            if (!TryParse(Value, out var number))
+            {
+                return Effective.IsWholeNumber ? "Enter a whole number." : "Enter a number.";
+            }
+
+            if (Effective.IsWholeNumber && Math.Abs(number - Math.Round(number)) > 1e-9)
+            {
+                return "Enter a whole number.";
+            }
+
+            return Range is { } range && !range.Contains(number)
+                ? $"Use a number from {range.Format(range.Minimum)} to {range.Format(range.Maximum)}."
+                : null;
+        }
+    }
+
+    protected override void OnValueSet()
+    {
+        OnPropertyChanged(nameof(SliderValue));
+        OnPropertyChanged(nameof(NumberValue));
+        OnPropertyChanged(nameof(ValueText));
+        OnPropertyChanged(nameof(IsUnset));
+        OnPropertyChanged(nameof(ShowValueText));
+        OnPropertyChanged(nameof(CanReset));
+    }
+
+    private static bool TryParse(string? text, out double number) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out number) && double.IsFinite(number);
 }
 
 public sealed class ToggleSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value)

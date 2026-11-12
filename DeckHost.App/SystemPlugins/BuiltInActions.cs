@@ -147,7 +147,7 @@ internal sealed class CounterAction() : DeckActionBase(
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
-        new(StepKey, "Step", ActionSettingKind.Number, "1", Description: "Added per press or knob step."),
+        new(StepKey, "Step", ActionSettingKind.Number, "1", Description: "Added per press or knob step.") { Range = new(1, 100) },
     ];
 
     public override bool CanBeMultiActionStep => false;

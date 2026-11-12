@@ -24,21 +24,29 @@ public partial class ColorField : UserControl
 
     private bool _syncing;
 
+    /// <summary>The text <see cref="Sync"/> last put in the box (the value, or the default while unset).</summary>
+    private string? _syncedText;
+
     public ColorField()
     {
         InitializeComponent();
+
+        // TextChanged and ColorChanged can arrive after Sync has returned, so _syncing alone doesn't
+        // tell them apart from the user. Without the comparison with what Sync showed, opening a
+        // window wrote the shown default (#000000, #FFFFFF) into the setting as if it was chosen.
         HexBox.TextChanged += (_, _) =>
         {
-            if (!_syncing)
+            if (!_syncing && HexBox.Text != _syncedText)
             {
                 Hex = HexBox.Text;
             }
         };
         Picker.ColorChanged += (_, e) =>
         {
-            if (!_syncing)
+            var hex = $"#{e.NewColor.R:X2}{e.NewColor.G:X2}{e.NewColor.B:X2}";
+            if (!_syncing && !(TryParse(_syncedText, out var shown) && $"#{shown.R:X2}{shown.G:X2}{shown.B:X2}" == hex))
             {
-                Hex = $"#{e.NewColor.R:X2}{e.NewColor.G:X2}{e.NewColor.B:X2}";
+                Hex = hex;
             }
         };
         ClearButton.Click += (_, _) => Hex = string.Empty;
@@ -84,6 +92,7 @@ public partial class ColorField : UserControl
         {
             var isDefault = string.IsNullOrWhiteSpace(hex);
             var shown = isDefault ? DefaultHex ?? string.Empty : hex!;
+            _syncedText = shown;
             if (HexBox.Text != shown)
             {
                 HexBox.Text = shown;
