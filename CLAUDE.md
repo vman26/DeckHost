@@ -20,7 +20,7 @@ dotnet build .\plugins\DeckHost.Plugin.Obs                              # -> art
 dotnet run --project .\DeckHost.App -- --check-native                   # load the bridge, list devices, exit
 ```
 
-- Versions: MinVer from `v*` tags (`Directory.Build.props`); `AppInfo.Version` is what the app shows. Releases: push a tag; `.github/workflows/release.yml` builds win-x64, linux-x64 (on Ubuntu 22.04, static OpenCV) and osx-arm64, runs `--check-native` on each publish, packages with `packaging/` and `scripts/package.sh`, and creates the GitHub release. `build.yml` builds and tests all three on every PR.
+- Versions: MinVer from `v*` tags (`Directory.Build.props`); `AppInfo.Version` is what the app shows: pre-releases get `+<7-char commit>` (from the informational version the SDK stamps), package file names `-<commit>` (`release.yml` outputs `display` and `file`). Releases: push a tag; `.github/workflows/release.yml` builds win-x64, linux-x64 (on Ubuntu 22.04, static OpenCV) and osx-arm64, runs `--check-native` on each publish, packages with `packaging/` and `scripts/package.sh`, and creates the GitHub release. `build.yml` builds and tests all three on every PR.
 - `dotnet publish` copies the native bridge into `plugins/device/deckhost-device-mirabox` too (`PublishMiraBoxBridgeRuntime` in the App project).
 
 - The plugin catalog tests install the real OBS package, so `DeckHost.Tests` builds the OBS project first (`ReferenceOutputAssembly=false`).

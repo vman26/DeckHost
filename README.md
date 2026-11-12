@@ -67,7 +67,21 @@ dotnet build DeckHost.slnx -p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/
 
 ### Versions and releases
 
-Versions come from git tags ([MinVer](https://github.com/adamralph/minver)): building the commit tagged `v1.2.0` gives 1.2.0, later commits 1.2.1-alpha.0.N, and before the first tag 0.1.0-alpha.0.N. The app shows its version in **☰ → DeckHost settings** and in the log.
+Versions come from git tags ([MinVer](https://github.com/adamralph/minver)) and follow [SemVer](https://semver.org):
+
+| Commit | Version | Meaning |
+|---|---|---|
+| tagged `v1.2.0` | `1.2.0` | a release |
+| 3 commits after `v1.2.0` | `1.2.1-alpha.0.3+4b09090` | work in progress towards 1.2.1 |
+| tagged `v1.3.0-beta.1` | `1.3.0-beta.1+…` | a beta (also `-rc.1` for a release candidate) |
+| 2 commits after `v1.3.0-beta.1` | `1.3.0-beta.1.2+…` | work after that beta |
+| before the first tag | `0.1.0-alpha.0.N+…` | |
+
+- The number after the label (`N`, here `3` or `2`) is the number of commits since the last tag (MinVer calls it the "height"). It only counts; two branches can be at the same height, which is why the commit is added.
+- `alpha.0` is only the default for untagged commits. A version is beta or a release candidate when you tag it so (`v1.3.0-beta.1`, `v1.3.0-rc.1`).
+- Every version that isn't a release ends in `+<commit>`: the first 7 characters of the commit it was built from (`git show 4b09090`). Release versions don't need it, the tag points at the commit.
+- Package file names use `-` instead of `+` (`DeckHost-1.2.1-alpha.0.3-4b09090-linux-x64.tar.gz`), since GitHub renames some characters in release files.
+- The app shows its version in **☰ → DeckHost settings** and in the log.
 
 To release, tag and push:
 
@@ -76,7 +90,7 @@ git tag v1.2.0
 git push origin v1.2.0
 ```
 
-The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.2.0-beta.1`) becomes a pre-release. Run the workflow by hand to get the packages as build artifacts without releasing.
+The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.2.0-beta.1`, `v1.2.0-rc.1`) becomes a pre-release. Run the workflow by hand to get the packages as build artifacts without releasing.
 
 ## Plugins
 
