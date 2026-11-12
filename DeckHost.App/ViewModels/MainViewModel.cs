@@ -230,7 +230,7 @@ public class MainViewModel : ViewModelBase
     {
         get
         {
-            var (red, green, blue) = Core.Rendering.ProfileBackdrop.GetColor(SelectedProfile is null ? null : new ProfileBackground(SelectedProfile.BackgroundColor));
+            var (red, green, blue) = Core.Rendering.ProfileBackdrop.GetColor(SelectedProfile is null ? null : ToHostModel(SelectedProfile).Background);
             return new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(red, green, blue));
         }
     }
@@ -475,7 +475,8 @@ public class MainViewModel : ViewModelBase
                 ProfileDocument.CurrentVersion,
                 _manualProfileId ?? SelectedProfile?.Id,
                 Profiles.Select(static profile => profile.ToModel()).ToList(),
-                AutoSwitchEnabled));
+                AutoSwitchEnabled,
+                DefaultBackground));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -534,6 +535,46 @@ public class MainViewModel : ViewModelBase
     }
 
     // ---------------------------------------------------------------- profile management
+
+    private string _defaultBackgroundColor = string.Empty;
+    private string _defaultBackgroundImage = string.Empty;
+
+    /// <summary>Background color for every profile that has none of its own (Profile Manager); empty for DeckHost's dark blue.</summary>
+    public string DefaultBackgroundColor
+    {
+        get => _defaultBackgroundColor;
+        set
+        {
+            if (SetProperty(ref _defaultBackgroundColor, value ?? string.Empty))
+            {
+                SyncProfilesToHost();
+            }
+        }
+    }
+
+    /// <summary>Background image for every profile that has no background of its own.</summary>
+    public string DefaultBackgroundImage
+    {
+        get => _defaultBackgroundImage;
+        set
+        {
+            if (SetProperty(ref _defaultBackgroundImage, value ?? string.Empty))
+            {
+                SyncProfilesToHost();
+            }
+        }
+    }
+
+    /// <summary>The background of profiles without one of their own; null when none is set.</summary>
+    public ProfileBackground? DefaultBackground
+    {
+        get
+        {
+            var color = System.Text.RegularExpressions.Regex.IsMatch(_defaultBackgroundColor.Trim(), "^#?[0-9A-Fa-f]{6}$") ? _defaultBackgroundColor.Trim() : null;
+            var image = string.IsNullOrWhiteSpace(_defaultBackgroundImage) ? null : _defaultBackgroundImage.Trim();
+            return color is null && image is null ? null : new ProfileBackground(color, image);
+        }
+    }
 
     /// <summary>Whether profiles follow the focused app (see each profile's AutoSwitchApps).</summary>
     public bool AutoSwitchEnabled
@@ -777,6 +818,8 @@ public class MainViewModel : ViewModelBase
 
             SelectedProfile = Profiles.FirstOrDefault(profile => profile.Id == document?.SelectedProfileId) ?? Profiles[0];
             _autoSwitchEnabled = document?.AutoSwitchEnabled ?? true;
+            _defaultBackgroundColor = document?.DefaultBackground?.Color ?? string.Empty;
+            _defaultBackgroundImage = document?.DefaultBackground?.ImagePath ?? string.Empty;
 
             if (unresolved > 0)
             {
@@ -789,7 +832,7 @@ public class MainViewModel : ViewModelBase
         }
 
         _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
-        _deviceHostService.SetProfiles(Profiles.Select(static profile => profile.ToModel()).ToList());
+        _deviceHostService.SetProfiles(Profiles.Select(ToHostModel).ToList());
         if (SelectedProfile is not null)
         {
             _deviceHostService.SetActiveProfile(SelectedProfile.Id);
@@ -847,9 +890,16 @@ public class MainViewModel : ViewModelBase
         return new ControlBindingViewModel(binding, primary, steps);
     }
 
+    /// <summary>The profile as the host draws it: its own background, else the default for all profiles.</summary>
+    private DeviceProfile ToHostModel(ProfileItemViewModel profile)
+    {
+        var model = profile.ToModel();
+        return model.Background is { IsEmpty: false } || DefaultBackground is null ? model : model with { Background = DefaultBackground };
+    }
+
     private void SyncProfilesToHost()
     {
-        _deviceHostService.SetProfiles(Profiles.Select(static profile => profile.ToModel()).ToList());
+        _deviceHostService.SetProfiles(Profiles.Select(ToHostModel).ToList());
 
         if (SelectedProfile is not null)
         {

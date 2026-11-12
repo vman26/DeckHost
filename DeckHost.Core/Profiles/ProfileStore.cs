@@ -11,7 +11,8 @@ public sealed record ProfileDocument(
     int Version,
     string? SelectedProfileId,
     IReadOnlyList<DeviceProfile> Profiles,
-    bool AutoSwitchEnabled = true)
+    bool AutoSwitchEnabled = true,
+    ProfileBackground? DefaultBackground = null)
 {
     public const int CurrentVersion = 1;
 }
