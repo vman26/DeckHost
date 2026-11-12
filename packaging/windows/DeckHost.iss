@@ -1,9 +1,13 @@
 ; Inno Setup script for the Windows installer. Built by .github/workflows/release.yml:
-;   iscc /DAppVersion=1.2.0 /DNumericVersion=1.2.0 /DSourceDir=<publish folder> /DOutputDir=<dir> DeckHost.iss
+;   iscc /DAppVersion=1.2.0 /DFileVersion=1.2.0 /DNumericVersion=1.2.0 /DSourceDir=<publish folder> /DOutputDir=<dir> DeckHost.iss
+; A pre-release: AppVersion 1.2.1-alpha.0.3+4b09090 (shown), FileVersion 1.2.1-alpha.0.3-4b09090 (file name).
 ; Installs per user (no administrator rights), like the start-with-Windows entry DeckHost makes itself.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
+#endif
+#ifndef FileVersion
+  #define FileVersion AppVersion
 #endif
 #ifndef NumericVersion
   #define NumericVersion "0.0.0"
@@ -31,7 +35,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
-OutputBaseFilename=DeckHost-{#AppVersion}-win-x64-setup
+OutputBaseFilename=DeckHost-{#FileVersion}-win-x64-setup
 SetupIconFile=..\..\DeckHost.App\Assets\avalonia-logo.ico
 UninstallDisplayIcon={app}\DeckHost.App.exe
 Compression=lzma2/max
