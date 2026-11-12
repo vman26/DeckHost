@@ -57,7 +57,7 @@ internal static class ControlRenderer
             return;
         }
 
-        if (!HasOwnContent(binding, action))
+        if (binding is null || !HasOwnContent(binding, action))
         {
             // The display is free (at most a background color of its own): the linked control fills it.
             context.FillColor(binding?.Appearance.BackgroundColor);
