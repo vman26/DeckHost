@@ -30,11 +30,21 @@ jobs:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
-          fetch-depth: 0 # MinVer reads the version from the tags
+          fetch-depth: 0 # GitVersion reads the version from the tags and branches
 
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
+
+      - name: Version
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          scripts/version.sh "$BRANCH" > "$RUNNER_TEMP/version.txt"
+          cat "$RUNNER_TEMP/version.txt"
+          # Later builds stamp this version instead of running GitVersion again.
+          . "$RUNNER_TEMP/version.txt"
+          echo "VERSION_ARGS=-p:DisableGitVersionTask=true -p:Version=$version" >> "$GITHUB_ENV"
 
       - name: Linux build dependencies
         if: runner.os == 'Linux'
@@ -61,10 +71,10 @@ jobs:
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             args+=("-p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4")
           fi
-          dotnet build DeckHost.slnx -c Release "${args[@]}"
+          dotnet build DeckHost.slnx -c Release $VERSION_ARGS "${args[@]}"
 
       - name: Test
-        run: dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release --no-build
+        run: dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release --no-build $VERSION_ARGS
 
       # Loads the native bridge from the app's plugin folder, as the app does, and lists devices.
       - name: Check the native bridge
