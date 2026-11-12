@@ -1,8 +1,9 @@
 name: release
 
-# Push a tag like v1.2.0 (or v1.2.0-beta.1 for a pre-release) to build, package and publish a
-# GitHub release. Started by hand, or on a pull request that changes the packaging, it only builds
-# the packages, as workflow artifacts.
+# Push a tag like v1.2.0 (or v1.2.0-rc.1 for a pre-release) to build, package and publish a
+# GitHub release; the tag is the version. Started by hand, or on a pull request that changes the
+# packaging, it only builds the packages, as workflow artifacts, versioned by GitVersion from the
+# branch (scripts/version.sh, GitVersion.yml).
 on:
   push:
     tags: ["v*"]
@@ -13,6 +14,8 @@ on:
       - "scripts/package.sh"
       - "scripts/build-opencv-static.sh"
       - "Directory.Build.props"
+      - "GitVersion.yml"
+      - "scripts/version.sh"
   workflow_dispatch:
 
 env:
@@ -56,31 +59,14 @@ jobs:
 
       - name: Version
         id: version
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
-          # The version the build stamps, with the MinVer settings from Directory.Build.props.
-          version="$(dotnet msbuild DeckHost.Contracts/DeckHost.Contracts.csproj -restore -t:MinVer -getProperty:MinVerVersion -p:EnableMiraBoxNativeBuild=false | tail -n 1 | tr -d '\r')"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "Couldn't read the version (got: $version)." >&2
-            exit 1
-          fi
-          if [[ "$GITHUB_REF_TYPE" == "tag" && "v$version" != "$GITHUB_REF_NAME" ]]; then
-            echo "The tag $GITHUB_REF_NAME doesn't give the version $version (is it a valid vMAJOR.MINOR.PATCH tag?)." >&2
-            exit 1
-          fi
-          # Pre-releases carry the commit they were built from (as the app shows it):
-          # display 0.1.0-alpha.0.11+4b09090, file names 0.1.0-alpha.0.11-4b09090.
-          display="$version"
-          file="$version"
-          if [[ "$version" == *-* ]]; then
-            commit="$(git rev-parse --short=7 HEAD)"
-            display="$version+$commit"
-            file="$version-$commit"
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "display=$display" >> "$GITHUB_OUTPUT"
-          echo "file=$file" >> "$GITHUB_OUTPUT"
-          echo "numeric=${version%%-*}" >> "$GITHUB_OUTPUT"
-          echo "DeckHost $display"
+          scripts/version.sh "$BRANCH" > "$RUNNER_TEMP/version.txt"
+          cat "$RUNNER_TEMP/version.txt" | tee -a "$GITHUB_OUTPUT"
+          # Later builds stamp this version instead of running GitVersion again.
+          . "$RUNNER_TEMP/version.txt"
+          echo "VERSION_ARGS=-p:DisableGitVersionTask=true -p:Version=$version" >> "$GITHUB_ENV"
 
       - name: Linux build dependencies
         if: runner.os == 'Linux'
@@ -106,7 +92,7 @@ jobs:
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             args+=("-p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4")
           fi
-          dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release "${args[@]}"
+          dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release $VERSION_ARGS "${args[@]}"
 
       - name: Publish
         run: |
@@ -115,7 +101,7 @@ jobs:
             args+=("-p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4")
           fi
           dotnet publish DeckHost.App/DeckHost.App.csproj -c Release -r ${{ matrix.rid }} --self-contained \
-            -o publish/DeckHost "${args[@]}"
+            -o publish/DeckHost $VERSION_ARGS "${args[@]}"
 
       # The published app must load its native bridge on a clean machine.
       - name: Check the native bridge

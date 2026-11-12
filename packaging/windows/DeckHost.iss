@@ -1,6 +1,6 @@
 ; Inno Setup script for the Windows installer. Built by .github/workflows/release.yml:
 ;   iscc /DAppVersion=1.2.0 /DFileVersion=1.2.0 /DNumericVersion=1.2.0 /DSourceDir=<publish folder> /DOutputDir=<dir> DeckHost.iss
-; A pre-release: AppVersion 1.3.0-alpha.0.3+4b09090 (shown), FileVersion 1.3.0-alpha.0.3-4b09090 (file name).
+; A pre-release: AppVersion 1.3.0-alpha.3+4b09090 (shown), FileVersion 1.3.0-alpha.3-4b09090 (file name).
 ; Installs per user (no administrator rights), like the start-with-Windows entry DeckHost makes itself.
 
 #ifndef AppVersion

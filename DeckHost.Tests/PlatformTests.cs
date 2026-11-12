@@ -129,6 +129,8 @@ public class AppVersionTests
     [InlineData("1.0.0-beta.1+4b09090a51839e513f29debdadc8d634e737d2f3", "1.0.0-beta.1+4b09090")]
     [InlineData("1.0.0-rc.2.5+build.4b09090a51839e513f29debdadc8d634e737d2f3", "1.0.0-rc.2.5+4b09090")]
     [InlineData("1.2.1-alpha.0.3", "1.2.1-alpha.0.3")]
+    [InlineData("1.4.0-alpha.21+Branch.release-1.4.0.Sha.d3d4b5e05b1e5182023baa6a9afb50d742a0ae49.d3d4b5e", "1.4.0-alpha.21+d3d4b5e")]
+    [InlineData("1.4.0+Branch.main.Sha.d3d4b5e05b1e5182023baa6a9afb50d742a0ae49.d3d4b5e", "1.4.0")]
     [InlineData(null, "0.0.0")]
     public void Pre_releases_show_their_commit(string? informational, string expected) =>
         Assert.Equal(expected, DeckHost.App.AppInfo.Describe(informational, null));
