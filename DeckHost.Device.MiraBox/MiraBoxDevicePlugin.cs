@@ -98,7 +98,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
-            return (false, $"The MiraBox bridge could not be loaded from {Path.Combine(AppContext.BaseDirectory, "plugins", "device", "deckhost.device.mirabox")}: {ex.Message}");
+            return (false, MiraBoxNative.DescribeLoadFailure() ?? $"The MiraBox bridge could not be loaded: {ex.Message}");
         }
     }
 
