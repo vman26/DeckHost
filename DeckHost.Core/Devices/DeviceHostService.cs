@@ -958,6 +958,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         {
             _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceText), binding.Appearance.Text ?? string.Empty);
             _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceImage), binding.Appearance.ImagePath ?? string.Empty);
+            _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceBackground), binding.Appearance.BackgroundColor ?? string.Empty);
         }
     }
 

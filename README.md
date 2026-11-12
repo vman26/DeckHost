@@ -111,6 +111,8 @@ DeckHost ships with three **system plugins**. You can switch them off in the Plu
 | Media Controls | Play / Pause, Next, Previous, Stop, Volume Up / Down, Mute, Volume Knob, Track Swipe |
 | System Controls | Launch App, Open Website or File, Hotkey, Type Text, Lock Computer, System Info (CPU, memory, disk, uptime) |
 
+On the device the actions look like Stream Deck keys: an icon on a colored tile, with a short caption only where the icon needs one (the app to launch, the site, the hotkey). Your own text becomes the caption, your own background color replaces the tile, and your own image replaces the icon. On the touch strip, readouts (volume, CPU, a counter, Stream Deck dials) are laid out like a Stream Deck +: the name small at the top left, the icon on the left, the value on the right with a thin level bar under it.
+
 Media keys, hotkeys, typing and locking use Windows `SendInput`, the tools listed under "What works where" on Linux, and system key events on macOS.
 
 Actions with settings (the app to launch, a hotkey, a scene name, ...) are set up with **double-click** or **right-click → Customize**. Multi Action steps are added, removed, reordered and configured there too, or added by dropping more actions onto the control. For a Hotkey, click **Record** and press the combination.
