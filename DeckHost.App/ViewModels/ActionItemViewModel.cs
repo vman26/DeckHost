@@ -95,9 +95,16 @@ public class ActionItemViewModel : ViewModelBase
             return false;
         }
 
+        // A control without a display of its own (a knob) shows its action on the display it's linked
+        // to (the touch zone above it), so actions that show text or a reading (Counter, Key ID, Clock,
+        // System Info) fit there too. Stream Deck key actions (a key image) still need a display of their own.
+        var outputs = control.HasLinkedDisplay ? control.Outputs | LinkedDisplayOutputs : control.Outputs;
         return (control.Inputs & Action.RequiredInputs) == Action.RequiredInputs &&
-               (control.Outputs & Action.RequiredOutputs) == Action.RequiredOutputs;
+               (outputs & Action.RequiredOutputs) == Action.RequiredOutputs;
     }
+
+    /// <summary>What a linked display offers the control that borrows it: text and readouts, drawn by the host.</summary>
+    private const OutputCapabilities LinkedDisplayOutputs = OutputCapabilities.Text;
 
     public static ActionItemViewModel Create(string pluginId, string pluginName, IDeckAction action) => new(pluginId, pluginName, action);
 }

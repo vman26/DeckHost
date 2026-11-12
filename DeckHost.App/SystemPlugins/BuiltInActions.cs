@@ -214,7 +214,7 @@ internal sealed class KeyIdDiagnosticAction() : DeckActionBase(
     "deckhost.diagnostic.key-id",
     "Key ID (Diagnostic)",
     InputCapabilities.None,
-    OutputCapabilities.ColorImage,
+    OutputCapabilities.Text,
     "Shows which control and SDK id this is, to check the key layout.")
 {
     public override bool CanBeMultiActionStep => false;
