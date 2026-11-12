@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:primitives="using:Avalonia.Controls.Primitives"
+			 x:Class="DeckHost.App.Views.ColorPickerPanel"
+			 Width="272">
+	<UserControl.Styles>
+		<Style Selector="TextBlock.caption">
+			<Setter Property="FontSize" Value="11" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<Style Selector="TextBox.channel">
+			<Setter Property="Padding" Value="6,4" />
+			<Setter Property="MinWidth" Value="0" />
+			<Setter Property="HorizontalContentAlignment" Value="Center" />
+		</Style>
+		<Style Selector="Button.swatch">
+			<Setter Property="Width" Value="24" />
+			<Setter Property="Height" Value="24" />
+			<Setter Property="Padding" Value="0" />
+			<Setter Property="CornerRadius" Value="4" />
+			<Setter Property="BorderBrush" Value="#475569" />
+			<Setter Property="BorderThickness" Value="1" />
+		</Style>
+	</UserControl.Styles>
+	<StackPanel Spacing="10" Margin="4">
+		<!-- Saturation left to right, brightness top to bottom: white at the top left, the hue at the top right, black at the bottom. -->
+		<primitives:ColorSpectrum Name="Spectrum" Height="200" CornerRadius="6"
+								  Components="SaturationValue" Shape="Box" />
+
+		<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+			<Button Name="EyedropperButton" Width="40" Height="40" Padding="0" CornerRadius="6"
+					ToolTip.Tip="Pick a color from the screen (click, or Space; Esc cancels)">
+				<Border Name="EyedropperSwatch" Width="40" Height="40" CornerRadius="6">
+					<Path Data="M17.6 3.3a2.4 2.4 0 0 1 3.4 3.4l-2.4 2.4 1 1-1.4 1.4-1-1-7.6 7.6c-.4.4-.9.6-1.4.6H6.5l-2 2-1.4-1.4 2-2v-1.7c0-.5.2-1 .6-1.4l7.6-7.6-1-1L13.7 4.2l1 1Zm-3.5 4.7L6.6 15.5v1.4H8l7.5-7.5Z"
+						  Fill="White" Stretch="Uniform" Width="20" Height="20" />
+				</Border>
+			</Button>
+			<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+				<primitives:ColorSlider Name="HueSlider" ColorModel="Hsva" ColorComponent="Component1"
+										IsPerceptive="True" Orientation="Horizontal" Height="14" />
+				<primitives:ColorSlider Name="AlphaSlider" ColorModel="Hsva" ColorComponent="Alpha"
+										Orientation="Horizontal" Height="14" />
+			</StackPanel>
+		</Grid>
+
+		<Grid ColumnDefinitions="2*,*,*,*" ColumnSpacing="6" RowDefinitions="Auto,Auto" RowSpacing="2">
+			<TextBlock Classes="caption" Text="HEX" />
+			<TextBlock Classes="caption" Grid.Column="1" Text="R" />
+			<TextBlock Classes="caption" Grid.Column="2" Text="G" />
+			<TextBlock Classes="caption" Grid.Column="3" Text="B" />
+			<TextBox Name="HexInput" Grid.Row="1" Classes="channel" />
+			<TextBox Name="RedInput" Grid.Row="1" Grid.Column="1" Classes="channel" />
+			<TextBox Name="GreenInput" Grid.Row="1" Grid.Column="2" Classes="channel" />
+			<TextBox Name="BlueInput" Grid.Row="1" Grid.Column="3" Classes="channel" />
+		</Grid>
+
+		<TextBlock Name="EyedropperHint" Classes="caption" TextWrapping="Wrap" IsVisible="False" />
+
+		<StackPanel Spacing="6">
+			<TextBlock Classes="caption" Text="PRESET COLORS" />
+			<ItemsControl Name="Presets">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<WrapPanel ItemWidth="30" ItemHeight="30" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+			</ItemsControl>
+		</StackPanel>
+	</StackPanel>
+</UserControl>
