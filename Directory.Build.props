@@ -6,11 +6,14 @@
     <Copyright>Copyright (c) 2026 Marco Veltman</Copyright>
 
     <!-- Versions come from git tags (MinVer): the tag v1.2.0 builds 1.2.0; commits after it build
-         1.2.1-alpha.0.N. Untagged history starts at 0.1.0. Release builds need the full history
-         (fetch-depth: 0), else MinVer can't see the tags. -->
+         1.3.0-alpha.0.N (the next minor; a patch is released by tagging v1.2.1). For a major
+         version, raise MinVerMinimumMajorMinor (2.0 builds 2.0.0-alpha.0.N). Untagged history
+         starts at 0.1.0. Release builds need the full history (fetch-depth: 0), else MinVer can't
+         see the tags. release.yml reads the version from here. -->
     <MinVerTagPrefix>v</MinVerTagPrefix>
     <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
     <MinVerDefaultPreReleaseIdentifiers>alpha.0</MinVerDefaultPreReleaseIdentifiers>
+    <MinVerAutoIncrement>minor</MinVerAutoIncrement>
   </PropertyGroup>
 
   <ItemGroup>
