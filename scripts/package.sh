@@ -52,7 +52,14 @@ TEXT
         sed -e "s|@SHORT_VERSION@|${short}|" -e "s|@VERSION@|${version}|" "$root/packaging/macos/Info.plist" > "$app/Contents/Info.plist"
         chmod +x "$app/Contents/MacOS/DeckHost.App"
         # Apple Silicon only runs signed code; an ad-hoc signature is enough without a developer ID.
-        codesign --force --deep --sign - "$app"
+        # Each Mach-O file first, then the bundle (not --deep, which Apple advises against).
+        while IFS= read -r -d '' file; do
+            if file -b "$file" | grep -q "Mach-O"; then
+                codesign --force --sign - "$file"
+            fi
+        done < <(find "$app/Contents/MacOS" -type f -print0)
+        codesign --force --sign - "$app"
+        codesign --verify --strict "$app"
         (cd "$stage" && ditto -c -k --sequesterRsrc --keepParent DeckHost.app "$output/${name}.zip")
         echo "$output/${name}.zip"
         ;;
