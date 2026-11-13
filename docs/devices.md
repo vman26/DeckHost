@@ -51,9 +51,15 @@ A deck in a web browser.
 
 1. Choose **Web Deck** in the device picker.
 2. Open **Device settings** and choose **This computer only** (a deck in a browser window here) or **Phones and tablets on this network**.
-3. Set the number of columns and rows, and open the link shown there.
+3. Set the number of columns and rows.
+4. On the phone, open the address shown there (like `http://192.168.1.20:8765`) and enter the **pairing code** (like `K7QM-3XRD`; case and dashes don't matter). The phone remembers it unless you untick **Remember on this device**.
 
-The link carries a pairing code: without it the page shows nothing. A new code locks out every phone that had the old link. On a phone, **Add to Home Screen** makes it a full-screen app. Allow DeckHost through your firewall when the system asks, or phones can't reach it.
+- **New pairing code** makes another code and disconnects every phone; they have to enter the new one. The link shown with the code in it skips typing, for a QR code or a message to yourself.
+- **PIN (optional)** is asked once on each phone next to the code. Use it when others could see the code (a shared link, a screenshot). Changing it disconnects every phone too.
+- After five wrong codes or PINs in a minute a phone has to wait a minute.
+- On a phone, **Add to Home Screen** makes it a full-screen app. **Forget this device** (top right) removes the remembered code.
+
+Allow DeckHost through your firewall when the system asks, or phones can't reach it.
 
 ## Linux: the device rule
 

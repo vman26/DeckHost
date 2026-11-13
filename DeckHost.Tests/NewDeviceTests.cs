@@ -181,7 +181,50 @@ public sealed class WebDeckTests : IDisposable
 
         Assert.False(plugin.Devices.Single().IsConnected);
         Assert.Null(plugin.Link);
-        Assert.Equal(12, plugin.GetDeviceSettings(WebDeckPlugin.DeviceId).Get(WebDeckPlugin.Code).Length);
+        Assert.Matches("^[A-Z2-9]{4}-[A-Z2-9]{4}$", plugin.GetDeviceSettings(WebDeckPlugin.DeviceId).Get(WebDeckPlugin.Code));
+    }
+
+    [Theory]
+    [InlineData("k7qm-3xrd", "K7QM3XRD")]
+    [InlineData(" K7QM 3XRD ", "K7QM3XRD")]
+    public void CodesAreComparedWithoutCaseDashesOrSpaces(string typed, string normalized) =>
+        Assert.Equal(normalized, WebDeckPlugin.NormalizeCode(typed));
+
+    [Fact]
+    public void ThePinIsNeededWhenSetAndGuessingIsLimited()
+    {
+        using var plugin = new WebDeckPlugin(_directory);
+        var code = plugin.GetDeviceSettings(WebDeckPlugin.DeviceId).Get(WebDeckPlugin.Code);
+        Assert.Null(plugin.ApplyDeviceSettings(WebDeckPlugin.DeviceId, plugin.GetDeviceSettings(WebDeckPlugin.DeviceId).With(WebDeckPlugin.Pin, "4321")));
+        var phone = IPAddress.Parse("192.168.1.20");
+        var other = IPAddress.Parse("192.168.1.21");
+
+        Assert.Equal("pin", plugin.CheckAccess($"/check?code={code.ToLowerInvariant()}", phone));
+        Assert.Null(plugin.CheckAccess($"/check?code={code.Replace("-", "", StringComparison.Ordinal)}&pin=4321", phone));
+        for (var attempt = 0; attempt < WebDeckPlugin.MaxFailures; attempt++)
+        {
+            Assert.Equal("code", plugin.CheckAccess("/check?code=WRONG-CODE&pin=4321", phone));
+        }
+
+        // Locked out for a while, even with the right code; other addresses aren't.
+        Assert.Equal("wait", plugin.CheckAccess($"/check?code={code}&pin=4321", phone));
+        Assert.Null(plugin.CheckAccess($"/ws?code={code}&pin=4321", other));
+    }
+
+    [Fact]
+    public void NewPairingCodeReplacesTheOldOne()
+    {
+        using var plugin = new WebDeckPlugin(_directory);
+        var old = plugin.GetDeviceSettings(WebDeckPlugin.DeviceId).Get(WebDeckPlugin.Code);
+
+        var action = Assert.Single(plugin.GetSettingActions(WebDeckPlugin.DeviceId));
+        var message = plugin.RunSettingAction(WebDeckPlugin.DeviceId, action.Id);
+        var code = plugin.GetDeviceSettings(WebDeckPlugin.DeviceId).Get(WebDeckPlugin.Code);
+
+        Assert.NotEqual(old, code);
+        Assert.Contains(code, message, StringComparison.Ordinal);
+        Assert.Equal("code", plugin.CheckAccess($"/ws?code={old}", IPAddress.Loopback));
+        Assert.Equal(code, new WebDeckPlugin(_directory).GetDeviceSettings(WebDeckPlugin.DeviceId).Get(WebDeckPlugin.Code));
     }
 
     [Fact]
@@ -203,10 +246,16 @@ public sealed class WebDeckTests : IDisposable
 
         var code = settings.Get(WebDeckPlugin.Code);
         using var http = new HttpClient();
-        var denied = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/"));
-        var page = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/?code={code}"));
-        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
-        Assert.Contains("WebSocket", page, StringComparison.Ordinal);
+        // The page opens without a code (it asks for it); the deck itself needs it.
+        var page = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/"));
+        Assert.Contains("Pairing code", page, StringComparison.Ordinal);
+        Assert.Contains("\"pin\":false", await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/info")), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.Forbidden, (await http.GetAsync(new Uri($"http://127.0.0.1:{port}/check?code=nope"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync(new Uri($"http://127.0.0.1:{port}/check?code={code}"))).StatusCode);
+        using (var refused = new ClientWebSocket())
+        {
+            await Assert.ThrowsAnyAsync<WebSocketException>(() => refused.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws?code=nope"), CancellationToken.None));
+        }
 
         using var socket = new ClientWebSocket();
         await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/ws?code={code}"), CancellationToken.None);

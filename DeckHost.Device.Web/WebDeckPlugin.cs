@@ -18,10 +18,11 @@ namespace DeckHost.Device.Web;
 /// <summary>
 /// A deck in a web browser: a phone or tablet on the same network, or a browser window on this
 /// computer (an on-screen deck). DeckHost serves a page with the keys over HTTP and keeps it up to
-/// date over a WebSocket. Off until switched on in Device Settings; every page needs the pairing
-/// code in its link, so others on the network can't press keys.
+/// date over a WebSocket. Off until switched on in Device Settings. The page opens without a code
+/// and asks for the pairing code (and the PIN, when one is set); the deck only connects with them,
+/// so others on the network can't press keys. Wrong guesses from one address are limited.
 /// </summary>
-public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin
+public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceSettingActions
 {
     public const string DeviceId = "web.deck";
     public const string Sharing = "sharing";
@@ -29,6 +30,16 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
     public const string Rows = "rows";
     public const string Port = "port";
     public const string Code = "code";
+    public const string Pin = "pin";
+    public const string NewCodeAction = "new-code";
+
+    /// <summary>Wrong codes or PINs from one address within <see cref="FailureWindow"/> before it has to wait.</summary>
+    public const int MaxFailures = 5;
+
+    public static readonly TimeSpan FailureWindow = TimeSpan.FromMinutes(1);
+
+    /// <summary>Letters and digits that can't be mistaken for each other (no 0/O, 1/I/L).</summary>
+    private const string CodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
     public const string SharingOff = "off";
     public const string SharingLocal = "local";
@@ -44,6 +55,7 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
     private readonly ConcurrentDictionary<Client, byte> _clients = new();
     private readonly ConcurrentDictionary<string, Timer> _longPressTimers = new(StringComparer.Ordinal);
     private readonly byte[] _page;
+    private readonly Dictionary<IPAddress, (int Failures, DateTime Since)> _failures = [];
     private IReadOnlyCollection<DeviceDefinition> _devices;
     private IDevicePluginContext? _context;
     private TcpListener? _listener;
@@ -77,14 +89,19 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
     /// <summary>The port the server listens on while it runs.</summary>
     public int? ListeningPort { get; private set; }
 
-    /// <summary>The link to open on a phone (or here), with the pairing code; null while sharing is off.</summary>
-    public string? Link => ListeningPort is { } port
-        ? $"http://{(SharingMode == SharingNetwork ? LocalAddress() ?? "localhost" : "localhost")}:{port}/?code={Uri.EscapeDataString(PairingCode)}"
+    /// <summary>The address to open on a phone (or here); null while sharing is off.</summary>
+    public string? Address => ListeningPort is { } port
+        ? $"http://{(SharingMode == SharingNetwork ? LocalAddress() ?? "localhost" : "localhost")}:{port}/"
         : null;
+
+    /// <summary>The address with the pairing code in it (opens without typing the code); null while sharing is off.</summary>
+    public string? Link => Address is { } address ? $"{address}?code={Uri.EscapeDataString(PairingCode)}" : null;
 
     private string SharingMode => _settings.Get(Sharing, SharingOff);
 
     private string PairingCode => _settings.Get(Code);
+
+    private string PinCode => _settings.Get(Pin);
 
     public Task InitializeAsync(IDevicePluginContext context, CancellationToken cancellationToken)
     {
@@ -98,9 +115,9 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
     public IReadOnlyList<ActionSettingDefinition> GetDeviceSettingDefinitions(string deviceId) =>
     [
         new(Sharing, "Show the deck in a browser", ActionSettingKind.Choice, SharingOff,
-            Description: Link is { } link
-                ? $"Open this link on your phone or in a browser: {link}"
-                : "\"This computer\" gives an on-screen deck in a browser window; \"Phones and tablets\" lets devices on your network open it with the pairing link.",
+            Description: Address is { } address
+                ? $"Open {address} on your phone or in a browser and enter the pairing code {PairingCode}{(PinCode.Length > 0 ? " and the PIN" : string.Empty)}. Or open {Link} to skip typing the code."
+                : "\"This computer\" gives an on-screen deck in a browser window; \"Phones and tablets\" lets devices on your network open it and connect with the pairing code.",
             Options:
             [
                 new(SharingOff, "Off"),
@@ -111,8 +128,28 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
         new(Rows, "Rows", ActionSettingKind.Number, "3") { Range = new NumberRange(WebDeckLayout.MinSize, WebDeckLayout.MaxRows) },
         new(Port, "Port", ActionSettingKind.Number, DefaultPort.ToString(CultureInfo.InvariantCulture)),
         new(Code, "Pairing code", ActionSettingKind.Text, PairingCode,
-            Description: "Part of the link. Change it to lock out phones that had the old link."),
+            Description: "What a phone enters to connect (dashes and upper or lower case don't matter). New pairing code below makes another one and disconnects every phone."),
+        new(Pin, "PIN (optional)", ActionSettingKind.Secret,
+            Description: "Asked once on each phone or browser, next to the pairing code. Use it when the code could be seen by others (a shared link, a screenshot). Changing it disconnects every phone."),
     ];
+
+    public IReadOnlyList<DeviceSettingAction> GetSettingActions(string deviceId) =>
+    [
+        new(NewCodeAction, "New pairing code", "Phones that are connected now are disconnected and need the new code.",
+            Confirm: "Make a new pairing code? Every phone and browser that uses the Web Deck now is disconnected and has to enter the new code."),
+    ];
+
+    public string RunSettingAction(string deviceId, string actionId)
+    {
+        if (actionId != NewCodeAction)
+        {
+            return "Unknown action.";
+        }
+
+        var code = NewCode();
+        var error = ApplyDeviceSettings(deviceId, _settings.With(Code, code));
+        return error ?? $"The new pairing code is {code}.";
+    }
 
     public ActionSettings GetDeviceSettings(string deviceId) => _settings;
 
@@ -123,7 +160,17 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
             settings = settings.With(Code, NewCode());
         }
 
+        // A new code or PIN locks out the pages that connected with the old one.
+        var locksOut = NormalizeCode(settings.Get(Code)) != NormalizeCode(PairingCode) || settings.Get(Pin) != PinCode;
         _settings = settings;
+        if (locksOut)
+        {
+            foreach (var client in _clients.Keys)
+            {
+                client.Abort();
+            }
+        }
+
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
@@ -278,10 +325,33 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
                 }
 
                 var path = target.Split('?')[0];
-                if (!IsPaired(target))
+                var remote = (tcp.Client.RemoteEndPoint as IPEndPoint)?.Address ?? IPAddress.None;
+
+                // The page itself is open: it asks for the code (and PIN) and connects with them.
+                if (path is "/" or "/index.html")
                 {
-                    await WriteResponseAsync(stream, 403, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(
-                        "<!doctype html><meta name=viewport content=\"width=device-width\"><body style=\"font-family:sans-serif;background:#0b0f17;color:#e2e8f0;padding:24px\"><h2>DeckHost</h2><p>Open the link from DeckHost → Device Settings → Web Deck (it contains the pairing code).</p>")).ConfigureAwait(false);
+                    await WriteResponseAsync(stream, 200, "text/html; charset=utf-8", _page).ConfigureAwait(false);
+                    return;
+                }
+
+                if (path == "/info")
+                {
+                    await WriteResponseAsync(stream, 200, "application/json", Encoding.UTF8.GetBytes(
+                        JsonSerializer.Serialize(new { name = "DeckHost", pin = PinCode.Length > 0 }))).ConfigureAwait(false);
+                    return;
+                }
+
+                var access = CheckAccess(target, remote);
+                if (path == "/check")
+                {
+                    await WriteResponseAsync(stream, access is null ? 200 : 403, "application/json", Encoding.UTF8.GetBytes(
+                        JsonSerializer.Serialize(new { ok = access is null, reason = access }))).ConfigureAwait(false);
+                    return;
+                }
+
+                if (access is not null)
+                {
+                    await WriteResponseAsync(stream, 403, "application/json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { ok = false, reason = access }))).ConfigureAwait(false);
                     return;
                 }
 
@@ -294,12 +364,6 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
                     return;
                 }
 
-                if (path is "/" or "/index.html")
-                {
-                    await WriteResponseAsync(stream, 200, "text/html; charset=utf-8", _page).ConfigureAwait(false);
-                    return;
-                }
-
                 await WriteResponseAsync(stream, 404, "text/plain", "Not Found"u8.ToArray()).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or SocketException or WebSocketException or InvalidDataException or OperationCanceledException or ObjectDisposedException)
@@ -308,17 +372,53 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
         }
     }
 
-    private bool IsPaired(string target)
+    /// <summary>
+    /// Null when the request carries the pairing code (and the PIN, when one is set); otherwise why not:
+    /// "code", "pin", or "wait" after <see cref="MaxFailures"/> wrong tries from this address within
+    /// <see cref="FailureWindow"/> (also while the right code is given, so guessing gains nothing).
+    /// </summary>
+    internal string? CheckAccess(string target, IPAddress remote)
     {
         var query = target.Contains('?', StringComparison.Ordinal) ? target[(target.IndexOf('?', StringComparison.Ordinal) + 1)..] : string.Empty;
-        var given = query.Split('&')
+        var values = query.Split('&')
             .Select(static pair => pair.Split('=', 2))
-            .Where(static pair => pair.Length == 2 && pair[0] == "code")
-            .Select(static pair => Uri.UnescapeDataString(pair[1]))
-            .FirstOrDefault() ?? string.Empty;
-        var expected = PairingCode;
-        return expected.Length > 0 && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(given), Encoding.UTF8.GetBytes(expected));
+            .Where(static pair => pair.Length == 2)
+            .GroupBy(static pair => pair[0], StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => Uri.UnescapeDataString(group.First()[1].Replace('+', ' ')), StringComparer.Ordinal);
+        lock (_failures)
+        {
+            var now = DateTime.UtcNow;
+            if (_failures.TryGetValue(remote, out var record) && now - record.Since > FailureWindow)
+            {
+                _failures.Remove(remote);
+                record = default;
+            }
+
+            if (record.Failures >= MaxFailures)
+            {
+                return "wait";
+            }
+
+            var reason = !Same(NormalizeCode(values.GetValueOrDefault("code") ?? string.Empty), NormalizeCode(PairingCode)) ? "code"
+                : PinCode.Length > 0 && !Same(values.GetValueOrDefault("pin") ?? string.Empty, PinCode) ? "pin"
+                : null;
+            if (reason is null)
+            {
+                _failures.Remove(remote);
+                return null;
+            }
+
+            _failures[remote] = (record.Failures + 1, record.Failures == 0 ? now : record.Since);
+            return reason;
+        }
     }
+
+    private static bool Same(string given, string expected) =>
+        expected.Length > 0 && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(given), Encoding.UTF8.GetBytes(expected));
+
+    /// <summary>A code as compared: upper case, without spaces and dashes.</summary>
+    internal static string NormalizeCode(string code) =>
+        new([.. code.Where(static c => !char.IsWhiteSpace(c) && c != '-').Select(char.ToUpperInvariant)]);
 
     private async Task RunClientAsync(Client client, CancellationToken stopping)
     {
@@ -416,7 +516,17 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
         return string.IsNullOrWhiteSpace(settings.Get(Code)) ? settings.With(Code, NewCode()) : settings;
     }
 
-    internal static string NewCode() => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(6));
+    /// <summary>A new pairing code like <c>K7QM-3XRD</c>: 8 characters from 31 (about 40 bits), easy to type on a phone.</summary>
+    internal static string NewCode()
+    {
+        var code = new char[8];
+        for (var index = 0; index < code.Length; index++)
+        {
+            code[index] = CodeAlphabet[RandomNumberGenerator.GetInt32(CodeAlphabet.Length)];
+        }
+
+        return $"{new string(code, 0, 4)}-{new string(code, 4, 4)}";
+    }
 
     /// <summary>This computer's address on the local network (the first up, non-loopback IPv4).</summary>
     private static string? LocalAddress()
@@ -481,7 +591,7 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
 
     private static async Task WriteResponseAsync(NetworkStream stream, int status, string contentType, byte[] body)
     {
-        var reason = status switch { 200 => "OK", 403 => "Forbidden", 404 => "Not Found", _ => "Error" };
+        var reason = status switch { 200 => "OK", 403 => "Forbidden", 404 => "Not Found", 405 => "Method Not Allowed", _ => "Error" };
         var head = $"HTTP/1.1 {status} {reason}\r\nContent-Type: {contentType}\r\nContent-Length: {body.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
         await stream.WriteAsync(Encoding.ASCII.GetBytes(head)).ConfigureAwait(false);
         await stream.WriteAsync(body).ConfigureAwait(false);

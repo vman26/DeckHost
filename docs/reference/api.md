@@ -119,6 +119,18 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 
 ## DeckHost.Contracts.Interfaces
 
+### DeviceSettingAction
+
+*record* — A button on a device's settings page.
+
+| Member | |
+|---|---|
+| `DeviceSettingAction(string Id, string Label, string Description = null, string Confirm = null)` | A button on a device's settings page. |
+| `string Confirm { get; init; }` | When set, DeckHost asks this question before running it. |
+| `string Description { get; init; }` | One line under the button: what it does. |
+| `string Id { get; init; }` |  |
+| `string Label { get; init; }` |  |
+
 ### IActionHost
 
 *interface* — Services the host offers to actions. Thread-safe: actions may call these from background work (for example after an async request finished).
@@ -239,6 +251,15 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `void ReportConnectionStatus(string deviceId, string state, string message)` |  |
 | `void ReportInputEvent(string deviceId, string controlId, InputCapabilities eventType, int value)` |  |
 | `void RequestRedraw(string deviceId)` | Asks the host to send every control image again, e.g. after the plugin drew something over them (a full-screen background). Thread-safe; the redraw happens on the host's worker. |
+
+### IDeviceSettingActions
+
+*interface* — Optional, next to `IConfigurableDevicePlugin`: buttons on the device's settings page for things that aren't a value to save (make a new pairing code, reset the device, …).
+
+| Member | |
+|---|---|
+| `IReadOnlyList<DeviceSettingAction> GetSettingActions(string deviceId)` | The buttons for this device. |
+| `string RunSettingAction(string deviceId, string actionId)` | Does what the button says (DeckHost calls it off the UI thread). Returns a line for the user; DeckHost reloads the device's settings afterwards, so changed values show. |
 
 ### IRenderContext
 

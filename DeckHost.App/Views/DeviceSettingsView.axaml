@@ -91,6 +91,35 @@
 				<Border Classes="card" IsVisible="{Binding HasEditor}">
 					<ContentControl Content="{Binding Editor}" />
 				</Border>
+				<!-- The plugin's buttons (a new pairing code, …). -->
+				<Border Classes="card" IsVisible="{Binding HasActions}">
+					<ItemsControl ItemsSource="{Binding Actions}">
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate>
+								<StackPanel Spacing="12" />
+							</ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+						<ItemsControl.ItemTemplate>
+							<DataTemplate x:DataType="vm:DeviceSettingActionViewModel">
+								<StackPanel Spacing="6">
+									<StackPanel Orientation="Horizontal" Spacing="10">
+										<Button Content="{Binding Label}" Command="{Binding RunCommand}" IsEnabled="{Binding IsIdle}" />
+										<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" VerticalAlignment="Center" />
+									</StackPanel>
+									<Border IsVisible="{Binding Confirming}" Padding="10" CornerRadius="8" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.7F1D1D}" BorderThickness="1">
+										<StackPanel Spacing="8">
+											<TextBlock Text="{Binding ConfirmText}" TextWrapping="Wrap" Foreground="{DynamicResource C.FECACA}" />
+											<StackPanel Orientation="Horizontal" Spacing="8">
+												<Button Content="{Binding Label}" Classes="accent" Command="{Binding RunCommand}" />
+												<Button Content="Cancel" Command="{Binding CancelCommand}" />
+											</StackPanel>
+										</StackPanel>
+									</Border>
+								</StackPanel>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+				</Border>
 				<!-- Firmware: the version, and updates when the device's plugin can install them. -->
 				<Border Classes="card" IsVisible="{Binding HasFirmware}">
 					<StackPanel Spacing="8" DataContext="{Binding Firmware}" x:DataType="vm:FirmwareViewModel">
