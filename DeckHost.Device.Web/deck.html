@@ -16,18 +16,61 @@
   .key.down { transform: scale(0.94); box-shadow: inset 0 0 0 2px #60a5fa; }
   #status { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: #1e293b; font-size: 13px; opacity: 0; transition: opacity 200ms; pointer-events: none; }
   #status.show { opacity: 1; }
+  #connect { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; touch-action: auto; -webkit-user-select: text; user-select: text; overflow: auto; }
+  body.pairing #connect { display: flex; }
+  body.pairing #deck { display: none; }
+  .card { width: 100%; max-width: 360px; background: #111827; border: 1px solid #232c3d; border-radius: 16px; padding: 24px; box-sizing: border-box; }
+  .card h1 { margin: 0 0 4px; font-size: 22px; }
+  .card p { margin: 0 0 18px; color: #94a3b8; font-size: 14px; line-height: 1.45; }
+  .card label { display: block; font-size: 13px; color: #cbd5e1; margin: 14px 0 6px; }
+  .card input[type=text], .card input[type=password] { width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 10px; border: 1px solid #334155; background: #0b0f17; color: #e2e8f0; font-size: 18px; letter-spacing: 0.08em; }
+  .card input:focus { outline: 2px solid #60a5fa; outline-offset: 1px; }
+  .card .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 14px; color: #cbd5e1; }
+  .card button { width: 100%; margin-top: 18px; padding: 12px; border: 0; border-radius: 10px; background: #2563eb; color: white; font-size: 16px; font-weight: 600; }
+  .card button:disabled { opacity: 0.6; }
+  .card .error { min-height: 20px; margin-top: 12px; color: #f87171; font-size: 14px; }
+  .card .hint { margin-top: 16px; font-size: 12px; color: #64748b; }
+  #forget { position: fixed; top: calc(6px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: #475569; font-size: 12px; display: none; }
+  body.connected #forget { display: block; }
 </style>
 </head>
 <body>
 <div id="deck"></div>
+<div id="connect">
+  <form class="card" id="form" autocomplete="off">
+    <h1>DeckHost</h1>
+    <p>Enter the pairing code shown in DeckHost under Device settings → Web Deck.</p>
+    <label for="code">Pairing code</label>
+    <input id="code" type="text" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" maxlength="40" required>
+    <div id="pinRow" hidden>
+      <label for="pin">PIN</label>
+      <input id="pin" type="password" inputmode="numeric" maxlength="64">
+    </div>
+    <label class="check"><input id="remember" type="checkbox" checked> Remember on this device</label>
+    <button id="go" type="submit">Connect</button>
+    <div class="error" id="error" role="alert"></div>
+    <div class="hint">Tip: add this page to your home screen to use it like an app.</div>
+  </form>
+</div>
+<button id="forget" type="button">Forget this device</button>
 <div id="status">Connecting…</div>
 <script>
 (() => {
   const deck = document.getElementById('deck');
   const status = document.getElementById('status');
-  const code = new URLSearchParams(location.search).get('code') || '';
-  let columns = 5, rows = 3, socket, retry = 500;
+  const form = document.getElementById('form');
+  const codeBox = document.getElementById('code');
+  const pinBox = document.getElementById('pin');
+  const pinRow = document.getElementById('pinRow');
+  const remember = document.getElementById('remember');
+  const go = document.getElementById('go');
+  const error = document.getElementById('error');
+  const storageKey = 'deckhost.webdeck';
+  let columns = 5, rows = 3, socket, retry = 500, pairing = null, needsPin = false;
   const keys = new Map();
+
+  function load() { try { return JSON.parse(localStorage.getItem(storageKey)) || null; } catch { return null; } }
+  function save(value) { try { value ? localStorage.setItem(storageKey, JSON.stringify(value)) : localStorage.removeItem(storageKey); } catch { } }
 
   function show(text) { status.textContent = text; status.classList.toggle('show', !!text); }
 
@@ -69,10 +112,48 @@
 
   function send(message) { if (socket && socket.readyState === 1) socket.send(JSON.stringify(message)); }
 
+  function query(value) {
+    const parts = [`code=${encodeURIComponent(value.code)}`];
+    if (value.pin) parts.push(`pin=${encodeURIComponent(value.pin)}`);
+    return parts.join('&');
+  }
+
+  const reasons = {
+    code: 'That pairing code is not right. It may have been changed in DeckHost.',
+    pin: 'The PIN is not right.',
+    wait: 'Too many wrong tries. Wait a minute and try again.',
+  };
+
+  // Asks the server whether the code (and PIN) are right; null when they are, else a message.
+  async function check(value) {
+    try {
+      const response = await fetch(`/check?${query(value)}`, { cache: 'no-store' });
+      const result = await response.json();
+      return result.ok ? null : (reasons[result.reason] || 'DeckHost refused the connection.');
+    } catch {
+      return 'DeckHost can\'t be reached. Is it running, with the Web Deck switched on?';
+    }
+  }
+
+  function askForCode(message, value) {
+    if (socket) { socket.onclose = null; socket.close(); socket = null; }
+    pairing = null;
+    document.body.classList.remove('connected');
+    document.body.classList.add('pairing');
+    show('');
+    if (value && value.code) codeBox.value = value.code;
+    pinRow.hidden = !needsPin;
+    pinBox.value = '';
+    error.textContent = message || '';
+    go.disabled = false;
+    (codeBox.value ? (needsPin ? pinBox : codeBox) : codeBox).focus();
+  }
+
   function connect() {
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-    socket = new WebSocket(`${scheme}://${location.host}/ws?code=${encodeURIComponent(code)}`);
-    socket.onopen = () => { retry = 500; show(''); };
+    socket = new WebSocket(`${scheme}://${location.host}/ws?${query(pairing)}`);
+    let opened = false;
+    socket.onopen = () => { opened = true; retry = 500; show(''); };
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data);
       if (message.type === 'layout') {
@@ -86,17 +167,74 @@
         keys.forEach((img) => img.removeAttribute('src'));
       }
     };
-    socket.onclose = () => {
+    socket.onclose = async () => {
+      if (!pairing) return;
       show('Reconnecting…');
-      setTimeout(connect, retry);
+      // Closed right away or dropped: if the code (or PIN) was changed, ask for the new one.
+      const problem = await check(pairing);
+      if (problem && problem !== reasons.wait && !problem.startsWith('DeckHost can')) {
+        save(null);
+        askForCode(opened ? 'The pairing code or PIN was changed in DeckHost. Enter the new one.' : problem, pairing);
+        return;
+      }
+      setTimeout(() => { if (pairing) connect(); }, retry);
       retry = Math.min(retry * 2, 5000);
     };
   }
 
+  function start(value) {
+    pairing = value;
+    document.body.classList.remove('pairing');
+    document.body.classList.add('connected');
+    build();
+    show('Connecting…');
+    connect();
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const value = { code: codeBox.value.trim().toUpperCase(), pin: needsPin ? pinBox.value : '' };
+    if (!value.code) { codeBox.focus(); return; }
+    go.disabled = true;
+    error.textContent = '';
+    const problem = await check(value);
+    go.disabled = false;
+    if (problem) { error.textContent = problem; return; }
+    save(remember.checked ? value : null);
+    start(value);
+  });
+
+  document.getElementById('forget').addEventListener('click', () => {
+    save(null);
+    askForCode('');
+    codeBox.value = '';
+  });
+
   addEventListener('resize', fit);
-  build();
-  show('Connecting…');
-  connect();
+
+  (async () => {
+    try { needsPin = !!(await (await fetch('/info', { cache: 'no-store' })).json()).pin; } catch { }
+
+    // A link with ?code= fills it in; the code is then taken out of the address bar and history.
+    const fromLink = new URLSearchParams(location.search).get('code');
+    if (fromLink) history.replaceState(null, '', location.pathname);
+    const saved = load();
+    const value = fromLink ? { code: fromLink, pin: saved && saved.code === fromLink ? saved.pin || '' : '' } : saved;
+    if (value && value.code && (!needsPin || value.pin)) {
+      const problem = await check(value);
+      if (!problem) {
+        if (fromLink) save(value);
+        start(value);
+        return;
+      }
+
+      if (saved) save(null);
+      askForCode(problem, value);
+      return;
+    }
+
+    askForCode('', value);
+  })();
 })();
 </script>
 </body>

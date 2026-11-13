@@ -48,7 +48,36 @@ public sealed partial class DeviceSettingsViewModel : ViewModelBase
             : new SettingsEditorViewModel(plugin.GetDeviceSettingDefinitions(device.Id), plugin.GetDeviceSettings(device.Id));
         Lights = lights;
         Firmware = firmware;
+        if (plugin is IDeviceSettingActions actions)
+        {
+            Actions = [.. actions.GetSettingActions(device.Id).Select(action => new DeviceSettingActionViewModel(this, actions, action))];
+        }
     }
+
+    /// <summary>The plugin's buttons (a new pairing code, …).</summary>
+    public IReadOnlyList<DeviceSettingActionViewModel> Actions { get; } = [];
+
+    public bool HasActions => Actions.Count > 0;
+
+    /// <summary>After a button: the plugin may have changed values (a new code), so the fields show them again.</summary>
+    internal void ReloadEditor()
+    {
+        if (_plugin is null)
+        {
+            return;
+        }
+
+        Editor = new SettingsEditorViewModel(_plugin.GetDeviceSettingDefinitions(_device.Id), _plugin.GetDeviceSettings(_device.Id));
+        OnPropertyChanged(nameof(Editor));
+    }
+
+    internal void ShowStatus(string text, bool isError)
+    {
+        StatusIsError = isError;
+        Status = text;
+    }
+
+    internal string DeviceId => _device.Id;
 
     /// <summary>The device's firmware (version, updates); null when its plugin doesn't report it.</summary>
     public FirmwareViewModel? Firmware { get; }
@@ -71,7 +100,7 @@ public sealed partial class DeviceSettingsViewModel : ViewModelBase
         ? "Connected. Saving applies the settings right away."
         : "Not connected. The settings are saved and applied when the device is plugged in.";
 
-    public SettingsEditorViewModel Editor { get; }
+    public SettingsEditorViewModel Editor { get; private set; }
 
     public string Status
     {
@@ -255,4 +284,70 @@ public sealed class LedLightViewModel(string name, LightStyleEditorViewModel edi
     public string Name { get; } = name;
 
     public LightStyleEditorViewModel Editor { get; } = editor;
+}
+
+/// <summary>One of a device plugin's buttons on its settings page, with an optional "are you sure?".</summary>
+public sealed partial class DeviceSettingActionViewModel(DeviceSettingsViewModel owner, IDeviceSettingActions plugin, DeviceSettingAction action) : ViewModelBase
+{
+    private bool _confirming;
+    private bool _isRunning;
+
+    public string Label => action.Label;
+
+    public string Description => action.Description ?? string.Empty;
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(action.Description);
+
+    public string ConfirmText => action.Confirm ?? string.Empty;
+
+    /// <summary>Waiting for the second click.</summary>
+    public bool Confirming
+    {
+        get => _confirming;
+        private set => SetProperty(ref _confirming, value);
+    }
+
+    public bool IsRunning
+    {
+        get => _isRunning;
+        private set
+        {
+            if (SetProperty(ref _isRunning, value))
+            {
+                OnPropertyChanged(nameof(IsIdle));
+            }
+        }
+    }
+
+    public bool IsIdle => !_isRunning;
+
+    [RelayCommand]
+    private async Task RunAsync()
+    {
+        if (action.Confirm is not null && !Confirming)
+        {
+            Confirming = true;
+            return;
+        }
+
+        Confirming = false;
+        IsRunning = true;
+        try
+        {
+            var message = await Task.Run(() => plugin.RunSettingAction(owner.DeviceId, action.Id));
+            owner.ReloadEditor();
+            owner.ShowStatus(message, isError: false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.IO.IOException or UnauthorizedAccessException)
+        {
+            owner.ShowStatus($"{action.Label} failed: {ex.Message}", isError: true);
+        }
+        finally
+        {
+            IsRunning = false;
+        }
+    }
+
+    [RelayCommand]
+    private void Cancel() => Confirming = false;
 }

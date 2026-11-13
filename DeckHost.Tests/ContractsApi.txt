@@ -47,6 +47,17 @@
   DeckHost.Contracts.Icons.VolumeDown : System.String const
   DeckHost.Contracts.Icons.VolumeUp : System.String const
   DeckHost.Contracts.Icons.Workflow : System.String const
+  DeckHost.Contracts.Interfaces.DeviceSettingAction(System.String Id, System.String Label, System.String Description, System.String Confirm)
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.<Clone>$() : DeckHost.Contracts.Interfaces.DeviceSettingAction
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.Confirm : System.String {set}
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.Deconstruct(System.String& Id, System.String& Label, System.String& Description, System.String& Confirm) : System.Void
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.Description : System.String {set}
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.Equals(DeckHost.Contracts.Interfaces.DeviceSettingAction other) : System.Boolean
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.GetHashCode() : System.Int32
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.Id : System.String {set}
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.Label : System.String {set}
+  DeckHost.Contracts.Interfaces.DeviceSettingAction.ToString() : System.String
   DeckHost.Contracts.Interfaces.IActionHost.ActivatePage(System.String deviceId, System.Int32 number) : System.Void
   DeckHost.Contracts.Interfaces.IActionHost.ActivateProfile(System.String deviceId, System.String profileIdOrName) : System.Void abstract
   DeckHost.Contracts.Interfaces.IActionHost.ActivateRelativePage(System.String deviceId, System.Int32 offset) : System.Void
@@ -98,6 +109,8 @@
   DeckHost.Contracts.Interfaces.IDevicePluginContext.ReportConnectionStatus(System.String deviceId, System.String state, System.String message) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDevicePluginContext.ReportInputEvent(System.String deviceId, System.String controlId, DeckHost.Contracts.Enums.InputCapabilities eventType, System.Int32 value) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDevicePluginContext.RequestRedraw(System.String deviceId) : System.Void
+  DeckHost.Contracts.Interfaces.IDeviceSettingActions.GetSettingActions(System.String deviceId) : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Interfaces.DeviceSettingAction> abstract
+  DeckHost.Contracts.Interfaces.IDeviceSettingActions.RunSettingAction(System.String deviceId, System.String actionId) : System.String abstract
   DeckHost.Contracts.Interfaces.IRenderContext.Clear(System.UInt32 argbColor) : System.Void abstract
   DeckHost.Contracts.Interfaces.IRenderContext.ControlId : System.String abstract
   DeckHost.Contracts.Interfaces.IRenderContext.DeviceId : System.String abstract
@@ -667,6 +680,7 @@
   DeckHost.Contracts.VariableKeys.SwitchState : System.String const
   DeckHost.Contracts.VariableKeys.UserVariable(System.String name) : System.String
   DeckHost.Contracts.VariableKeys.WorkflowState : System.String const
+class DeckHost.Contracts.Interfaces.DeviceSettingAction
 class DeckHost.Contracts.Interfaces.NullActionHost
 class DeckHost.Contracts.Models.ActionContext
 class DeckHost.Contracts.Models.ActionReference
@@ -713,6 +727,7 @@ interface DeckHost.Contracts.Interfaces.IDeviceLightBatchOutput
 interface DeckHost.Contracts.Interfaces.IDeviceOutput
 interface DeckHost.Contracts.Interfaces.IDevicePlugin
 interface DeckHost.Contracts.Interfaces.IDevicePluginContext
+interface DeckHost.Contracts.Interfaces.IDeviceSettingActions
 interface DeckHost.Contracts.Interfaces.IRenderContext
 interface DeckHost.Contracts.Interfaces.IVariableStore
 static class DeckHost.Contracts.Icons

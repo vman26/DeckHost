@@ -372,8 +372,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         OnPropertyChanged(nameof(HasPages));
     }
 
-    /// <summary>More than one page: the page bar shows numbers (one page shows only +).</summary>
-    public bool HasPages => PageTabs.Count > 1;
+    /// <summary>A layout is shown: the page bar shows its pages (always at least page 1) and +.</summary>
+    public bool HasPages => PageTabs.Count > 0;
 
     private static string NewLayoutId(ProfileItemViewModel root, string kind) => $"{root.Id}.{kind}.{Guid.NewGuid():N}"[..Math.Min(80, root.Id.Length + kind.Length + 34)];
 
