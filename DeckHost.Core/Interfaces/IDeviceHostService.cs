@@ -33,6 +33,14 @@ public interface IDeviceHostService : IAsyncDisposable
         remove { }
     }
 
+    /// <summary>
+    /// Pauses a device: no images or lights are sent to it and its input is ignored (a firmware update
+    /// is writing to it). Resuming redraws it.
+    /// </summary>
+    void SetDevicePaused(string deviceId, bool paused)
+    {
+    }
+
     /// <summary>Per device: inputs, images and lights sent, failures and the last error since start.</summary>
     IReadOnlyList<DeviceStatistics> DeviceStatistics => [];
 

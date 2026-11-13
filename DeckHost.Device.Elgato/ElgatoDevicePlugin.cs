@@ -13,8 +13,14 @@ namespace DeckHost.Device.Elgato;
 /// app, which otherwise holds the device). Devices are found and followed as they are plugged in
 /// and out; each one seen before stays listed while unplugged, so its profiles can be edited.
 /// </summary>
-public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin
+public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceFirmware
 {
+    /// <summary>The version the deck reports (read when it connects); Elgato's update protocol isn't public.</summary>
+    public DeviceFirmwareInfo? GetFirmwareInfo(string deviceId) =>
+        Find(deviceId)?.Firmware is { Length: > 0 } version
+            ? new DeviceFirmwareInfo(version, CanUpdate: false, "Elgato's update protocol isn't public: update the firmware with Elgato's Stream Deck app (close DeckHost while it runs).")
+            : null;
+
     public const string Brightness = "brightness";
 
     private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);
@@ -260,6 +266,7 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
                 stream.ReadTimeout = Timeout.Infinite;
                 stream.WriteTimeout = 2000;
                 session.Open(stream);
+                session.Firmware = ReadFirmware(stream, model);
                 if (model.Generation == 1)
                 {
                     // The first generation keeps a half-sent image across reconnects: start a fresh stream.
@@ -383,6 +390,20 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
         }
     }
 
+    private static string? ReadFirmware(HidStream stream, StreamDeckModel model)
+    {
+        try
+        {
+            var report = StreamDeckProtocol.FirmwareRequest(model);
+            stream.GetFeature(report);
+            return StreamDeckProtocol.FirmwareVersion(model, report);
+        }
+        catch (Exception ex) when (ex is IOException or TimeoutException or NotSupportedException or ObjectDisposedException)
+        {
+            return null;
+        }
+    }
+
     private bool Write(Session session, IEnumerable<byte[]> reports, out string? error)
     {
         lock (session.WriteLock)
@@ -427,7 +448,7 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
                 session.Model.Name,
                 session.Model.Controls(),
                 session.Stream is not null,
-                $"Serial {session.Serial}"))];
+                session.Firmware is { } firmware ? $"Serial {session.Serial}, firmware {firmware}" : $"Serial {session.Serial}"))];
 
     internal static string DeviceIdFor(StreamDeckModel model, string serial)
     {
@@ -496,6 +517,9 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
         public Lock WriteLock { get; } = new();
 
         public HidStream? Stream { get; private set; }
+
+        /// <summary>The firmware version the deck reported when it connected.</summary>
+        public string? Firmware { get; set; }
 
         public void Open(HidStream stream) => Stream = stream;
 

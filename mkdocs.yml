@@ -52,3 +52,4 @@ nav:
           - "0006 Workflows": maintainers/adr/0006-workflows.md
           - "0007 In-process plugins": maintainers/adr/0007-in-process-plugins.md
           - "0008 Generic USB devices": maintainers/adr/0008-generic-usb-devices.md
+          - "0009 Firmware updates": maintainers/adr/0009-firmware-updates.md

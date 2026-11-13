@@ -12,5 +12,6 @@ Architecture decision records: why DeckHost is built the way it is. Each one say
 | [0006](0006-workflows.md) | Workflows are a graph run on the host worker | Accepted |
 | [0007](0007-in-process-plugins.md) | DeckHost plugins run in the app's process | Accepted, revisit |
 | [0008](0008-generic-usb-devices.md) | Generic USB devices are descriptions, learned by pressing | Accepted |
+| [0009](0009-firmware-updates.md) | Firmware updates go through the host, written by the device plugin | Accepted |
 
 Format: *Context* (what forced a choice), *Decision*, *Consequences* (good and bad). Keep them short.

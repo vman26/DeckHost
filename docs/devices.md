@@ -24,6 +24,10 @@ DeckHost talks to Stream Decks directly over USB, without Elgato's software. **C
 
 This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't (**☰ → Help and support → Report a problem**).
 
+## Firmware
+
+**Device settings → Firmware** shows the version each device runs. DeckHost installs firmware for devices whose plugin supports it, after you confirm: it checks the download, and the device doesn't respond until it's done. The N4 Pro, Stream Decks and other USB devices only show their version: MiraBox has no update protocol, Elgato's isn't public (use Elgato's app with DeckHost closed), and other devices use their maker's tool.
+
 ## Other USB devices (device creator)
 
 Button boxes, foot pedals, jog wheels, game controllers and other USB devices DeckHost doesn't know can be made into a deck: **☰ → Add a USB device**.
