@@ -230,6 +230,17 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     private void OpenWelcome_OnClick(object? sender, RoutedEventArgs e) => OpenWelcome();
 
+    private void OpenDeviceCreator_OnClick(object? sender, RoutedEventArgs e) => OpenDeviceCreator();
+
+    /// <summary>The device creator: a USB device DeckHost doesn't know, made into a deck.</summary>
+    public void OpenDeviceCreator()
+    {
+        if (TryResolve<DeckHost.Device.Hid.IHidDeviceSource>() is { } source)
+        {
+            OpenSingle("Add a USB device", () => new DeviceCreatorView { DataContext = new DeviceCreatorViewModel(TryResolve<DeckHost.Device.Hid.HidDevicePlugin>(), source) });
+        }
+    }
+
     /// <summary>The welcome tour (by itself on the first start).</summary>
     public void OpenWelcome() =>
         OpenSingle("Welcome", () => new WelcomeView

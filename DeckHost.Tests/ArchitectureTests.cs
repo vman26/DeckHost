@@ -19,6 +19,7 @@ public class ArchitectureTests
         typeof(DeckHost.Device.MiraBox.MiraBoxDevicePlugin).Assembly,
         typeof(DeckHost.Device.Elgato.ElgatoDevicePlugin).Assembly,
         typeof(DeckHost.Device.Web.WebDeckPlugin).Assembly,
+        typeof(DeckHost.Device.Hid.HidDevicePlugin).Assembly,
     ];
 
     private static string[] References(Assembly assembly) =>
