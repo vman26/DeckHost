@@ -4,7 +4,7 @@
 	<UserControl.Styles>
 		<!-- Not set: the default color is shown muted, so the box is never blank. -->
 		<Style Selector="TextBox.isDefault">
-			<Setter Property="Foreground" Value="#64748B" />
+			<Setter Property="Foreground" Value="{DynamicResource C.64748B}" />
 			<Setter Property="FontStyle" Value="Italic" />
 		</Style>
 	</UserControl.Styles>
@@ -12,17 +12,17 @@
 		<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
 			<!-- The swatch opens the picker (ColorPickerPanel). -->
 			<Button Name="SwatchButton" Width="48" Height="32" Padding="3" VerticalAlignment="Center" ToolTip.Tip="Pick a color">
-				<Border Name="Swatch" CornerRadius="3" BorderBrush="#475569" BorderThickness="1" />
+				<Border Name="Swatch" CornerRadius="3" BorderBrush="{DynamicResource C.475569}" BorderThickness="1" />
 			</Button>
 			<TextBox Name="HexBox" Grid.Column="1" />
 			<Button Name="ClearButton" Grid.Column="2" Content="✕" ToolTip.Tip="Back to the default" Padding="8,4" />
 		</Grid>
 		<!-- Only with AllowOpacity: 0 % is transparent (what is behind shows through). -->
 		<Grid Name="OpacityRow" ColumnDefinitions="Auto,*,48,Auto" ColumnSpacing="8" IsVisible="False">
-			<TextBlock Text="Opacity" VerticalAlignment="Center" Foreground="#94A3B8" />
+			<TextBlock Text="Opacity" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" />
 			<Slider Name="OpacitySlider" Grid.Column="1" Minimum="0" Maximum="100" SmallChange="5" LargeChange="10"
 					TickFrequency="5" IsSnapToTickEnabled="True" VerticalAlignment="Center" />
-			<TextBlock Name="OpacityText" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="#E2E8F0" />
+			<TextBlock Name="OpacityText" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="{DynamicResource C.E2E8F0}" />
 			<Button Name="TransparentButton" Grid.Column="3" Content="Transparent" Padding="8,4"
 					ToolTip.Tip="No background of its own: the profile background shows through" />
 		</Grid>

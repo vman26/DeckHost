@@ -37,9 +37,8 @@ public static class Pages
             Content = page,
             Width = 760,
             Height = 720,
-            Background = Avalonia.Media.Brush.Parse("#111827"),
-            RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark,
         };
+        window.Bind(Window.BackgroundProperty, window.GetResourceObservable("C.111827"));
         if (TopLevel.GetTopLevel(from) is Window owner)
         {
             window.Show(owner);

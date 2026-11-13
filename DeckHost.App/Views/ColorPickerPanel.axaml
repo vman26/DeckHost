@@ -6,7 +6,7 @@
 	<UserControl.Styles>
 		<Style Selector="TextBlock.caption">
 			<Setter Property="FontSize" Value="11" />
-			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
 			<Setter Property="FontWeight" Value="SemiBold" />
 		</Style>
 		<Style Selector="TextBox.channel">
@@ -19,7 +19,7 @@
 			<Setter Property="Height" Value="24" />
 			<Setter Property="Padding" Value="0" />
 			<Setter Property="CornerRadius" Value="4" />
-			<Setter Property="BorderBrush" Value="#475569" />
+			<Setter Property="BorderBrush" Value="{DynamicResource C.475569}" />
 			<Setter Property="BorderThickness" Value="1" />
 		</Style>
 	</UserControl.Styles>

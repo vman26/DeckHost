@@ -8,23 +8,23 @@
 	<UserControl.Styles>
 		<Style Selector="TextBlock.hint">
 			<Setter Property="FontSize" Value="13" />
-			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
 			<Setter Property="TextWrapping" Value="Wrap" />
 		</Style>
 		<Style Selector="TextBlock.heading">
 			<Setter Property="FontSize" Value="22" />
 			<Setter Property="FontWeight" Value="SemiBold" />
-			<Setter Property="Foreground" Value="#F8FAFC" />
+			<Setter Property="Foreground" Value="{DynamicResource C.F8FAFC}" />
 		</Style>
 		<Style Selector="Border.card">
-			<Setter Property="Background" Value="#0F172A" />
-			<Setter Property="BorderBrush" Value="#1E293B" />
+			<Setter Property="Background" Value="{DynamicResource C.0F172A}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource C.1E293B}" />
 			<Setter Property="BorderThickness" Value="1" />
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="16" />
 		</Style>
 		<Style Selector="Border.tip">
-			<Setter Property="Background" Value="#111827" />
+			<Setter Property="Background" Value="{DynamicResource C.111827}" />
 			<Setter Property="CornerRadius" Value="10" />
 			<Setter Property="Padding" Value="12,10" />
 		</Style>
@@ -46,7 +46,7 @@
 					<Border Classes="card">
 						<StackPanel Spacing="10">
 							<Grid ColumnDefinitions="*,Auto">
-								<TextBlock Text="Your devices" FontWeight="SemiBold" Foreground="#E2E8F0" VerticalAlignment="Center" />
+								<TextBlock Text="Your devices" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" />
 								<Button Grid.Column="1" Content="Look again" Command="{Binding RefreshDevicesCommand}" />
 							</Grid>
 							<ItemsControl ItemsSource="{Binding Devices}">
@@ -57,15 +57,15 @@
 									<DataTemplate x:DataType="vm:WelcomeDevice">
 										<StackPanel Orientation="Horizontal" Spacing="10">
 											<TextBlock Text="{Binding Dot}" Foreground="{Binding DotColor}" VerticalAlignment="Center" />
-											<TextBlock Text="{Binding Name}" Foreground="#E2E8F0" VerticalAlignment="Center" />
-											<TextBlock Text="{Binding State}" Foreground="#64748B" VerticalAlignment="Center" />
+											<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" />
+											<TextBlock Text="{Binding State}" Foreground="{DynamicResource C.64748B}" VerticalAlignment="Center" />
 										</StackPanel>
 									</DataTemplate>
 								</ItemsControl.ItemTemplate>
 							</ItemsControl>
 							<Border Classes="tip" IsVisible="{Binding ShowNoDeviceHelp}">
 								<StackPanel Spacing="6">
-									<TextBlock Text="No device connected yet" FontWeight="SemiBold" Foreground="#FDE68A" />
+									<TextBlock Text="No device connected yet" FontWeight="SemiBold" Foreground="{DynamicResource C.FDE68A}" />
 									<TextBlock Classes="hint" Text="{Binding DeviceHelp}" />
 									<TextBlock Classes="hint" Text="No device at all? Use the Web Deck: choose it in the device picker at the top, open Device settings and turn on sharing. Its link opens a deck on your phone." />
 									<TextBlock Classes="hint" Text="You can set everything up without a device; it shows up as soon as you plug it in." />
@@ -81,15 +81,15 @@
 					<TextBlock Classes="hint" Text="Fill the empty keys of this profile with everyday actions, or start empty and drag actions from the list on the right yourself." />
 					<Border Classes="card">
 						<StackPanel Spacing="10">
-							<TextBlock Text="Starter layout" FontWeight="SemiBold" Foreground="#E2E8F0" />
+							<TextBlock Text="Starter layout" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
 							<TextBlock Classes="hint" Text="Play / pause, previous and next track, mute, volume down and up, a clock, system info, lock, and switch profile. On a knob: the volume; on the touch strip: swipe to skip tracks. Controls that already have an action keep it." />
 							<Button Content="Put these on my device" Classes="accent" Command="{Binding ApplyStarterCommand}" IsEnabled="{Binding CanApplyStarter}" HorizontalAlignment="Left" />
-							<TextBlock Text="{Binding StarterStatus}" Foreground="#93C5FD" TextWrapping="Wrap" />
+							<TextBlock Text="{Binding StarterStatus}" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
 						</StackPanel>
 					</Border>
 					<Border Classes="card">
 						<StackPanel Spacing="6">
-							<TextBlock Text="Coming from the Stream Deck app?" FontWeight="SemiBold" Foreground="#E2E8F0" />
+							<TextBlock Text="Coming from the Stream Deck app?" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
 							<TextBlock Classes="hint" Text="Import your .streamDeckProfile files on the Profiles page (the grid icon at the top right), and install your Stream Deck plugins from Plugins → Store." />
 						</StackPanel>
 					</Border>

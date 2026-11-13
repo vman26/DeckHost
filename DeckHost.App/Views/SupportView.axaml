@@ -8,16 +8,16 @@
 	<UserControl.Styles>
 		<Style Selector="TextBlock.hint">
 			<Setter Property="FontSize" Value="12" />
-			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
 			<Setter Property="TextWrapping" Value="Wrap" />
 		</Style>
 		<Style Selector="TextBlock.title">
 			<Setter Property="FontWeight" Value="SemiBold" />
-			<Setter Property="Foreground" Value="#E2E8F0" />
+			<Setter Property="Foreground" Value="{DynamicResource C.E2E8F0}" />
 		</Style>
 		<Style Selector="Border.card">
-			<Setter Property="Background" Value="#0F172A" />
-			<Setter Property="BorderBrush" Value="#1E293B" />
+			<Setter Property="Background" Value="{DynamicResource C.0F172A}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource C.1E293B}" />
 			<Setter Property="BorderThickness" Value="1" />
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="14" />
@@ -28,10 +28,10 @@
 		<StackPanel Margin="20" Spacing="14">
 
 			<!-- After a crash: what happened and what to do (nothing was sent). -->
-			<Border IsVisible="{Binding HasNewCrashes}" Background="#2A1215" BorderBrush="#7F1D1D" BorderThickness="1" CornerRadius="12" Padding="14">
+			<Border IsVisible="{Binding HasNewCrashes}" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.7F1D1D}" BorderThickness="1" CornerRadius="12" Padding="14">
 				<StackPanel Spacing="8">
-					<TextBlock Text="{Binding NewCrashTitle}" FontWeight="SemiBold" Foreground="#FECACA" TextWrapping="Wrap" />
-					<TextBlock Classes="hint" Foreground="#FCA5A5"
+					<TextBlock Text="{Binding NewCrashTitle}" FontWeight="SemiBold" Foreground="{DynamicResource C.FECACA}" TextWrapping="Wrap" />
+					<TextBlock Classes="hint" Foreground="{DynamicResource C.FCA5A5}"
 							   Text="A crash report was saved on this computer; nothing was sent. Reporting it helps fix it: it opens a GitHub issue with the report filled in, which you can read and change before you submit it." />
 					<StackPanel Orientation="Horizontal" Spacing="8">
 						<Button Content="Report it" Classes="accent" Command="{Binding ReportNewestCommand}" />
@@ -47,7 +47,7 @@
 					<TextBlock Classes="hint" Text="Getting started, devices, profiles, pages and folders, workflows, plugins and troubleshooting." />
 					<StackPanel Orientation="Horizontal" Spacing="10">
 						<Button Content="Open the documentation" Classes="accent" Command="{Binding OpenDocumentationCommand}" />
-						<SelectableTextBlock Text="{x:Static vm:SupportViewModel.DocumentationUrl}" Foreground="#94A3B8" VerticalAlignment="Center" />
+						<SelectableTextBlock Text="{x:Static vm:SupportViewModel.DocumentationUrl}" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Center" />
 					</StackPanel>
 				</StackPanel>
 			</Border>
@@ -78,11 +78,11 @@
 						</ItemsControl.ItemsPanel>
 						<ItemsControl.ItemTemplate>
 							<DataTemplate x:DataType="vm:CrashItemViewModel">
-								<Border Background="#111827" CornerRadius="8" Padding="10,6">
+								<Border Background="{DynamicResource C.111827}" CornerRadius="8" Padding="10,6">
 									<Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
 										<StackPanel Spacing="2">
-											<TextBlock Text="{Binding When}" Foreground="#E2E8F0" />
-											<TextBlock Text="{Binding Headline}" FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" />
+											<TextBlock Text="{Binding When}" Foreground="{DynamicResource C.E2E8F0}" />
+											<TextBlock Text="{Binding Headline}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
 										</StackPanel>
 										<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
 											<Button Content="Open" Command="{Binding OpenCommand}" />
@@ -99,12 +99,12 @@
 			<Border Classes="card">
 				<StackPanel Spacing="4">
 					<TextBlock Classes="title" Text="This DeckHost" />
-					<SelectableTextBlock Text="{Binding Version}" Foreground="#CBD5E1" />
-					<SelectableTextBlock Text="{Binding SystemDescription}" Foreground="#94A3B8" FontSize="12" TextWrapping="Wrap" />
+					<SelectableTextBlock Text="{Binding Version}" Foreground="{DynamicResource C.CBD5E1}" />
+					<SelectableTextBlock Text="{Binding SystemDescription}" Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap" />
 				</StackPanel>
 			</Border>
 
-			<TextBlock Text="{Binding Status}" Foreground="#93C5FD" TextWrapping="Wrap" />
+			<TextBlock Text="{Binding Status}" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
 		</StackPanel>
 	</ScrollViewer>
 </UserControl>

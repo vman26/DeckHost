@@ -28,9 +28,25 @@ public sealed record AppSettingsData(
     bool ShowDebugPanel = false,
     DateTimeOffset? CrashesSeenUntil = null,
     bool OfferCrashReports = true,
-    bool WelcomeShown = false)
+    bool WelcomeShown = false,
+    string Theme = AppTheme.Dark)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
+}
+
+/// <summary>DeckHost's look: dark (as designed), light, or the system's choice.</summary>
+public static class AppTheme
+{
+    public const string Dark = "dark";
+    public const string Light = "light";
+    public const string System = "system";
+
+    public static Avalonia.Styling.ThemeVariant ToVariant(string? theme) => theme switch
+    {
+        Light => Avalonia.Styling.ThemeVariant.Light,
+        System => Avalonia.Styling.ThemeVariant.Default,
+        _ => Avalonia.Styling.ThemeVariant.Dark,
+    };
 }
 
 public static class AppSettings

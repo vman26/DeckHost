@@ -7,16 +7,16 @@
 	<UserControl.Styles>
 		<Style Selector="TextBlock.label">
 			<Setter Property="FontWeight" Value="SemiBold" />
-			<Setter Property="Foreground" Value="#E2E8F0" />
+			<Setter Property="Foreground" Value="{DynamicResource C.E2E8F0}" />
 		</Style>
 		<Style Selector="TextBlock.value">
-			<Setter Property="Foreground" Value="#E2E8F0" />
+			<Setter Property="Foreground" Value="{DynamicResource C.E2E8F0}" />
 			<Setter Property="VerticalAlignment" Value="Center" />
 			<Setter Property="HorizontalAlignment" Value="Right" />
 		</Style>
 		<Style Selector="TextBlock.hint">
 			<Setter Property="FontSize" Value="12" />
-			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
 			<Setter Property="TextWrapping" Value="Wrap" />
 		</Style>
 	</UserControl.Styles>
@@ -33,7 +33,7 @@
 				</ItemsControl.ItemsPanel>
 				<ItemsControl.ItemTemplate>
 					<DataTemplate x:DataType="IBrush">
-						<Ellipse Width="18" Height="18" Fill="{Binding}" Stroke="#334155" StrokeThickness="1" />
+						<Ellipse Width="18" Height="18" Fill="{Binding}" Stroke="{DynamicResource C.334155}" StrokeThickness="1" />
 					</DataTemplate>
 				</ItemsControl.ItemTemplate>
 			</ItemsControl>
@@ -80,10 +80,10 @@
 				</ItemsControl.ItemsPanel>
 				<ItemsControl.ItemTemplate>
 					<DataTemplate x:DataType="vm:LightStepViewModel">
-						<Border Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="10">
+						<Border Background="{DynamicResource C.111827}" BorderBrush="{DynamicResource C.334155}" BorderThickness="1" CornerRadius="10" Padding="10">
 							<Grid RowDefinitions="Auto,Auto" RowSpacing="6">
 								<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-									<TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" MinWidth="48" />
+									<TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" VerticalAlignment="Center" MinWidth="48" />
 									<local:ColorField Grid.Column="1" Hex="{Binding Color, Mode=TwoWay}" DefaultHex="#FFFFFF" />
 									<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
 										<Button Content="↑" ToolTip.Tip="Earlier" Command="{Binding MoveUpCommand}" IsEnabled="{Binding CanMoveUp}" />
@@ -92,10 +92,10 @@
 									</StackPanel>
 								</Grid>
 								<Grid Grid.Row="1" ColumnDefinitions="Auto,*,52,Auto,*,52" ColumnSpacing="8">
-									<TextBlock Text="Fade" Foreground="#CBD5E1" VerticalAlignment="Center" />
+									<TextBlock Text="Fade" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" />
 									<Slider Grid.Column="1" Minimum="0" Maximum="5" SmallChange="0.05" LargeChange="0.5" Value="{Binding FadeSeconds, Mode=TwoWay}" VerticalAlignment="Center" />
 									<TextBlock Grid.Column="2" Classes="value" Text="{Binding FadeText}" />
-									<TextBlock Grid.Column="3" Text="Hold" Foreground="#CBD5E1" VerticalAlignment="Center" Margin="8,0,0,0" />
+									<TextBlock Grid.Column="3" Text="Hold" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" Margin="8,0,0,0" />
 									<Slider Grid.Column="4" Minimum="0" Maximum="5" SmallChange="0.05" LargeChange="0.5" Value="{Binding HoldSeconds, Mode=TwoWay}" VerticalAlignment="Center" />
 									<TextBlock Grid.Column="5" Classes="value" Text="{Binding HoldText}" />
 								</Grid>
