@@ -14,4 +14,7 @@ internal static class DragFormats
 
     /// <summary>A Multi Action step being dragged to a new place (its position, from 0).</summary>
     public static readonly DataFormat<string> Step = DataFormat.CreateInProcessFormat<string>("MultiActionStepPayload");
+
+    /// <summary>A kind of workflow node from the workflow editor's palette.</summary>
+    public static readonly DataFormat<string> WorkflowNode = DataFormat.CreateInProcessFormat<string>("WorkflowNodePayload");
 }

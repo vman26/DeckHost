@@ -1,10 +1,12 @@
 using Avalonia.Threading;
+using DeckHost.Contracts;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
 using DeckHost.Core.Interfaces;
 using DeckHost.Core.Models;
 using DeckHost.Core.Plugins;
 using DeckHost.Core.Profiles;
+using DeckHost.Core.Workflows;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -447,14 +449,14 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     private static string? FolderIdOf(ControlBinding? binding) =>
         binding is { ActionKind: ProfileActionKind.Single } &&
         binding.Action.ActionId == SystemPlugins.FolderAction.ActionId &&
-        binding.Action.Settings.TryGetValue(SystemPlugins.FolderAction.FolderIdKey, out var id) ? id : null;
+        binding.Action.EffectiveSettings.TryGetValue(SystemPlugins.FolderAction.FolderIdKey, out var id) ? id : null;
 
     /// <summary>Keeps a folder's name in step with its key's Folder name setting.</summary>
     private void SyncFolderName(ControlBinding? binding)
     {
         if (FolderIdOf(binding) is { } folderId &&
             AllLayouts.FirstOrDefault(layout => layout.Id == folderId) is { } folder &&
-            binding!.Action.Settings.TryGetValue(SystemPlugins.FolderAction.NameKey, out var name) && !string.IsNullOrWhiteSpace(name))
+            binding!.Action.EffectiveSettings.TryGetValue(SystemPlugins.FolderAction.NameKey, out var name) && !string.IsNullOrWhiteSpace(name))
         {
             folder.Name = name;
         }
@@ -534,7 +536,39 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         var appearance = existing?.Model.Appearance ?? new ControlAppearance();
         ControlBinding updated;
 
-        if (actionItem.IsMultiActionScaffold)
+        if (actionItem.ScaffoldKind == ProfileActionKind.Workflow)
+        {
+            if (existing?.IsWorkflow == true)
+            {
+                OpenWorkflowEditor(control.Id);
+                return;
+            }
+
+            // What the control did keeps working: its action or steps become the first nodes.
+            var workflow = existing is null || existing.IsDisplayContentOnly ? WorkflowConverter.Starter() : WorkflowConverter.FromBinding(existing.Model);
+            updated = new ControlBinding(control.Id, ProfileActionKind.Workflow, actionItem.ToActionReference(), appearance, []) { Workflow = workflow };
+            ApplyBinding(control.Id, updated);
+            StatusMessage = existing is null || existing.IsDisplayContentOnly
+                ? $"Made a workflow on {control.DisplayName}."
+                : $"Turned {control.DisplayName} into a workflow that does what it did before.";
+            OpenWorkflowEditor(control.Id);
+            return;
+        }
+        else if (existing?.IsWorkflow == true && !actionItem.IsMultiActionScaffold)
+        {
+            if (!actionItem.CanBeMultiActionStep)
+            {
+                StatusMessage = $"{actionItem.Name} cannot be part of a workflow.";
+                return;
+            }
+
+            updated = existing.Model with
+            {
+                Workflow = WorkflowConverter.Append(existing.Model.Workflow ?? WorkflowConverter.Starter(), actionItem.ToActionReference(actionItem.DefaultSettings)),
+            };
+            StatusMessage = $"Added {actionItem.Name} to the workflow on {control.DisplayName}.";
+        }
+        else if (actionItem.IsMultiActionScaffold)
         {
             var kind = actionItem.ScaffoldKind!.Value;
             IReadOnlyList<MultiActionStep> steps = existing switch
@@ -743,6 +777,8 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             old.RevertRequested -= OnEditorRevert;
             old.RemoveRequested -= OnEditorRemove;
             old.OpenFolderRequested -= OnEditorOpenFolder;
+            old.OpenWorkflowRequested -= OnEditorOpenWorkflow;
+            old.ConvertToWorkflowRequested -= OnEditorConvertToWorkflow;
         }
 
         if (SelectedControl is null || SelectedProfile is null)
@@ -756,6 +792,8 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         editor.RevertRequested += OnEditorRevert;
         editor.RemoveRequested += OnEditorRemove;
         editor.OpenFolderRequested += OnEditorOpenFolder;
+        editor.OpenWorkflowRequested += OnEditorOpenWorkflow;
+        editor.ConvertToWorkflowRequested += OnEditorConvertToWorkflow;
         Editor = editor;
         if (editor.HasSettingsPage && SelectedDevice is { } device)
         {
@@ -801,6 +839,99 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     }
 
     private void OnEditorOpenFolder(object? sender, string folderId) => OpenFolder(folderId);
+
+    private void OnEditorOpenWorkflow(object? sender, EventArgs e)
+    {
+        if (sender is ControlCustomizationViewModel editor)
+        {
+            OpenWorkflowEditor(editor.ControlId);
+        }
+    }
+
+    private void OnEditorConvertToWorkflow(object? sender, EventArgs e)
+    {
+        if (sender is ControlCustomizationViewModel editor)
+        {
+            ConvertToWorkflow(editor.ControlId);
+        }
+    }
+
+    // ---------------------------------------------------------------- workflows
+
+    /// <summary>Raised with the editor to show (the main window opens it as a page).</summary>
+    public event Action<WorkflowEditorViewModel>? WorkflowEditorRequested;
+
+    /// <summary>Turns a Multi Action, Multi Action Switch, Key Logic or plain action into a workflow that does the same, and opens it.</summary>
+    public void ConvertToWorkflow(string controlId)
+    {
+        if (SelectedProfile?.GetBinding(controlId) is not { IsWorkflow: false } existing ||
+            !_actionsByKey.TryGetValue(EditorActionIds.Key(EditorActionIds.BuiltInPluginId, SystemPlugins.WorkflowAction.ActionId), out var workflowAction))
+        {
+            return;
+        }
+
+        ApplyBinding(controlId, new ControlBinding(controlId, ProfileActionKind.Workflow, workflowAction.ToActionReference(), existing.Model.Appearance, [])
+        {
+            Workflow = WorkflowConverter.FromBinding(existing.Model),
+        });
+        StatusMessage = $"Turned {existing.PrimaryAction.Name} into a workflow that does the same; add to it in the editor.";
+        OpenWorkflowEditor(controlId);
+    }
+
+    /// <summary>Opens the node editor for the workflow on a control of the edited layout.</summary>
+    public void OpenWorkflowEditor(string controlId)
+    {
+        if (CreateWorkflowEditor(controlId) is { } editor)
+        {
+            WorkflowEditorRequested?.Invoke(editor);
+        }
+    }
+
+    public WorkflowEditorViewModel? CreateWorkflowEditor(string controlId)
+    {
+        if (SelectedProfile is not { } layout || SelectedDevice is not { } device ||
+            !_controlsById.TryGetValue(controlId, out var controlItem) ||
+            layout.GetBinding(controlId) is not { IsWorkflow: true } binding)
+        {
+            return null;
+        }
+
+        var layoutId = layout.Id;
+        return new WorkflowEditorViewModel(
+            device.Id,
+            layoutId,
+            controlItem.Control,
+            controlItem.DisplayName,
+            binding.Model.Workflow ?? WorkflowConverter.Starter(),
+            _actionsByKey.Values,
+            workflow => ApplyWorkflow(layoutId, controlId, workflow),
+            _deviceHostService);
+    }
+
+    /// <summary>Stores an edited workflow on its control (also when another layout is shown meanwhile).</summary>
+    public bool ApplyWorkflow(string layoutId, string controlId, Workflow workflow)
+    {
+        if (AllLayouts.FirstOrDefault(candidate => candidate.Id == layoutId) is not { } layout ||
+            layout.GetBinding(controlId) is not { IsWorkflow: true } binding)
+        {
+            return false;
+        }
+
+        var model = binding.Model with { Workflow = workflow };
+        if (ReferenceEquals(layout, SelectedProfile))
+        {
+            ApplyBinding(controlId, model);
+            return true;
+        }
+
+        if (Resolve(model) is { } resolved)
+        {
+            layout.SetBinding(resolved);
+        }
+
+        SyncProfilesToHost();
+        return true;
+    }
 
     private void OnEditorRemove(object? sender, EventArgs e)
     {
@@ -1035,7 +1166,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
                 {
                     Action = binding.Action with
                     {
-                        Settings = new ActionSettings(binding.Action.Settings
+                        Settings = new ActionSettings(binding.Action.EffectiveSettings
                             .Where(static pair => pair.Key != SystemPlugins.FolderAction.FolderIdKey)
                             .Append(new KeyValuePair<string, string>(SystemPlugins.FolderAction.FolderIdKey, newFolderId))),
                     },
@@ -1219,6 +1350,9 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     private void OnForegroundAppChanged(string appName)
     {
         OnPropertyChanged(nameof(CurrentAppName));
+
+        // Workflows can check which app is in front.
+        _deviceHostService.SetVariable(VariableKeys.ForegroundApp, appName);
         if (!AutoSwitchEnabled || SelectedDevice is null)
         {
             return;
@@ -1466,15 +1600,22 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             return null;
         }
 
+        // The steps, or a workflow's action nodes (a workflow keeps working without a node whose
+        // plugin is gone: the node is skipped, and the editor marks it).
         var steps = new List<StepItemViewModel>();
-        foreach (var step in binding.Steps.OrderBy(static step => step.Order))
+        foreach (var step in binding.StepActions)
         {
-            if (!_actionsByKey.TryGetValue(EditorActionIds.Key(step.Action.PluginId, step.Action.ActionId), out var stepAction))
+            if (!_actionsByKey.TryGetValue(EditorActionIds.Key(step.PluginId, step.ActionId), out var stepAction))
             {
+                if (binding.ActionKind == ProfileActionKind.Workflow)
+                {
+                    continue;
+                }
+
                 return null;
             }
 
-            steps.Add(new StepItemViewModel(stepAction, step.Action.EffectiveSettings));
+            steps.Add(new StepItemViewModel(stepAction, step.EffectiveSettings));
         }
 
         return new ControlBindingViewModel(binding, primary, steps);

@@ -63,6 +63,7 @@ public class ActionItemViewModel : ViewModelBase
         EditorActionIds.MultiAction => ProfileActionKind.MultiAction,
         "builtin.multi-action-switch" => ProfileActionKind.MultiActionSwitch,
         "builtin.key-logic" => ProfileActionKind.KeyLogic,
+        SystemPlugins.WorkflowAction.ActionId => ProfileActionKind.Workflow,
         _ => null,
     };
 

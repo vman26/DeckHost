@@ -5,6 +5,7 @@ using DeckHost.Contracts.Models;
 using DeckHost.Core.Interfaces;
 using DeckHost.Core.Models;
 using DeckHost.Core.Rendering;
+using DeckHost.Core.Workflows;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 
@@ -89,6 +90,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     public event Action<LightState>? LightChanged;
     public event Action<DeviceInputEvent>? InputReceived;
+    public event Action<WorkflowTrace>? WorkflowTraced;
 
     public DeviceHostService(
         IEnumerable<IDevicePlugin> devicePlugins,
@@ -120,6 +122,10 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 TaskScheduler.Default);
         }
         _actionHost = new ActionHostServices(this);
+        if (_actionRouter is ActionRouter tracedRouter)
+        {
+            tracedRouter.Workflows.Traced += OnWorkflowTraced;
+        }
 
         foreach (var duplicate in _actionRouter.DuplicateActionKeys)
         {
@@ -196,6 +202,55 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     });
 
     public void AppendLog(string level, string message) => Log(level, message);
+
+    public void SetVariable(string key, string value) => Enqueue(() => _variableStore.Publish(key, value));
+
+    public void StopWorkflows(string deviceId, string controlId) => Enqueue(() =>
+    {
+        if (_actionRouter is ActionRouter router)
+        {
+            router.Workflows.StopAll(deviceId, controlId);
+        }
+    });
+
+    public void RunWorkflowTrigger(string deviceId, string controlId, string trigger) => Enqueue(() =>
+    {
+        if (_actionRouter is not ActionRouter router || GetActiveProfile(deviceId) is not { } profile)
+        {
+            return;
+        }
+
+        var binding = profile.Bindings.FirstOrDefault(candidate =>
+            candidate.ActionKind == ProfileActionKind.Workflow &&
+            string.Equals(candidate.ControlId, controlId, StringComparison.OrdinalIgnoreCase));
+        if (binding is null)
+        {
+            Log("Info", $"No workflow on '{controlId}' in the active profile to run.");
+            return;
+        }
+
+        var (eventType, value) = trigger switch
+        {
+            WorkflowTriggers.RotateLeft => (InputCapabilities.Rotate, -1),
+            WorkflowTriggers.RotateRight => (InputCapabilities.Rotate, 1),
+            WorkflowTriggers.SwipeLeft => (InputCapabilities.Swipe, -1),
+            WorkflowTriggers.SwipeRight => (InputCapabilities.Swipe, 1),
+            WorkflowTriggers.Up => (InputCapabilities.Release, 0),
+            _ => (InputCapabilities.Press, 1),
+        };
+        router.Workflows.Fire(profile, binding, trigger, new DeviceInputEvent(deviceId, controlId, eventType, value), _actionHost);
+        _dirtyDevices.Add(deviceId);
+    });
+
+    private void OnWorkflowTraced(WorkflowTrace trace)
+    {
+        if (trace.Kind is WorkflowTraceKind.Started or WorkflowTraceKind.Finished or WorkflowTraceKind.Stopped or WorkflowTraceKind.Failed)
+        {
+            Log(trace.Kind == WorkflowTraceKind.Failed ? "Warning" : "Info", $"Workflow on '{trace.ControlId}' (run {trace.RunId}): {trace.Kind}: {trace.Detail}");
+        }
+
+        SafeInvoke(() => WorkflowTraced?.Invoke(trace));
+    }
 
     public Task<Uri?> GetActionSettingsPageAsync(string deviceId, string controlId)
     {
@@ -462,6 +517,16 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             return;
         }
 
+        // Workflows start on inputs, and on a tap, a double press or a hold (which need timing).
+        if (activeProfile.Bindings.FirstOrDefault(binding => binding.ActionKind == ProfileActionKind.Workflow &&
+                string.Equals(binding.ControlId, inputEvent.ControlId, StringComparison.OrdinalIgnoreCase)) is { } workflow &&
+            _actionRouter is ActionRouter workflowRouter)
+        {
+            HandleWorkflowInput(workflowRouter, activeProfile, workflow, inputEvent);
+            _dirtyDevices.Add(inputEvent.DeviceId);
+            return;
+        }
+
         var target = FindTapTarget(activeProfile, inputEvent);
         bool dispatched;
         if (target is null)
@@ -514,7 +579,73 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     /// steps, unless a second press follows within <see cref="DoublePressWindow"/>, which runs the
     /// double-press steps. Without double-press steps a press runs at once.
     /// </summary>
-    private void HandleKeyLogic(ActionRouter router, DeviceProfile profile, ControlBinding binding, DeviceInputEvent inputEvent)
+    private void HandleKeyLogic(ActionRouter router, DeviceProfile profile, ControlBinding binding, DeviceInputEvent inputEvent) =>
+        HandleGestures(
+            inputEvent,
+            ActionRouter.HasGroup(binding, StepGroups.Hold),
+            ActionRouter.HasGroup(binding, StepGroups.DoublePress),
+            group =>
+            {
+                if (router.DispatchGroup(profile, binding, group, inputEvent.DeviceId, _actionHost))
+                {
+                    HandleLightFeedback(profile, inputEvent.ControlId);
+                }
+
+                Log("Info", $"Key Logic on '{inputEvent.ControlId}': {group}.");
+            });
+
+    /// <summary>
+    /// A workflow: inputs that start triggers right away go through the router; a tap, a double
+    /// press and a hold are told apart like Key Logic, when the workflow listens to them.
+    /// </summary>
+    private void HandleWorkflowInput(ActionRouter router, DeviceProfile profile, ControlBinding binding, DeviceInputEvent inputEvent)
+    {
+        if (router.Dispatch(profile, inputEvent, _actionHost))
+        {
+            HandleLightFeedback(profile, inputEvent.ControlId);
+        }
+
+        var triggers = WorkflowEngine.TriggersOf(binding.Workflow);
+        if (inputEvent.EventType is not (InputCapabilities.Press or InputCapabilities.Release or InputCapabilities.LongPress) ||
+            !(triggers.Contains(WorkflowTriggers.Tap) || triggers.Contains(WorkflowTriggers.DoublePress) || triggers.Contains(WorkflowTriggers.Hold)))
+        {
+            return;
+        }
+
+        HandleGestures(
+            inputEvent,
+            triggers.Contains(WorkflowTriggers.Hold),
+            triggers.Contains(WorkflowTriggers.DoublePress),
+            group =>
+            {
+                var trigger = group switch
+                {
+                    StepGroups.Hold => WorkflowTriggers.Hold,
+                    StepGroups.DoublePress => WorkflowTriggers.DoublePress,
+                    _ => WorkflowTriggers.Tap,
+                };
+
+                // The profile and binding as they are now (a wait for a double press may span an edit).
+                var current = GetActiveProfile(inputEvent.DeviceId);
+                var currentBinding = current?.Bindings.FirstOrDefault(candidate =>
+                    candidate.ActionKind == ProfileActionKind.Workflow &&
+                    string.Equals(candidate.ControlId, inputEvent.ControlId, StringComparison.OrdinalIgnoreCase));
+                if (current is not null && currentBinding is not null &&
+                    router.Workflows.Fire(current, currentBinding, trigger, inputEvent with { EventType = InputCapabilities.Press, Value = 1 }, _actionHost))
+                {
+                    HandleLightFeedback(current, inputEvent.ControlId);
+                }
+            });
+    }
+
+    /// <summary>
+    /// Tells a press, a double press and a hold apart: <paramref name="run"/> gets
+    /// <see cref="StepGroups.Hold"/> on the device's long press (when <paramref name="hasHold"/>),
+    /// <see cref="StepGroups.Press"/> on a release that didn't end a hold, or, when
+    /// <paramref name="hasDouble"/>, <see cref="StepGroups.DoublePress"/> for a second release within
+    /// <see cref="DoublePressWindow"/> (the single press then waits that long).
+    /// </summary>
+    private void HandleGestures(DeviceInputEvent inputEvent, bool hasHold, bool hasDouble, Action<string> run)
     {
         var key = (inputEvent.DeviceId, inputEvent.ControlId);
         if (!_keyLogic.TryGetValue(key, out var state))
@@ -523,35 +654,25 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             _keyLogic[key] = state;
         }
 
-        void Run(string group)
-        {
-            if (router.DispatchGroup(profile, binding, group, inputEvent.DeviceId, _actionHost))
-            {
-                HandleLightFeedback(profile, inputEvent.ControlId);
-            }
-
-            Log("Info", $"Key Logic on '{inputEvent.ControlId}': {group}.");
-        }
-
         switch (inputEvent.EventType)
         {
             case InputCapabilities.Press:
                 state.Held = false;
                 break;
-            case InputCapabilities.LongPress when ActionRouter.HasGroup(binding, StepGroups.Hold):
+            case InputCapabilities.LongPress when hasHold:
                 state.Held = true;
                 state.Pending = false;
-                Run(StepGroups.Hold);
+                run(StepGroups.Hold);
                 break;
             case InputCapabilities.Release when state.Held:
                 state.Held = false;
                 break;
             case InputCapabilities.Release when state.Pending:
                 state.Pending = false;
-                Run(StepGroups.DoublePress);
+                run(StepGroups.DoublePress);
                 break;
-            case InputCapabilities.Release when !ActionRouter.HasGroup(binding, StepGroups.DoublePress):
-                Run(StepGroups.Press);
+            case InputCapabilities.Release when !hasDouble:
+                run(StepGroups.Press);
                 break;
             case InputCapabilities.Release:
                 state.Pending = true;
@@ -562,7 +683,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                         if (state.Pending && state.Version == version)
                         {
                             state.Pending = false;
-                            Run(StepGroups.Press);
+                            run(StepGroups.Press);
                             _dirtyDevices.Add(inputEvent.DeviceId);
                         }
                     }),
@@ -909,7 +1030,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             foreach (var binding in profile.Bindings)
             {
                 var references = binding.ActionKind != ProfileActionKind.Single
-                    ? binding.Steps.OrderBy(static step => step.Order).Select(static step => step.Action)
+                    ? binding.StepActions
                     : [binding.Action];
                 var index = 0;
                 foreach (var reference in references)

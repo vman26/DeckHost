@@ -156,6 +156,13 @@
 							<TextBlock Text="{Binding ActionDescription}" Classes="hint" IsVisible="{Binding HasActionDescription}" />
 						</StackPanel>
 						<ContentControl Content="{Binding ActionSettings}" IsVisible="{Binding HasActionSettings}" />
+						<StackPanel Spacing="8" IsVisible="{Binding IsWorkflow}">
+							<TextBlock Text="{Binding WorkflowSummary}" Foreground="#E2E8F0" TextWrapping="Wrap" />
+							<Button Content="Open workflow editor" Classes="accent" Command="{Binding OpenWorkflowCommand}" HorizontalAlignment="Left"
+									ToolTip.Tip="Link triggers, actions, waits, conditions and loops on a canvas" />
+						</StackPanel>
+						<Button Content="Turn into a workflow…" Command="{Binding ConvertToWorkflowCommand}" IsVisible="{Binding CanConvertToWorkflow}" HorizontalAlignment="Left"
+								ToolTip.Tip="Make a workflow that does the same, to add conditions (If), loops, toggles and variables" />
 						<Button Content="Open folder" Classes="accent" Command="{Binding OpenFolderCommand}" IsVisible="{Binding IsFolder}" HorizontalAlignment="Left"
 								ToolTip.Tip="Show the folder's keys here (and on the device); Back under the device returns" />
 						<TextBlock Classes="hint" IsVisible="{Binding ShowSettingsPage}"
