@@ -25,7 +25,7 @@ Releases are on the repository's **Releases** page, one package per platform:
 | Platform | Package | Install |
 |---|---|---|
 | Windows 10/11 (x64) | `DeckHost-<version>-win-x64-setup.exe` | Run it. Installs for your user (no administrator rights), with a Start menu entry and uninstaller. A plain `.zip` is there too. |
-| Linux (x64) | `DeckHost-<version>-linux-x64.tar.gz` | Unpack and run `./install.sh`: installs to `~/.local/share/deckhost` with a menu entry, and (with sudo, once) the udev rule that lets you use the N4 Pro without root. `./install.sh --uninstall` removes it. |
+| Linux (x64) | `DeckHost-<version>-linux-x64.tar.gz` | Unpack and run `./install.sh`: installs to `~/.local/share/deckhost` with a menu entry, and (with sudo, once) the udev rule that lets you use the N4 Pro and Elgato Stream Decks without root. `./install.sh --uninstall` removes it. |
 | macOS 12+ (Apple Silicon) | `DeckHost-<version>-osx-arm64.zip` | Unzip and move **DeckHost.app** to Applications. It isn't notarized: the first time, right-click → **Open**, or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`. |
 
 `SHA256SUMS.txt` lists the checksums. To check that the device support is installed without opening the window, run DeckHost with `--check-native`: it loads the native bridge and lists the StreamDock devices it finds.
@@ -35,6 +35,8 @@ Releases are on the repository's **Releases** page, one package per platform:
 | | Windows | Linux | macOS |
 |---|---|---|---|
 | N4 Pro (keys, touch strip, knobs, LEDs, settings) | ✓ | ✓ (udev rule) | ✓ |
+| Elgato Stream Deck: MK.2, Original v2, XL, Neo, +, Pedal (preview, see below) | ✓ | ✓ (udev rule) | ✓ |
+| Web Deck: keys on a phone, tablet or browser window | ✓ | ✓ | ✓ |
 | Media keys, volume | ✓ | playerctl; wpctl, pactl or amixer | ✓ (volume HUD) |
 | Hotkey, Type Text | ✓ | xdotool (X11) or wtype (Wayland) | ✓ (Accessibility permission) |
 | Lock computer | ✓ | loginctl or xdg-screensaver | ✓ (Accessibility permission) |
@@ -44,6 +46,12 @@ Releases are on the repository's **Releases** page, one package per platform:
 | Stream Deck plugins (native and Node.js) | ✓ | ✓ when the plugin ships a Linux build | ✓ when the plugin ships a macOS build |
 | Stream Deck plugin settings pages inside DeckHost | ✓ (WebView2) | ✓ (WebKitGTK, `libwebkit2gtk-4.1`; else in your browser) | ✓ (WKWebView) |
 | Stream Deck HTML plugins (plugins that run in a web page) | ✓ (WebView2) | don't run | don't run |
+
+### Elgato Stream Deck and the Web Deck
+
+DeckHost talks to Elgato Stream Decks directly over USB, without Elgato's software. Close the Stream Deck app first: it keeps the device to itself. Each deck you plug in appears in the device picker in the header (with its own profiles) and stays listed while unplugged. The models of the current generation are supported (Stream Deck MK.2 and Original v2, XL, Neo, Stream Deck + with its dials and touch strip, Pedal); the first-edition Stream Deck and the Mini are recognized but not driven yet. This support is new and was written from the protocol, not yet tested on every model: please report what works.
+
+The **Web Deck** is a deck in a web browser. Pick *Web Deck* in the device picker, open **Device settings** and choose *This computer only* (an on-screen deck in a browser window) or *Phones and tablets on this network*, the number of columns and rows, and open the link shown there. The link carries a pairing code; without it the page shows nothing, and changing the code locks out every phone that had the old link. On a phone, "Add to Home Screen" makes it a full-screen app. Allow DeckHost through the firewall when your system asks, or the phone can't reach it.
 
 On Linux, "close to tray" starts off, since not every desktop shows a tray icon; turn it on in DeckHost settings if yours does. The Linux tools above are optional: an action whose tool is missing shows which one to install.
 
