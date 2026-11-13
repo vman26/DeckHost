@@ -95,6 +95,14 @@ git push origin v1.4.0
 
 The tag is the version. The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.4.0-rc.1`, `v1.3.1-beta.1`) becomes a pre-release; use the label of the branch you tag on (`rc` on `release/*`, `beta` on `hotfix/*`), so the builds after it count on from it. Run the workflow by hand to get the packages as build artifacts without releasing.
 
+**Updates in the app** come from these releases: DeckHost asks GitHub's public API for the releases of the repository it was built for (`api.github.com/repos/<owner>/<repo>/releases`, no sign-in), takes the newest one whose tag is a higher version than its own, and downloads that release's package for the system (see [DeckHost settings and the tray](#deckhost-settings-and-the-tray)). That only works for a **public** repository: a private one answers 404 without a sign-in, and a sign-in token can't be shipped inside the app. With a private source repository, publish the releases to a separate public repository that holds nothing but releases:
+
+1. Create a public repository, for example `vman26/DeckHost-releases`, with one commit (a README is enough; GitHub needs a commit to put the release tags on).
+2. Create a fine-grained token with **Contents: Read and write** on that repository only, and add it to the source repository as the Actions secret `RELEASES_TOKEN`.
+3. Add the Actions variable `RELEASES_REPO` = `vman26/DeckHost-releases` to the source repository.
+
+From then on the release workflow creates each release in the source repository and in the releases repository (same files and notes), and the apps it builds check the releases repository (the build property `DeckHostUpdateRepository`, default `vman26/DeckHost`). The release notes link to pull requests in the private repository, which only you can open.
+
 The usual flow (git-flow):
 
 - **Features:** branch `feature/*` from `develop`, merge back. For a release: branch `release/1.4.0` from `develop`, fix and tag `v1.4.0-rc.1`, … as needed, merge it into `main`, tag `v1.4.0` there, and merge `main` back into `develop`.

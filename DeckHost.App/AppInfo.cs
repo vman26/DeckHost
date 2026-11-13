@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Reflection;
 
 namespace DeckHost.App;
@@ -14,6 +15,13 @@ internal static class AppInfo
     public static string Version { get; } = Describe(
         typeof(AppInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         typeof(AppInfo).Assembly.GetName().Version?.ToString(3));
+
+    /// <summary>The GitHub repository the updater checks (build property DeckHostUpdateRepository).</summary>
+    public static string UpdateRepository { get; } =
+        typeof(AppInfo).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(static attribute => attribute.Key == "UpdateRepository")?.Value is { Length: > 0 } repository
+            ? repository
+            : Core.Updates.UpdateChecker.DefaultRepository;
 
     /// <summary>
     /// From the informational version, which ends in the commit ("1.3.0-alpha.3+4b09090a5183..." from
