@@ -32,5 +32,25 @@ public partial class DeviceSettingsView : UserControl
         }
     }
 
+    private async void ChooseFirmware_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not DeviceSettingsViewModel { Firmware: { } firmware })
+        {
+            return;
+        }
+
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Choose a firmware file",
+            AllowMultiple = false,
+            FileTypeFilter = [new FilePickerFileType("Firmware") { Patterns = [.. System.Linq.Enumerable.Select(firmware.FileExtensions, static extension => "*" + extension)] }, FilePickerFileTypes.All],
+        });
+
+        if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
+        {
+            firmware.ChooseFile(path);
+        }
+    }
+
     private void Close_OnClick(object? sender, RoutedEventArgs e) => Pages.Close(this);
 }

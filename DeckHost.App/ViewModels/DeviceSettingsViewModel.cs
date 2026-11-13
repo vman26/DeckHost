@@ -9,15 +9,20 @@ using DeckHost.Contracts.Models;
 namespace DeckHost.App.ViewModels;
 
 /// <summary>Finds the device plugin that owns a device and offers its settings (vibration, brightness, idle screen, ...).</summary>
-public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins, Func<IDeviceLightSettings>? lights = null)
+public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins, Func<IDeviceLightSettings>? lights = null, Core.Firmware.FirmwareService? firmware = null)
 {
     private readonly IReadOnlyList<IDevicePlugin> _plugins = plugins.ToList();
 
-    public bool HasSettings(string deviceId) => FindPlugin(deviceId) is not null;
+    /// <summary>Whether the device has a settings page: settings of its own, or firmware to show.</summary>
+    public bool HasSettings(string deviceId) => FindPlugin(deviceId) is not null || firmware?.Supports(deviceId) == true;
 
     public DeviceSettingsViewModel? Create(DeviceDefinition device) =>
-        FindPlugin(device.Id) is { } plugin
-            ? new DeviceSettingsViewModel(plugin, device, device.Controls.Any(static control => control.HasLight) && lights is not null ? new KnobLightsViewModel(lights(), device.Id, [.. device.Controls.Where(static control => control.HasLight).Select(static control => control.DisplayName)]) : null)
+        HasSettings(device.Id)
+            ? new DeviceSettingsViewModel(
+                FindPlugin(device.Id),
+                device,
+                device.Controls.Any(static control => control.HasLight) && lights is not null ? new KnobLightsViewModel(lights(), device.Id, [.. device.Controls.Where(static control => control.HasLight).Select(static control => control.DisplayName)]) : null,
+                firmware?.Supports(device.Id) == true ? new FirmwareViewModel(firmware, device) : null)
             : null;
 
     private IConfigurableDevicePlugin? FindPlugin(string deviceId) =>
@@ -28,19 +33,30 @@ public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins, Fu
 /// <summary>The Device Settings window: an editor generated from the device plugin's setting definitions.</summary>
 public sealed partial class DeviceSettingsViewModel : ViewModelBase
 {
-    private readonly IConfigurableDevicePlugin _plugin;
+    private readonly IConfigurableDevicePlugin? _plugin;
     private readonly DeviceDefinition _device;
     private string _status = string.Empty;
     private bool _statusIsError;
     private bool _isSaving;
 
-    public DeviceSettingsViewModel(IConfigurableDevicePlugin plugin, DeviceDefinition device, KnobLightsViewModel? lights = null)
+    public DeviceSettingsViewModel(IConfigurableDevicePlugin? plugin, DeviceDefinition device, KnobLightsViewModel? lights = null, FirmwareViewModel? firmware = null)
     {
         _plugin = plugin;
         _device = device;
-        Editor = new SettingsEditorViewModel(plugin.GetDeviceSettingDefinitions(device.Id), plugin.GetDeviceSettings(device.Id));
+        Editor = plugin is null
+            ? new SettingsEditorViewModel([], ActionSettings.Empty)
+            : new SettingsEditorViewModel(plugin.GetDeviceSettingDefinitions(device.Id), plugin.GetDeviceSettings(device.Id));
         Lights = lights;
+        Firmware = firmware;
     }
+
+    /// <summary>The device's firmware (version, updates); null when its plugin doesn't report it.</summary>
+    public FirmwareViewModel? Firmware { get; }
+
+    public bool HasFirmware => Firmware is not null;
+
+    /// <summary>The plugin has settings for this device (else only lights and firmware are shown).</summary>
+    public bool HasEditor => _plugin is not null && Editor.Fields.Count > 0;
 
     /// <summary>The default light of the device's LEDs (DeckHost draws it, effects included); null without LEDs.</summary>
     public KnobLightsViewModel? Lights { get; }
@@ -49,7 +65,9 @@ public sealed partial class DeviceSettingsViewModel : ViewModelBase
 
     public string DeviceName => _device.Name;
 
-    public string ConnectionText => _device.IsConnected
+    public string ConnectionText => !HasEditor
+        ? (_device.IsConnected ? "Connected." : "Not connected.")
+        : _device.IsConnected
         ? "Connected. Saving applies the settings right away."
         : "Not connected. The settings are saved and applied when the device is plugged in.";
 
@@ -87,7 +105,7 @@ public sealed partial class DeviceSettingsViewModel : ViewModelBase
         }
     }
 
-    public bool CanSave => !IsSaving;
+    public bool CanSave => !IsSaving && _plugin is not null;
 
     /// <summary>Saves and applies; returns true on success. Device I/O runs off the UI thread.</summary>
     [RelayCommand]
@@ -106,7 +124,7 @@ public sealed partial class DeviceSettingsViewModel : ViewModelBase
         try
         {
             var settings = Editor.ToSettings();
-            var error = await Task.Run(() => _plugin.ApplyDeviceSettings(_device.Id, settings));
+            var error = await Task.Run(() => _plugin?.ApplyDeviceSettings(_device.Id, settings));
             StatusIsError = error is not null;
             Status = error ?? (_device.IsConnected ? "Saved and applied." : "Saved. Applied when the device connects.");
             return error is null;

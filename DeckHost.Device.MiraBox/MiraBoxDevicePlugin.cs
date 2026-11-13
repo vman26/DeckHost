@@ -15,8 +15,19 @@ namespace DeckHost.Device.MiraBox;
 /// The primary definition always exists, connected or not, so profiles can be edited offline.
 /// </para>
 /// </summary>
-public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin
+public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin, IDeviceFirmware
 {
+    /// <summary>The version the SDK reads; the StreamDock SDK has no way to write firmware.</summary>
+    public DeviceFirmwareInfo? GetFirmwareInfo(string deviceId)
+    {
+        lock (_sync)
+        {
+            return FindSession(deviceId)?.Info is { FirmwareVersion.Length: > 0 } info
+                ? new DeviceFirmwareInfo(info.FirmwareVersion, CanUpdate: false, "MiraBox offers no firmware update protocol: update it with MiraBox's own software, if they release one.")
+                : null;
+        }
+    }
+
     public IReadOnlyList<ActionSettingDefinition> GetDeviceSettingDefinitions(string deviceId) => N4ProDeviceSettings.Definitions;
 
     public ActionSettings GetDeviceSettings(string deviceId) => N4ProDeviceSettings.Load(deviceId);

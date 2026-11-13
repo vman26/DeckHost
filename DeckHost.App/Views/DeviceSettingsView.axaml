@@ -88,8 +88,38 @@
 
 		<ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
 			<StackPanel Margin="20" Spacing="12">
-				<Border Classes="card">
+				<Border Classes="card" IsVisible="{Binding HasEditor}">
 					<ContentControl Content="{Binding Editor}" />
+				</Border>
+				<!-- Firmware: the version, and updates when the device's plugin can install them. -->
+				<Border Classes="card" IsVisible="{Binding HasFirmware}">
+					<StackPanel Spacing="8" DataContext="{Binding Firmware}" x:DataType="vm:FirmwareViewModel">
+						<TextBlock Text="Firmware" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource C.F1F5F9}" />
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<TextBlock Text="Version" Foreground="{DynamicResource C.94A3B8}" />
+							<SelectableTextBlock Text="{Binding Version}" Foreground="{DynamicResource C.E2E8F0}" />
+						</StackPanel>
+						<TextBlock Classes="hint" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" />
+						<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanUpdate}">
+							<Button Content="Check for an update" Command="{Binding CheckCommand}" IsEnabled="{Binding IsIdle}" />
+							<Button Content="Install from a file…" Click="ChooseFirmware_OnClick" IsVisible="{Binding CanInstallFile}" IsEnabled="{Binding IsIdle}" />
+						</StackPanel>
+						<StackPanel Spacing="6" IsVisible="{Binding HasRelease}">
+							<TextBlock Text="{Binding ReleaseText}" TextWrapping="Wrap" Foreground="{DynamicResource C.BBF7D0}" />
+							<Button Content="Install" Classes="accent" Command="{Binding InstallReleaseCommand}" IsEnabled="{Binding IsIdle}" />
+						</StackPanel>
+						<Border IsVisible="{Binding IsConfirming}" Padding="10" CornerRadius="8" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.7F1D1D}" BorderThickness="1">
+							<StackPanel Spacing="8">
+								<TextBlock Text="{Binding ConfirmText}" TextWrapping="Wrap" Foreground="{DynamicResource C.FECACA}" />
+								<StackPanel Orientation="Horizontal" Spacing="8">
+									<Button Content="Install now" Classes="accent" Command="{Binding ConfirmInstallCommand}" />
+									<Button Content="Cancel" Command="{Binding CancelInstallCommand}" />
+								</StackPanel>
+							</StackPanel>
+						</Border>
+						<ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" IsVisible="{Binding IsBusy}" />
+						<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" Classes.error="{Binding StatusIsError}" Classes.hint="{Binding !StatusIsError}" TextWrapping="Wrap" />
+					</StackPanel>
 				</Border>
 				<!-- DeckHost's own default for the LEDs (applies right away, saved with the profiles). -->
 				<Border Classes="card" IsVisible="{Binding HasLights}">
@@ -114,7 +144,7 @@
 						</TabControl>
 					</StackPanel>
 				</Border>
-				<TextBlock Classes="hint"
+				<TextBlock Classes="hint" IsVisible="{Binding HasEditor}"
 						   Text="&quot;Device default&quot; leaves a setting as the device has it. The idle screen is what the device shows when DeckHost isn't running; choose Black to remove an old image that is stuck on the display." />
 			</StackPanel>
 		</ScrollViewer>
@@ -127,7 +157,7 @@
 						   VerticalAlignment="Center"
 						   TextWrapping="Wrap" />
 				<Button Grid.Column="1" Content="Close" Click="Close_OnClick" />
-				<Button Grid.Column="2" Content="Save" Classes="accent" IsEnabled="{Binding CanSave}" Command="{Binding SaveCommand}" />
+				<Button Grid.Column="2" Content="Save" Classes="accent" IsEnabled="{Binding CanSave}" IsVisible="{Binding HasEditor}" Command="{Binding SaveCommand}" />
 			</Grid>
 		</Border>
 	</Grid>

@@ -203,6 +203,22 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     public void SimulateInput(DeviceInputEvent inputEvent) => ReportInput(inputEvent);
 
+    private readonly HashSet<string> _pausedDevices = new(StringComparer.OrdinalIgnoreCase);
+
+    public void SetDevicePaused(string deviceId, bool paused) => Enqueue(() =>
+    {
+        if (paused ? _pausedDevices.Add(deviceId) : _pausedDevices.Remove(deviceId))
+        {
+            Log("Information", paused ? $"Paused '{deviceId}' (firmware update)." : $"Resumed '{deviceId}'.");
+            if (!paused)
+            {
+                ForgetFrames(deviceId);
+                _dirtyDevices.Add(deviceId);
+                ApplyIdleLights(deviceId);
+            }
+        }
+    });
+
     public void Redraw(string deviceId) => Enqueue(() =>
     {
         ForgetControlFrames(deviceId);
@@ -505,6 +521,11 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     private void HandleInput(DeviceInputEvent inputEvent)
     {
+        if (_pausedDevices.Contains(inputEvent.DeviceId))
+        {
+            return;
+        }
+
         // Reported for every press (also unbound controls) so the editor can show it live.
         SafeInvoke(() => InputReceived?.Invoke(inputEvent));
         Count(inputEvent.DeviceId, static statistics => statistics with { Inputs = statistics.Inputs + 1, LastInput = DateTimeOffset.Now });
@@ -1104,7 +1125,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
 
         // Rendered even while the device is unplugged: the editor shows the same frames as a preview.
-        var connected = entry.Device.IsConnected;
+        var connected = entry.Device.IsConnected && !_pausedDevices.Contains(deviceId);
         var profile = GetActiveProfile(deviceId);
         var layoutBounds = ControlRenderer.LayoutBounds(entry.Device);
         var clock = _clock.Elapsed;
@@ -1423,7 +1444,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             }
         }
 
-        if (changed.Count == 0 || !entry.Device.IsConnected)
+        if (changed.Count == 0 || !entry.Device.IsConnected || _pausedDevices.Contains(deviceId))
         {
             return;
         }

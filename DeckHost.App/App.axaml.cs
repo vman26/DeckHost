@@ -316,7 +316,8 @@ public partial class App : Application
             provider.GetRequiredService<PluginCatalog>(),
             provider.GetRequiredService<ProfileStore>(),
             provider.GetRequiredService<IPluginStateTransfer>()));
-        services.AddSingleton(provider => new DeviceSettingsService(provider.GetServices<IDevicePlugin>(), () => provider.GetRequiredService<MainViewModel>()));
+        services.AddSingleton(provider => new Core.Firmware.FirmwareService(provider.GetServices<IDevicePlugin>(), provider.GetRequiredService<IDeviceHostService>()));
+        services.AddSingleton(provider => new DeviceSettingsService(provider.GetServices<IDevicePlugin>(), () => provider.GetRequiredService<MainViewModel>(), provider.GetRequiredService<Core.Firmware.FirmwareService>()));
         services.AddTransient(provider => new PluginManagerViewModel(
             provider.GetRequiredService<PluginCatalog>(),
             provider.GetRequiredService<IDeviceHostService>(),

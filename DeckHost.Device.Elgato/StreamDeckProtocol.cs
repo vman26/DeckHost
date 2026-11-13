@@ -173,6 +173,29 @@ public static class StreamDeckProtocol
         return report;
     }
 
+    /// <summary>The feature report to read the firmware version with (0x05, 32 bytes; first generation 0x04, 17 bytes).</summary>
+    public static byte[] FirmwareRequest(StreamDeckModel model)
+    {
+        var report = new byte[model.Generation == 1 ? 17 : 32];
+        report[0] = (byte)(model.Generation == 1 ? 0x04 : 0x05);
+        return report;
+    }
+
+    /// <summary>The version in a firmware feature report: text from byte 6 (first generation 5) up to the first NUL.</summary>
+    public static string? FirmwareVersion(StreamDeckModel model, ReadOnlySpan<byte> report)
+    {
+        var start = model.Generation == 1 ? 5 : 6;
+        if (report.Length <= start)
+        {
+            return null;
+        }
+
+        var text = report[start..];
+        var end = text.IndexOf((byte)0);
+        var version = System.Text.Encoding.ASCII.GetString(end >= 0 ? text[..end] : text).Trim();
+        return version.Length > 0 && version.All(static c => c >= ' ' && c < 127) ? version : null;
+    }
+
     /// <summary>Feature report: key brightness in percent.</summary>
     public static byte[] BrightnessReport(int percent)
     {

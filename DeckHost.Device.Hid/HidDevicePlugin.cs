@@ -12,8 +12,19 @@ namespace DeckHost.Device.Hid;
 /// when its hardware is plugged in it is opened and its reports become key presses and knob turns.
 /// These devices only send input: they have no screens or lights DeckHost could drive.
 /// </summary>
-public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput
+public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmware
 {
+    /// <summary>The device's release number from USB (what most makers bump with firmware); read only.</summary>
+    public DeviceFirmwareInfo? GetFirmwareInfo(string deviceId)
+    {
+        lock (_sync)
+        {
+            return _sessions.GetValueOrDefault(deviceId)?.Firmware is { } version
+                ? new DeviceFirmwareInfo(version, CanUpdate: false, "Generic USB devices are updated with their maker's tool.")
+                : null;
+        }
+    }
+
     private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly Lock _sync = new();
@@ -239,6 +250,7 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput
 
                 stream.ReadTimeout = Timeout.Infinite;
                 session.Open(stream);
+                session.Firmware = ReleaseOf(match);
                 changed = true;
                 changes.Add((session.DeviceId, "Connected", description.Name));
                 new Thread(() => ReadLoop(session, stream)) { IsBackground = true, Name = $"HID {description.Name}" }.Start();
@@ -271,6 +283,19 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput
 
         var (page, usage) = HidSharpDeviceSource.TopUsage(device);
         return page == description.UsagePage && (description.Usage is null || usage == description.Usage);
+    }
+
+    private static string? ReleaseOf(HidDevice device)
+    {
+        try
+        {
+            var bcd = device.ReleaseNumberBcd;
+            return bcd == 0 ? null : $"{bcd >> 8:X}.{bcd & 0xFF:X2}";
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private void ReadLoop(Session session, HidStream stream)
@@ -358,6 +383,8 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput
         public string DeviceId => Description.DeviceId;
 
         public HidStream? Stream { get; private set; }
+
+        public string? Firmware { get; set; }
 
         public void Open(HidStream stream) => Stream = stream;
 

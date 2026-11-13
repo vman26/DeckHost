@@ -81,6 +81,9 @@
   DeckHost.Contracts.Interfaces.IDeckAction.ShowInPalette : System.Boolean
   DeckHost.Contracts.Interfaces.IDeckAction.ShowsAppearanceOnly : System.Boolean
   DeckHost.Contracts.Interfaces.IDeviceBackdropOutput.TrySetBackdrop(System.String deviceId, System.Byte red, System.Byte green, System.Byte blue, System.String& error) : System.Boolean abstract
+  DeckHost.Contracts.Interfaces.IDeviceFirmware.CheckForFirmwareAsync(System.String deviceId, System.Threading.CancellationToken cancellationToken) : System.Threading.Tasks.Task<DeckHost.Contracts.Models.FirmwareRelease>
+  DeckHost.Contracts.Interfaces.IDeviceFirmware.GetFirmwareInfo(System.String deviceId) : DeckHost.Contracts.Models.DeviceFirmwareInfo abstract
+  DeckHost.Contracts.Interfaces.IDeviceFirmware.InstallFirmwareAsync(System.String deviceId, DeckHost.Contracts.Models.FirmwareImage image, System.IProgress<DeckHost.Contracts.Models.FirmwareProgress> progress, System.Threading.CancellationToken cancellationToken) : System.Threading.Tasks.Task<DeckHost.Contracts.Models.FirmwareUpdateResult>
   DeckHost.Contracts.Interfaces.IDeviceLightBatchOutput.TrySetLights(System.String deviceId, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.LightColor> lights, System.String& error) : System.Boolean abstract
   DeckHost.Contracts.Interfaces.IDeviceOutput.Clear(System.String deviceId) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDeviceOutput.TryPushImage(System.String deviceId, System.String controlId, System.ReadOnlySpan<System.Byte> rgba, System.Int32 width, System.Int32 height, System.String& error) : System.Boolean abstract
@@ -267,6 +270,17 @@
   DeckHost.Contracts.Models.DeviceDefinition.IsConnected : System.Boolean {set}
   DeckHost.Contracts.Models.DeviceDefinition.Name : System.String {set}
   DeckHost.Contracts.Models.DeviceDefinition.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceFirmwareInfo(System.String Version, System.Boolean CanUpdate, System.String Detail)
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.<Clone>$() : DeckHost.Contracts.Models.DeviceFirmwareInfo
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.CanUpdate : System.Boolean {set}
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.Deconstruct(System.String& Version, System.Boolean& CanUpdate, System.String& Detail) : System.Void
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.Detail : System.String {set}
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.Equals(DeckHost.Contracts.Models.DeviceFirmwareInfo other) : System.Boolean
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.FileExtensions : System.Collections.Generic.IReadOnlyList<System.String> {set}
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceFirmwareInfo.Version : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile(System.String Id, System.String Name, System.String DeviceId, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.ControlBinding> Bindings, System.Collections.Generic.IReadOnlyList<System.String> AutoSwitchApps, DeckHost.Contracts.Models.ProfileBackground Background)
   DeckHost.Contracts.Models.DeviceProfile.<Clone>$() : DeckHost.Contracts.Models.DeviceProfile
   DeckHost.Contracts.Models.DeviceProfile.AutoSwitchApps : System.Collections.Generic.IReadOnlyList<System.String> {set}
@@ -283,6 +297,45 @@
   DeckHost.Contracts.Models.DeviceProfile.Name : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile.ParentId : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile.ToString() : System.String
+  DeckHost.Contracts.Models.FirmwareImage(System.String Path, System.String Version)
+  DeckHost.Contracts.Models.FirmwareImage.<Clone>$() : DeckHost.Contracts.Models.FirmwareImage
+  DeckHost.Contracts.Models.FirmwareImage.Deconstruct(System.String& Path, System.String& Version) : System.Void
+  DeckHost.Contracts.Models.FirmwareImage.Equals(DeckHost.Contracts.Models.FirmwareImage other) : System.Boolean
+  DeckHost.Contracts.Models.FirmwareImage.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.FirmwareImage.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.FirmwareImage.Path : System.String {set}
+  DeckHost.Contracts.Models.FirmwareImage.ToString() : System.String
+  DeckHost.Contracts.Models.FirmwareImage.Version : System.String {set}
+  DeckHost.Contracts.Models.FirmwareProgress(System.Double Fraction, System.String Step)
+  DeckHost.Contracts.Models.FirmwareProgress.<Clone>$() : DeckHost.Contracts.Models.FirmwareProgress
+  DeckHost.Contracts.Models.FirmwareProgress.Deconstruct(System.Double& Fraction, System.String& Step) : System.Void
+  DeckHost.Contracts.Models.FirmwareProgress.Equals(DeckHost.Contracts.Models.FirmwareProgress other) : System.Boolean
+  DeckHost.Contracts.Models.FirmwareProgress.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.FirmwareProgress.Fraction : System.Double {set}
+  DeckHost.Contracts.Models.FirmwareProgress.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.FirmwareProgress.Step : System.String {set}
+  DeckHost.Contracts.Models.FirmwareProgress.ToString() : System.String
+  DeckHost.Contracts.Models.FirmwareRelease(System.String Version, System.Uri DownloadUri, System.String Sha256, System.String Notes)
+  DeckHost.Contracts.Models.FirmwareRelease.<Clone>$() : DeckHost.Contracts.Models.FirmwareRelease
+  DeckHost.Contracts.Models.FirmwareRelease.Deconstruct(System.String& Version, System.Uri& DownloadUri, System.String& Sha256, System.String& Notes) : System.Void
+  DeckHost.Contracts.Models.FirmwareRelease.DownloadUri : System.Uri {set}
+  DeckHost.Contracts.Models.FirmwareRelease.Equals(DeckHost.Contracts.Models.FirmwareRelease other) : System.Boolean
+  DeckHost.Contracts.Models.FirmwareRelease.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.FirmwareRelease.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.FirmwareRelease.Notes : System.String {set}
+  DeckHost.Contracts.Models.FirmwareRelease.Sha256 : System.String {set}
+  DeckHost.Contracts.Models.FirmwareRelease.ToString() : System.String
+  DeckHost.Contracts.Models.FirmwareRelease.Version : System.String {set}
+  DeckHost.Contracts.Models.FirmwareUpdateResult(System.Boolean Success, System.String Message)
+  DeckHost.Contracts.Models.FirmwareUpdateResult.<Clone>$() : DeckHost.Contracts.Models.FirmwareUpdateResult
+  DeckHost.Contracts.Models.FirmwareUpdateResult.Deconstruct(System.Boolean& Success, System.String& Message) : System.Void
+  DeckHost.Contracts.Models.FirmwareUpdateResult.Equals(DeckHost.Contracts.Models.FirmwareUpdateResult other) : System.Boolean
+  DeckHost.Contracts.Models.FirmwareUpdateResult.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.FirmwareUpdateResult.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.FirmwareUpdateResult.Message : System.String {set}
+  DeckHost.Contracts.Models.FirmwareUpdateResult.NotSupported : DeckHost.Contracts.Models.FirmwareUpdateResult
+  DeckHost.Contracts.Models.FirmwareUpdateResult.Success : System.Boolean {set}
+  DeckHost.Contracts.Models.FirmwareUpdateResult.ToString() : System.String
   DeckHost.Contracts.Models.LightColor(System.String ControlId, System.Byte Red, System.Byte Green, System.Byte Blue)
   DeckHost.Contracts.Models.LightColor.<Clone>$() : DeckHost.Contracts.Models.LightColor
   DeckHost.Contracts.Models.LightColor.Blue : System.Byte {set}
@@ -623,7 +676,12 @@ class DeckHost.Contracts.Models.ActionSettings
 class DeckHost.Contracts.Models.ControlAppearance
 class DeckHost.Contracts.Models.ControlBinding
 class DeckHost.Contracts.Models.DeviceDefinition
+class DeckHost.Contracts.Models.DeviceFirmwareInfo
 class DeckHost.Contracts.Models.DeviceProfile
+class DeckHost.Contracts.Models.FirmwareImage
+class DeckHost.Contracts.Models.FirmwareProgress
+class DeckHost.Contracts.Models.FirmwareRelease
+class DeckHost.Contracts.Models.FirmwareUpdateResult
 class DeckHost.Contracts.Models.LightColor
 class DeckHost.Contracts.Models.LightStep
 class DeckHost.Contracts.Models.LightStyle
@@ -650,6 +708,7 @@ interface DeckHost.Contracts.Interfaces.IApplicationPlugin
 interface DeckHost.Contracts.Interfaces.IConfigurableDevicePlugin
 interface DeckHost.Contracts.Interfaces.IDeckAction
 interface DeckHost.Contracts.Interfaces.IDeviceBackdropOutput
+interface DeckHost.Contracts.Interfaces.IDeviceFirmware
 interface DeckHost.Contracts.Interfaces.IDeviceLightBatchOutput
 interface DeckHost.Contracts.Interfaces.IDeviceOutput
 interface DeckHost.Contracts.Interfaces.IDevicePlugin
