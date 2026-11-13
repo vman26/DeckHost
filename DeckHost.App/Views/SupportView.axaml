@@ -52,6 +52,21 @@
 				</StackPanel>
 			</Border>
 
+			<Border Classes="card" IsVisible="{Binding HasDeviceDiagnostics}">
+				<StackPanel Spacing="8">
+					<TextBlock Classes="title" Text="Devices" />
+					<TextBlock Classes="hint" Text="What DeckHost has seen of each device since it started. Press a key and refresh: if the inputs don't go up, the device isn't reaching DeckHost (another program has it, a missing Linux rule, the cable)." />
+					<ItemsControl ItemsSource="{Binding DeviceDiagnostics}">
+						<ItemsControl.ItemTemplate>
+							<DataTemplate>
+								<SelectableTextBlock Text="{Binding}" FontSize="12" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" Margin="0,2" />
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+					<Button Content="Refresh" Command="{Binding RefreshDiagnosticsCommand}" />
+				</StackPanel>
+			</Border>
+
 			<Border Classes="card">
 				<StackPanel Spacing="10">
 					<TextBlock Classes="title" Text="Report a problem" />

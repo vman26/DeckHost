@@ -305,6 +305,28 @@ public partial class ProfileManagerViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The other devices a profile can be copied to (each has its own profiles).</summary>
+    public IReadOnlyList<DeviceChoiceViewModel> OtherDevices => _main.OtherDevices;
+
+    public bool HasOtherDevices => OtherDevices.Count > 0;
+
+    private DeviceChoiceViewModel? _copyTarget;
+
+    public DeviceChoiceViewModel? CopyTarget
+    {
+        get => _copyTarget ??= OtherDevices.FirstOrDefault();
+        set => SetProperty(ref _copyTarget, value);
+    }
+
+    [RelayCommand]
+    private void CopyToDevice()
+    {
+        if (EditingProfile is not null && CopyTarget is { } target)
+        {
+            Message = _main.CopyProfileToDevice(EditingProfile, target.Id);
+        }
+    }
+
     [RelayCommand]
     private void DeleteProfile()
     {

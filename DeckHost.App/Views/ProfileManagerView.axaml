@@ -73,6 +73,17 @@
 					<Button Content="↓" ToolTip.Tip="Move down" Command="{Binding MoveDownCommand}" IsEnabled="{Binding HasEditingProfile}" />
 					<Button Content="Import…" ToolTip.Tip="A DeckHost profile (.deckhostprofile) or a Stream Deck profile (.streamDeckProfile)" Click="ImportProfile_OnClick" />
 					<Button Content="Export…" ToolTip.Tip="This profile with its pages, folders and images, to share or keep" Click="ExportProfile_OnClick" IsEnabled="{Binding HasEditingProfile}" />
+					<StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasOtherDevices}">
+						<Button Content="Copy to" Command="{Binding CopyToDeviceCommand}" IsEnabled="{Binding HasEditingProfile}"
+								ToolTip.Tip="A copy of this profile for another device: keys keep their place where they fit, the rest go on added pages" />
+						<ComboBox ItemsSource="{Binding OtherDevices}" SelectedItem="{Binding CopyTarget}" MinWidth="150">
+							<ComboBox.ItemTemplate>
+								<DataTemplate>
+									<TextBlock Text="{Binding Label}" />
+								</DataTemplate>
+							</ComboBox.ItemTemplate>
+						</ComboBox>
+					</StackPanel>
 				</WrapPanel>
 			</Grid>
 

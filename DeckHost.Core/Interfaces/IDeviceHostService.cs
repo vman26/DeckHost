@@ -33,6 +33,9 @@ public interface IDeviceHostService : IAsyncDisposable
         remove { }
     }
 
+    /// <summary>Per device: inputs, images and lights sent, failures and the last error since start.</summary>
+    IReadOnlyList<DeviceStatistics> DeviceStatistics => [];
+
     IReadOnlyCollection<DeviceDefinition> Devices { get; }
     IReadOnlyCollection<DeviceProfile> Profiles { get; }
     IReadOnlyCollection<RuntimeLogEntry> RuntimeLogs { get; }

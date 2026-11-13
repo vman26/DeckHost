@@ -140,6 +140,17 @@ public static class ProfileBundle
         }
     }
 
+    /// <summary>
+    /// A copy of a profile's layouts for <paramref name="deviceId"/> with new ids (settings that point at a
+    /// layout, such as Folder keys, follow). Images stay where they are.
+    /// </summary>
+    public static IReadOnlyList<DeviceProfile> Copy(IReadOnlyList<DeviceProfile> layouts, string deviceId)
+    {
+        var stamp = Guid.NewGuid().ToString("N")[..8];
+        var ids = layouts.ToDictionary(static layout => layout.Id, layout => $"{layout.Id}.{stamp}", StringComparer.Ordinal);
+        return [.. layouts.Select(layout => Renumber(layout, ids, deviceId))];
+    }
+
     /// <summary>A layout with every image path passed through <paramref name="map"/>.</summary>
     internal static DeviceProfile MapFiles(DeviceProfile layout, Func<string?, string?> map) => layout with
     {
