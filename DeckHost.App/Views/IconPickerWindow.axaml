@@ -9,7 +9,7 @@
 		MinHeight="420"
 		Background="#111827"
 		RequestedThemeVariant="Dark"
-		Icon="/Assets/avalonia-logo.ico"
+		Icon="/Assets/deckhost.ico"
 		WindowStartupLocation="CenterOwner"
 		Title="Choose an icon">
 

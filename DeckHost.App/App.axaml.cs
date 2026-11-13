@@ -171,7 +171,7 @@ public partial class App : Application
 
         var tray = new TrayIcon
         {
-            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://DeckHost.App/Assets/avalonia-logo.ico"))),
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://DeckHost.App/Assets/deckhost.ico"))),
             ToolTipText = "DeckHost",
             Menu = menu,
         };

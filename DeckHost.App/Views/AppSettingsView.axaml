@@ -63,8 +63,32 @@
 			</StackPanel>
 		</Border>
 
+		<!-- Support: a link and the QR code for phones. -->
+		<Border Classes="card">
+			<Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+				<StackPanel Spacing="8" VerticalAlignment="Center">
+					<TextBlock Text="Support DeckHost" FontWeight="SemiBold" Foreground="#E2E8F0" />
+					<TextBlock Classes="hint" Margin="0" Text="DeckHost is free and open source. If it saves you time, you can buy its developer a coffee; it helps keep new devices and features coming." />
+					<StackPanel Orientation="Horizontal" Spacing="10">
+						<Button Content="☕  Buy me a coffee" Classes="accent" Command="{Binding OpenDonateCommand}" />
+						<SelectableTextBlock Text="buymeacoffee.com/Vman26" Foreground="#94A3B8" VerticalAlignment="Center" />
+					</StackPanel>
+				</StackPanel>
+				<Border Grid.Column="1" Background="White" CornerRadius="10" Padding="6" ToolTip.Tip="Scan with your phone">
+					<Image Source="/Assets/support-qr.png" Width="104" Height="104" />
+				</Border>
+			</Grid>
+		</Border>
+
 		<Border Classes="card">
 			<StackPanel Spacing="8">
+				<StackPanel Orientation="Horizontal" Spacing="12">
+					<Image Source="/Assets/deckhost-64.png" Width="40" Height="40" />
+					<StackPanel VerticalAlignment="Center">
+						<TextBlock Text="DeckHost" FontSize="18" FontWeight="SemiBold" Foreground="#F8FAFC" />
+						<TextBlock Text="One platform. Unlimited control." Foreground="#94A3B8" FontSize="12" />
+					</StackPanel>
+				</StackPanel>
 				<SelectableTextBlock Text="{Binding VersionText}" Foreground="#94A3B8" FontSize="12" TextWrapping="Wrap" />
 				<TextBlock Text="Data" FontWeight="SemiBold" Foreground="#E2E8F0" />
 				<SelectableTextBlock Text="{Binding DataDirectory}" Foreground="#CBD5E1" TextWrapping="Wrap" />
