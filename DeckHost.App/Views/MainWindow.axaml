@@ -118,7 +118,24 @@
 					<StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center">
 						<StackPanel Orientation="Horizontal" Spacing="8">
 							<Image Source="/Assets/deckhost-64.png" Width="22" Height="22" VerticalAlignment="Center" ToolTip.Tip="DeckHost" />
-							<TextBlock Text="{Binding DeviceName}" FontSize="17" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" />
+							<TextBlock Text="{Binding DeviceName}" FontSize="17" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" IsVisible="{Binding !HasSeveralDevices}" />
+							<!-- Several devices (N4 Pro, Stream Decks, the web deck): pick the one to edit. -->
+							<ComboBox ItemsSource="{Binding DeviceChoices}"
+									  SelectedItem="{Binding PickedDevice, Mode=TwoWay}"
+									  IsVisible="{Binding HasSeveralDevices}"
+									  MinWidth="180"
+									  FontSize="16"
+									  FontWeight="SemiBold"
+									  Background="Transparent"
+									  BorderThickness="0"
+									  Padding="0,2"
+									  ToolTip.Tip="The device you're editing">
+								<ComboBox.ItemTemplate>
+									<DataTemplate>
+										<TextBlock Text="{Binding Label}" />
+									</DataTemplate>
+								</ComboBox.ItemTemplate>
+							</ComboBox>
 							<Border Padding="7,2" CornerRadius="999" Background="#1E293B" VerticalAlignment="Center">
 								<TextBlock Text="{Binding ConnectionStatus}" FontSize="11" Foreground="#93C5FD" />
 							</Border>

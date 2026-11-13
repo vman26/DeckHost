@@ -189,6 +189,12 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     public void SimulateInput(DeviceInputEvent inputEvent) => ReportInput(inputEvent);
 
+    public void Redraw(string deviceId) => Enqueue(() =>
+    {
+        ForgetControlFrames(deviceId);
+        _dirtyDevices.Add(deviceId);
+    });
+
     public void AppendLog(string level, string message) => Log(level, message);
 
     public Task<Uri?> GetActionSettingsPageAsync(string deviceId, string controlId)

@@ -18,6 +18,8 @@
   <Project Path="DeckHost.App/DeckHost.App.csproj" />
   <Project Path="DeckHost.Contracts/DeckHost.Contracts.csproj" />
   <Project Path="DeckHost.Core/DeckHost.Core.csproj" Id="1c415323-e703-4e4b-8637-5f09a7941b45" />
+  <Project Path="DeckHost.Device.Elgato/DeckHost.Device.Elgato.csproj" />
   <Project Path="DeckHost.Device.MiraBox/DeckHost.Device.MiraBox.csproj" />
+  <Project Path="DeckHost.Device.Web/DeckHost.Device.Web.csproj" />
   <Project Path="DeckHost.Tests/DeckHost.Tests.csproj" />
 </Solution>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0f17">
+<title>DeckHost</title>
+<style>
+  :root { color-scheme: dark; --gap: 10px; }
+  html, body { margin: 0; height: 100%; background: #0b0f17; color: #e2e8f0; font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #deck { position: absolute; inset: 0; display: grid; gap: var(--gap); padding: calc(var(--gap) + env(safe-area-inset-top)) calc(var(--gap) + env(safe-area-inset-right)) calc(var(--gap) + env(safe-area-inset-bottom)) calc(var(--gap) + env(safe-area-inset-left)); box-sizing: border-box; place-content: center; }
+  .key { position: relative; border-radius: 14%; background: #151b27; overflow: hidden; aspect-ratio: 1; box-shadow: inset 0 0 0 1px #232c3d; transition: transform 60ms; }
+  .key img { width: 100%; height: 100%; display: block; pointer-events: none; }
+  .key.down { transform: scale(0.94); box-shadow: inset 0 0 0 2px #60a5fa; }
+  #status { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: #1e293b; font-size: 13px; opacity: 0; transition: opacity 200ms; pointer-events: none; }
+  #status.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="deck"></div>
+<div id="status">Connecting…</div>
+<script>
+(() => {
+  const deck = document.getElementById('deck');
+  const status = document.getElementById('status');
+  const code = new URLSearchParams(location.search).get('code') || '';
+  let columns = 5, rows = 3, socket, retry = 500;
+  const keys = new Map();
+
+  function show(text) { status.textContent = text; status.classList.toggle('show', !!text); }
+
+  function fit() {
+    const gap = 10;
+    const width = (innerWidth - gap * (columns + 1)) / columns;
+    const height = (innerHeight - gap * (rows + 1)) / rows;
+    const size = Math.max(24, Math.floor(Math.min(width, height)));
+    deck.style.gridTemplateColumns = `repeat(${columns}, ${size}px)`;
+    deck.style.gridAutoRows = `${size}px`;
+  }
+
+  function build() {
+    deck.textContent = '';
+    keys.clear();
+    for (let index = 0; index < columns * rows; index++) {
+      const id = `key.${index}`;
+      const key = document.createElement('div');
+      key.className = 'key';
+      const img = document.createElement('img');
+      img.alt = '';
+      key.appendChild(img);
+      const press = (down) => (event) => {
+        event.preventDefault();
+        if (down === key.classList.contains('down')) return;
+        key.classList.toggle('down', down);
+        if (down && navigator.vibrate) navigator.vibrate(10);
+        send({ type: down ? 'down' : 'up', key: id });
+      };
+      key.addEventListener('pointerdown', (event) => { key.setPointerCapture(event.pointerId); press(true)(event); });
+      key.addEventListener('pointerup', press(false));
+      key.addEventListener('pointercancel', press(false));
+      key.addEventListener('contextmenu', (event) => event.preventDefault());
+      deck.appendChild(key);
+      keys.set(id, img);
+    }
+    fit();
+  }
+
+  function send(message) { if (socket && socket.readyState === 1) socket.send(JSON.stringify(message)); }
+
+  function connect() {
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    socket = new WebSocket(`${scheme}://${location.host}/ws?code=${encodeURIComponent(code)}`);
+    socket.onopen = () => { retry = 500; show(''); };
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'layout') {
+        columns = message.columns; rows = message.rows;
+        document.title = message.name || 'DeckHost';
+        build();
+      } else if (message.type === 'image') {
+        const img = keys.get(message.key);
+        if (img) img.src = `data:image/png;base64,${message.png}`;
+      } else if (message.type === 'clear') {
+        keys.forEach((img) => img.removeAttribute('src'));
+      }
+    };
+    socket.onclose = () => {
+      show('Reconnecting…');
+      setTimeout(connect, retry);
+      retry = Math.min(retry * 2, 5000);
+    };
+  }
+
+  addEventListener('resize', fit);
+  build();
+  show('Connecting…');
+  connect();
+})();
+</script>
+</body>
+</html>

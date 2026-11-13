@@ -45,6 +45,9 @@ public interface IDeviceHostService : IAsyncDisposable
     /// <summary>Handles an input as if it came from the device (test mode in the editor).</summary>
     void SimulateInput(DeviceInputEvent inputEvent);
 
+    /// <summary>Renders every control of the device again and raises their frames (e.g. when the editor switches to it).</summary>
+    void Redraw(string deviceId);
+
     /// <summary>Adds a line to the runtime log (for parts of the app outside the host).</summary>
     void AppendLog(string level, string message);
 
