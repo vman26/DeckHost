@@ -11,7 +11,16 @@ namespace DeckHost.App.Platform;
 /// On by default where a tray icon is always available (Windows, macOS). Linux desktops without a
 /// status-notifier tray (plain GNOME) would leave no way back to a hidden window, so it starts off there.
 /// </param>
-public sealed record AppSettingsData(bool StartMinimized = true, bool? CloseToTray = null)
+/// <param name="CheckForUpdates">Check GitHub for a new DeckHost release now and then.</param>
+/// <param name="IncludePrereleases">Offer pre-releases too; by default only to someone running one.</param>
+/// <param name="SkippedVersion">A release the user chose to skip: not announced again (a newer one is).</param>
+public sealed record AppSettingsData(
+    bool StartMinimized = true,
+    bool? CloseToTray = null,
+    bool CheckForUpdates = true,
+    bool? IncludePrereleases = null,
+    string? SkippedVersion = null,
+    DateTimeOffset? LastUpdateCheck = null)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
 }

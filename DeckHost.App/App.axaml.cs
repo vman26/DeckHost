@@ -89,8 +89,16 @@ public partial class App : Application
                 desktop.Shutdown();
             }
 
-            CreateTrayIcon(ShowMainWindow, () => mainWindow.OpenAppSettings(), ExitApplication);
+            var updates = services.GetRequiredService<UpdateViewModel>();
+            updates.RestartRequested += () =>
+            {
+                logger.LogInformation("Exiting to install an update.");
+                ExitApplication();
+            };
+
+            CreateTrayIcon(ShowMainWindow, () => mainWindow.OpenAppSettings(), ExitApplication, updates, () => UpdateWindow.ShowFor(mainWindow, updates));
             ListenForActivation(ShowMainWindow);
+            updates.StartAutomaticChecks();
 
             if (Program.StartedAtLogin && settings.StartMinimized)
             {
@@ -121,11 +129,24 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private void CreateTrayIcon(Action open, Action openSettings, Action exit)
+    private void CreateTrayIcon(Action open, Action openSettings, Action exit, UpdateViewModel updates, Action showUpdate)
     {
         var menu = new NativeMenu();
         var openItem = new NativeMenuItem("Open DeckHost");
         openItem.Click += (_, _) => open();
+
+        // While the window is in the tray, the tray menu announces an update.
+        var updateItem = new NativeMenuItem { IsVisible = false };
+        updateItem.Click += (_, _) => showUpdate();
+        updates.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(UpdateViewModel.IsUpdateAvailable) or nameof(UpdateViewModel.IsSkipped))
+            {
+                updateItem.Header = $"Update to DeckHost {updates.Latest?.Version}…";
+                updateItem.IsVisible = updates.IsUpdateAvailable && !updates.IsSkipped;
+            }
+        };
+        menu.Items.Add(updateItem);
         var settingsItem = new NativeMenuItem("Settings…");
         settingsItem.Click += (_, _) => openSettings();
         var exitItem = new NativeMenuItem("Exit");
@@ -260,6 +281,13 @@ public partial class App : Application
             provider.GetRequiredService<IDeviceHostService>(),
             provider.GetRequiredService<DeviceSettingsService>()));
         services.AddTransient(provider => new ProfileManagerViewModel(provider.GetRequiredService<MainViewModel>()));
+
+        // Updates: GitHub releases of DeckHost.
+        services.AddSingleton(_ => new UpdateViewModel(
+            new Core.Updates.UpdateChecker(Core.Updates.UpdateChecker.CreateHttpClient()),
+            AppInfo.Version,
+            Platform.AppSettings.Load,
+            Platform.AppSettings.Save));
 
         return services.BuildServiceProvider();
     }
