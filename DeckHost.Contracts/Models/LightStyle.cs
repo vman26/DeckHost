@@ -99,6 +99,16 @@ public sealed record LightStyle(
     [JsonPropertyName("spread")]
     public double? Spread { get; init; }
 
+    /// <summary>
+    /// Each LED its own light, in the order of the device's LEDs (a null entry, or a missing one,
+    /// uses this style). For the device's default light (Device Settings → Knob lights).
+    /// </summary>
+    [JsonPropertyName("leds")]
+    public IReadOnlyList<LightStyle?>? Leds { get; init; }
+
+    /// <summary>The light of LED <paramref name="index"/>: its own when it has one, else this style.</summary>
+    public LightStyle ForLed(int index) => Leds is { } leds && index >= 0 && index < leds.Count && leds[index] is { } own ? own : this;
+
     // Records compare lists by reference; compare their contents, so an equal style is equal.
     public bool Equals(LightStyle? other) =>
         other is not null &&
@@ -107,7 +117,8 @@ public sealed record LightStyle(
         PeriodSeconds.Equals(other.PeriodSeconds) &&
         Spread.Equals(other.Spread) &&
         (Colors ?? []).SequenceEqual(other.Colors ?? [], StringComparer.OrdinalIgnoreCase) &&
-        (Steps ?? []).SequenceEqual(other.Steps ?? []);
+        (Steps ?? []).SequenceEqual(other.Steps ?? []) &&
+        (Leds ?? []).SequenceEqual(other.Leds ?? []);
 
     public override int GetHashCode() => HashCode.Combine(Color.ToUpperInvariant(), Effect, PeriodSeconds, Spread, Colors?.Count ?? 0, Steps?.Count ?? 0);
 }

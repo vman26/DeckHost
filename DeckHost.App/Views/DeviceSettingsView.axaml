@@ -96,7 +96,22 @@
 					<StackPanel Spacing="10" DataContext="{Binding Lights}" x:DataType="vm:KnobLightsViewModel">
 						<TextBlock Text="Knob lights" FontWeight="SemiBold" FontSize="15" Foreground="#F1F5F9" />
 						<TextBlock Classes="hint" Text="What the LEDs show while idle, in every profile. A knob can have a light of its own in Customize → Light. Changes show right away." />
-						<local:LightStyleEditor DataContext="{Binding Editor}" />
+						<CheckBox Content="Each knob its own effect" IsChecked="{Binding EachLedOwn}" IsVisible="{Binding CanEachLedOwn}" />
+						<Panel IsVisible="{Binding ShowSharedEditor}">
+							<local:LightStyleEditor DataContext="{Binding Editor}" />
+						</Panel>
+						<TabControl ItemsSource="{Binding Leds}" IsVisible="{Binding EachLedOwn}" Padding="0,8,0,0">
+							<TabControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:LedLightViewModel">
+									<TextBlock Text="{Binding Name}" FontSize="14" />
+								</DataTemplate>
+							</TabControl.ItemTemplate>
+							<TabControl.ContentTemplate>
+								<DataTemplate x:DataType="vm:LedLightViewModel">
+									<local:LightStyleEditor DataContext="{Binding Editor}" />
+								</DataTemplate>
+							</TabControl.ContentTemplate>
+						</TabControl>
 					</StackPanel>
 				</Border>
 				<TextBlock Classes="hint"

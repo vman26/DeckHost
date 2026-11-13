@@ -139,4 +139,50 @@ public class LightEffectTests
         Assert.Contains(device.Calls, call => call == "batch:encoder.0:0,0,0 encoder.1:0,0,0");
         store.Dispose();
     }
+
+    [Fact]
+    public async Task Each_led_can_have_its_own_light()
+    {
+        var device = new HostLightTests.LightDevice();
+        var store = new VariableStore();
+        await using var host = new DeviceHostService([device], [], store);
+        host.SetProfiles([new DeviceProfile("profile", "Profile", HostLightTests.LightDevice.DeviceId, [])]);
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+        device.Calls.Clear();
+
+        host.SetDeviceLight(HostLightTests.LightDevice.DeviceId, new LightStyle("00FF00") { Leds = [new LightStyle("FF0000"), null] });
+        await host.WhenIdleAsync();
+
+        // The first LED its own red; the second (no style of its own) the shared green.
+        Assert.Contains(device.Calls, call => call == "batch:encoder.0:255,0,0 encoder.1:0,255,0");
+        store.Dispose();
+    }
+
+    [Fact]
+    public void The_knob_lights_card_composes_each_led()
+    {
+        var saved = new Dictionary<string, LightStyle?>();
+        var settings = new LightStore(saved);
+        var card = new KnobLightsViewModel(settings, "dev", ["Knob 1", "Knob 2"]);
+
+        card.EachLedOwn = true;
+        card.Leds[0].Editor.SelectedEffect = card.Leds[0].Editor.Effects.First(option => option.Value == LightEffects.Breathe);
+        card.Leds[1].Editor.SelectedEffect = card.Leds[1].Editor.Effects.First(option => option.Value == LightEffects.Off);
+
+        var style = saved["dev"]!;
+        Assert.Equal([LightEffects.Breathe, LightEffects.Off], style.Leds!.Select(led => led!.Effect));
+
+        // Opened again: the card shows each LED's own light.
+        var reopened = new KnobLightsViewModel(settings, "dev", ["Knob 1", "Knob 2"]);
+        Assert.True(reopened.EachLedOwn);
+        Assert.Equal(LightEffects.Breathe, reopened.Leds[0].Editor.Effect);
+    }
+
+    private sealed class LightStore(Dictionary<string, LightStyle?> saved) : IDeviceLightSettings
+    {
+        public LightStyle? GetDeviceLight(string deviceId) => saved.GetValueOrDefault(deviceId);
+
+        public void SetDeviceLight(string deviceId, LightStyle? style) => saved[deviceId] = style;
+    }
 }
