@@ -216,6 +216,83 @@ public partial class ProfileManagerViewModel : ViewModelBase
 
     public void Detach() => _main.PropertyChanged -= OnMainPropertyChanged;
 
+    private string _message = string.Empty;
+
+    /// <summary>What the last import, export, backup or restore did.</summary>
+    public string Message
+    {
+        get => _message;
+        set => SetProperty(ref _message, value);
+    }
+
+    /// <summary>The daily backups of all profiles, newest first.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<BackupItemViewModel> Backups { get; } = [];
+
+    public void RefreshBackups()
+    {
+        Backups.Clear();
+        foreach (var file in _main.ProfileBackups)
+        {
+            Backups.Add(new BackupItemViewModel(this, file.FullName, $"{file.LastWriteTime:dddd d MMMM yyyy, HH:mm}"));
+        }
+    }
+
+    [RelayCommand]
+    private void BackUpNow()
+    {
+        _main.BackUpProfiles();
+        RefreshBackups();
+        Message = "Backed up all profiles.";
+    }
+
+    internal void Restore(string path)
+    {
+        try
+        {
+            _main.RestoreBackup(path);
+            EditingProfile = _main.SelectedRootProfile ?? _main.Profiles.FirstOrDefault();
+            RefreshBackups();
+            Message = _main.StatusMessage;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or System.Text.Json.JsonException or UnauthorizedAccessException)
+        {
+            Message = $"Couldn't restore: {ex.Message}";
+        }
+    }
+
+    /// <summary>Imports a DeckHost or Stream Deck profile file.</summary>
+    public void Import(string path)
+    {
+        try
+        {
+            Message = _main.ImportProfile(path);
+            EditingProfile = _main.SelectedRootProfile;
+        }
+        catch (Exception ex) when (ex is Core.Profiles.ProfileBundleException or System.IO.IOException or UnauthorizedAccessException)
+        {
+            Message = ex.Message;
+        }
+    }
+
+    /// <summary>Exports the profile being edited.</summary>
+    public void Export(string path)
+    {
+        if (EditingProfile is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _main.ExportProfile(EditingProfile, path);
+            Message = _main.StatusMessage;
+        }
+        catch (Core.Profiles.ProfileBundleException ex)
+        {
+            Message = ex.Message;
+        }
+    }
+
     [RelayCommand]
     private void NewProfile() => EditingProfile = _main.CreateProfile("New Profile");
 
@@ -341,4 +418,12 @@ public partial class ProfileManagerViewModel : ViewModelBase
                 break;
         }
     }
+}
+
+/// <summary>One backup in the Profiles page.</summary>
+public sealed class BackupItemViewModel(ProfileManagerViewModel owner, string path, string label)
+{
+    public string Label { get; } = label;
+
+    public CommunityToolkit.Mvvm.Input.RelayCommand RestoreCommand { get; } = new(() => owner.Restore(path));
 }

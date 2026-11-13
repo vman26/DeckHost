@@ -71,6 +71,8 @@
 					<Button Content="Duplicate" Command="{Binding DuplicateProfileCommand}" IsEnabled="{Binding HasEditingProfile}" />
 					<Button Content="↑" ToolTip.Tip="Move up" Command="{Binding MoveUpCommand}" IsEnabled="{Binding HasEditingProfile}" />
 					<Button Content="↓" ToolTip.Tip="Move down" Command="{Binding MoveDownCommand}" IsEnabled="{Binding HasEditingProfile}" />
+					<Button Content="Import…" ToolTip.Tip="A DeckHost profile (.deckhostprofile) or a Stream Deck profile (.streamDeckProfile)" Click="ImportProfile_OnClick" />
+					<Button Content="Export…" ToolTip.Tip="This profile with its pages, folders and images, to share or keep" Click="ExportProfile_OnClick" IsEnabled="{Binding HasEditingProfile}" />
 				</WrapPanel>
 			</Grid>
 
@@ -105,6 +107,28 @@
 								<Button Grid.Column="1" Content="Browse…" Click="BrowseBackground_OnClick" />
 								<Button Grid.Column="2" Content="Clear" Command="{Binding ClearBackgroundCommand}" />
 							</Grid>
+						</StackPanel>
+					</Border>
+
+					<!-- Backups of all profiles: one a day (14 kept), or now; restore one. -->
+					<Border Classes="card">
+						<StackPanel Spacing="10">
+							<TextBlock Classes="section" Text="BACKUPS" />
+							<TextBlock Classes="hint" Text="DeckHost backs up all profiles once a day (the last 14 days are kept). Restoring replaces all profiles; the current ones are backed up first." />
+							<StackPanel Orientation="Horizontal" Spacing="8">
+								<Button Content="Back up now" Command="{Binding BackUpNowCommand}" />
+								<TextBlock Text="{Binding Message}" Foreground="#93C5FD" VerticalAlignment="Center" TextWrapping="Wrap" />
+							</StackPanel>
+							<ItemsControl ItemsSource="{Binding Backups}">
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="vm:BackupItemViewModel">
+										<Grid ColumnDefinitions="*,Auto" Margin="0,2">
+											<TextBlock Text="{Binding Label}" Foreground="#CBD5E1" VerticalAlignment="Center" />
+											<Button Grid.Column="1" Content="Restore" Command="{Binding RestoreCommand}" />
+										</Grid>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
 						</StackPanel>
 					</Border>
 
