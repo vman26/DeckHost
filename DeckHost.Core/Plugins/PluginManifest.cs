@@ -8,8 +8,10 @@ namespace DeckHost.Core.Plugins;
 /// <c>plugin.json</c> at the root of a plugin package (.zip):
 /// <code>
 /// { "id": "deckhost.plugin.obs", "name": "OBS Studio", "version": "1.0.0",
-///   "author": "...", "description": "...", "assembly": "DeckHost.Plugin.Obs.dll", "hostApiVersion": 1 }
+///   "author": "...", "description": "...", "assembly": "DeckHost.Plugin.Obs.dll", "hostApiVersion": 1,
+///   "icon": "icon.png" }
 /// </code>
+/// <c>icon</c> (optional) is an image in the package, shown in the Plugin Manager and the store.
 /// </summary>
 public sealed partial record PluginManifest(
     string Id,
@@ -18,7 +20,8 @@ public sealed partial record PluginManifest(
     string Assembly,
     string? Author = null,
     string? Description = null,
-    int HostApiVersion = PluginManifest.CurrentHostApiVersion)
+    int HostApiVersion = PluginManifest.CurrentHostApiVersion,
+    string? Icon = null)
 {
     public const string FileName = "plugin.json";
 

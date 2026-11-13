@@ -1,6 +1,8 @@
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using DeckHost.Core.Plugins;
+using DeckHost.Core.Rendering;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -29,11 +31,13 @@ public partial class PluginStoreViewModel : ViewModelBase
     public const string Uncategorized = "Uncategorized";
 
     private static readonly HttpClient Http = PluginStore.CreateHttpClient();
+    private static readonly HttpClient MediaHttp = CreateMediaClient();
     private static readonly string SettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost", "store.json");
 
     private readonly PluginCatalog _catalog;
     private readonly PluginStore _store = new(Http);
+    private readonly StoreMedia _media = new(MediaHttp);
     private readonly List<StoreItemViewModel> _all = [];
     private string _searchText = string.Empty;
     private string _selectedSource = AllSources;
@@ -50,6 +54,9 @@ public partial class PluginStoreViewModel : ViewModelBase
         _store.DeckHostCatalogUrls = LoadCatalogUrls();
         _catalogUrlsText = string.Join(Environment.NewLine, _store.DeckHostCatalogUrls);
     }
+
+    /// <summary>Icons and READMEs of the listed plugins.</summary>
+    internal StoreMedia Media => _media;
 
     /// <summary>Reports install results to the Plugin Manager's status line.</summary>
     public event Action<string, bool>? StatusReported;
@@ -284,15 +291,16 @@ public partial class PluginStoreViewModel : ViewModelBase
             var existing = _all.FirstOrDefault(item => string.Equals(item.Entry.Id, installed.Id, StringComparison.OrdinalIgnoreCase));
             if (existing is not null)
             {
-                // The installed manifest knows the category even when the catalog doesn't.
+                // The installed manifest knows the category (and has the icon) even when the catalog doesn't.
                 existing.InstalledCategory = installed.Category;
+                existing.InstalledIconPath = installed.IconPath;
                 continue;
             }
 
             var source = installed.Source == PluginCatalog.StreamDeckSource ? $"Stream Deck ({installed.Origin})" : PluginStore.DeckHostSource;
             _all.Add(new StoreItemViewModel(
                 this,
-                new StoreEntry(installed.Id, installed.Name, installed.Author, installed.Description, source, installed.Version, null, null, null,
+                new StoreEntry(installed.Id, installed.Name, installed.Author, installed.Description, source, installed.Version, installed.IconPath, null, null,
                     PluginCategories.Resolve(installed.Category, installed.Name, installed.Description, installed.Id)),
                 isInstalled: true));
         }
@@ -332,6 +340,13 @@ public partial class PluginStoreViewModel : ViewModelBase
         }
     }
 
+    private static HttpClient CreateMediaClient()
+    {
+        var client = PluginStore.CreateHttpClient();
+        client.Timeout = TimeSpan.FromSeconds(30);
+        return client;
+    }
+
     private sealed record StoreSettings(IReadOnlyList<string>? CatalogUrls);
 }
 
@@ -342,6 +357,14 @@ public partial class StoreItemViewModel : ViewModelBase
     private bool _isInstalling;
     private string _progress = string.Empty;
     private string? _installedCategory;
+    private string? _installedIconPath;
+    private Bitmap? _icon;
+    private bool _iconRequested;
+    private bool _isExpanded;
+    private bool _readmeRequested;
+    private bool _isLoadingReadme;
+    private StoreReadme? _readme;
+    private string _readmeStatus = string.Empty;
 
     public StoreItemViewModel(PluginStoreViewModel owner, StoreEntry entry, bool isInstalled)
     {
@@ -368,6 +391,86 @@ public partial class StoreItemViewModel : ViewModelBase
             OnPropertyChanged(nameof(Category));
         }
     }
+
+    /// <summary>The installed plugin's own icon, for when the catalog has none.</summary>
+    public string? InstalledIconPath
+    {
+        get => _installedIconPath;
+        set => _installedIconPath = value;
+    }
+
+    /// <summary>The plugin's icon, downloaded (and cached) the first time the list shows it.</summary>
+    public Bitmap? Icon
+    {
+        get
+        {
+            if (!_iconRequested)
+            {
+                _iconRequested = true;
+                _ = LoadIconAsync();
+            }
+
+            return _icon;
+        }
+    }
+
+    public bool HasIcon => _icon is not null;
+
+    /// <summary>Loads images for the README.</summary>
+    public Func<string, Task<byte[]?>> ImageLoader => url => _owner.Media.GetImageAsync(url);
+
+    /// <summary>Whether the details (the plugin's README) are shown.</summary>
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (SetProperty(ref _isExpanded, value))
+            {
+                OnPropertyChanged(nameof(DescriptionLines));
+                OnPropertyChanged(nameof(ExpandText));
+                if (value && !_readmeRequested)
+                {
+                    _readmeRequested = true;
+                    _ = LoadReadmeAsync();
+                }
+            }
+        }
+    }
+
+    public string ExpandText => IsExpanded ? "Less ▴" : "More ▾";
+
+    /// <summary>The description is cut to three lines until the card is expanded.</summary>
+    public int DescriptionLines => IsExpanded ? 0 : 3;
+
+    public bool IsLoadingReadme
+    {
+        get => _isLoadingReadme;
+        private set => SetProperty(ref _isLoadingReadme, value);
+    }
+
+    public string? ReadmeMarkdown => _readme?.Markdown;
+
+    public Uri? ReadmeImageBase => _readme?.ImageBase;
+
+    public Uri? ReadmeLinkBase => _readme?.LinkBase;
+
+    public bool HasReadme => _readme is not null;
+
+    /// <summary>"Loading the README…", or why there is none.</summary>
+    public string ReadmeStatus
+    {
+        get => _readmeStatus;
+        private set
+        {
+            if (SetProperty(ref _readmeStatus, value))
+            {
+                OnPropertyChanged(nameof(HasReadmeStatus));
+            }
+        }
+    }
+
+    public bool HasReadmeStatus => ReadmeStatus.Length > 0;
 
     public string Details => string.Join(" · ", new[]
     {
@@ -438,6 +541,80 @@ public partial class StoreItemViewModel : ViewModelBase
 
     [RelayCommand]
     private Task Install() => _owner.InstallAsync(this);
+
+    [RelayCommand]
+    private void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    private async Task LoadIconAsync()
+    {
+        var bytes = await _owner.Media.GetImageAsync(Entry.IconUrl).ConfigureAwait(false)
+                    ?? await _owner.Media.GetImageAsync(_installedIconPath).ConfigureAwait(false);
+        var bitmap = bytes is null ? null : await Task.Run(() => DecodeIcon(bytes)).ConfigureAwait(false);
+        if (bitmap is null)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            _icon = bitmap;
+            OnPropertyChanged(nameof(Icon));
+            OnPropertyChanged(nameof(HasIcon));
+        });
+    }
+
+    /// <summary>A small bitmap (icons are shown at 44 px; 96 keeps them sharp at 200 %).</summary>
+    private static Bitmap? DecodeIcon(byte[] bytes)
+    {
+        try
+        {
+            if (SvgRasterizer.IsSvg(bytes))
+            {
+                bytes = SvgRasterizer.ToPng(bytes, 96) ?? [];
+            }
+
+            using var stream = new MemoryStream(bytes);
+            return Bitmap.DecodeToWidth(stream, 96);
+        }
+        catch (Exception)
+        {
+            // Not an image Avalonia can decode: the initials stay.
+            return null;
+        }
+    }
+
+    private async Task LoadReadmeAsync()
+    {
+        if (StoreMedia.FindRepository(Entry) is null)
+        {
+            ReadmeStatus = HasDescription
+                ? "This plugin has no GitHub repository with a README; the page may have more."
+                : "No description or README for this plugin; the page may have more.";
+            return;
+        }
+
+        IsLoadingReadme = true;
+        ReadmeStatus = "Loading the README…";
+        try
+        {
+            var readme = await Task.Run(() => _owner.Media.GetReadmeAsync(Entry));
+            _readme = readme;
+            ReadmeStatus = readme is null ? "The plugin's repository has no README." : string.Empty;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            ReadmeStatus = $"Could not load the README: {ex.Message}";
+            _readmeRequested = false;
+        }
+        finally
+        {
+            IsLoadingReadme = false;
+            OnPropertyChanged(nameof(ReadmeMarkdown));
+            OnPropertyChanged(nameof(ReadmeImageBase));
+            OnPropertyChanged(nameof(ReadmeLinkBase));
+            OnPropertyChanged(nameof(HasReadme));
+        }
+    }
 
     [RelayCommand]
     private void OpenPage()
