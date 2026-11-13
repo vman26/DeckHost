@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -11,6 +14,7 @@ namespace DeckHost.App.Views;
 public partial class ControlCustomizationView : UserControl
 {
     private HotkeySettingField? _recordingField;
+    private bool _browserStarted;
 
     public ControlCustomizationView()
     {
@@ -20,21 +24,44 @@ public partial class ControlCustomizationView : UserControl
         AddHandler(KeyDownEvent, OnRecorderKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, OnRecorderKeyUp, RoutingStrategies.Tunnel);
 
-        if (!WebView2Host.IsSupported)
+        // The plugin's settings page, in the system's web view (WebView2, WKWebView, WebKitGTK).
+        SettingsBrowser.EnvironmentRequested += (_, e) =>
         {
-            // WebView2 is Windows-only; elsewhere the plugin's page opens in the default browser.
-            SettingsBrowser.IsVisible = false;
-            SettingsBrowserError.Text = "Plugin settings pages open in your web browser on this system. Use Open in browser above; changes there are saved straight to the plugin.";
-            SettingsBrowserError.Foreground = Avalonia.Media.Brushes.LightSteelBlue;
-            SettingsBrowserError.IsVisible = true;
-        }
-
-        SettingsBrowser.Failed += message => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            e.EnableDevTools = true;
+            var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeckHost", "webview");
+            switch (e)
+            {
+                case Avalonia.Platform.WindowsWebView2EnvironmentRequestedEventArgs windows:
+                    windows.UserDataFolder = data;
+                    break;
+                case Avalonia.Platform.GtkWebViewEnvironmentRequestedEventArgs gtk:
+                    gtk.BaseDataDirectory = data;
+                    gtk.BaseCacheDirectory = Path.Combine(data, "cache");
+                    break;
+            }
+        };
+        SettingsBrowser.NewWindowRequested += (_, e) =>
         {
-            SettingsBrowser.IsVisible = false;
-            SettingsBrowserError.Text = $"The built-in browser couldn't start ({message}). Use Open in browser instead.";
-            SettingsBrowserError.IsVisible = true;
-        });
+            // Links that open a window go to the browser.
+            e.Handled = true;
+            if (e.Request is { Scheme: "http" or "https" } uri)
+            {
+                Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+            }
+        };
+        SettingsBrowser.AdapterCreated += (_, _) => _browserStarted = true;
+        SettingsBrowser.AttachedToVisualTree += (_, _) => Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+        {
+            // No web view on this system (Linux without WebKitGTK): offer the browser instead.
+            if (!_browserStarted && SettingsBrowser.IsEffectivelyVisible)
+            {
+                SettingsBrowser.IsVisible = false;
+                SettingsBrowserError.Text = OperatingSystem.IsLinux()
+                    ? "The built-in browser needs WebKitGTK (libwebkit2gtk-4.1). Use Open in browser above; changes there are saved straight to the plugin."
+                    : "The built-in browser couldn't start. Use Open in browser above; changes there are saved straight to the plugin.";
+                SettingsBrowserError.IsVisible = true;
+            }
+        }, TimeSpan.FromSeconds(8));
 
         // Two columns when there is room, else one.
         Columns.SizeChanged += (_, e) => Arrange(e.NewSize.Width);
