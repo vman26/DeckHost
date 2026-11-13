@@ -19,7 +19,19 @@ public sealed record StoreEntry(
     string? PageUrl = null)
 {
     /// <summary>The store page to open: the catalog's page, else the repository or author site.</summary>
-    public string? StorePageUrl => PageUrl ?? RepositoryUrl;
+    public string? StorePageUrl => PageUrl ?? PurchaseUrl ?? RepositoryUrl;
+
+    /// <summary>The package's SHA-256 (hex): the download is refused when it doesn't match.</summary>
+    public string? Sha256 { get; init; }
+
+    /// <summary>What the plugin says it may do (plugin.json permissions), shown before installing.</summary>
+    public IReadOnlyList<string>? Permissions { get; init; }
+
+    /// <summary>A paid plugin: where to buy it (the store opens this instead of installing).</summary>
+    public string? PurchaseUrl { get; init; }
+
+    /// <summary>The price as the author writes it ("€5", "pay what you want"), for paid plugins.</summary>
+    public string? Price { get; init; }
 }
 
 /// <summary>
@@ -55,7 +67,17 @@ public sealed class PluginStore(HttpClient http)
     private static readonly string[] PackageExtensions = [".zip", ".dhplugin", ".streamdeckplugin"];
     private static readonly string[] SkippedFolders = ["obj", "node_modules", ".git", ".vs"];
 
-    /// <summary>DeckHost catalog URLs to read (there is no official one yet).</summary>
+    /// <summary>
+    /// The DeckHost plugin catalog: the public <c>deckhost-plugins</c> repository, built into one file on
+    /// its GitHub Pages (docs/maintainers/plugin-store.md). Read before the user's own sources; while it
+    /// doesn't exist yet (404) it's simply empty.
+    /// </summary>
+    public const string OfficialCatalogUrl = "https://vman26.github.io/deckhost-plugins/catalog.json";
+
+    /// <summary>Whether to read <see cref="OfficialCatalogUrl"/> (tests turn it off).</summary>
+    public bool IncludeOfficialCatalog { get; set; } = true;
+
+    /// <summary>The user's own DeckHost catalog sources (URLs, files or folders), next to the official one.</summary>
     public IReadOnlyList<string> DeckHostCatalogUrls { get; set; } = [];
 
     /// <summary>A client with a generic User-Agent (GitHub's API requires one).</summary>
@@ -74,6 +96,17 @@ public sealed class PluginStore(HttpClient http)
             LoadSourceAsync(OpenActionSource, async token => ParseOpenActionCatalog(await http.GetStringAsync(OpenActionCatalogUrl, token).ConfigureAwait(false)), cancellationToken),
             LoadSourceAsync(ElgatoArchiveSource, async token => ParseElgatoArchiveCatalog(await http.GetStringAsync(ElgatoCatalogUrl, token).ConfigureAwait(false)), cancellationToken),
         };
+
+        if (IncludeOfficialCatalog && !DeckHostCatalogUrls.Contains(OfficialCatalogUrl, StringComparer.OrdinalIgnoreCase))
+        {
+            sources.Add(LoadSourceAsync(DeckHostSource, async token =>
+            {
+                using var response = await http.GetAsync(OfficialCatalogUrl, token).ConfigureAwait(false);
+                return response.StatusCode == System.Net.HttpStatusCode.NotFound
+                    ? []
+                    : ParseDeckHostCatalog(await response.EnsureSuccessStatusCode().Content.ReadAsStringAsync(token).ConfigureAwait(false));
+            }, cancellationToken));
+        }
 
         foreach (var source in DeckHostCatalogUrls)
         {
@@ -95,6 +128,11 @@ public sealed class PluginStore(HttpClient http)
     /// <param name="progress">Fraction downloaded (0..1), or -1 while the size is unknown.</param>
     public async Task<string> DownloadAsync(StoreEntry entry, string directory, IProgress<double>? progress, CancellationToken cancellationToken)
     {
+        if (entry.DownloadUrl is null && entry.PurchaseUrl is not null)
+        {
+            throw new PluginException($"{entry.Name} is a paid plugin: get it from {entry.PurchaseUrl}, then install the file you receive.");
+        }
+
         var url = entry.DownloadUrl ?? await FindReleaseAssetAsync(entry, cancellationToken).ConfigureAwait(false)
             ?? throw new PluginException($"{entry.Name} has no downloadable release.");
 
@@ -137,6 +175,20 @@ public sealed class PluginStore(HttpClient http)
             await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             received += read;
             progress?.Report(total is > 0 ? (double)received / total.Value : -1);
+        }
+
+        await file.FlushAsync(cancellationToken).ConfigureAwait(false);
+        file.Close();
+        if (entry.Sha256 is { Length: > 0 } expected)
+        {
+            await using var check = File.OpenRead(path);
+            var actual = Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(check, cancellationToken).ConfigureAwait(false));
+            if (!string.Equals(actual, expected.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                check.Close();
+                File.Delete(path);
+                throw new PluginException($"The download of {entry.Name} doesn't match the catalog's checksum, so it wasn't installed. Try again later, or tell the plugin's author.");
+            }
         }
 
         return path;
@@ -206,7 +258,13 @@ public sealed class PluginStore(HttpClient http)
                 Text(plugin, "repository"),
                 Text(plugin, "download_url"),
                 PluginCategories.Resolve(Text(plugin, "category"), Text(plugin, "name") ?? id, Text(plugin, "description"), id),
-                Text(plugin, "page")));
+                Text(plugin, "page"))
+            {
+                Sha256 = Text(plugin, "sha256"),
+                Permissions = plugin["permissions"] is JsonArray permissions ? [.. permissions.Select(static item => item?.GetValue<string>()).OfType<string>()] : null,
+                PurchaseUrl = Text(plugin, "purchase_url"),
+                Price = Text(plugin, "price"),
+            });
         }
 
         return entries;

@@ -218,7 +218,6 @@ public partial class PluginStoreViewModel : ViewModelBase
 
             var deckHostCount = _all.Count(static item => item.Entry.Source.StartsWith(PluginStore.DeckHostSource, StringComparison.Ordinal));
             Summary = $"{_all.Count} plugins ({deckHostCount} DeckHost)."
-                + (_store.DeckHostCatalogUrls.Count == 0 ? " No DeckHost catalog is set up yet: add its address under Sources." : string.Empty)
                 + (errors.Count == 0 ? string.Empty : $" Could not load: {string.Join("; ", errors)}");
         }
         finally
@@ -477,8 +476,30 @@ public partial class StoreItemViewModel : ViewModelBase
         Entry.Author is null ? null : $"by {Entry.Author}",
         Entry.Version is null ? null : $"v{Entry.Version}",
         Category,
+        IsPaid ? Entry.Price ?? "paid" : null,
         Entry.Id,
     }.Where(static part => part is not null));
+
+    /// <summary>"It can use the network." for catalog entries that list permissions.</summary>
+    public string PermissionsText => Entry.Permissions is { Count: > 0 } permissions ? PluginPermissions.Describe(permissions) : string.Empty;
+
+    public bool HasPermissions => PermissionsText.Length > 0;
+
+    /// <summary>A paid plugin: Buy opens its page; the file you get is installed with Install plugin….</summary>
+    public bool IsPaid => Entry.PurchaseUrl is not null && Entry.DownloadUrl is null;
+
+    public bool CanBuy => IsPaid && !IsInstalled;
+
+    public bool ShowInstall => !IsInstalled && !IsPaid;
+
+    [RelayCommand]
+    private void Buy()
+    {
+        if (Uri.TryCreate(Entry.PurchaseUrl, UriKind.Absolute, out var uri) && uri.Scheme is "https")
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+        }
+    }
 
     public string Description => Entry.Description ?? string.Empty;
 
@@ -506,6 +527,8 @@ public partial class StoreItemViewModel : ViewModelBase
             if (SetProperty(ref _isInstalled, value))
             {
                 OnPropertyChanged(nameof(CanInstall));
+                OnPropertyChanged(nameof(CanBuy));
+                OnPropertyChanged(nameof(ShowInstall));
             }
         }
     }
@@ -537,7 +560,7 @@ public partial class StoreItemViewModel : ViewModelBase
 
     public bool HasProgress => Progress.Length > 0;
 
-    public bool CanInstall => !IsInstalled && !IsInstalling && (Entry.DownloadUrl is not null || Entry.RepositoryUrl is not null);
+    public bool CanInstall => !IsInstalled && !IsInstalling && !IsPaid && (Entry.DownloadUrl is not null || Entry.RepositoryUrl is not null);
 
     [RelayCommand]
     private Task Install() => _owner.InstallAsync(this);

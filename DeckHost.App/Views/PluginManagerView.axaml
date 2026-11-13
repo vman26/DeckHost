@@ -252,13 +252,15 @@
 												</StackPanel>
 												<TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource C.64748B}" TextTrimming="CharacterEllipsis" />
 												<TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" MaxLines="{Binding DescriptionLines}" />
+												<TextBlock Text="{Binding PermissionsText}" IsVisible="{Binding HasPermissions}" FontSize="11" Foreground="{DynamicResource C.FDE68A}" />
 												<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasProgress}">
 													<ProgressBar IsIndeterminate="{Binding IsInstalling}" Width="120" VerticalAlignment="Center" />
 													<TextBlock Text="{Binding Progress}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" />
 												</StackPanel>
 											</StackPanel>
 											<StackPanel Grid.Column="2" Spacing="6" VerticalAlignment="Center">
-<Button Content="Install" Classes="accent" IsVisible="{Binding !IsInstalled}" IsEnabled="{Binding CanInstall}" Command="{Binding InstallCommand}" HorizontalAlignment="Right" />
+<Button Content="Install" Classes="accent" IsVisible="{Binding ShowInstall}" IsEnabled="{Binding CanInstall}" Command="{Binding InstallCommand}" HorizontalAlignment="Right" />
+												<Button Content="Buy" Classes="accent" IsVisible="{Binding CanBuy}" Command="{Binding BuyCommand}" HorizontalAlignment="Right" ToolTip.Tip="A paid plugin: buy it on its page, then install the file you get with Install plugin…" />
 												<Border Classes="badge" Background="{DynamicResource C.14532D}" IsVisible="{Binding IsInstalled}" HorizontalAlignment="Right">
 													<TextBlock Text="Installed" FontSize="11" Foreground="{DynamicResource C.BBF7D0}" />
 												</Border>
