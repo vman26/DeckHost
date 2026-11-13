@@ -260,6 +260,67 @@ public sealed class RenderingAndStoreTests : IDisposable
         Assert.Contains(archive.Entries, static entry => entry.FullName == "plugin.json");
     }
 
+    [Fact]
+    public async Task The_DeckHost_catalog_carries_checksums_permissions_and_paid_plugins()
+    {
+        Directory.CreateDirectory(_root);
+        var package = Path.Combine(_root, "good.zip");
+        File.WriteAllText(package, "package bytes");
+        var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(package)));
+        var entries = PluginStore.ParseDeckHostCatalog($$"""
+            [
+              { "id": "a.plugin", "name": "A", "download_url": "{{package.Replace("\\", "\\\\")}}", "sha256": "{{sha.ToLowerInvariant()}}", "permissions": ["network", "processes"] },
+              { "id": "b.plugin", "name": "B", "purchase_url": "https://example.test/buy", "price": "€5" }
+            ]
+            """);
+
+        var free = entries.Single(entry => entry.Id == "a.plugin");
+        Assert.Equal(["network", "processes"], free.Permissions);
+        var paid = entries.Single(entry => entry.Id == "b.plugin");
+        Assert.Equal(("https://example.test/buy", "€5"), (paid.PurchaseUrl, paid.Price));
+        Assert.Equal("https://example.test/buy", paid.StorePageUrl);
+
+        using var http = new HttpClient();
+        var store = new PluginStore(http) { IncludeOfficialCatalog = false };
+        await Assert.ThrowsAsync<PluginException>(() => store.DownloadAsync(paid, Path.Combine(_root, "downloads"), null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_download_that_does_not_match_its_checksum_is_refused()
+    {
+        var bytes = "the real package"u8.ToArray();
+        using var http = new HttpClient(new FixedResponse(bytes));
+        var store = new PluginStore(http) { IncludeOfficialCatalog = false };
+        var good = new StoreEntry("a", "A", null, null, "DeckHost", "1.0", null, null, "https://example.test/a.zip") { Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)) };
+        var bad = good with { Sha256 = new string('0', 64) };
+
+        var path = await store.DownloadAsync(good, Path.Combine(_root, "downloads"), null, CancellationToken.None);
+        Assert.Equal(bytes, File.ReadAllBytes(path));
+        var error = await Assert.ThrowsAsync<PluginException>(() => store.DownloadAsync(bad, Path.Combine(_root, "downloads"), null, CancellationToken.None));
+        Assert.Contains("checksum", error.Message);
+        Assert.Single(Directory.GetFiles(Path.Combine(_root, "downloads")));
+    }
+
+    [Fact]
+    public async Task The_official_catalog_is_read_first_and_a_missing_one_is_simply_empty()
+    {
+        using var missing = new HttpClient(new FixedResponse([], System.Net.HttpStatusCode.NotFound));
+        var store = new PluginStore(missing);
+        var (entries, errors) = await store.LoadAsync(CancellationToken.None);
+        Assert.DoesNotContain(errors, error => error.StartsWith(PluginStore.DeckHostSource, StringComparison.Ordinal));
+        Assert.DoesNotContain(entries, entry => entry.Source == PluginStore.DeckHostSource);
+
+        using var present = new HttpClient(new FixedResponse("""{ "deckhost.plugin.obs": { "name": "OBS Studio", "download_url": "https://example.test/obs.zip" } }"""u8.ToArray()));
+        var (official, _) = await new PluginStore(present).LoadAsync(CancellationToken.None);
+        Assert.Contains(official, entry => entry.Id == "deckhost.plugin.obs" && entry.Source == PluginStore.DeckHostSource);
+    }
+
+    private sealed class FixedResponse(byte[] body, System.Net.HttpStatusCode status = System.Net.HttpStatusCode.OK) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(status) { Content = new ByteArrayContent(body) });
+    }
+
     private static int CountGreen(SKBitmap bitmap, int fromY, int toY)
     {
         var count = 0;

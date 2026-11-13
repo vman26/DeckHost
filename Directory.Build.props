@@ -3,7 +3,9 @@
   <PropertyGroup>
     <Product>DeckHost</Product>
     <Authors>Marco Veltman</Authors>
-    <Copyright>Copyright (c) 2026 Marco Veltman</Copyright>
+    <Copyright>Copyright (c) 2026 Marco Veltman and DeckHost contributors</Copyright>
+    <!-- GPL-3.0-or-later with a plugin exception (NOTICE.md); DeckHost.Contracts overrides this with MIT. -->
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
 
     <!-- Versions come from git (GitVersion, rules in GitVersion.yml): tags are releases, and the
          branch you work on decides what comes next (develop: next minor, hotfix/*: next patch,

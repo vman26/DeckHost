@@ -27,6 +27,7 @@ case "$rid" in
         cp -a "$publish" "$folder/DeckHost"
         cp "$root/packaging/linux/install.sh" "$root/packaging/linux/deckhost.desktop" "$root/packaging/linux/70-deckhost-mirabox.rules" "$folder/"
         cp "$root/LICENSE" "$folder/LICENSE.txt"
+        cp "$root/NOTICE.md" "$folder/NOTICE.md"
         chmod +x "$folder/install.sh" "$folder/DeckHost/DeckHost.App"
         cp "$root/DeckHost.App/Assets/deckhost-256.png" "$folder/deckhost.png"
         cat > "$folder/README.txt" <<TEXT
