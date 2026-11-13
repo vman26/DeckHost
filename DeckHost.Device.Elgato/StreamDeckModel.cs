@@ -5,9 +5,14 @@ namespace DeckHost.Device.Elgato;
 
 /// <summary>
 /// A Stream Deck model this plugin drives: its USB product id, key grid and image size, how key
-/// images are oriented, and for the Stream Deck + its dials and touch strip. All of them use the
-/// current ("second generation") protocol: JPEG key images in 1024-byte reports.
+/// images are oriented, and for the Stream Deck + its dials and touch strip. Most use the current
+/// ("second generation") protocol: JPEG key images in 1024-byte reports. The first Stream Deck and
+/// the Mini use the first one (<see cref="Generation"/> 1): BMP key images, other report layouts.
 /// </summary>
+/// <param name="Generation">The protocol: 2 (JPEG) or 1 (BMP; first edition and Mini).</param>
+/// <param name="ImageReportLength">Length of the reports that carry key images (first generation: 8191 on the first edition, 1024 on the Mini).</param>
+/// <param name="KeysRightToLeft">The first edition numbers its keys from the right in each row.</param>
+/// <param name="TransposeKeyImages">The Mini's key images are mirrored on the diagonal (turned 90° and flipped).</param>
 public sealed record StreamDeckModel(
     string Name,
     int ProductId,
@@ -18,7 +23,11 @@ public sealed record StreamDeckModel(
     int Dials = 0,
     int TouchStripWidth = 0,
     int TouchStripHeight = 0,
-    bool HasDisplays = true)
+    bool HasDisplays = true,
+    int Generation = 2,
+    int ImageReportLength = 1024,
+    bool KeysRightToLeft = false,
+    bool TransposeKeyImages = false)
 {
     public const int VendorId = 0x0fd9;
 
@@ -35,15 +44,28 @@ public sealed record StreamDeckModel(
         new("Stream Deck Neo", 0x009a, 4, 2, 96, FlipKeyImages: true),
         new("Stream Deck +", 0x0084, 4, 2, 120, FlipKeyImages: false, Dials: 4, TouchStripWidth: 800, TouchStripHeight: 100),
         new("Stream Deck Pedal", 0x0086, 3, 1, 0, FlipKeyImages: false, HasDisplays: false),
+        new("Stream Deck (first edition)", 0x0060, 5, 3, 72, FlipKeyImages: true, Generation: 1, ImageReportLength: 8191, KeysRightToLeft: true),
+        new("Stream Deck Mini", 0x0063, 3, 2, 80, FlipKeyImages: false, Generation: 1, TransposeKeyImages: true),
+        new("Stream Deck Mini", 0x0090, 3, 2, 80, FlipKeyImages: false, Generation: 1, TransposeKeyImages: true),
     ];
 
-    /// <summary>Older models with a different protocol (BMP images): recognized, not driven yet.</summary>
-    public static IReadOnlyDictionary<int, string> NotYetSupported { get; } = new Dictionary<int, string>
+    /// <summary>Models recognized but not driven (none at the moment).</summary>
+    public static IReadOnlyDictionary<int, string> NotYetSupported { get; } = new Dictionary<int, string>();
+
+    /// <summary>
+    /// The device's own key number for DeckHost's key <paramref name="key"/> (reading order). The same
+    /// mapping works both ways.
+    /// </summary>
+    public int HardwareKey(int key)
     {
-        [0x0060] = "Stream Deck (first edition)",
-        [0x0063] = "Stream Deck Mini",
-        [0x0090] = "Stream Deck Mini",
-    };
+        if (!KeysRightToLeft)
+        {
+            return key;
+        }
+
+        var column = key % Columns;
+        return key - column + (Columns - 1 - column);
+    }
 
     public static StreamDeckModel? Find(int productId) => All.FirstOrDefault(model => model.ProductId == productId);
 
