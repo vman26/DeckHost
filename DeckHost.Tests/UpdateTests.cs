@@ -331,7 +331,8 @@ public sealed class UpdateInstallerTests
             File.WriteAllText(script, UpdateInstaller.SwapScriptText.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n");
 
             // A process id that has exited: the script doesn't wait.
-            using var exited = Process.Start(new ProcessStartInfo("/bin/true"))!;
+            // (/bin/sh is everywhere; /bin/true isn't on macOS.)
+            using var exited = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", "exit 0" } })!;
             exited.WaitForExit();
             using var helper = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { script, exited.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), source, target, "DeckHost.App" } })!;
             Assert.True(helper.WaitForExit(10_000));
