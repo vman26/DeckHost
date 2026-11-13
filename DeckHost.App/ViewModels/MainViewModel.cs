@@ -1572,9 +1572,19 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         try
         {
-            return _profileStore.Load();
+            var document = _profileStore.Load();
+            if (_profileStore.NewerVersionLoaded is { } newer)
+            {
+                StatusMessage = $"These profiles were saved by a newer DeckHost (format {newer}). Anything this version doesn't know is dropped when it saves; the original is kept in the backups folder.";
+            }
+            else if (_profileStore.LastMigration.Count > 0)
+            {
+                StatusMessage = "Profiles were updated to this version's format. The old file is in the backups folder.";
+            }
+
+            return document;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException or InvalidOperationException)
         {
             // Keep the unreadable file for the user instead of overwriting it with defaults.
             var backupPath = $"{_profileStore.FilePath}.unreadable-{DateTime.Now:yyyyMMdd-HHmmss}";
