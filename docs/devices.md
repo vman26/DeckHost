@@ -24,6 +24,23 @@ DeckHost talks to Stream Decks directly over USB, without Elgato's software. **C
 
 This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't (**☰ → Help and support → Report a problem**).
 
+## Other USB devices (device creator)
+
+Button boxes, foot pedals, jog wheels, game controllers and other USB devices DeckHost doesn't know can be made into a deck: **☰ → Add a USB device**.
+
+1. **Pick the device.** The list shows every USB HID interface on the computer; a device can have several. Pick one and press a key: **What it sends** shows the device's reports. If nothing changes when you press, try the device's other interface.
+2. **Add its keys and knobs.** Click **Add key** and press the key; DeckHost works out where it shows up in the reports. **Add knob**, turn it to the right a few clicks and click **Done turning**. For a knob you can push, select it and click **Learn push**. Pressing a key you already added says so. Keys light up on the canvas as you press them, and knobs show their turns.
+3. **Place them** where they sit on the device: drag them, or **Arrange** them in rows. Keys are numbered by where they sit (left to right, top to bottom) and knobs left to right, so profiles copy cleanly between devices.
+4. **Save device.** It joins the device picker with its own profiles, like any deck. **Edit** and **Remove** are on the same page.
+
+What to know:
+
+- These devices only send input. They have no screens or lights DeckHost could drive, so keys show their action's name on the canvas.
+- **Windows keeps keyboards and mice to itself**: DeckHost can't read those interfaces. Many macro pads also have a vendor-defined interface (often listed as *vendor-defined*), which does work. A device that types keys will also keep typing them; DeckHost can't stop that.
+- **Linux** needs a device rule, as for Stream Decks. The page shows the line and where to put it.
+- **macOS** may ask to allow input monitoring for some devices.
+- Descriptions are kept in `devices/hid/<name>.json`; they can be shared.
+
 ## Web Deck (phone, tablet or a window)
 
 A deck in a web browser.

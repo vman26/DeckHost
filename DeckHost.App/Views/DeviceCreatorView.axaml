@@ -1,0 +1,175 @@
+<UserControl
+		xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		xmlns:hid="using:DeckHost.Device.Hid"
+		x:Class="DeckHost.App.Views.DeviceCreatorView"
+		x:DataType="vm:DeviceCreatorViewModel">
+
+	<UserControl.Styles>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+		<Style Selector="TextBlock.title">
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="{DynamicResource C.E2E8F0}" />
+		</Style>
+		<Style Selector="Border.card">
+			<Setter Property="Background" Value="{DynamicResource C.0F172A}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource C.1E293B}" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="12" />
+			<Setter Property="Padding" Value="14" />
+		</Style>
+		<Style Selector="Border.control">
+			<Setter Property="Background" Value="{DynamicResource C.1E293B}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource C.334155}" />
+			<Setter Property="BorderThickness" Value="2" />
+			<Setter Property="Cursor" Value="SizeAll" />
+		</Style>
+		<Style Selector="Border.control.selected">
+			<Setter Property="BorderBrush" Value="{DynamicResource C.3B82F6}" />
+		</Style>
+		<Style Selector="Border.control.down">
+			<Setter Property="Background" Value="{DynamicResource C.1D4ED8}" />
+		</Style>
+	</UserControl.Styles>
+
+	<Grid ColumnDefinitions="340,*" ColumnSpacing="16" Margin="20">
+		<!-- The device: saved ones, the hardware list, the name and what it sends. -->
+		<ScrollViewer HorizontalScrollBarVisibility="Disabled">
+			<StackPanel Spacing="14">
+				<Border Classes="card" IsVisible="{Binding HasSavedDevices}">
+					<StackPanel Spacing="8">
+						<TextBlock Classes="title" Text="Your USB devices" />
+						<ItemsControl ItemsSource="{Binding SavedDevices}">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="hid:HidDeviceDescription">
+									<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" Margin="0,2">
+										<TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" TextTrimming="CharacterEllipsis" />
+										<Button Grid.Column="1" Content="Edit" Command="{Binding $parent[UserControl].((vm:DeviceCreatorViewModel)DataContext).EditCommand}" CommandParameter="{Binding}" />
+										<Button Grid.Column="2" Content="Remove" Command="{Binding $parent[UserControl].((vm:DeviceCreatorViewModel)DataContext).DeleteCommand}" CommandParameter="{Binding}" />
+									</Grid>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+						<Button Content="New device" Command="{Binding NewCommand}" />
+					</StackPanel>
+				</Border>
+
+				<Border Classes="card">
+					<StackPanel Spacing="8">
+						<Grid ColumnDefinitions="*,Auto">
+							<TextBlock Classes="title" Text="1. The device" VerticalAlignment="Center" />
+							<Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshHardwareCommand}" />
+						</Grid>
+						<TextBlock Classes="hint" Text="USB HID devices on this computer. A device can have several interfaces: pick the one whose reports change when you press its keys." />
+						<ListBox ItemsSource="{Binding Hardware}" SelectedItem="{Binding SelectedHardware}" MaxHeight="260">
+							<ListBox.ItemTemplate>
+								<DataTemplate x:DataType="vm:HidDeviceItem">
+									<StackPanel Spacing="1" Margin="0,2">
+										<TextBlock Text="{Binding Label}" Foreground="{DynamicResource C.E2E8F0}" TextTrimming="CharacterEllipsis" />
+										<TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
+									</StackPanel>
+								</DataTemplate>
+							</ListBox.ItemTemplate>
+						</ListBox>
+						<TextBlock Text="Name" Foreground="{DynamicResource C.CBD5E1}" />
+						<TextBox Text="{Binding Name}" />
+					</StackPanel>
+				</Border>
+
+				<Border Classes="card" IsVisible="{Binding HasHardware}">
+					<StackPanel Spacing="6">
+						<TextBlock Classes="title" Text="What it sends" />
+						<TextBlock Classes="hint" Text="{Binding ReportInfo}" />
+						<SelectableTextBlock Text="{Binding LastReport}" FontFamily="monospace" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource C.93C5FD}" />
+					</StackPanel>
+				</Border>
+
+				<Border Classes="card" IsVisible="{Binding ShowUdevRule}">
+					<StackPanel Spacing="6">
+						<TextBlock Classes="title" Text="Linux: access to the device" />
+						<TextBlock Classes="hint" Text="DeckHost needs a device rule to open it without root:" />
+						<SelectableTextBlock Text="{Binding UdevRule}" FontFamily="monospace" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource C.E2E8F0}" />
+						<TextBlock Classes="hint" Text="{Binding UdevInstructions}" />
+					</StackPanel>
+				</Border>
+			</StackPanel>
+		</ScrollViewer>
+
+		<!-- Its controls: learn them, place them, save. -->
+		<Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="10">
+			<WrapPanel ItemSpacing="8" LineSpacing="8">
+				<TextBlock Classes="title" Text="2. Keys and knobs" VerticalAlignment="Center" Margin="0,0,8,0" />
+				<Button Content="Add key" Classes="accent" Command="{Binding AddKeyCommand}" IsEnabled="{Binding CanAdd}" />
+				<Button Content="Add knob" Command="{Binding AddKnobCommand}" IsEnabled="{Binding CanAdd}" />
+				<Button Content="Done turning" Classes="accent" Command="{Binding DoneTurningCommand}" IsVisible="{Binding IsLearningKnob}" />
+				<Button Content="Cancel" Command="{Binding CancelLearningCommand}" IsVisible="{Binding IsLearning}" />
+				<Button Content="Arrange" Command="{Binding ArrangeCommand}" IsEnabled="{Binding HasControls}" ToolTip.Tip="Keys in a grid, knobs in a row below" />
+				<NumericUpDown Value="{Binding ColumnsValue}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="120" ToolTip.Tip="Keys per row for Arrange" />
+			</WrapPanel>
+
+			<Border Grid.Row="1" Padding="10,8" CornerRadius="8" Background="{DynamicResource C.172554}">
+				<TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="{DynamicResource C.DBEAFE}" />
+			</Border>
+
+			<Border Grid.Row="2" Classes="card" Padding="0">
+				<ScrollViewer HorizontalScrollBarVisibility="Auto">
+					<Panel>
+						<TextBlock Classes="hint" Margin="20" IsVisible="{Binding !HasControls}"
+								   Text="Pick the device on the left, then click Add key and press a key on it. Add each key and knob the same way, then drag them where they sit on the device." />
+						<ItemsControl ItemsSource="{Binding Controls}" Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}" Margin="16" HorizontalAlignment="Left" VerticalAlignment="Top">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<Canvas />
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+							<ItemsControl.Styles>
+								<Style Selector="ContentPresenter" x:DataType="vm:CreatorControlViewModel">
+									<Setter Property="Canvas.Left" Value="{Binding X}" />
+									<Setter Property="Canvas.Top" Value="{Binding Y}" />
+								</Style>
+							</ItemsControl.Styles>
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:CreatorControlViewModel">
+									<Border Classes="control"
+											Classes.selected="{Binding IsSelected}"
+											Classes.down="{Binding IsDown}"
+											Width="{Binding Width}" Height="{Binding Height}"
+											CornerRadius="{Binding CornerRadius}"
+											ToolTip.Tip="{Binding Summary}"
+											PointerPressed="Control_OnPointerPressed"
+											PointerMoved="Control_OnPointerMoved"
+											PointerReleased="Control_OnPointerReleased">
+										<StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="2">
+											<TextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource C.E2E8F0}" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="64" />
+											<TextBlock Text="{Binding Activity}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" HorizontalAlignment="Center" IsVisible="{Binding IsKnob}" />
+										</StackPanel>
+									</Border>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</Panel>
+				</ScrollViewer>
+			</Border>
+
+			<Border Grid.Row="3" Classes="card" IsVisible="{Binding HasSelectedControl}">
+				<Grid ColumnDefinitions="Auto,220,*,Auto,Auto" ColumnSpacing="10">
+					<TextBlock Text="Name" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+					<TextBox Grid.Column="1" Text="{Binding SelectedControl.Name, FallbackValue=''}" />
+					<TextBlock Grid.Column="2" Classes="hint" VerticalAlignment="Center" Text="{Binding SelectedControl.Summary, FallbackValue=''}" />
+					<Button Grid.Column="3" Content="Learn push" Command="{Binding LearnPressCommand}" IsVisible="{Binding SelectedIsKnob}" ToolTip.Tip="For a knob that can be pushed: push it after clicking" />
+					<Button Grid.Column="4" Content="Remove" Command="{Binding RemoveControlCommand}" />
+				</Grid>
+			</Border>
+
+			<StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="10">
+				<Button Content="Save device" Classes="accent" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}" />
+				<TextBlock Classes="hint" VerticalAlignment="Center" Text="Keys and knobs are numbered by where they sit (left to right, top to bottom). The device only sends input: it has no screens or lights DeckHost could use." />
+			</StackPanel>
+		</Grid>
+	</Grid>
+</UserControl>

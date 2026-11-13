@@ -26,7 +26,7 @@ The rules ([0001](adr/0001-dependency-rule.md)) are checked by `ArchitectureTest
 |---|---|---|
 | Contracts | Interfaces and records shared with plugins | `IDevicePlugin`, `IDeviceOutput`, `IDeckAction`, `IApplicationPlugin`, `ControlBinding`, `Workflow` |
 | Core | The host worker, input routing, rendering, profiles, plugins, updates, workflows, Stream Deck plugin runtime | `DeviceHostService`, `ActionRouter`, `WorkflowEngine`, `SurfaceRenderer`, `ProfileStore`, `PluginCatalog` |
-| Device plugins | Find devices, report input, show images and lights | `MiraBoxDevicePlugin`, `ElgatoDevicePlugin`, `WebDeckPlugin` |
+| Device plugins | Find devices, report input, show images and lights | `MiraBoxDevicePlugin`, `ElgatoDevicePlugin`, `WebDeckPlugin`, `HidDevicePlugin` (user-described USB devices) |
 | App | Window, editor, pages, built-in actions, OS integration | `MainViewModel`, `WorkflowEditorViewModel`, `Platform/*` |
 
 ## Flows
