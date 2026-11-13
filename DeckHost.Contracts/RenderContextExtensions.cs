@@ -48,11 +48,11 @@ public static class RenderContextExtensions
             if (!string.IsNullOrEmpty(icon))
             {
                 var iconSize = height * 0.36d;
-                context.DrawIcon(icon, pad + (iconSize / 2d), height * 0.6d, iconSize);
+                context.DrawIcon(icon, pad + (iconSize / 2d), height * 0.6d, iconSize, TextColorOr(context, 0xFFFFFFFF));
                 left = pad + iconSize + pad;
             }
 
-            context.DrawRightAlignedText(value, width - pad, height * 0.64d, (float)Math.Max(12d, height * 0.21d));
+            context.DrawRightAlignedText(value, width - pad, height * 0.64d, (float)Math.Max(12d, height * 0.21d), TextColorOr(context, 0xFFFFFFFF));
             if (fraction is { } wideLevel)
             {
                 DrawBar(context, left, height * 0.76d, width - pad - left, Math.Max(3d, height * 0.045d), wideLevel, WideBarBackgroundColor, barColor);
@@ -64,14 +64,14 @@ public static class RenderContextExtensions
         var hasIcon = !string.IsNullOrEmpty(icon);
         if (hasIcon)
         {
-            context.DrawIcon(icon!, width / 2d, height * 0.27d, height * 0.26d);
+            context.DrawIcon(icon!, width / 2d, height * 0.27d, height * 0.26d, TextColorOr(context, 0xFFFFFFFF));
         }
         else
         {
             context.DrawCenteredText(label, width / 2d, height * 0.22d, Math.Max(10f, height * 0.12f), LabelColor);
         }
 
-        context.DrawCenteredText(value, width / 2d, height * (hasIcon ? 0.58d : 0.52d), Math.Max(14f, height * 0.22f));
+        context.DrawCenteredText(value, width / 2d, height * (hasIcon ? 0.58d : 0.52d), Math.Max(14f, height * 0.22f), TextColorOr(context, 0xFFFFFFFF));
         if (fraction is { } level)
         {
             var barHeight = Math.Max(4d, height * 0.06d);
@@ -148,11 +148,22 @@ public static class RenderContextExtensions
 
         var iconSize = height * 0.6d;
         var pad = Math.Max(4d, height * 0.2d);
-        context.DrawIcon(icon, pad + (iconSize / 2d), height / 2d, iconSize);
+        context.DrawIcon(icon, pad + (iconSize / 2d), height / 2d, iconSize, TextColorOr(context, 0xFFFFFFFF));
         if (!string.IsNullOrWhiteSpace(text))
         {
-            context.DrawText(text, pad + iconSize + pad, (height / 2d) + (size * 0.36d), size);
+            context.DrawText(text, pad + iconSize + pad, (height / 2d) + (size * 0.36d), size, TextColorOr(context, 0xFFFFFFFF));
         }
+    }
+
+    /// <summary>The binding's text color (Customize → Text style) as ARGB, else <paramref name="fallback"/>.</summary>
+    public static uint TextColorOr(this IRenderContext context, uint fallback)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var hex = context.TextStyle?.Color?.Trim().TrimStart('#');
+        return hex is { Length: 6 or 8 } &&
+               uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? hex.Length == 6 ? 0xFF000000 | value : value
+            : fallback;
     }
 
     private static void DrawBar(IRenderContext context, double x, double y, double width, double height, double level, uint background, uint color)
