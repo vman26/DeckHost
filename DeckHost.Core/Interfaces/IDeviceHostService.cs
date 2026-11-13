@@ -23,6 +23,9 @@ public interface IDeviceHostService : IAsyncDisposable
     /// <summary>Every input from a device or from <see cref="SimulateInput"/>.</summary>
     event Action<DeviceInputEvent>? InputReceived;
 
+    /// <summary>A control's LED changed color (effects included, also while the device is unplugged).</summary>
+    event Action<LightState>? LightChanged;
+
     IReadOnlyCollection<DeviceDefinition> Devices { get; }
     IReadOnlyCollection<DeviceProfile> Profiles { get; }
     IReadOnlyCollection<RuntimeLogEntry> RuntimeLogs { get; }
@@ -32,6 +35,12 @@ public interface IDeviceHostService : IAsyncDisposable
     void SetProfiles(IEnumerable<DeviceProfile> profiles);
 
     void SetActiveProfile(string profileId);
+
+    /// <summary>
+    /// The default light of a device's LEDs (a color and an effect), for controls whose binding sets
+    /// no light of its own; null for dark.
+    /// </summary>
+    void SetDeviceLight(string deviceId, LightStyle? style);
 
     /// <summary>Handles an input as if it came from the device (test mode in the editor).</summary>
     void SimulateInput(DeviceInputEvent inputEvent);
