@@ -24,6 +24,9 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     private string _iconPath;
     private string _backgroundColor;
     private string _backgroundMode;
+    private string _tileFrom;
+    private string _tileTo;
+    private double _tileCorner;
     private bool _lightEnabled;
     private string _activeColor;
     private string _idleColor;
@@ -57,6 +60,10 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         _imagePath = binding?.AppearanceImagePath ?? string.Empty;
         _iconPath = binding?.Model.Appearance.IconPath ?? string.Empty;
         _backgroundColor = binding?.Model.Appearance.BackgroundColor ?? string.Empty;
+        var tile = binding?.Model.Appearance.Tile;
+        _tileFrom = tile?.From ?? string.Empty;
+        _tileTo = tile?.To ?? string.Empty;
+        _tileCorner = tile?.CornerPercent ?? TileStyle.DefaultCornerPercent;
         _backgroundMode = !string.IsNullOrWhiteSpace(_backgroundColor) ? BackgroundModeColor
             : binding?.Model.Appearance.ShowTile == true ? BackgroundModeTile
             : BackgroundModeTransparent;
@@ -413,11 +420,70 @@ public partial class ControlCustomizationViewModel : ViewModelBase
 
             OnPropertyChanged();
             OnPropertyChanged(nameof(ShowBackgroundColor));
+            OnPropertyChanged(nameof(ShowTileSettings));
             RaiseChanged();
         }
     }
 
     public bool ShowBackgroundColor => _backgroundMode == BackgroundModeColor;
+
+    public bool ShowTileSettings => _backgroundMode == BackgroundModeTile;
+
+    /// <summary>The tile's (first) color; empty for the action's own colors.</summary>
+    public string TileFrom
+    {
+        get => _tileFrom;
+        set
+        {
+            if (SetProperty(ref _tileFrom, value ?? string.Empty))
+            {
+                RaiseChanged();
+            }
+        }
+    }
+
+    /// <summary>The tile's second color (a gradient to it); empty for one color (or the action's gradient).</summary>
+    public string TileTo
+    {
+        get => _tileTo;
+        set
+        {
+            if (SetProperty(ref _tileTo, value ?? string.Empty))
+            {
+                RaiseChanged();
+            }
+        }
+    }
+
+    /// <summary>Corner rounding in percent of the key's width: 0 square, 50 round.</summary>
+    public double TileCorner
+    {
+        get => _tileCorner;
+        set
+        {
+            var snapped = Math.Round(Math.Clamp(value, 0, 50));
+            if (SetProperty(ref _tileCorner, snapped))
+            {
+                OnPropertyChanged(nameof(TileCornerText));
+                RaiseChanged();
+            }
+        }
+    }
+
+    public string TileCornerText => _tileCorner switch
+    {
+        0 => "Square",
+        >= 50 => "Round",
+        _ => $"{_tileCorner:0} %",
+    };
+
+    [RelayCommand]
+    private void ResetTile()
+    {
+        TileFrom = string.Empty;
+        TileTo = string.Empty;
+        TileCorner = TileStyle.DefaultCornerPercent;
+    }
 
     public string? BackgroundColorError =>
         string.IsNullOrWhiteSpace(BackgroundColor) || IsHexColor(BackgroundColor, allowAlpha: true) ? null : "Use #RRGGBB (or #AARRGGBB with opacity), for example #1D4ED8.";
@@ -533,6 +599,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             ShowOnLinkedDisplay = ShowOnLinkedDisplay,
             IconPath = icon,
             ShowTile = SupportsAppearance && _backgroundMode == BackgroundModeTile,
+            Tile = SupportsAppearance && _backgroundMode == BackgroundModeTile ? BuildTileStyle() : null,
         };
 
         if (_original is null || _primaryAction is null)
@@ -557,6 +624,15 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             : _original.Steps;
 
         return _original with { Action = action, Appearance = appearance, Steps = steps };
+    }
+
+    /// <summary>The tile's look; null when nothing differs from the action's own.</summary>
+    private TileStyle? BuildTileStyle()
+    {
+        var from = IsHexColor(TileFrom, allowAlpha: true) ? "#" + NormalizeColor(TileFrom) : null;
+        var to = IsHexColor(TileTo, allowAlpha: true) ? "#" + NormalizeColor(TileTo) : null;
+        double? corner = Math.Abs(TileCorner - TileStyle.DefaultCornerPercent) < 0.5 ? null : TileCorner;
+        return from is null && to is null && corner is null ? null : new TileStyle(from, to, corner);
     }
 
     private RgbFeedback? BuildLight()

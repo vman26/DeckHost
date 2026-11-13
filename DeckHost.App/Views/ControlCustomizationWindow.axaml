@@ -249,6 +249,19 @@
 								  DisplayMemberBinding="{Binding Label}" HorizontalAlignment="Stretch" />
 						<local:ColorField Hex="{Binding BackgroundColor, Mode=TwoWay}" DefaultHex="#1E293B" Placeholder="a color of your own" AllowOpacity="True"
 										  IsVisible="{Binding ShowBackgroundColor}" />
+						<!-- The tile's look: colors (one, or a gradient) and corner rounding. -->
+						<Grid IsVisible="{Binding ShowTileSettings}" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
+							<TextBlock Text="Color" VerticalAlignment="Center" Foreground="#CBD5E1" />
+							<local:ColorField Grid.Column="1" Hex="{Binding TileFrom, Mode=TwoWay}" DefaultHex="#64748B" Placeholder="the action's colors" AllowOpacity="True" />
+							<TextBlock Grid.Row="1" Text="Fades to" VerticalAlignment="Center" Foreground="#CBD5E1" />
+							<local:ColorField Grid.Row="1" Grid.Column="1" Hex="{Binding TileTo, Mode=TwoWay}" DefaultHex="#1E293B" Placeholder="one color (or the action's gradient)" AllowOpacity="True" />
+							<TextBlock Grid.Row="2" Text="Corners" VerticalAlignment="Center" Foreground="#CBD5E1" />
+							<Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,64" ColumnSpacing="8">
+								<Slider Minimum="0" Maximum="50" SmallChange="2" LargeChange="10" Value="{Binding TileCorner, Mode=TwoWay}" VerticalAlignment="Center" />
+								<TextBlock Grid.Column="1" Text="{Binding TileCornerText}" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="#E2E8F0" />
+							</Grid>
+							<Button Grid.Row="3" Grid.Column="1" Content="Back to the action's tile" Command="{Binding ResetTileCommand}" HorizontalAlignment="Left" />
+						</Grid>
 						<TextBlock Classes="hint" Text="Transparent shows the profile background behind the icon. A color can be partly see-through with its opacity slider." />
 						<TextBlock Classes="error" Text="{Binding BackgroundColorError}" IsVisible="{Binding HasBackgroundColorError}" />
 						<TextBlock Classes="label" Text="Icon" />
