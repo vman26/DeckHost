@@ -7,8 +7,7 @@
 		Height="640"
 		MinWidth="560"
 		MinHeight="420"
-		Background="#111827"
-		RequestedThemeVariant="Dark"
+		Background="{DynamicResource C.111827}"
 		Icon="/Assets/deckhost.ico"
 		WindowStartupLocation="CenterOwner"
 		Title="Choose an icon">
@@ -16,7 +15,7 @@
 	<Window.Styles>
 		<Style Selector="TextBlock.hint">
 			<Setter Property="FontSize" Value="12" />
-			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
 			<Setter Property="TextWrapping" Value="Wrap" />
 		</Style>
 		<Style Selector="ListBox.icons ListBoxItem">
@@ -25,13 +24,13 @@
 			<Setter Property="CornerRadius" Value="8" />
 		</Style>
 		<Style Selector="ListBox.icons ListBoxItem:selected /template/ ContentPresenter">
-			<Setter Property="Background" Value="#1D4ED8" />
+			<Setter Property="Background" Value="{DynamicResource C.1D4ED8}" />
 		</Style>
 	</Window.Styles>
 
 	<Grid RowDefinitions="Auto,*,Auto">
 		<!-- Search and source -->
-		<Border Padding="16,14" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+		<Border Padding="16,14" Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="0,0,0,1">
 			<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
 				<TextBox Text="{Binding SearchText}" PlaceholderText="Search icons (play, microphone, spotify, ...)" />
 				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
@@ -58,10 +57,10 @@
 					<ListBox.ItemTemplate>
 						<DataTemplate x:DataType="vm:IconResultViewModel">
 							<StackPanel Width="78" Spacing="4" ToolTip.Tip="{Binding ToolTip}">
-								<Border Width="64" Height="64" CornerRadius="10" Background="#1E293B" HorizontalAlignment="Center">
+								<Border Width="64" Height="64" CornerRadius="10" Background="{DynamicResource C.1E293B}" HorizontalAlignment="Center">
 									<Image Source="{Binding Preview}" Width="44" Height="44" />
 								</Border>
-								<TextBlock Text="{Binding Name}" FontSize="11" Foreground="#CBD5E1" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" MaxWidth="76" />
+								<TextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource C.CBD5E1}" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" MaxWidth="76" />
 							</StackPanel>
 						</DataTemplate>
 					</ListBox.ItemTemplate>
@@ -69,9 +68,9 @@
 			</Grid>
 
 			<!-- Installed packs -->
-			<Border Grid.Column="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1,0,0,0" Padding="12">
+			<Border Grid.Column="1" Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="1,0,0,0" Padding="12">
 				<Grid RowDefinitions="Auto,*">
-					<TextBlock Text="Installed packs" FontWeight="SemiBold" Foreground="#E2E8F0" Margin="0,0,0,8" />
+					<TextBlock Text="Installed packs" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" Margin="0,0,0,8" />
 					<ScrollViewer Grid.Row="1">
 						<ItemsControl ItemsSource="{Binding Packs}">
 							<ItemsControl.ItemsPanel>
@@ -81,9 +80,9 @@
 							</ItemsControl.ItemsPanel>
 							<ItemsControl.ItemTemplate>
 								<DataTemplate x:DataType="vm:IconPackItemViewModel">
-									<Border Background="#111827" CornerRadius="8" Padding="8">
+									<Border Background="{DynamicResource C.111827}" CornerRadius="8" Padding="8">
 										<StackPanel Spacing="2">
-											<TextBlock Text="{Binding Title}" Foreground="#F1F5F9" TextWrapping="Wrap" />
+											<TextBlock Text="{Binding Title}" Foreground="{DynamicResource C.F1F5F9}" TextWrapping="Wrap" />
 											<TextBlock Text="{Binding Detail}" Classes="hint" />
 											<StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
 												<Button Content="License" Padding="8,2" FontSize="12">
@@ -110,10 +109,10 @@
 		</Grid>
 
 		<!-- Selection and actions -->
-		<Border Grid.Row="2" Padding="16,12" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
+		<Border Grid.Row="2" Padding="16,12" Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="0,1,0,0">
 			<Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
 				<StackPanel VerticalAlignment="Center" Spacing="2">
-					<TextBlock Text="{Binding SelectionText}" Foreground="#E2E8F0" TextTrimming="CharacterEllipsis" />
+					<TextBlock Text="{Binding SelectionText}" Foreground="{DynamicResource C.E2E8F0}" TextTrimming="CharacterEllipsis" />
 					<TextBlock Classes="hint" IsVisible="{Binding SuggestPicture}"
 							   Text="A colored icon: usually made as the whole key picture." />
 				</StackPanel>

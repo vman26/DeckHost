@@ -3,7 +3,15 @@
              x:Class="DeckHost.App.App"
              xmlns:local="using:DeckHost.App"
              RequestedThemeVariant="Dark">
-             <!-- The windows are designed dark; keep Fluent controls dark too so all windows match. -->
+             <!-- Dark until the settings are read (App.ApplyTheme): DeckHost settings → Look. -->
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DeckHost.App/Themes/Colors.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
 
     <Application.DataTemplates>
         <local:ViewLocator />

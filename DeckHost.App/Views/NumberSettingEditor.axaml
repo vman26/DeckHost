@@ -10,11 +10,11 @@
 		</Style>
 		<Style Selector="TextBlock.value">
 			<Setter Property="FontWeight" Value="SemiBold" />
-			<Setter Property="Foreground" Value="#E2E8F0" />
+			<Setter Property="Foreground" Value="{DynamicResource C.E2E8F0}" />
 			<Setter Property="VerticalAlignment" Value="Center" />
 		</Style>
 		<Style Selector="TextBlock.value.unset">
-			<Setter Property="Foreground" Value="#64748B" />
+			<Setter Property="Foreground" Value="{DynamicResource C.64748B}" />
 			<Setter Property="FontStyle" Value="Italic" />
 		</Style>
 		<Style Selector="Button.reset">

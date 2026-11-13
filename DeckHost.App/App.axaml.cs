@@ -30,9 +30,19 @@ namespace DeckHost.App;
 
 public partial class App : Application
 {
+    /// <summary>Switches between the dark, light and system look; everything follows at once.</summary>
+    public static void ApplyTheme(string? theme)
+    {
+        if (Current is { } app)
+        {
+            app.RequestedThemeVariant = Platform.AppTheme.ToVariant(theme);
+        }
+    }
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        ApplyTheme(Platform.AppSettings.Load().Theme);
     }
 
     public override void OnFrameworkInitializationCompleted()

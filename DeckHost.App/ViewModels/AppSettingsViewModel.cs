@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using CommunityToolkit.Mvvm.Input;
@@ -78,6 +79,26 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
             {
                 Save();
             }
+        }
+    }
+
+    /// <summary>The look: Dark, Light or Same as the system (applies at once).</summary>
+    public IReadOnlyList<string> Themes { get; } = ["Dark", "Light", "Same as the system"];
+
+    public string Theme
+    {
+        get => AppSettings.Load().Theme switch
+        {
+            AppTheme.Light => Themes[1],
+            AppTheme.System => Themes[2],
+            _ => Themes[0],
+        };
+        set
+        {
+            var theme = value == Themes[1] ? AppTheme.Light : value == Themes[2] ? AppTheme.System : AppTheme.Dark;
+            AppSettings.Save(AppSettings.Load() with { Theme = theme });
+            App.ApplyTheme(theme);
+            OnPropertyChanged();
         }
     }
 

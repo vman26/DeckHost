@@ -13,6 +13,8 @@ The main window is laid out like the Stream Deck app: the device at the top, the
 
 Click a control. Its editor opens below the device, and every change shows on the device right away; **Revert** puts back how the control was when you selected it.
 
+**Light or dark:** DeckHost settings → Look → Theme (Dark, Light, or Same as the system).
+
 **Undo and redo** (the arrows in the header, or Ctrl+Z and Ctrl+Y; ⌘ on macOS) step back and forth through what you did to controls: drops, moves and swaps, removes and edits. Typing in a field counts as one step. Undo covers the controls of the device you're editing; profiles and pages are changed on their own pages.
 
 - **Action**: its settings. Some Stream Deck plugins bring their own settings page, shown next to the editor.

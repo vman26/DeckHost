@@ -11,7 +11,7 @@
 		Height="920"
 		MinWidth="1020"
 		MinHeight="680"
-		Background="#111318"
+		Background="{DynamicResource C.111318}"
 		Icon="/Assets/deckhost.ico"
 		Title="DeckHost Studio">
 
@@ -22,23 +22,29 @@
 			<Setter Property="BorderThickness" Value="0" />
 			<Setter Property="Padding" Value="8" />
 			<Setter Property="CornerRadius" Value="8" />
-			<Setter Property="Foreground" Value="#CBD5E1" />
+			<Setter Property="Foreground" Value="{DynamicResource C.CBD5E1}" />
 		</Style>
 		<Style Selector="Button.tool:pointerover /template/ ContentPresenter, ToggleButton.tool:pointerover /template/ ContentPresenter">
-			<Setter Property="Background" Value="#262B36" />
+			<Setter Property="Background" Value="{DynamicResource C.262B36}" />
+		</Style>
+		<Style Selector="Button.tool:disabled /template/ ContentPresenter">
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<Style Selector="Button.tool:disabled">
+			<Setter Property="Opacity" Value="0.35" />
 		</Style>
 		<Style Selector="ToggleButton.tool:checked /template/ ContentPresenter">
-			<Setter Property="Background" Value="#1D4ED8" />
+			<Setter Property="Background" Value="{DynamicResource C.1D4ED8}" />
 		</Style>
 		<Style Selector="Path.toolIcon">
-			<Setter Property="Fill" Value="#CBD5E1" />
+			<Setter Property="Fill" Value="{DynamicResource C.CBD5E1}" />
 		</Style>
 		<!-- The action list, like the Stream Deck app: plugin rows that fold open, actions with their icon. -->
 		<Style Selector="Border.actionItem">
 			<Setter Property="Background" Value="Transparent" />
 		</Style>
 		<Style Selector="Border.actionItem:pointerover">
-			<Setter Property="Background" Value="#262B36" />
+			<Setter Property="Background" Value="{DynamicResource C.262B36}" />
 		</Style>
 		<Style Selector="ToggleButton.groupHeader">
 			<Setter Property="Background" Value="Transparent" />
@@ -49,7 +55,7 @@
 			<Setter Property="CornerRadius" Value="8" />
 		</Style>
 		<Style Selector="ToggleButton.groupHeader:pointerover /template/ ContentPresenter, ToggleButton.groupHeader:checked /template/ ContentPresenter">
-			<Setter Property="Background" Value="#1E222B" />
+			<Setter Property="Background" Value="{DynamicResource C.1E222B}" />
 		</Style>
 		<!-- Page buttons under the device: small pills, the current one filled. -->
 		<Style Selector="Button.page">
@@ -60,27 +66,27 @@
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="HorizontalContentAlignment" Value="Center" />
 			<Setter Property="VerticalContentAlignment" Value="Center" />
-			<Setter Property="Background" Value="#262B36" />
-			<Setter Property="Foreground" Value="#CBD5E1" />
+			<Setter Property="Background" Value="{DynamicResource C.262B36}" />
+			<Setter Property="Foreground" Value="{DynamicResource C.CBD5E1}" />
 		</Style>
 		<Style Selector="Button.page.current">
-			<Setter Property="Background" Value="#E2E8F0" />
-			<Setter Property="Foreground" Value="#111318" />
+			<Setter Property="Background" Value="{DynamicResource C.E2E8F0}" />
+			<Setter Property="Foreground" Value="{DynamicResource C.111318}" />
 		</Style>
 		<Style Selector="Button.page.current:pointerover /template/ ContentPresenter">
-			<Setter Property="Background" Value="#F8FAFC" />
-			<Setter Property="Foreground" Value="#111318" />
+			<Setter Property="Background" Value="{DynamicResource C.F8FAFC}" />
+			<Setter Property="Foreground" Value="{DynamicResource C.111318}" />
 		</Style>
 		<Style Selector="TextBlock.panelTitle">
 			<Setter Property="FontSize" Value="12" />
 			<Setter Property="FontWeight" Value="SemiBold" />
-			<Setter Property="Foreground" Value="#64748B" />
+			<Setter Property="Foreground" Value="{DynamicResource C.64748B}" />
 			<Setter Property="LetterSpacing" Value="0.6" />
 		</Style>
 		<Style Selector="Border.debugCard">
 			<Setter Property="Padding" Value="12" />
-			<Setter Property="Background" Value="#161A22" />
-			<Setter Property="BorderBrush" Value="#262B36" />
+			<Setter Property="Background" Value="{DynamicResource C.161A22}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource C.262B36}" />
 			<Setter Property="BorderThickness" Value="1" />
 			<Setter Property="CornerRadius" Value="10" />
 		</Style>
@@ -96,7 +102,7 @@
 	<Panel>
 		<Grid RowDefinitions="Auto,*">
 			<!-- Header: menu, device and profile, update notice, tools. -->
-			<Border Padding="16,10" Background="#16181E" BorderBrush="#262B36" BorderThickness="0,0,0,1">
+			<Border Padding="16,10" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="0,0,0,1">
 				<Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="14">
 					<Button Classes="tool" Width="40" Height="40" FontSize="18" Content="☰" ToolTip.Tip="Menu">
 						<Button.Flyout>
@@ -120,7 +126,7 @@
 					<StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center">
 						<StackPanel Orientation="Horizontal" Spacing="8">
 							<Image Source="/Assets/deckhost-64.png" Width="22" Height="22" VerticalAlignment="Center" ToolTip.Tip="DeckHost" />
-							<TextBlock Text="{Binding DeviceName}" FontSize="17" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" IsVisible="{Binding !HasSeveralDevices}" />
+							<TextBlock Text="{Binding DeviceName}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" VerticalAlignment="Center" IsVisible="{Binding !HasSeveralDevices}" />
 							<!-- Several devices (N4 Pro, Stream Decks, the web deck): pick the one to edit. -->
 							<ComboBox ItemsSource="{Binding DeviceChoices}"
 									  SelectedItem="{Binding PickedDevice, Mode=TwoWay}"
@@ -138,8 +144,8 @@
 									</DataTemplate>
 								</ComboBox.ItemTemplate>
 							</ComboBox>
-							<Border Padding="7,2" CornerRadius="999" Background="#1E293B" VerticalAlignment="Center">
-								<TextBlock Text="{Binding ConnectionStatus}" FontSize="11" Foreground="#93C5FD" />
+							<Border Padding="7,2" CornerRadius="999" Background="{DynamicResource C.1E293B}" VerticalAlignment="Center">
+								<TextBlock Text="{Binding ConnectionStatus}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" />
 							</Border>
 						</StackPanel>
 						<!-- The profile picker, like the Stream Deck app's profile name under the device. -->
@@ -153,11 +159,11 @@
 									  ToolTip.Tip="The profile you're editing (and the device shows)">
 								<ComboBox.ItemTemplate>
 									<DataTemplate x:DataType="vm:ProfileItemViewModel">
-										<TextBlock Text="{Binding Name}" Foreground="#CBD5E1" />
+										<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.CBD5E1}" />
 									</DataTemplate>
 								</ComboBox.ItemTemplate>
 							</ComboBox>
-							<Button Classes="tool" Padding="6,2" FontSize="12" Content="Manage…" Foreground="#64748B" Click="OpenProfileManager_OnClick" />
+							<Button Classes="tool" Padding="6,2" FontSize="12" Content="Manage…" Foreground="{DynamicResource C.64748B}" Click="OpenProfileManager_OnClick" />
 						</StackPanel>
 					</StackPanel>
 
@@ -168,16 +174,16 @@
 							VerticalAlignment="Center"
 							IsVisible="False"
 							Padding="12,6"
-							Background="#172554"
-							BorderBrush="#1D4ED8"
+							Background="{DynamicResource C.172554}"
+							BorderBrush="{DynamicResource C.1D4ED8}"
 							BorderThickness="1"
 							CornerRadius="12"
 							x:DataType="vm:UpdateViewModel">
 						<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-							<TextBlock Text="⬆" FontSize="16" Foreground="#93C5FD" VerticalAlignment="Center" />
+							<TextBlock Text="⬆" FontSize="16" Foreground="{DynamicResource C.93C5FD}" VerticalAlignment="Center" />
 							<StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-								<TextBlock Text="{Binding AvailableTitle}" FontWeight="SemiBold" Foreground="#E2E8F0" />
-								<TextBlock Text="{Binding AvailableSummary}" FontSize="11" Foreground="#93C5FD" />
+								<TextBlock Text="{Binding AvailableTitle}" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+								<TextBlock Text="{Binding AvailableSummary}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" />
 							</StackPanel>
 							<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
 								<Button Content="What's new" Classes="accent" Command="{Binding ShowDetailsCommand}" />
@@ -213,9 +219,9 @@
 			<Grid Grid.Row="1" x:Name="Workspace" ColumnDefinitions="*,Auto,320">
 				<Grid RowDefinitions="400,5,*" MinWidth="560">
 					<!-- The device, at a fixed size: opening plugins or the editor doesn't resize it. -->
-					<Grid Background="#111318">
+					<Grid Background="{DynamicResource C.111318}">
 						<Viewbox Stretch="Uniform" StretchDirection="Both" Margin="24,16,24,64" HorizontalAlignment="Center" VerticalAlignment="Center">
-							<Border Padding="18" Background="#0B0D12" BorderBrush="#262B36" BorderThickness="1" CornerRadius="24">
+							<Border Padding="18" Background="{DynamicResource C.0B0D12}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1" CornerRadius="24">
 								<!-- The background is the color the device shows between its controls for this profile. -->
 								<ItemsControl ItemsSource="{Binding ControlItems}"
 											  Width="{Binding CanvasWidth}"
@@ -272,12 +278,12 @@
 																   FontSize="11"
 																   FontWeight="SemiBold"
 																   HorizontalAlignment="Center"
-																   Foreground="#64748B" />
+																   Foreground="{DynamicResource C.64748B}" />
 														<TextBlock Grid.Row="1"
 																   IsVisible="{Binding ShowTextPreview}"
 																   Text="{Binding PreviewText}"
 																   FontSize="11"
-																   Foreground="#E2E8F0"
+																   Foreground="{DynamicResource C.E2E8F0}"
 																   TextWrapping="Wrap"
 																   TextAlignment="Center"
 																   HorizontalAlignment="Center"
@@ -287,11 +293,11 @@
 																   Text="{Binding TypeLabel}"
 																   HorizontalAlignment="Center"
 																   FontSize="10"
-																   Foreground="#475569" />
+																   Foreground="{DynamicResource C.475569}" />
 													</Grid>
 
 													<!-- Press feedback from the device or a double-click. -->
-													<Border Background="#66FFFFFF"
+													<Border Background="{DynamicResource C.66FFFFFF}"
 															IsVisible="{Binding IsPressed}"
 															IsHitTestVisible="False" />
 													<TextBlock Text="{Binding InputIndicator}"
@@ -299,7 +305,7 @@
 															   IsHitTestVisible="False"
 															   FontSize="28"
 															   FontWeight="Bold"
-															   Foreground="#0F172A"
+															   Foreground="{DynamicResource C.0F172A}"
 															   HorizontalAlignment="Center"
 															   VerticalAlignment="Center" />
 												</Grid>
@@ -315,10 +321,10 @@
 								<Button Classes="tool" Padding="8,3" Click="CloseFolder_OnClick" ToolTip.Tip="Leave the folder">
 									<StackPanel Orientation="Horizontal" Spacing="4">
 										<Viewbox Width="12" Height="12"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M15.5 4L17 5.5L10.5 12L17 18.5L15.5 20L7.5 12Z" /></Canvas></Viewbox>
-										<TextBlock Text="Back" FontSize="12" Foreground="#CBD5E1" VerticalAlignment="Center" />
+										<TextBlock Text="Back" FontSize="12" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" />
 									</StackPanel>
 								</Button>
-								<TextBlock Text="{Binding FolderTrail}" FontSize="12" Foreground="#FBBF24" VerticalAlignment="Center" />
+								<TextBlock Text="{Binding FolderTrail}" FontSize="12" Foreground="{DynamicResource C.FBBF24}" VerticalAlignment="Center" />
 							</StackPanel>
 							<StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
 								<ItemsControl ItemsSource="{Binding PageTabs}" IsVisible="{Binding HasPages}">
@@ -345,22 +351,22 @@
 							<TextBlock Text="{Binding StatusMessage}"
 									   HorizontalAlignment="Center"
 									   FontSize="12"
-									   Foreground="#64748B"
+									   Foreground="{DynamicResource C.64748B}"
 									   TextTrimming="CharacterEllipsis" />
 						</StackPanel>
 					</Grid>
 
-					<GridSplitter Grid.Row="1" Background="#262B36" ResizeDirection="Rows" ToolTip.Tip="Drag to give the device or the editor more room" />
+					<GridSplitter Grid.Row="1" Background="{DynamicResource C.262B36}" ResizeDirection="Rows" ToolTip.Tip="Drag to give the device or the editor more room" />
 
 					<!-- The selected control's editor (what Customize was). -->
-					<Border Grid.Row="2" Background="#16181E">
+					<Border Grid.Row="2" Background="{DynamicResource C.16181E}">
 						<Panel>
 							<ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasEditor}">
 								<ContentControl Content="{Binding Editor}" />
 							</ScrollViewer>
 							<TextBlock IsVisible="{Binding !HasEditor}"
 									   Text="Select a control to configure its action."
-									   Foreground="#64748B"
+									   Foreground="{DynamicResource C.64748B}"
 									   FontSize="15"
 									   HorizontalAlignment="Center"
 									   VerticalAlignment="Center" />
@@ -369,46 +375,46 @@
 				</Grid>
 
 				<!-- Debug panel (DeckHost settings → Show the debug panel). -->
-				<Border Grid.Column="1" Width="300" IsVisible="{Binding ShowDebugPanel}" Background="#13161C" BorderBrush="#262B36" BorderThickness="1,0,0,0">
+				<Border Grid.Column="1" Width="300" IsVisible="{Binding ShowDebugPanel}" Background="{DynamicResource C.13161C}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1,0,0,0">
 					<ScrollViewer HorizontalScrollBarVisibility="Disabled">
 						<StackPanel Margin="14" Spacing="10">
 							<TextBlock Classes="panelTitle" Text="DEBUG" />
 							<Border Classes="debugCard">
 								<StackPanel Spacing="3">
-									<TextBlock Text="Selected control" FontSize="11" Foreground="#64748B" />
-									<TextBlock Text="{Binding SelectedControlName}" FontWeight="SemiBold" Foreground="#F8FAFC" />
-									<TextBlock Text="{Binding SelectedControlType}" Foreground="#CBD5E1" />
+									<TextBlock Text="Selected control" FontSize="11" Foreground="{DynamicResource C.64748B}" />
+									<TextBlock Text="{Binding SelectedControlName}" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
+									<TextBlock Text="{Binding SelectedControlType}" Foreground="{DynamicResource C.CBD5E1}" />
 								</StackPanel>
 							</Border>
 							<Border Classes="debugCard">
 								<StackPanel Spacing="3">
-									<TextBlock Text="Inputs" FontSize="11" Foreground="#64748B" />
-									<TextBlock Text="{Binding SelectedControlInputs}" Foreground="#E2E8F0" TextWrapping="Wrap" />
-									<TextBlock Text="Outputs" FontSize="11" Foreground="#64748B" Margin="0,6,0,0" />
-									<TextBlock Text="{Binding SelectedControlOutputs}" Foreground="#E2E8F0" TextWrapping="Wrap" />
+									<TextBlock Text="Inputs" FontSize="11" Foreground="{DynamicResource C.64748B}" />
+									<TextBlock Text="{Binding SelectedControlInputs}" Foreground="{DynamicResource C.E2E8F0}" TextWrapping="Wrap" />
+									<TextBlock Text="Outputs" FontSize="11" Foreground="{DynamicResource C.64748B}" Margin="0,6,0,0" />
+									<TextBlock Text="{Binding SelectedControlOutputs}" Foreground="{DynamicResource C.E2E8F0}" TextWrapping="Wrap" />
 								</StackPanel>
 							</Border>
 							<Border Classes="debugCard">
 								<StackPanel Spacing="3">
-									<TextBlock Text="Assigned action" FontSize="11" Foreground="#64748B" />
-									<TextBlock Text="{Binding SelectedAssignmentName}" FontWeight="SemiBold" Foreground="#F8FAFC" />
-									<TextBlock Text="{Binding SelectedAssignmentCapabilities}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+									<TextBlock Text="Assigned action" FontSize="11" Foreground="{DynamicResource C.64748B}" />
+									<TextBlock Text="{Binding SelectedAssignmentName}" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
+									<TextBlock Text="{Binding SelectedAssignmentCapabilities}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
 								</StackPanel>
 							</Border>
 							<Border Classes="debugCard">
 								<StackPanel Spacing="3">
-									<TextBlock Text="Runtime connection" FontSize="11" Foreground="#64748B" />
-									<TextBlock Text="{Binding ConnectionStatus}" FontWeight="SemiBold" Foreground="#F8FAFC" />
-									<TextBlock Text="{Binding ConnectionDetail}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+									<TextBlock Text="Runtime connection" FontSize="11" Foreground="{DynamicResource C.64748B}" />
+									<TextBlock Text="{Binding ConnectionStatus}" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
+									<TextBlock Text="{Binding ConnectionDetail}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
 								</StackPanel>
 							</Border>
 							<Border Classes="debugCard">
 								<StackPanel Spacing="4">
-									<TextBlock Text="Runtime log" FontSize="11" Foreground="#64748B" />
+									<TextBlock Text="Runtime log" FontSize="11" Foreground="{DynamicResource C.64748B}" />
 									<ItemsControl ItemsSource="{Binding RuntimeLogs}">
 										<ItemsControl.ItemTemplate>
 											<DataTemplate>
-												<TextBlock FontSize="11" Foreground="#CBD5E1" TextWrapping="Wrap" Text="{Binding Message}" />
+												<TextBlock FontSize="11" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" Text="{Binding Message}" />
 											</DataTemplate>
 										</ItemsControl.ItemTemplate>
 									</ItemsControl>
@@ -419,7 +425,7 @@
 				</Border>
 
 				<!-- Actions, grouped by plugin. Drag one onto a control (or into a Multi Action's steps). -->
-				<Border Grid.Column="2" Background="#16181E" BorderBrush="#262B36" BorderThickness="1,0,0,0">
+				<Border Grid.Column="2" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1,0,0,0">
 					<Grid RowDefinitions="Auto,*">
 						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="12,12,12,8">
 							<TextBox PlaceholderText="Search actions" Text="{Binding SearchText, Mode=TwoWay}" />
@@ -434,16 +440,16 @@
 										<StackPanel>
 											<ToggleButton Classes="groupHeader" IsChecked="{Binding IsExpanded, Mode=TwoWay}">
 												<Grid ColumnDefinitions="14,26,*,Auto" ColumnSpacing="8">
-													<TextBlock Text="›" FontSize="16" Foreground="#94A3B8" VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}" />
-													<TextBlock Text="⌄" FontSize="14" Foreground="#94A3B8" VerticalAlignment="Top" IsVisible="{Binding IsExpanded}" />
+													<TextBlock Text="›" FontSize="16" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}" />
+													<TextBlock Text="⌄" FontSize="14" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Top" IsVisible="{Binding IsExpanded}" />
 													<Panel Grid.Column="1" Width="26" Height="26">
 														<Viewbox IsVisible="{Binding Icon.HasGeometry}">
 															<Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas>
 														</Viewbox>
 														<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" Stretch="Uniform" />
 													</Panel>
-													<TextBlock Grid.Column="2" Text="{Binding PluginName}" FontWeight="SemiBold" Foreground="#F1F5F9" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-													<TextBlock Grid.Column="3" Text="{Binding Actions.Count}" FontSize="11" Foreground="#64748B" VerticalAlignment="Center" />
+													<TextBlock Grid.Column="2" Text="{Binding PluginName}" FontWeight="SemiBold" Foreground="{DynamicResource C.F1F5F9}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+													<TextBlock Grid.Column="3" Text="{Binding Actions.Count}" FontSize="11" Foreground="{DynamicResource C.64748B}" VerticalAlignment="Center" />
 												</Grid>
 											</ToggleButton>
 											<ItemsControl ItemsSource="{Binding Actions}" IsVisible="{Binding IsExpanded}" Margin="16,0,0,6">
@@ -462,7 +468,7 @@
 																	</Viewbox>
 																	<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" Stretch="Uniform" />
 																</Panel>
-																<TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="#E2E8F0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+																<TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
 															</Grid>
 														</Border>
 													</DataTemplate>
@@ -478,17 +484,17 @@
 			</Grid>
 
 			<!-- Pages (settings, plugins, profiles, updates) open here, over the workspace. -->
-			<Border Grid.Row="1" x:Name="PageHost" IsVisible="False" Background="#111318">
+			<Border Grid.Row="1" x:Name="PageHost" IsVisible="False" Background="{DynamicResource C.111318}">
 				<Grid RowDefinitions="Auto,*">
-					<Border Padding="12,8" Background="#16181E" BorderBrush="#262B36" BorderThickness="0,0,0,1">
+					<Border Padding="12,8" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="0,0,0,1">
 						<StackPanel Orientation="Horizontal" Spacing="12">
 							<Button Classes="tool" Click="PageBack_OnClick" ToolTip.Tip="Back">
 								<StackPanel Orientation="Horizontal" Spacing="6">
 									<Viewbox Width="16" Height="16"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M15.5 4L17 5.5L10.5 12L17 18.5L15.5 20L7.5 12Z" /></Canvas></Viewbox>
-									<TextBlock Text="Back" VerticalAlignment="Center" Foreground="#CBD5E1" />
+									<TextBlock Text="Back" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
 								</StackPanel>
 							</Button>
-							<TextBlock x:Name="PageTitle" FontSize="17" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" />
+							<TextBlock x:Name="PageTitle" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" VerticalAlignment="Center" />
 						</StackPanel>
 					</Border>
 					<!-- Pages keep a readable width on a wide window. -->
@@ -499,7 +505,7 @@
 
 		<!-- The drag ghost: what is being dragged (the action's icon and name) follows the pointer. -->
 		<Canvas x:Name="DragLayer" IsHitTestVisible="False">
-			<Border x:Name="DragGhostVisual" IsVisible="False" Padding="10,7" CornerRadius="10" Background="#E61E222B" BorderBrush="#3B82F6" BorderThickness="1"
+			<Border x:Name="DragGhostVisual" IsVisible="False" Padding="10,7" CornerRadius="10" Background="{DynamicResource C.E61E222B}" BorderBrush="{DynamicResource C.3B82F6}" BorderThickness="1"
 					BoxShadow="0 6 18 0 #80000000">
 				<StackPanel Orientation="Horizontal" Spacing="8">
 					<Panel Width="22" Height="22">
@@ -508,7 +514,7 @@
 						</Viewbox>
 						<Image x:Name="DragGhostImage" Stretch="Uniform" />
 					</Panel>
-					<TextBlock x:Name="DragGhostText" Foreground="#F8FAFC" FontWeight="SemiBold" VerticalAlignment="Center" />
+					<TextBlock x:Name="DragGhostText" Foreground="{DynamicResource C.F8FAFC}" FontWeight="SemiBold" VerticalAlignment="Center" />
 				</StackPanel>
 			</Border>
 		</Canvas>

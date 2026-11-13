@@ -9,21 +9,21 @@
 	<UserControl.Styles>
 		<Style Selector="TextBlock.label">
 			<Setter Property="FontWeight" Value="SemiBold" />
-			<Setter Property="Foreground" Value="#E2E8F0" />
+			<Setter Property="Foreground" Value="{DynamicResource C.E2E8F0}" />
 		</Style>
 		<Style Selector="TextBlock.hint">
 			<Setter Property="FontSize" Value="12" />
-			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
 			<Setter Property="TextWrapping" Value="Wrap" />
 		</Style>
 		<Style Selector="TextBlock.error">
 			<Setter Property="FontSize" Value="12" />
-			<Setter Property="Foreground" Value="#FCA5A5" />
+			<Setter Property="Foreground" Value="{DynamicResource C.FCA5A5}" />
 			<Setter Property="TextWrapping" Value="Wrap" />
 		</Style>
 		<Style Selector="Border.card">
-			<Setter Property="Background" Value="#0F172A" />
-			<Setter Property="BorderBrush" Value="#1E293B" />
+			<Setter Property="Background" Value="{DynamicResource C.0F172A}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource C.1E293B}" />
 			<Setter Property="BorderThickness" Value="1" />
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="14" />
@@ -79,10 +79,10 @@
 	</UserControl.DataTemplates>
 
 	<Grid RowDefinitions="Auto,*,Auto">
-		<Border Padding="20,16" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+		<Border Padding="20,16" Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="0,0,0,1">
 			<StackPanel Spacing="4">
-				<TextBlock Text="{Binding DeviceName}" FontSize="22" FontWeight="SemiBold" Foreground="#F8FAFC" />
-				<TextBlock Text="{Binding ConnectionText}" Foreground="#94A3B8" TextWrapping="Wrap" />
+				<TextBlock Text="{Binding DeviceName}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
+				<TextBlock Text="{Binding ConnectionText}" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
 			</StackPanel>
 		</Border>
 
@@ -94,7 +94,7 @@
 				<!-- DeckHost's own default for the LEDs (applies right away, saved with the profiles). -->
 				<Border Classes="card" IsVisible="{Binding HasLights}">
 					<StackPanel Spacing="10" DataContext="{Binding Lights}" x:DataType="vm:KnobLightsViewModel">
-						<TextBlock Text="Knob lights" FontWeight="SemiBold" FontSize="15" Foreground="#F1F5F9" />
+						<TextBlock Text="Knob lights" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource C.F1F5F9}" />
 						<TextBlock Classes="hint" Text="What the LEDs show while idle, in every profile. A knob can have a light of its own in Customize → Light. Changes show right away." />
 						<CheckBox Content="Each knob its own effect" IsChecked="{Binding EachLedOwn}" IsVisible="{Binding CanEachLedOwn}" />
 						<Panel IsVisible="{Binding ShowSharedEditor}">
@@ -119,7 +119,7 @@
 			</StackPanel>
 		</ScrollViewer>
 
-		<Border Grid.Row="2" Padding="20,12" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
+		<Border Grid.Row="2" Padding="20,12" Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="0,1,0,0">
 			<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
 				<TextBlock Text="{Binding Status}"
 						   IsVisible="{Binding HasStatus}"

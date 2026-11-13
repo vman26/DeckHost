@@ -1,0 +1,96 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        DeckHost's colors for the dark and the light theme. Each key is named after its color in the
+        dark theme (the look DeckHost was designed in): C.E2E8F0 is body text, C.94A3B8 muted text,
+        C.0F172A / C.111318 / C.16181E backgrounds, C.1E293B cards, C.262B36 / C.334155 borders,
+        C.93C5FD links and accents. Views use them as {DynamicResource C.…}, so a theme change
+        applies at once. Add a key to both themes.
+    -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+                <SolidColorBrush x:Key="C.0B0D12" Color="#0B0D12" />
+                <SolidColorBrush x:Key="C.0B1120" Color="#0B1120" />
+                <SolidColorBrush x:Key="C.0B1220" Color="#0B1220" />
+                <SolidColorBrush x:Key="C.0F172A" Color="#0F172A" />
+                <SolidColorBrush x:Key="C.111318" Color="#111318" />
+                <SolidColorBrush x:Key="C.111827" Color="#111827" />
+                <SolidColorBrush x:Key="C.13161C" Color="#13161C" />
+                <SolidColorBrush x:Key="C.14532D" Color="#14532D" />
+                <SolidColorBrush x:Key="C.16181E" Color="#16181E" />
+                <SolidColorBrush x:Key="C.161A22" Color="#161A22" />
+                <SolidColorBrush x:Key="C.172554" Color="#172554" />
+                <SolidColorBrush x:Key="C.1D4ED8" Color="#1D4ED8" />
+                <SolidColorBrush x:Key="C.1E222B" Color="#1E222B" />
+                <SolidColorBrush x:Key="C.1E293B" Color="#1E293B" />
+                <SolidColorBrush x:Key="C.1E3A8A" Color="#1E3A8A" />
+                <SolidColorBrush x:Key="C.262B36" Color="#262B36" />
+                <SolidColorBrush x:Key="C.2A1215" Color="#2A1215" />
+                <SolidColorBrush x:Key="C.2D2D2D" Color="#2D2D2D" />
+                <SolidColorBrush x:Key="C.334155" Color="#334155" />
+                <SolidColorBrush x:Key="C.3B82F6" Color="#3B82F6" />
+                <SolidColorBrush x:Key="C.475569" Color="#475569" />
+                <SolidColorBrush x:Key="C.64748B" Color="#64748B" />
+                <SolidColorBrush x:Key="C.66FFFFFF" Color="#66FFFFFF" />
+                <SolidColorBrush x:Key="C.7F1D1D" Color="#7F1D1D" />
+                <SolidColorBrush x:Key="C.93C5FD" Color="#93C5FD" />
+                <SolidColorBrush x:Key="C.94A3B8" Color="#94A3B8" />
+                <SolidColorBrush x:Key="C.BBF7D0" Color="#BBF7D0" />
+                <SolidColorBrush x:Key="C.BFDBFE" Color="#BFDBFE" />
+                <SolidColorBrush x:Key="C.CBD5E1" Color="#CBD5E1" />
+                <SolidColorBrush x:Key="C.DBEAFE" Color="#DBEAFE" />
+                <SolidColorBrush x:Key="C.E2E8F0" Color="#E2E8F0" />
+                <SolidColorBrush x:Key="C.E61E222B" Color="#E61E222B" />
+                <SolidColorBrush x:Key="C.F1F5F9" Color="#F1F5F9" />
+                <SolidColorBrush x:Key="C.F8FAFC" Color="#F8FAFC" />
+                <SolidColorBrush x:Key="C.FBBF24" Color="#FBBF24" />
+                <SolidColorBrush x:Key="C.FCA5A5" Color="#FCA5A5" />
+                <SolidColorBrush x:Key="C.FCD34D" Color="#FCD34D" />
+                <SolidColorBrush x:Key="C.FDE68A" Color="#FDE68A" />
+                <SolidColorBrush x:Key="C.FECACA" Color="#FECACA" />
+                <SolidColorBrush x:Key="C.FFFFFF" Color="#FFFFFF" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+                <SolidColorBrush x:Key="C.0B0D12" Color="#E5E7EB" />
+                <SolidColorBrush x:Key="C.0B1120" Color="#F1F5F9" />
+                <SolidColorBrush x:Key="C.0B1220" Color="#F1F5F9" />
+                <SolidColorBrush x:Key="C.0F172A" Color="#FFFFFF" />
+                <SolidColorBrush x:Key="C.111318" Color="#F1F5F9" />
+                <SolidColorBrush x:Key="C.111827" Color="#F8FAFC" />
+                <SolidColorBrush x:Key="C.13161C" Color="#F8FAFC" />
+                <SolidColorBrush x:Key="C.14532D" Color="#DCFCE7" />
+                <SolidColorBrush x:Key="C.16181E" Color="#FFFFFF" />
+                <SolidColorBrush x:Key="C.161A22" Color="#FFFFFF" />
+                <SolidColorBrush x:Key="C.172554" Color="#DBEAFE" />
+                <SolidColorBrush x:Key="C.1D4ED8" Color="#1D4ED8" />
+                <SolidColorBrush x:Key="C.1E222B" Color="#F1F5F9" />
+                <SolidColorBrush x:Key="C.1E293B" Color="#E2E8F0" />
+                <SolidColorBrush x:Key="C.1E3A8A" Color="#DBEAFE" />
+                <SolidColorBrush x:Key="C.262B36" Color="#CBD5E1" />
+                <SolidColorBrush x:Key="C.2A1215" Color="#FEF2F2" />
+                <SolidColorBrush x:Key="C.2D2D2D" Color="#E5E7EB" />
+                <SolidColorBrush x:Key="C.334155" Color="#CBD5E1" />
+                <SolidColorBrush x:Key="C.3B82F6" Color="#3B82F6" />
+                <SolidColorBrush x:Key="C.475569" Color="#94A3B8" />
+                <SolidColorBrush x:Key="C.64748B" Color="#64748B" />
+                <SolidColorBrush x:Key="C.66FFFFFF" Color="#66000000" />
+                <SolidColorBrush x:Key="C.7F1D1D" Color="#FEE2E2" />
+                <SolidColorBrush x:Key="C.93C5FD" Color="#1D4ED8" />
+                <SolidColorBrush x:Key="C.94A3B8" Color="#475569" />
+                <SolidColorBrush x:Key="C.BBF7D0" Color="#15803D" />
+                <SolidColorBrush x:Key="C.BFDBFE" Color="#1E40AF" />
+                <SolidColorBrush x:Key="C.CBD5E1" Color="#334155" />
+                <SolidColorBrush x:Key="C.DBEAFE" Color="#1E3A8A" />
+                <SolidColorBrush x:Key="C.E2E8F0" Color="#1E293B" />
+                <SolidColorBrush x:Key="C.E61E222B" Color="#E6FFFFFF" />
+                <SolidColorBrush x:Key="C.F1F5F9" Color="#0F172A" />
+                <SolidColorBrush x:Key="C.F8FAFC" Color="#0F172A" />
+                <SolidColorBrush x:Key="C.FBBF24" Color="#B45309" />
+                <SolidColorBrush x:Key="C.FCA5A5" Color="#B91C1C" />
+                <SolidColorBrush x:Key="C.FCD34D" Color="#B45309" />
+                <SolidColorBrush x:Key="C.FDE68A" Color="#A16207" />
+                <SolidColorBrush x:Key="C.FECACA" Color="#991B1B" />
+                <SolidColorBrush x:Key="C.FFFFFF" Color="#FFFFFF" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>
