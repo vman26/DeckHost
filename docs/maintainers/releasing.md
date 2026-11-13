@@ -18,9 +18,40 @@ Each release then goes to both repositories, and the apps check the releases rep
 
 ## Code signing
 
-Without certificates the packages are unsigned: Windows SmartScreen warns, and macOS asks to allow the app once. Add these secrets to sign them; nothing else changes.
+Without signing the packages still work: Windows SmartScreen warns, and macOS asks to allow the app once. Add secrets to sign them; nothing else changes. A trusted certificate always means a check of who you are by a certificate authority, so no script can get one by itself. What can be automated is everything around it, and that's what's here.
 
-### Windows
+### What to choose
+
+| | Cost | Who | Automation |
+|---|---|---|---|
+| **Azure Artifact Signing** (Windows) | about 10 USD/month | organizations in the US, Canada, EU, UK and several other countries; individual developers only in the US and Canada | `scripts/setup-azure-signing.sh` sets it up; Microsoft renews the certificates, nothing expires on you except the app secret (2 years) |
+| A **code-signing certificate** from a CA (Windows) | 150–400 USD/year | anyone, also individuals in Europe (Certum, Sectigo, SSL.com, …) | the `.pfx` secrets below; cloud-only certificates need the CA's tool |
+| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository | their GitHub action; not for a private source repository |
+| **Apple Developer ID** (macOS) | 99 USD/year | anyone with an Apple Developer account | the macOS secrets below; signing and notarizing are automatic |
+| **Build provenance** (all files) | free | public source repositories (private ones need GitHub Enterprise Cloud) | on by itself: the release job attests every file (`gh attestation verify <file> --repo <owner/repo>`) |
+
+For a person in Europe with a private source repository: a CA certificate for Windows (or Artifact Signing through a registered business) and the Apple Developer Program for macOS.
+
+### Windows: Azure Artifact Signing
+
+1. Get an Azure subscription and install the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli); sign in with `az login` (and `gh auth login`, to store the results in the repository).
+2. Run `scripts/setup-azure-signing.sh vman26/DeckHost`. It creates the resource group and the signing account and tells you what to do in the portal.
+3. In the portal, request a **public identity validation** on the signing account. Microsoft checks it by hand; this can take a few days.
+4. When it is **Completed**, run `scripts/setup-azure-signing.sh vman26/DeckHost <validation id>`. It creates the certificate profile and an app that may sign with it (and nothing else), and stores these in the repository:
+
+| Variable / secret | |
+|---|---|
+| `AZURE_SIGNING_ENDPOINT` (variable) | The account's endpoint, e.g. `https://weu.codesigning.azure.net/` |
+| `AZURE_SIGNING_ACCOUNT` (variable) | The signing account |
+| `AZURE_SIGNING_PROFILE` (variable) | The certificate profile |
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` (secrets) | The signing app |
+
+The release workflow then signs DeckHost's programs, libraries and the setup with `azure/artifact-signing-action`. The app's secret lasts two years; run the script again (step 4) to replace it. Settings: `RESOURCE_GROUP`, `LOCATION`, `ACCOUNT`, `PROFILE` environment variables.
+
+!!! note
+    The script and the signing steps haven't been run against a real Azure account yet. If the Azure CLI's `trustedsigning` commands have been renamed, create the account and profile in the portal and set the variables and secrets above by hand.
+
+### Windows: a certificate file
 
 | Secret / variable | |
 |---|---|
@@ -28,10 +59,7 @@ Without certificates the packages are unsigned: Windows SmartScreen warns, and m
 | `WINDOWS_CERTIFICATE_PASSWORD` (secret) | Its password |
 | `WINDOWS_TIMESTAMP_URL` (variable, optional) | Your CA's timestamp server (default DigiCert's) |
 
-`scripts/sign-windows.ps1` signs `DeckHost.App.exe`, DeckHost's libraries and the native bridge before packaging, and the setup afterwards.
-
-!!! tip "Getting a certificate"
-    An OV or EV certificate from a CA (Sectigo, DigiCert, Certum, …) works when it can be exported as `.pfx`. Certificates issued since mid-2023 live on hardware tokens or in the CA's cloud; those need the CA's signing tool instead of a `.pfx` (adapt `sign-windows.ps1`). Open-source projects can apply to [SignPath Foundation](https://signpath.org) for free signing. SmartScreen trusts a new certificate after it has seen enough downloads.
+`scripts/sign-windows.ps1` signs `DeckHost.App.exe`, DeckHost's libraries and the native bridge before packaging, and the setup afterwards. Certificates issued since mid-2023 live on hardware tokens or in the CA's cloud; those need the CA's signing tool instead of a `.pfx` (adapt `sign-windows.ps1`). SmartScreen trusts a new certificate after it has seen enough downloads.
 
 ### macOS
 

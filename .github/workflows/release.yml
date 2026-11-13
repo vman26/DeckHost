@@ -45,9 +45,10 @@ jobs:
       run:
         shell: bash
     # Code signing is optional: without these secrets the packages are built unsigned (Windows
-    # SmartScreen warns, macOS asks to allow the app once). See docs/releasing.md.
+    # SmartScreen warns, macOS asks to allow the app once). See docs/maintainers/releasing.md.
     env:
       HAS_MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      HAS_AZURE_SIGNING: ${{ vars.AZURE_SIGNING_ACCOUNT != '' && secrets.AZURE_CLIENT_SECRET != '' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -146,18 +147,61 @@ jobs:
           MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: scripts/package.sh ${{ matrix.rid }} "${{ steps.version.outputs.file }}" publish/DeckHost artifacts/release "${{ steps.version.outputs.display }}"
 
-      - name: Package (Windows)
+      # Windows signing, either way (no-op without the secrets):
+      #  - a certificate file: the WINDOWS_CERTIFICATE secret (.pfx), signed by scripts/sign-windows.ps1;
+      #  - Azure Artifact Signing: the AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT and
+      #    AZURE_SIGNING_PROFILE variables plus the AZURE_TENANT_ID, AZURE_CLIENT_ID and
+      #    AZURE_CLIENT_SECRET secrets (scripts/setup-azure-signing.sh creates them).
+      - name: Files to sign (Windows)
+        if: runner.os == 'Windows'
+        id: windows-files
+        shell: pwsh
+        run: |
+          # DeckHost's own programs and libraries.
+          $own = @(Get-Item publish/DeckHost/DeckHost.App.exe) + @(Get-ChildItem publish/DeckHost -Recurse -Include 'DeckHost.*.dll', 'MiraBoxBridge.dll')
+          $list = ($own | ForEach-Object FullName) -join ','
+          "list=$list" >> $env:GITHUB_OUTPUT
+
+      - name: Sign with the certificate file (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: ./scripts/sign-windows.ps1 @("${{ steps.windows-files.outputs.list }}".Split(','))
+
+      - name: Sign with Azure Artifact Signing (Windows)
+        if: runner.os == 'Windows' && env.HAS_AZURE_SIGNING == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          files: ${{ steps.windows-files.outputs.list }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: DeckHost
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: true
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        id: windows-package
+        shell: pwsh
         run: |
           $file = "${{ steps.version.outputs.file }}"
-          # DeckHost's own programs and libraries (no-op without a certificate).
-          $own = @(Get-Item publish/DeckHost/DeckHost.App.exe) + @(Get-ChildItem publish/DeckHost -Recurse -Include 'DeckHost.*.dll', 'MiraBoxBridge.dll')
-          ./scripts/sign-windows.ps1 @($own | ForEach-Object FullName)
           New-Item -ItemType Directory -Force artifacts/release | Out-Null
           Compress-Archive -Path publish/DeckHost -DestinationPath "artifacts/release/DeckHost-$file-win-x64.zip"
           if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
@@ -166,7 +210,42 @@ jobs:
           }
           iscc /Qp "/DAppVersion=${{ steps.version.outputs.display }}" "/DFileVersion=$file" "/DNumericVersion=${{ steps.version.outputs.numeric }}" `
             "/DSourceDir=$PWD\publish\DeckHost" "/DOutputDir=$PWD\artifacts\release" packaging/windows/DeckHost.iss
-          ./scripts/sign-windows.ps1 @(Get-ChildItem artifacts/release -Filter '*.exe' | ForEach-Object FullName)
+          $setup = (Get-ChildItem artifacts/release -Filter '*.exe' | ForEach-Object FullName) -join ','
+          "setup=$setup" >> $env:GITHUB_OUTPUT
+
+      - name: Sign the setup with the certificate file (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: ./scripts/sign-windows.ps1 @("${{ steps.windows-package.outputs.setup }}".Split(','))
+
+      - name: Sign the setup with Azure Artifact Signing (Windows)
+        if: runner.os == 'Windows' && env.HAS_AZURE_SIGNING == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          files: ${{ steps.windows-package.outputs.setup }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: DeckHost Setup
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: true
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
 
       - uses: actions/upload-artifact@v4
         with:
@@ -180,6 +259,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Build provenance (public source repositories; a private one needs GitHub Enterprise Cloud).
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -189,6 +271,14 @@ jobs:
       - name: Checksums
         working-directory: artifacts
         run: sha256sum * > SHA256SUMS.txt
+
+      # A signed statement that these files were built by this workflow from this commit
+      # (Sigstore; check with `gh attestation verify <file> --repo <owner/repo>`). Free and automatic.
+      - name: Build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/*
 
       - name: Create the GitHub release
         env:
