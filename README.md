@@ -136,9 +136,9 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 - **Text**: multi-line, wrapped or not, with color (picker or hex), font, size, bold, italic, and horizontal (left/center/right) and vertical (top/middle/bottom) alignment.
 - **Icon**: **Choose…** opens the icon picker (see [Icons](#icons)). The icon takes the place of the action's own on its tile; single-color icons are drawn in white.
 - **Image**: PNG, JPG, animated GIF or SVG, with a **Clear** button.
-- **Background**: **Transparent** (the default: the profile background shows behind the icon, which is drawn in the action's color), **The action's colored tile**, or **A color of my own**. A color has an **Opacity** slider (and **Transparent**) and is stored as `#AARRGGBB` below 100 %.
+- **Background**: **Transparent** (the default: the profile background shows behind the icon, which is drawn in the action's color, or in the text color when one is set), **The action's colored tile** (with its own color or gradient and corners from square to round), or **A color of my own**. A color has an **Opacity** slider (and **Transparent**) and is stored as `#AARRGGBB` below 100 %.
 - **Colors** everywhere use one picker: a saturation/brightness square, hue and opacity sliders, HEX and R/G/B boxes, preset colors and an **eyedropper** that picks a color from anywhere on the screen (click, Space or Enter takes it; Esc cancels). The eyedropper works on Windows, on macOS (it needs the Screen Recording permission, else it only sees the desktop picture) and on Linux with X11; Wayland doesn't let apps read the screen.
-- The action's own settings, and for knobs the LED color. Numeric settings have a slider with a number box next to it for exact values, and **↺** to go back to the default.
+- The action's own settings, and for knobs their light: by default the device's **Knob lights**, or **its own light**: an idle color with an effect (steady, breathing, rainbow, off) and speed, and a color while it's used. Numeric settings have a slider with a number box next to it for exact values, and **↺** to go back to the default.
 
 ### Icons
 
@@ -148,6 +148,10 @@ The icon picker (Customize → Icon → **Choose…**) searches two places:
 - **Online (Iconify)**: [Iconify](https://iconify.design)'s free, open-source icon sets (Material Design, Lucide, Tabler, brand logos, ...), shown with each set's name and license. A picked icon is saved into a local "Downloaded icons" pack, with its set's license in its `license.txt`, so profiles keep working offline.
 
 **Use as icon** puts it on the action's tile (with the caption); **Use as picture** fills the key, like an image file. Colored pack icons are usually made as whole key pictures; the picker suggests that for them. Check an icon's license before sharing a profile that uses it.
+
+### Knob lights
+
+The N4 Pro has an LED ring around each knob. **Device Settings → Knob lights** sets what they show while idle, in every profile: off, a steady color, **breathing** or a **rainbow** that runs across the knobs, with the speed of the effect. A knob can have its own light instead (Customize → Light), and lights up in its "when used" color for a moment when it's turned or pressed. The editor shows each knob round, with its LED ring in the color the device shows right now, effects included, also while the device is unplugged.
 
 ### Knobs on the touch strip
 

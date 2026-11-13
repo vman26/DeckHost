@@ -197,3 +197,76 @@ public class HostLightTests
         }
     }
 }
+
+public class LightSettingsTests
+{
+    private sealed class Store : DeckHost.App.ViewModels.IDeviceLightSettings
+    {
+        public Dictionary<string, LightStyle?> Lights { get; } = [];
+
+        public LightStyle? GetDeviceLight(string deviceId) => Lights.GetValueOrDefault(deviceId);
+
+        public void SetDeviceLight(string deviceId, LightStyle? style) => Lights[deviceId] = style;
+    }
+
+    [Fact]
+    public void The_knob_lights_card_sets_the_devices_light_right_away()
+    {
+        var store = new Store();
+        var card = new DeckHost.App.ViewModels.KnobLightsViewModel(store, "dev");
+
+        Assert.Equal(DeckHost.App.ViewModels.KnobLightsViewModel.Off, card.SelectedEffect.Value); // dark until chosen
+        card.SelectedEffect = card.Effects.First(option => option.Value == LightEffects.Breathe);
+        card.Color = "#FF8800";
+        card.PeriodSeconds = 4.2;
+
+        Assert.Equal(new LightStyle("FF8800", LightEffects.Breathe, 4.2), store.Lights["dev"]);
+        Assert.True(card.ShowColor && card.ShowSpeed);
+        card.SelectedEffect = card.Effects.First(option => option.Value == DeckHost.App.ViewModels.KnobLightsViewModel.Off);
+        Assert.Null(store.Lights["dev"]);
+    }
+
+    [Fact]
+    public void A_knob_can_have_its_own_idle_effect()
+    {
+        var builtIns = DeckHost.App.SystemPlugins.SystemPluginSet.Create().First(plugin => plugin.Id == DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId);
+        var item = DeckHost.App.ViewModels.ActionItemViewModel.Create(builtIns.Id, builtIns.Name, builtIns.Actions.First(action => action.Id == "media.volume-knob"));
+        var knob = new DeckHost.App.ViewModels.ControlItemViewModel(new PhysicalControl("encoder.0", "Knob 1", ControlType.Encoder, new Rect(0, 0, 10, 10),
+            InputCapabilities.Rotate | InputCapabilities.Press, OutputCapabilities.None, DisplayControlId: "touch.0", LedIndex: 0));
+        var binding = new DeckHost.App.ViewModels.ControlBindingViewModel(
+            new ControlBinding("encoder.0", ProfileActionKind.Single, item.ToActionReference(), new ControlAppearance(), []), item, []);
+        var customize = new DeckHost.App.ViewModels.ControlCustomizationViewModel(knob, binding, [item], null);
+
+        Assert.Null(customize.BuildBinding()!.Appearance.RgbFeedback); // follows the device's knob lights
+        customize.LightEnabled = true;
+        customize.SelectedIdleEffect = customize.IdleEffects.First(option => option.Value == LightEffects.Rainbow);
+        customize.EffectPeriod = 6;
+
+        var light = customize.BuildBinding()!.Appearance.RgbFeedback!;
+        Assert.Equal((LightEffects.Rainbow, 6d), (light.IdleEffect, light.EffectPeriodSeconds));
+        Assert.Equal(new LightStyle(light.IdleColor, LightEffects.Rainbow, 6), light.IdleStyle);
+    }
+
+    [Fact]
+    public void Device_lights_and_a_knobs_effect_are_saved()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}", "profiles.json");
+        try
+        {
+            var store = new DeckHost.Core.Profiles.ProfileStore(path);
+            var light = new RgbFeedback("FFFFFF", "00FF00") { IdleEffect = LightEffects.Breathe, EffectPeriodSeconds = 2.5 };
+            var binding = new ControlBinding("encoder.0", ProfileActionKind.Single, Bindings.Reference("p", "a"), new ControlAppearance(RgbFeedback: light), []);
+            store.Save(new DeckHost.Core.Profiles.ProfileDocument(DeckHost.Core.Profiles.ProfileDocument.CurrentVersion, "p", [new DeviceProfile("p", "P", "dev", [binding])],
+                DeviceLights: new Dictionary<string, LightStyle> { ["dev"] = new("FF0000", LightEffects.Rainbow, 5) }));
+
+            var loaded = store.Load()!;
+
+            Assert.Equal(new LightStyle("FF0000", LightEffects.Rainbow, 5), loaded.DeviceLights!["dev"]);
+            Assert.Equal(light, Assert.Single(Assert.Single(loaded.Profiles).Bindings).Appearance.RgbFeedback);
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+        }
+    }
+}

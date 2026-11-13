@@ -58,7 +58,10 @@ public class ControlItemViewModel : ViewModelBase
     /// <summary>Thin controls (the swipe bar) only show their name.</summary>
     public bool IsCompact => Height < CompactHeight;
 
-    public bool ShowDetails => !IsCompact;
+    public bool ShowDetails => !IsCompact && !IsKnob;
+
+    /// <summary>A knob shows one line (its action, or its name); keys and zones their name on top.</summary>
+    public bool ShowName => !IsKnob;
 
     public string InputsLabel { get; }
 
@@ -112,7 +115,7 @@ public class ControlItemViewModel : ViewModelBase
     public bool HasPreview => PreviewBitmap is not null;
 
     /// <summary>Text card for controls without a display (knobs, swipe bar) or before the first frame.</summary>
-    public bool ShowTextPreview => !HasPreview && ShowDetails;
+    public bool ShowTextPreview => !HasPreview && (ShowDetails || IsKnob);
 
     /// <summary>True while the control is held down on the device (or in test mode).</summary>
     public bool IsPressed
@@ -253,7 +256,46 @@ public class ControlItemViewModel : ViewModelBase
         ? $"{DisplayName}: drop an action here. Double-click to customize."
         : $"{DisplayName}: {AssignedBinding.DisplayName}. Double-click to customize, drag to move, Ctrl+drag to copy.";
 
-    public double CornerRadius => Type == ControlType.Encoder ? Width / 2d : Math.Min(14d, Height / 3d);
+    /// <summary>Knobs are round, keys and zones rounded rectangles (a CornerRadius, so the binding takes it).</summary>
+    public Avalonia.CornerRadius CornerRadius => new(IsKnob ? Width / 2d : Math.Min(14d, Height / 3d));
+
+    public bool IsKnob => Type == ControlType.Encoder;
+
+    /// <summary>A knob's face: dark brushed metal, lit a little from the top left.</summary>
+    public IBrush KnobFaceBrush { get; } = new RadialGradientBrush
+    {
+        GradientOrigin = new Avalonia.RelativePoint(0.35, 0.3, Avalonia.RelativeUnit.Relative),
+        Center = new Avalonia.RelativePoint(0.5, 0.5, Avalonia.RelativeUnit.Relative),
+        GradientStops =
+        {
+            new GradientStop(Color.Parse("#52525B"), 0),
+            new GradientStop(Color.Parse("#27272A"), 0.7),
+            new GradientStop(Color.Parse("#18181B"), 1),
+        },
+    };
+
+    private static readonly IBrush LightOffBrush = new SolidColorBrush(Color.Parse("#3F3F46"));
+    private IBrush _lightBrush = LightOffBrush;
+    private bool _isLightOn;
+
+    /// <summary>The LED's current color (the host reports it, effects included), for the ring around a knob.</summary>
+    public IBrush LightBrush
+    {
+        get => _lightBrush;
+        private set => SetProperty(ref _lightBrush, value);
+    }
+
+    public bool IsLightOn
+    {
+        get => _isLightOn;
+        private set => SetProperty(ref _isLightOn, value);
+    }
+
+    public void SetLight(byte red, byte green, byte blue)
+    {
+        IsLightOn = red > 0 || green > 0 || blue > 0;
+        LightBrush = IsLightOn ? new SolidColorBrush(Color.FromRgb(red, green, blue)) : LightOffBrush;
+    }
 
 
     private void RefreshComputedState()
