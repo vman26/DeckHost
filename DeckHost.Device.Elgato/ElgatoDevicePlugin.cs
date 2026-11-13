@@ -113,8 +113,9 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
         IEnumerable<byte[]> reports;
         if (controlId.StartsWith("key.", StringComparison.Ordinal) && int.TryParse(controlId.AsSpan(4), NumberStyles.None, CultureInfo.InvariantCulture, out var key) && key < model.KeyCount && model.HasDisplays)
         {
-            var jpeg = StreamDeckProtocol.EncodeJpeg(rgba, width, height, model.KeyImageSize, model.KeyImageSize, model.FlipKeyImages);
-            reports = StreamDeckProtocol.KeyImageReports(key, jpeg);
+            reports = model.Generation == 1
+                ? StreamDeckProtocol.Gen1KeyImageReports(model, key, StreamDeckProtocol.EncodeBmp(rgba, width, height, model))
+                : StreamDeckProtocol.KeyImageReports(key, StreamDeckProtocol.EncodeJpeg(rgba, width, height, model.KeyImageSize, model.KeyImageSize, model.FlipKeyImages));
         }
         else if (controlId.StartsWith("touch.", StringComparison.Ordinal) && int.TryParse(controlId.AsSpan(6), NumberStyles.None, CultureInfo.InvariantCulture, out var zone) && zone < model.Dials)
         {
@@ -147,10 +148,12 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
 
         var model = session.Model;
         var black = new byte[4];
-        var keyJpeg = StreamDeckProtocol.EncodeJpeg(black, 1, 1, model.KeyImageSize, model.KeyImageSize, flip: false);
+        var keyImage = model.Generation == 1
+            ? StreamDeckProtocol.EncodeBmp(black, 1, 1, model)
+            : StreamDeckProtocol.EncodeJpeg(black, 1, 1, model.KeyImageSize, model.KeyImageSize, flip: false);
         for (var key = 0; key < model.KeyCount; key++)
         {
-            Write(session, StreamDeckProtocol.KeyImageReports(key, keyJpeg), out _);
+            Write(session, model.Generation == 1 ? StreamDeckProtocol.Gen1KeyImageReports(model, key, keyImage) : StreamDeckProtocol.KeyImageReports(key, keyImage), out _);
         }
 
         if (model.TouchStripWidth > 0)
@@ -257,6 +260,12 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
                 stream.ReadTimeout = Timeout.Infinite;
                 stream.WriteTimeout = 2000;
                 session.Open(stream);
+                if (model.Generation == 1)
+                {
+                    // The first generation keeps a half-sent image across reconnects: start a fresh stream.
+                    Write(session, [StreamDeckProtocol.Gen1ResetStreamReport(model)], out _);
+                }
+
                 changed = true;
                 connected.Add((session, $"{model.Name} {serial}"));
                 var reader = new Thread(() => ReadLoop(session, stream)) { IsBackground = true, Name = $"Stream Deck {serial}" };
@@ -363,7 +372,7 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
         {
             try
             {
-                session.Stream?.SetFeature(StreamDeckProtocol.BrightnessReport(percent));
+                session.Stream?.SetFeature(StreamDeckProtocol.BrightnessReport(session.Model, percent));
                 return true;
             }
             catch (Exception ex) when (ex is IOException or TimeoutException or ObjectDisposedException)

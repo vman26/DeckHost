@@ -7,7 +7,7 @@ namespace DeckHost.Device.Elgato;
 public readonly record struct StreamDeckInput(string ControlId, InputCapabilities Event, int Value);
 
 /// <summary>
-/// The Stream Deck USB HID protocol (current generation), as pure functions: the reports that
+/// The Stream Deck USB HID protocol (both generations), as pure functions: the reports that
 /// carry a key image or a part of the Stream Deck +'s touch strip, brightness and reset, and how
 /// an input report turns into key, dial and touch events.
 /// </summary>
@@ -64,6 +64,115 @@ public static class StreamDeckProtocol
         }
     }
 
+    // ---------------------------------------------------------------- first generation
+
+    private const int Gen1HeaderLength = 16;
+
+    /// <summary>
+    /// First generation (first edition, Mini): the reports that set key <paramref name="key"/> (reading
+    /// order) to a BMP: [0x02, 0x01, page, 0, last, hardware key + 1, 0…], each padded to the model's
+    /// <see cref="StreamDeckModel.ImageReportLength"/>. The first edition counts pages from 1.
+    /// </summary>
+    public static IEnumerable<byte[]> Gen1KeyImageReports(StreamDeckModel model, int key, byte[] bmp)
+    {
+        var payload = model.ImageReportLength - Gen1HeaderLength;
+        var firstPage = model.KeysRightToLeft ? 1 : 0;
+        var page = 0;
+        for (var offset = 0; offset < bmp.Length || page == 0; offset += payload, page++)
+        {
+            var length = Math.Min(payload, bmp.Length - offset);
+            var report = new byte[model.ImageReportLength];
+            report[0] = 0x02;
+            report[1] = 0x01;
+            report[2] = (byte)(page + firstPage);
+            report[4] = (byte)(offset + length >= bmp.Length ? 1 : 0);
+            report[5] = (byte)(model.HardwareKey(key) + 1);
+            bmp.AsSpan(offset, length).CopyTo(report.AsSpan(Gen1HeaderLength));
+            yield return report;
+        }
+    }
+
+    /// <summary>First generation: an empty image report that resets the device's image stream.</summary>
+    public static byte[] Gen1ResetStreamReport(StreamDeckModel model)
+    {
+        var report = new byte[model.ImageReportLength];
+        report[0] = 0x02;
+        return report;
+    }
+
+    /// <summary>
+    /// A rendered control (RGBA) as the first generation's key image: a 24-bit BMP (bottom-up rows,
+    /// BGR) at the model's key size, turned 180° (first edition) or mirrored on the diagonal (Mini).
+    /// </summary>
+    public static byte[] EncodeBmp(ReadOnlySpan<byte> rgba, int sourceWidth, int sourceHeight, StreamDeckModel model)
+    {
+        var size = model.KeyImageSize;
+        var scaled = Scale(rgba, sourceWidth, sourceHeight, size, size);
+        const int HeaderLength = 54;
+        var rowLength = ((size * 3) + 3) & ~3;
+        var bmp = new byte[HeaderLength + (rowLength * size)];
+        bmp[0] = (byte)'B';
+        bmp[1] = (byte)'M';
+        WriteInt32(bmp, 2, bmp.Length);
+        WriteInt32(bmp, 10, HeaderLength);
+        WriteInt32(bmp, 14, 40);
+        WriteInt32(bmp, 18, size);
+        WriteInt32(bmp, 22, size);
+        bmp[26] = 1;
+        bmp[28] = 24;
+        WriteInt32(bmp, 34, rowLength * size);
+        WriteInt32(bmp, 38, 2835);
+        WriteInt32(bmp, 42, 2835);
+        for (var y = 0; y < size; y++)
+        {
+            // BMP rows go from the bottom up.
+            var row = HeaderLength + ((size - 1 - y) * rowLength);
+            for (var x = 0; x < size; x++)
+            {
+                var (sx, sy) = model.TransposeKeyImages ? (y, x) : model.FlipKeyImages ? (size - 1 - x, size - 1 - y) : (x, y);
+                var source = ((sy * size) + sx) * 4;
+                var target = row + (x * 3);
+                bmp[target] = scaled[source + 2];
+                bmp[target + 1] = scaled[source + 1];
+                bmp[target + 2] = scaled[source];
+            }
+        }
+
+        return bmp;
+    }
+
+    /// <summary>Feature report: key brightness in percent (first generation: 17 bytes, 0x05 0x55 0xAA 0xD1 0x01).</summary>
+    public static byte[] BrightnessReport(StreamDeckModel model, int percent)
+    {
+        if (model.Generation != 1)
+        {
+            return BrightnessReport(percent);
+        }
+
+        var report = new byte[17];
+        report[0] = 0x05;
+        report[1] = 0x55;
+        report[2] = 0xAA;
+        report[3] = 0xD1;
+        report[4] = 0x01;
+        report[5] = (byte)Math.Clamp(percent, 0, 100);
+        return report;
+    }
+
+    /// <summary>Feature report: back to the device's own logo screen.</summary>
+    public static byte[] ResetReport(StreamDeckModel model)
+    {
+        if (model.Generation != 1)
+        {
+            return ResetReport();
+        }
+
+        var report = new byte[17];
+        report[0] = 0x0B;
+        report[1] = 0x63;
+        return report;
+    }
+
     /// <summary>Feature report: key brightness in percent.</summary>
     public static byte[] BrightnessReport(int percent)
     {
@@ -91,6 +200,22 @@ public static class StreamDeckProtocol
     public static IReadOnlyList<StreamDeckInput> Parse(ReadOnlySpan<byte> report, StreamDeckModel model, bool[] keysDown, bool[] dialsDown)
     {
         var events = new List<StreamDeckInput>();
+        if (model.Generation == 1)
+        {
+            // First generation: [0x01, state of hardware key 0, 1, …].
+            for (var key = 0; key < model.KeyCount && report.Length > 0 && report[0] == 0x01 && 1 + model.HardwareKey(key) < report.Length; key++)
+            {
+                var down = report[1 + model.HardwareKey(key)] != 0;
+                if (down != keysDown[key])
+                {
+                    keysDown[key] = down;
+                    events.Add(new StreamDeckInput($"key.{key}", down ? InputCapabilities.Press : InputCapabilities.Release, down ? 1 : 0));
+                }
+            }
+
+            return events;
+        }
+
         if (report.Length < 5 || report[0] != 0x01)
         {
             return events;
@@ -166,6 +291,23 @@ public static class StreamDeckProtocol
     /// A rendered control (RGBA) as the JPEG the device wants: scaled to <paramref name="width"/>×
     /// <paramref name="height"/> and, for keys of most models, turned 180°.
     /// </summary>
+    /// <summary>The image (RGBA) scaled to <paramref name="width"/>×<paramref name="height"/> on black, as RGBA.</summary>
+    internal static byte[] Scale(ReadOnlySpan<byte> rgba, int sourceWidth, int sourceHeight, int width, int height)
+    {
+        var info = new SKImageInfo(sourceWidth, sourceHeight, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        using var source = new SKBitmap(info);
+        rgba[..Math.Min(rgba.Length, info.BytesSize)].CopyTo(source.GetPixelSpan());
+        using var target = new SKBitmap(new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul));
+        using (var canvas = new SKCanvas(target))
+        {
+            canvas.Clear(SKColors.Black);
+            using var image = SKImage.FromBitmap(source);
+            canvas.DrawImage(image, new SKRect(0, 0, width, height), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+        }
+
+        return target.GetPixelSpan().ToArray();
+    }
+
     public static byte[] EncodeJpeg(ReadOnlySpan<byte> rgba, int sourceWidth, int sourceHeight, int width, int height, bool flip, int quality = 92)
     {
         var info = new SKImageInfo(sourceWidth, sourceHeight, SKColorType.Rgba8888, SKAlphaType.Unpremul);
@@ -187,6 +329,14 @@ public static class StreamDeckProtocol
         using var snapshot = surface.Snapshot();
         using var data = snapshot.Encode(SKEncodedImageFormat.Jpeg, quality);
         return data.ToArray();
+    }
+
+    private static void WriteInt32(byte[] buffer, int offset, int value)
+    {
+        buffer[offset] = (byte)(value & 0xFF);
+        buffer[offset + 1] = (byte)((value >> 8) & 0xFF);
+        buffer[offset + 2] = (byte)((value >> 16) & 0xFF);
+        buffer[offset + 3] = (byte)((value >> 24) & 0xFF);
     }
 
     private static void WriteUInt16(byte[] report, int offset, int value)

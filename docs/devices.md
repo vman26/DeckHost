@@ -20,7 +20,7 @@ DeckHost talks to Stream Decks directly over USB, without Elgato's software. **C
 | Stream Deck Neo | supported |
 | Stream Deck + (dials and touch strip) | supported |
 | Stream Deck Pedal | supported |
-| First-edition Stream Deck, Stream Deck Mini | recognized, not driven yet |
+| First-edition Stream Deck, Stream Deck Mini | supported (older protocol, not tested on hardware yet) |
 
 This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't (**☰ → Help and support → Report a problem**).
 
