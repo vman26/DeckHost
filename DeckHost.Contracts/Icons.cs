@@ -23,6 +23,12 @@ public static class Icons
     public const string SwitchProfile = "M3 6.5h12v2H3Z M14 3.5L21 7.5L14 11.5Z M9 15.5h12v2H9Z M10 12.5L3 16.5L10 20.5Z";
     public const string Stack = "M4 4h16v4H4Z M4 10h16v4H4Z M4 16h16v4H4Z";
     public const string Chip = "M7 7h10v10H7Z M9.5 9.5h5v5h-5Z M9 3h2v3H9Z M13 3h2v3h-2Z M9 18h2v3H9Z M13 18h2v3h-2Z M3 9h3v2H3Z M3 13h3v2H3Z M18 9h3v2h-3Z M18 13h3v2h-3Z";
+    /// <summary>A switch, for a Multi Action Switch.</summary>
+    public const string Toggle = "M7 7h10a5 5 0 0 1 0 10H7a5 5 0 0 1 0-10Z M7 9a3 3 0 1 0 0 6h10a3 3 0 1 0 0-6Z M17 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4Z";
+
+    /// <summary>A key with one, two and a long press, for Key Logic.</summary>
+    public const string KeyLogic = "M4 4h16v16H4Z M6 6v12h12V6Z M8 8h2v2H8Z M11 8h2v2h-2Z M14 8h2v2h-2Z M8 13h8v2H8Z";
+
     /// <summary>A folder.</summary>
     public const string Folder = "M3 5h7l2 2h9v12H3Z M5 9v8h14V9Z";
 

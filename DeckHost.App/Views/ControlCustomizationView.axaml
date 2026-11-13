@@ -166,7 +166,7 @@
 				<!-- Multi Action steps: drop actions from the list to add them at a place, drag ⠿ to reorder. -->
 				<Border Classes="card" IsVisible="{Binding IsMultiAction}">
 					<StackPanel Spacing="10">
-						<TextBlock Classes="section" Text="STEPS (RUN IN THIS ORDER)" />
+						<TextBlock Classes="section" Text="{Binding StepsTitle}" />
 						<TextBlock Classes="hint" Text="Drag actions from the list onto the steps to add them where you drop them; drag ⠿ to change the order." />
 						<Border Name="StepsDropZone" Background="#0B1120" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="8" MinHeight="64"
 								DragDrop.AllowDrop="True">
@@ -192,6 +192,15 @@
 																<TextBlock Text="{Binding PluginName}" Classes="hint" />
 															</StackPanel>
 															<Button Grid.Column="3" Content="Remove" Command="{Binding RemoveCommand}" VerticalAlignment="Center" />
+														</Grid>
+														<!-- Which set it's in (switch, key logic) and how long it waits first. -->
+														<Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+															<TextBlock Text="Runs on" Classes="hint" VerticalAlignment="Center" IsVisible="{Binding HasGroup}" />
+															<ComboBox Grid.Column="1" ItemsSource="{Binding GroupOptions}" SelectedItem="{Binding Group, Mode=TwoWay}"
+																	  DisplayMemberBinding="{Binding Label}" MinWidth="140" IsVisible="{Binding HasGroup}" />
+															<TextBlock Grid.Column="3" Text="Wait before (ms)" Classes="hint" VerticalAlignment="Center" />
+															<NumericUpDown Grid.Column="4" Value="{Binding Delay, Mode=TwoWay}" Minimum="0" Maximum="60000" Increment="100"
+																		   FormatString="0" Width="130" ToolTip.Tip="Waits this long before the step runs; the device keeps working meanwhile" />
 														</Grid>
 														<ContentControl Content="{Binding Settings}" IsVisible="{Binding HasSettings}" />
 													</StackPanel>

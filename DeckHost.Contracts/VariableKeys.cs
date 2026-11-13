@@ -23,6 +23,9 @@ public static class VariableKeys
     public const string Status = "status";
     public const string Counter = "counter";
 
+    /// <summary>A Multi Action Switch's set that the next press runs (<see cref="Models.StepGroups.First"/> or <see cref="Models.StepGroups.Second"/>).</summary>
+    public const string SwitchState = "switchState";
+
     /// <summary><c>devices.{deviceId}.</c></summary>
     public static string Device(string deviceId) => $"devices.{deviceId}.";
 
