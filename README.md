@@ -138,7 +138,7 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 - **Image**: PNG, JPG, animated GIF or SVG, with a **Clear** button.
 - **Background**: **Transparent** (the default: the profile background shows behind the icon, which is drawn in the action's color, or in the text color when one is set), **The action's colored tile** (with its own color or gradient and corners from square to round), or **A color of my own**. A color has an **Opacity** slider (and **Transparent**) and is stored as `#AARRGGBB` below 100 %.
 - **Colors** everywhere use one picker: a saturation/brightness square, hue and opacity sliders, HEX and R/G/B boxes, preset colors and an **eyedropper** that picks a color from anywhere on the screen (click, Space or Enter takes it; Esc cancels). The eyedropper works on Windows, on macOS (it needs the Screen Recording permission, else it only sees the desktop picture) and on Linux with X11; Wayland doesn't let apps read the screen.
-- The action's own settings, and for knobs their light: by default the device's **Knob lights**, or **its own light**: an idle color with an effect (steady, breathing, rainbow, off) and speed, and a color while it's used. Numeric settings have a slider with a number box next to it for exact values, and **↺** to go back to the default.
+- The action's own settings, and for knobs their light: by default the device's **Knob lights**, or **its own light**: an idle light (any effect below, or one you compose) and a color while it's used. Numeric settings have a slider with a number box next to it for exact values, and **↺** to go back to the default.
 
 ### Icons
 
@@ -151,7 +151,13 @@ The icon picker (Customize → Icon → **Choose…**) searches two places:
 
 ### Knob lights
 
-The N4 Pro has an LED ring around each knob. **Device Settings → Knob lights** sets what they show while idle, in every profile: off, a steady color, **breathing** or a **rainbow** that runs across the knobs, with the speed of the effect. A knob can have its own light instead (Customize → Light), and lights up in its "when used" color for a moment when it's turned or pressed. The editor shows each knob round, with its LED ring in the color the device shows right now, effects included, also while the device is unplugged.
+The N4 Pro has an LED ring around each knob. **Device Settings → Knob lights** sets what they show while idle, in every profile, with a live preview next to the effect:
+
+- **Off**, **Steady color**, **Breathing**, **Heartbeat** (two beats and a rest), **Blink**, **Color cycle** (fades through a list of colors you pick), **Rainbow**, **Wave** (a band of light running across the knobs), **Chase** (a light with a fading tail running from knob to knob), **Candle** (a warm flicker) and **Sparkle** (random twinkles).
+- **Custom** is an effect composer: a list of steps, each a color with how long to fade to it and how long to hold it, played in order and then from the start. Start from a preset (Police, Sunset, Ocean, Traffic light, Fire, Alert) or add your own steps, and reorder them with the arrows.
+- **One cycle takes** sets the speed, and **Each LED runs ahead by** spreads an effect over the knobs (0 % lights them all the same).
+
+Effects run at about 30 frames a second, and fades follow a gamma curve so they look even to the eye. Steady lights (Off included) are sent again every few seconds and after the device applies its settings, so the device's own lighting can't come back. A knob can have its own light instead (Customize → Light, the same editor), and lights up in its "when used" color for a moment when it's turned or pressed. The editor shows each knob with its LED ring in the color the device shows right now, effects included, also while the device is unplugged.
 
 ### Knobs on the touch strip
 

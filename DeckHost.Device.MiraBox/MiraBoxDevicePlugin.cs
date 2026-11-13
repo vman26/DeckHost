@@ -44,13 +44,11 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
     private List<string> ApplyStoredSettings(string deviceId, string deviceKey)
     {
         var settings = N4ProDeviceSettings.Load(deviceId);
-        var (problems, idleScreenWritten) = N4ProDeviceSettings.Apply(deviceKey, settings, (marker, value) =>
+        var (problems, _) = N4ProDeviceSettings.Apply(deviceKey, settings, (marker, value) =>
             N4ProDeviceSettings.Save(deviceId, N4ProDeviceSettings.Load(deviceId).With(marker, value)));
-        if (idleScreenWritten)
-        {
-            // Writing the idle screen also blanks the keys on the device: send their images again.
-            _context?.RequestRedraw(deviceId);
-        }
+        // Writing the idle screen blanks the keys, and the device configuration resets the LEDs to
+        // the device's own lighting: send images and lights again.
+        _context?.RequestRedraw(deviceId);
 
         foreach (var problem in problems)
         {

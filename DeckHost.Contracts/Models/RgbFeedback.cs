@@ -41,8 +41,15 @@ public sealed record RgbFeedback(
     [JsonPropertyName("effectPeriodSeconds")]
     public double? EffectPeriodSeconds { get; init; }
 
+    /// <summary>
+    /// The whole idle light (effect, colors, custom steps, spread). Set by DeckHost's light editor;
+    /// without it the light is <see cref="IdleColor"/> with <see cref="IdleEffect"/>.
+    /// </summary>
+    [JsonPropertyName("idleLight")]
+    public LightStyle? IdleLight { get; init; }
+
     /// <summary>The idle light as a <see cref="LightStyle"/>.</summary>
-    public LightStyle IdleStyle => new(IdleColor, IdleEffect ?? LightEffects.Solid, EffectPeriodSeconds ?? LightStyle.DefaultPeriodSeconds);
+    public LightStyle IdleStyle => IdleLight ?? new(IdleColor, IdleEffect ?? LightEffects.Solid, EffectPeriodSeconds ?? LightStyle.DefaultPeriodSeconds);
 
     /// <summary>
     /// Parse RGB hex string (e.g., "FF0000") to (R, G, B) tuple.

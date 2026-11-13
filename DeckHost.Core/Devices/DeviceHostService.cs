@@ -35,6 +35,15 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     /// <summary>Frame interval for animated GIFs (10 fps keeps USB traffic reasonable).</summary>
     private static readonly TimeSpan AnimationInterval = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>Light effects run faster than images: about 30 frames a second.</summary>
+    private static readonly TimeSpan LightFrameInterval = TimeSpan.FromMilliseconds(33);
+
+    /// <summary>Steady lights are sent again this often, in case the device changed them itself (sleep, its own config).</summary>
+    private const long SteadyLightRefreshMilliseconds = 5000;
+
+    private int _lightFrameQueued;
+    private long _lastSteadyLightRefresh;
+
     private readonly IVariableStore _variableStore;
     private readonly IReadOnlyList<IDevicePlugin> _devicePlugins;
     private readonly IActionRouter _actionRouter;
@@ -236,6 +245,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             {
                 await InitializePluginsAsync(cancellationToken).ConfigureAwait(false);
                 _ = RunLiveRefreshAsync(_refreshCancellation.Token);
+                _ = RunLightLoopAsync(_refreshCancellation.Token);
                 completion.TrySetResult();
             }
             catch (OperationCanceledException)
@@ -376,9 +386,12 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             cancellationToken.ThrowIfCancellationRequested();
             var context = new DevicePluginContext(this, Log, ReportConnectionStatus, deviceId => Enqueue(() =>
             {
-                // The device's own screen was overwritten: push every image again.
+                // The device's own screen (and with its configuration, its LEDs) was overwritten:
+                // push every image and light again. A steady light (or Off) would otherwise never
+                // be sent again and the device's own lighting stayed on.
                 ForgetFrames(deviceId);
                 _dirtyDevices.Add(deviceId);
+                ApplyIdleLights(deviceId);
             }));
             try
             {
@@ -971,16 +984,38 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     /// <summary>Moves animated idle lights (breathing, rainbow) on; called on the animation tick.</summary>
     private void AnimateLights()
     {
+        if (!_pluginsInitialized)
+        {
+            return;
+        }
+
         var now = _clock.ElapsedMilliseconds;
+        var refreshSteady = now - _lastSteadyLightRefresh >= SteadyLightRefreshMilliseconds;
+        if (refreshSteady)
+        {
+            _lastSteadyLightRefresh = now;
+        }
+
         foreach (var (deviceId, entry) in _devicesById)
         {
             List<(string, (byte, byte, byte))>? lights = null;
             foreach (var control in entry.Device.Controls)
             {
-                if (!control.HasLight || !LightEffects.IsAnimated(IdleLightStyle(deviceId, control.Id)?.Effect) ||
-                    _lightHeldUntil.GetValueOrDefault((deviceId, control.Id)) > now)
+                var key = (deviceId, control.Id);
+                if (!control.HasLight || _lightHeldUntil.GetValueOrDefault(key) > now)
                 {
                     continue;
+                }
+
+                if (!LightEffects.IsAnimated(IdleLightStyle(deviceId, control.Id)?.Effect))
+                {
+                    if (!refreshSteady || !entry.Device.IsConnected)
+                    {
+                        continue;
+                    }
+
+                    // Sent again even though it didn't change.
+                    _lightsShown.Remove(key);
                 }
 
                 (lights ??= []).Add((control.Id, IdleLightColor(deviceId, control.Id)));
@@ -1005,9 +1040,10 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             return (0, 0, 0);
         }
 
-        // Each LED a little further along a rainbow, in the order of the device's lights.
-        var phase = entry.Device.Controls.Where(static control => control.HasLight).TakeWhile(control => !string.Equals(control.Id, controlId, StringComparison.OrdinalIgnoreCase)).Count();
-        return LightEffectMath.ColorAt(style, _clock.Elapsed, phase);
+        // The LED's place among the device's lights, for effects that run across them.
+        var lights = entry.Device.Controls.Where(static control => control.HasLight).ToList();
+        var phase = lights.FindIndex(control => string.Equals(control.Id, controlId, StringComparison.OrdinalIgnoreCase));
+        return LightEffectMath.ColorAt(style, _clock.Elapsed, Math.Max(0, phase), lights.Count);
     }
 
     private bool TryGetLightControl(string deviceId, string controlId, out DeviceEntry entry)
@@ -1150,7 +1186,30 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
                 Enqueue(MarkDueLiveControlsDirty);
-                Enqueue(AnimateLights);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>Moves light effects on at about 30 frames a second, so fades look smooth.</summary>
+    private async Task RunLightLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(LightFrameInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                // Skip a frame while the previous one is still queued (a slow device), instead of piling up.
+                if (Interlocked.Exchange(ref _lightFrameQueued, 1) == 0)
+                {
+                    Enqueue(() =>
+                    {
+                        Volatile.Write(ref _lightFrameQueued, 0);
+                        AnimateLights();
+                    });
+                }
             }
         }
         catch (OperationCanceledException)
