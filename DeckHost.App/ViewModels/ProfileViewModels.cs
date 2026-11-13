@@ -116,6 +116,10 @@ public class ProfileItemViewModel : ViewModelBase
         return binding;
     }
 
+    /// <summary>The control's binding model, also when its plugin isn't loaded (null when unmapped).</summary>
+    public ControlBinding? GetModel(string controlId) =>
+        GetBinding(controlId)?.Model ?? _unresolvedBindings.GetValueOrDefault(controlId);
+
     public void SetBinding(ControlBindingViewModel binding)
     {
         _bindingsByControlId[binding.ControlId] = binding;
