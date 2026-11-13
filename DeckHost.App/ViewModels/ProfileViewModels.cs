@@ -209,7 +209,8 @@ public class ControlBindingViewModel : ViewModelBase
 
     public RgbFeedback? LightFeedback => Model.Appearance.RgbFeedback;
 
-    public bool IsMultiAction => Model.ActionKind == ProfileActionKind.MultiAction;
+    /// <summary>A binding with steps: a Multi Action, a Multi Action Switch or Key Logic.</summary>
+    public bool IsMultiAction => Model.ActionKind != ProfileActionKind.Single;
 
     public bool IsDisplayContentOnly => PrimaryAction.IsDisplayContentAction;
 

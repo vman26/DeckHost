@@ -24,6 +24,8 @@ public static class SystemPluginSet
             "DeckHost Built-ins",
             "Multi Action, pages, folders, profile switching, clock, counter and diagnostics.",
             new MultiActionAction(),
+            new MultiActionSwitchAction(),
+            new KeyLogicAction(),
             new PageAction(),
             new FolderAction(),
             new FolderBackAction(),

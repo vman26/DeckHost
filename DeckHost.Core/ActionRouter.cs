@@ -12,6 +12,15 @@ namespace DeckHost.Core
         private readonly IVariableStore _variableStore;
         private readonly Action<ActionReference, Exception>? _onActionFailed;
         private Dictionary<string, IDeckAction> _actionsByKey = new(StringComparer.OrdinalIgnoreCase);
+
+        // The set a Multi Action Switch's press ran, so its release goes to the same set.
+        private readonly Dictionary<(string DeviceId, string ControlId), string> _switchSetAtPress = [];
+
+        /// <summary>
+        /// Runs work later on the host's worker (for steps with a wait): device id, delay, work.
+        /// Without it, waits are skipped and every step runs at once.
+        /// </summary>
+        public Action<string, TimeSpan, Action>? Scheduler { get; set; }
         private List<string> _duplicateActionKeys = [];
 
         public ActionRouter(
@@ -76,19 +85,93 @@ namespace DeckHost.Core
                 return false;
             }
 
-            if (binding.ActionKind == ProfileActionKind.MultiAction)
+            switch (binding.ActionKind)
             {
-                // The Multi Action itself runs too (it records the activation for its own label).
-                var dispatched = DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
-                foreach (var step in binding.Steps.OrderBy(static step => step.Order))
+                case ProfileActionKind.MultiAction:
                 {
-                    dispatched |= DispatchActionReference(step.Action, inputEvent, host, profile.Id);
+                    // The Multi Action itself runs too (it records the activation for its own label).
+                    var dispatched = DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
+                    return RunSteps(binding.Steps.OrderBy(static step => step.Order).ToList(), inputEvent, host, profile.Id) | dispatched;
                 }
 
-                return dispatched;
+                case ProfileActionKind.MultiActionSwitch:
+                {
+                    // Each press runs the next set; its release goes to the set the press ran.
+                    var key = (inputEvent.DeviceId, inputEvent.ControlId);
+                    var stateKey = VariableKeys.For(inputEvent.DeviceId, inputEvent.ControlId, VariableKeys.SwitchState);
+                    string set;
+                    if (inputEvent.EventType == InputCapabilities.Press)
+                    {
+                        set = _variableStore.TryGetValue<string>(stateKey, out var current) && current == StepGroups.Second ? StepGroups.Second : StepGroups.First;
+                        _switchSetAtPress[key] = set;
+                        _variableStore.Publish(stateKey, set == StepGroups.First ? StepGroups.Second : StepGroups.First);
+                    }
+                    else
+                    {
+                        set = _switchSetAtPress.GetValueOrDefault(key, StepGroups.First);
+                    }
+
+                    var dispatched = DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
+                    return RunSteps(StepsOf(binding, set), inputEvent, host, profile.Id) | dispatched;
+                }
+
+                case ProfileActionKind.KeyLogic:
+                    // The host tells a press, a double press and a hold apart (it needs timing) and runs DispatchGroup.
+                    return false;
+
+                default:
+                    return DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
+            }
+        }
+
+        /// <summary>
+        /// Runs one set of a binding's steps (Key Logic: press, double press or hold) as a press and
+        /// release of the control, with the steps' waits.
+        /// </summary>
+        public bool DispatchGroup(DeviceProfile profile, ControlBinding binding, string group, string deviceId, IActionHost host)
+        {
+            ArgumentNullException.ThrowIfNull(profile);
+            ArgumentNullException.ThrowIfNull(binding);
+            var steps = StepsOf(binding, group);
+            if (steps.Count == 0)
+            {
+                return false;
             }
 
-            return DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
+            // The binding's own action (Key Logic's label) records the activation.
+            DispatchActionReference(binding.Action, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Press, 1), host, profile.Id);
+            var dispatched = RunSteps(steps, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Press, 1), host, profile.Id);
+            dispatched |= RunSteps(steps, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Release, 0), host, profile.Id);
+            return dispatched;
+        }
+
+        /// <summary>Whether a Key Logic binding has steps for a set (no double-press steps: a press runs at once).</summary>
+        public static bool HasGroup(ControlBinding binding, string group) => StepsOf(binding, group).Count > 0;
+
+        private static List<MultiActionStep> StepsOf(ControlBinding binding, string group) =>
+            [.. binding.Steps.Where(step => StepGroups.Of(step, binding.ActionKind) == group).OrderBy(static step => step.Order)];
+
+        /// <summary>
+        /// Runs steps in order. At a step with a wait the rest is scheduled on the host's worker
+        /// (the worker is never blocked); without a scheduler waits are skipped.
+        /// </summary>
+        private bool RunSteps(IReadOnlyList<MultiActionStep> steps, DeviceInputEvent inputEvent, IActionHost host, string profileId, int from = 0, bool waitedForFirst = false)
+        {
+            var dispatched = false;
+            for (var index = from; index < steps.Count; index++)
+            {
+                var delay = Math.Clamp(steps[index].DelayMs, 0, StepGroups.MaxDelayMs);
+                if (delay > 0 && Scheduler is { } schedule && !(waitedForFirst && index == from))
+                {
+                    var next = index;
+                    schedule(inputEvent.DeviceId, TimeSpan.FromMilliseconds(delay), () => RunSteps(steps, inputEvent, host, profileId, next, waitedForFirst: true));
+                    return true;
+                }
+
+                dispatched |= DispatchActionReference(steps[index].Action, inputEvent, host, profileId);
+            }
+
+            return dispatched;
         }
 
         private bool DispatchActionReference(ActionReference actionReference, DeviceInputEvent inputEvent, IActionHost host, string profileId)
