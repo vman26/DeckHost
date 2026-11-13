@@ -297,6 +297,10 @@
 												<TranslateTransform X="{Binding X}" Y="{Binding Y}" />
 											</Border.RenderTransform>
 											<Grid>
+												<!-- A knob: a round metal face inside its LED ring, which shows the light's color live. -->
+												<Ellipse IsVisible="{Binding IsKnob}" Fill="{Binding KnobFaceBrush}" Margin="9" IsHitTestVisible="False" />
+												<Ellipse IsVisible="{Binding SupportsLight}" Stroke="{Binding LightBrush}" StrokeThickness="5" Margin="2" IsHitTestVisible="False" />
+												<Ellipse IsVisible="{Binding IsLightOn}" Stroke="{Binding LightBrush}" StrokeThickness="2" Margin="7" Opacity="0.45" IsHitTestVisible="False" />
 												<Image Source="{Binding PreviewBitmap}"
 													   IsVisible="{Binding HasPreview}"
 													   Stretch="Fill" />
@@ -306,6 +310,7 @@
 													  Margin="8,4"
 													  IsVisible="{Binding !HasPreview}">
 													<TextBlock Text="{Binding DisplayName}"
+															   IsVisible="{Binding ShowName}"
 															   FontSize="11"
 															   FontWeight="SemiBold"
 															   HorizontalAlignment="Center"

@@ -254,7 +254,7 @@ public partial class App : Application
             provider.GetRequiredService<PluginCatalog>(),
             provider.GetRequiredService<ProfileStore>(),
             provider.GetRequiredService<IPluginStateTransfer>()));
-        services.AddSingleton(provider => new DeviceSettingsService(provider.GetServices<IDevicePlugin>()));
+        services.AddSingleton(provider => new DeviceSettingsService(provider.GetServices<IDevicePlugin>(), () => provider.GetRequiredService<MainViewModel>()));
         services.AddTransient(provider => new PluginManagerViewModel(
             provider.GetRequiredService<PluginCatalog>(),
             provider.GetRequiredService<IDeviceHostService>(),

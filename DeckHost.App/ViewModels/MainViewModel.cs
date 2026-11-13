@@ -14,7 +14,7 @@ using System.Text.Json;
 
 namespace DeckHost.App.ViewModels;
 
-public class MainViewModel : ViewModelBase
+public class MainViewModel : ViewModelBase, IDeviceLightSettings
 {
     private const int MaxVisibleLogEntries = 200;
     private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(400);
@@ -70,6 +70,7 @@ public class MainViewModel : ViewModelBase
         _deviceHostService.ActiveProfileChanged += (deviceId, profileId) => Dispatcher.UIThread.Post(() => OnHostActiveProfileChanged(deviceId, profileId));
         _deviceHostService.ControlFrameRendered += frame => Dispatcher.UIThread.Post(() => OnControlFrameRendered(frame));
         _deviceHostService.InputReceived += input => Dispatcher.UIThread.Post(() => OnInputReceived(input));
+        _deviceHostService.LightChanged += light => Dispatcher.UIThread.Post(() => OnLightChanged(light));
         _pluginCatalog.Changed += (_, _) => Dispatcher.UIThread.Post(OnPluginsChanged);
 
         RebuildActions();
@@ -476,7 +477,8 @@ public class MainViewModel : ViewModelBase
                 _manualProfileId ?? SelectedProfile?.Id,
                 Profiles.Select(static profile => profile.ToModel()).ToList(),
                 AutoSwitchEnabled,
-                DefaultBackground));
+                DefaultBackground,
+                _deviceLights.Count == 0 ? null : new Dictionary<string, LightStyle>(_deviceLights, StringComparer.OrdinalIgnoreCase)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -524,6 +526,16 @@ public class MainViewModel : ViewModelBase
         }
     }
 
+    private void OnLightChanged(LightState light)
+    {
+        if (SelectedDevice is not null &&
+            string.Equals(light.DeviceId, SelectedDevice.Id, StringComparison.OrdinalIgnoreCase) &&
+            _controlsById.TryGetValue(light.ControlId, out var control))
+        {
+            control.SetLight(light.Red, light.Green, light.Blue);
+        }
+    }
+
     private void OnInputReceived(DeviceInputEvent input)
     {
         if (SelectedDevice is not null &&
@@ -535,6 +547,27 @@ public class MainViewModel : ViewModelBase
     }
 
     // ---------------------------------------------------------------- profile management
+
+    private readonly Dictionary<string, LightStyle> _deviceLights = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The default light of a device's LEDs (Device Settings → Knob lights); null for dark.</summary>
+    public LightStyle? GetDeviceLight(string deviceId) => _deviceLights.GetValueOrDefault(deviceId);
+
+    /// <summary>Sets a device's default light, shows it right away and saves it with the profiles.</summary>
+    public void SetDeviceLight(string deviceId, LightStyle? style)
+    {
+        if (style is null)
+        {
+            _deviceLights.Remove(deviceId);
+        }
+        else
+        {
+            _deviceLights[deviceId] = style;
+        }
+
+        _deviceHostService.SetDeviceLight(deviceId, style);
+        ScheduleSave();
+    }
 
     private string _defaultBackgroundColor = string.Empty;
     private string _defaultBackgroundImage = string.Empty;
@@ -820,6 +853,11 @@ public class MainViewModel : ViewModelBase
             _autoSwitchEnabled = document?.AutoSwitchEnabled ?? true;
             _defaultBackgroundColor = document?.DefaultBackground?.Color ?? string.Empty;
             _defaultBackgroundImage = document?.DefaultBackground?.ImagePath ?? string.Empty;
+            _deviceLights.Clear();
+            foreach (var (deviceId, style) in document?.DeviceLights ?? new Dictionary<string, LightStyle>())
+            {
+                _deviceLights[deviceId] = style;
+            }
 
             if (unresolved > 0)
             {
@@ -836,6 +874,11 @@ public class MainViewModel : ViewModelBase
         if (SelectedProfile is not null)
         {
             _deviceHostService.SetActiveProfile(SelectedProfile.Id);
+        }
+
+        foreach (var (deviceId, style) in _deviceLights)
+        {
+            _deviceHostService.SetDeviceLight(deviceId, style);
         }
     }
 
