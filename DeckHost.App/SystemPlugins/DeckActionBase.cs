@@ -137,6 +137,28 @@ internal abstract class DeckActionBase(
     /// </summary>
     protected virtual string? Icon(IRenderContext context) => null;
 
+    /// <summary>The icon in the action list for actions that draw no icon on the control (readouts).</summary>
+    protected virtual string? PaletteIcon => null;
+
+    /// <summary>The action's icon for the action list: its icon with default settings.</summary>
+    public string? ListIcon
+    {
+        get
+        {
+            try
+            {
+                return Icon(ListContext.Instance) ?? PaletteIcon;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NullReferenceException or KeyNotFoundException)
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>The color the action list draws the icon in (the tile's color; white for neutral actions).</summary>
+    public uint ListIconColor => TileColors == NeutralTile ? 0xFFE2E8F0 : TileColors.From;
+
     /// <summary>
     /// The icon the user picked for this control (Customize → Icon), else <paramref name="fallback"/>
     /// (the action's own). Actions that draw readouts pass their icon through this too.
@@ -408,4 +430,56 @@ internal sealed class SystemPlugin(string id, string name, string description, p
     public string? Author => "DeckHost";
 
     public IReadOnlyCollection<IDeckAction> Actions { get; } = actions;
+}
+
+/// <summary>A render context that draws nothing: asks an action for its icon outside a control.</summary>
+internal sealed class ListContext : IRenderContext
+{
+    public static readonly ListContext Instance = new();
+
+    private ListContext()
+    {
+    }
+
+    public string DeviceId => string.Empty;
+
+    public string ControlId => string.Empty;
+
+    public int Width => 144;
+
+    public int Height => 144;
+
+    public IVariableStore Variables { get; } = new DeckHost.Core.State.VariableStore();
+
+    public ActionSettings Settings { get; } = new([]);
+
+    public string ProfileId => string.Empty;
+
+    public bool DrawEncodedImage(byte[] encodedImage) => false;
+
+    public void DrawLabel(string text, TextVerticalAlignment defaultVertical = TextVerticalAlignment.Middle, float? defaultSize = null, uint defaultColor = 0xFFFFFFFF)
+    {
+    }
+
+    public void Clear(uint argbColor)
+    {
+    }
+
+    public void DrawText(string text, double x, double y, float size, uint argbColor = 0xFFFFFFFF)
+    {
+    }
+
+    public void DrawCenteredText(string text, double centerX, double centerY, float size, uint argbColor = 0xFFFFFFFF)
+    {
+    }
+
+    public void FillRoundedRect(double x, double y, double width, double height, double radius, uint argbColor)
+    {
+    }
+
+    public void DrawImage(byte[] rgbaPixels, int width, int height)
+    {
+    }
+
+    public bool DrawImageFile(string path) => false;
 }

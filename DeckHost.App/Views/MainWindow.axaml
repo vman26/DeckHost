@@ -1,549 +1,446 @@
 <Window xmlns="https://github.com/avaloniaui"
 		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		xmlns:vm="using:DeckHost.App.ViewModels"
+		xmlns:local="using:DeckHost.App.Views"
 		xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 		xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 		mc:Ignorable="d"
 		x:Class="DeckHost.App.Views.MainWindow"
 		x:DataType="vm:MainViewModel"
-		Width="1520"
+		Width="1440"
 		Height="920"
-		MinWidth="1240"
-		MinHeight="760"
-		Background="#111827"
+		MinWidth="1020"
+		MinHeight="680"
+		Background="#111318"
 		Icon="/Assets/avalonia-logo.ico"
 		Title="DeckHost Studio">
 
-	<Grid ColumnDefinitions="340,*,360" RowDefinitions="Auto,*">
-		<Border Grid.ColumnSpan="3"
-				Padding="20,16"
-				Background="#0F172A"
-				BorderBrush="#1E293B"
-				BorderThickness="0,0,0,1">
-			<DockPanel LastChildFill="True">
-				<Button DockPanel.Dock="Left"
-						Width="44"
-						Height="44"
-						Margin="0,0,16,0"
-						FontSize="20"
-						Content="☰">
-					<Button.Flyout>
-						<Flyout Placement="Bottom">
-							<StackPanel Width="260"
-										Spacing="12"
-										Margin="8">
-								<StackPanel Spacing="4">
-									<TextBlock Text="Navigation"
-											   FontWeight="SemiBold"
-											   Foreground="#F8FAFC" />
-									<TextBlock Text="Current page"
-											   FontSize="12"
-											   Foreground="#64748B" />
-									<TextBlock Text="{Binding CurrentPageName}"
-											   FontWeight="SemiBold" />
+	<Window.Styles>
+		<!-- Header buttons: an icon on a plain background, a soft highlight on hover. -->
+		<Style Selector="Button.tool, ToggleButton.tool">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="Padding" Value="8" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Foreground" Value="#CBD5E1" />
+		</Style>
+		<Style Selector="Button.tool:pointerover /template/ ContentPresenter, ToggleButton.tool:pointerover /template/ ContentPresenter">
+			<Setter Property="Background" Value="#262B36" />
+		</Style>
+		<Style Selector="ToggleButton.tool:checked /template/ ContentPresenter">
+			<Setter Property="Background" Value="#1D4ED8" />
+		</Style>
+		<Style Selector="Path.toolIcon">
+			<Setter Property="Fill" Value="#CBD5E1" />
+		</Style>
+		<!-- The action list, like the Stream Deck app: plugin rows that fold open, actions with their icon. -->
+		<Style Selector="Border.actionItem">
+			<Setter Property="Background" Value="Transparent" />
+		</Style>
+		<Style Selector="Border.actionItem:pointerover">
+			<Setter Property="Background" Value="#262B36" />
+		</Style>
+		<Style Selector="ToggleButton.groupHeader">
+			<Setter Property="Background" Value="Transparent" />
+			<Setter Property="BorderThickness" Value="0" />
+			<Setter Property="HorizontalAlignment" Value="Stretch" />
+			<Setter Property="HorizontalContentAlignment" Value="Stretch" />
+			<Setter Property="Padding" Value="10,10" />
+			<Setter Property="CornerRadius" Value="8" />
+		</Style>
+		<Style Selector="ToggleButton.groupHeader:pointerover /template/ ContentPresenter, ToggleButton.groupHeader:checked /template/ ContentPresenter">
+			<Setter Property="Background" Value="#1E222B" />
+		</Style>
+		<Style Selector="TextBlock.panelTitle">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="#64748B" />
+			<Setter Property="LetterSpacing" Value="0.6" />
+		</Style>
+		<Style Selector="Border.debugCard">
+			<Setter Property="Padding" Value="12" />
+			<Setter Property="Background" Value="#161A22" />
+			<Setter Property="BorderBrush" Value="#262B36" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="10" />
+		</Style>
+	</Window.Styles>
+
+	<Window.DataTemplates>
+		<!-- The selected control's editor, below the device. -->
+		<DataTemplate DataType="vm:ControlCustomizationViewModel">
+			<local:ControlCustomizationView />
+		</DataTemplate>
+	</Window.DataTemplates>
+
+	<Panel>
+		<Grid RowDefinitions="Auto,*">
+			<!-- Header: menu, device and profile, update notice, tools. -->
+			<Border Padding="16,10" Background="#16181E" BorderBrush="#262B36" BorderThickness="0,0,0,1">
+				<Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="14">
+					<Button Classes="tool" Width="40" Height="40" FontSize="18" Content="☰" ToolTip.Tip="Menu">
+						<Button.Flyout>
+							<Flyout Placement="BottomEdgeAlignedLeft">
+								<StackPanel Width="250" Spacing="8" Margin="6">
+									<Button Content="Profiles" HorizontalAlignment="Stretch" Click="OpenProfileManager_OnClick" />
+									<Button Content="Plugins and store" HorizontalAlignment="Stretch" Click="OpenPluginManager_OnClick" />
+									<Button Content="Device settings" HorizontalAlignment="Stretch" Click="OpenDeviceSettings_OnClick" />
+									<Button Content="DeckHost settings" HorizontalAlignment="Stretch" Click="OpenAppSettings_OnClick" />
+									<Separator />
+									<CheckBox Content="Switch profiles with the active app"
+											  IsChecked="{Binding AutoSwitchEnabled}"
+											  IsEnabled="{Binding AutoSwitchSupported}" />
 								</StackPanel>
-								<CheckBox Content="Switch profiles with the active app"
-										  IsChecked="{Binding AutoSwitchEnabled}"
-										  IsEnabled="{Binding AutoSwitchSupported}" />
-								<Separator />
-								<Button Content="Open Profile Manager"
-										HorizontalAlignment="Stretch"
-										Click="OpenProfileManager_OnClick" />
-								<Button Content="Open Plugin Manager"
-										HorizontalAlignment="Stretch"
-										Click="OpenPluginManager_OnClick" />
-								<Button Content="Device settings"
-										HorizontalAlignment="Stretch"
-										Click="OpenDeviceSettings_OnClick" />
-								<Button Content="DeckHost settings"
-										HorizontalAlignment="Stretch"
-										Click="OpenAppSettings_OnClick" />
-							</StackPanel>
-						</Flyout>
-					</Button.Flyout>
-				</Button>
+							</Flyout>
+						</Button.Flyout>
+					</Button>
 
-				<!-- An available update (DataContext: the update service, set in code). -->
-				<Border x:Name="UpdateBanner"
-						DockPanel.Dock="Right"
-						IsVisible="False"
-						Margin="12,0,0,0"
-						Padding="12,8"
-						Background="#172554"
-						BorderBrush="#1D4ED8"
-						BorderThickness="1"
-						CornerRadius="12"
-						x:DataType="vm:UpdateViewModel">
-					<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-						<TextBlock Text="⬆" FontSize="18" Foreground="#93C5FD" VerticalAlignment="Center" />
-						<StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-							<TextBlock Text="{Binding AvailableTitle}" FontWeight="SemiBold" Foreground="#E2E8F0" />
-							<TextBlock Text="{Binding AvailableSummary}" FontSize="12" Foreground="#93C5FD" />
+					<StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<TextBlock Text="{Binding DeviceName}" FontSize="17" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" />
+							<Border Padding="7,2" CornerRadius="999" Background="#1E293B" VerticalAlignment="Center">
+								<TextBlock Text="{Binding ConnectionStatus}" FontSize="11" Foreground="#93C5FD" />
+							</Border>
 						</StackPanel>
-						<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-							<Button Content="What's new" Classes="accent" Command="{Binding ShowDetailsCommand}" />
-							<Button Content="✕" ToolTip.Tip="Remind me next time DeckHost starts" Command="{Binding LaterCommand}" />
+						<!-- The profile picker, like the Stream Deck app's profile name under the device. -->
+						<StackPanel Orientation="Horizontal" Spacing="4">
+							<ComboBox ItemsSource="{Binding Profiles}"
+									  SelectedItem="{Binding SelectedProfile, Mode=TwoWay}"
+									  MinWidth="160"
+									  Background="Transparent"
+									  BorderThickness="0"
+									  Padding="0,2"
+									  ToolTip.Tip="The profile you're editing (and the device shows)">
+								<ComboBox.ItemTemplate>
+									<DataTemplate x:DataType="vm:ProfileItemViewModel">
+										<TextBlock Text="{Binding Name}" Foreground="#CBD5E1" />
+									</DataTemplate>
+								</ComboBox.ItemTemplate>
+							</ComboBox>
+							<Button Classes="tool" Padding="6,2" FontSize="12" Content="Manage…" Foreground="#64748B" Click="OpenProfileManager_OnClick" />
 						</StackPanel>
-					</Grid>
-				</Border>
-
-				<StackPanel Spacing="4">
-					<TextBlock Text="DeckHost Studio"
-							   FontSize="24"
-							   FontWeight="SemiBold"
-							   Foreground="#F8FAFC" />
-					<TextBlock Text="Profiles, plugins, and a device-first preview surface."
-							   Foreground="#94A3B8" />
-				</StackPanel>
-
-				<Border DockPanel.Dock="Right"
-						Padding="12,8"
-						Background="#111827"
-						BorderBrush="#1E293B"
-						BorderThickness="1"
-						CornerRadius="12">
-					<StackPanel Spacing="2">
-						<TextBlock Text="{Binding SelectedProfileName}"
-								   FontWeight="SemiBold"
-								   Foreground="#E2E8F0" />
-						<TextBlock Text="{Binding SelectedProfileSummary}"
-								   FontSize="12"
-								   Foreground="#64748B" />
-						<TextBlock Text="{Binding ConnectionStatus}"
-								   FontSize="12"
-								   Foreground="#93C5FD" />
 					</StackPanel>
-				</Border>
-			</DockPanel>
-		</Border>
 
-		<Border Grid.Row="1"
-				Grid.Column="0"
-				Margin="18"
-				Padding="16"
-				Background="#0F172A"
-				BorderBrush="#1E293B"
-				BorderThickness="1"
-				CornerRadius="16">
-			<Grid RowDefinitions="Auto,Auto,Auto,*"
-				  RowSpacing="14">
-				<TextBlock Text="Profiles &amp; Actions"
-						   FontSize="18"
-						   FontWeight="SemiBold"
-						   Foreground="#F8FAFC" />
+					<!-- An available update (DataContext: the update service, set in code). -->
+					<Border Grid.Column="2"
+							x:Name="UpdateBanner"
+							HorizontalAlignment="Right"
+							VerticalAlignment="Center"
+							IsVisible="False"
+							Padding="12,6"
+							Background="#172554"
+							BorderBrush="#1D4ED8"
+							BorderThickness="1"
+							CornerRadius="12"
+							x:DataType="vm:UpdateViewModel">
+						<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+							<TextBlock Text="⬆" FontSize="16" Foreground="#93C5FD" VerticalAlignment="Center" />
+							<StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+								<TextBlock Text="{Binding AvailableTitle}" FontWeight="SemiBold" Foreground="#E2E8F0" />
+								<TextBlock Text="{Binding AvailableSummary}" FontSize="11" Foreground="#93C5FD" />
+							</StackPanel>
+							<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+								<Button Content="What's new" Classes="accent" Command="{Binding ShowDetailsCommand}" />
+								<Button Content="✕" ToolTip.Tip="Remind me next time DeckHost starts" Command="{Binding LaterCommand}" />
+							</StackPanel>
+						</Grid>
+					</Border>
 
-				<StackPanel Grid.Row="1"
-							Spacing="8">
-					<DockPanel>
-						<Button DockPanel.Dock="Right"
-								Content="Manage…"
-								Padding="10,2"
-								FontSize="12"
-								Click="OpenProfileManager_OnClick" />
-						<TextBlock Text="Active Profile"
-								   FontSize="12"
-								   VerticalAlignment="Center"
-								   Foreground="#94A3B8" />
-					</DockPanel>
-					<ComboBox ItemsSource="{Binding Profiles}"
-							  HorizontalAlignment="Stretch"
-							  SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
-						<ComboBox.ItemTemplate>
-							<DataTemplate x:DataType="vm:ProfileItemViewModel">
-								<StackPanel Spacing="2">
-									<TextBlock Text="{Binding Name}" />
-									<TextBlock Text="{Binding Summary}"
-											   FontSize="11"
-											   Foreground="#64748B" />
-									<TextBlock Text="{Binding AutoSwitchSummary}"
-											   IsVisible="{Binding HasAutoSwitchApps}"
-											   FontSize="11"
-											   Foreground="#93C5FD" />
-								</StackPanel>
-							</DataTemplate>
-						</ComboBox.ItemTemplate>
-					</ComboBox>
-				</StackPanel>
+					<StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+						<ToggleButton Classes="tool"
+									  IsChecked="{Binding IsTestMode, Mode=TwoWay}"
+									  ToolTip.Tip="Test mode: click controls to press them, the mouse wheel turns knobs. Runs the real actions.">
+							<StackPanel Orientation="Horizontal" Spacing="6">
+								<Viewbox Width="18" Height="18"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M8 5v14l11-7Z" /></Canvas></Viewbox>
+								<TextBlock Text="Test" VerticalAlignment="Center" Foreground="#CBD5E1" />
+							</StackPanel>
+						</ToggleButton>
+						<Button Classes="tool" ToolTip.Tip="Profiles" Click="OpenProfileManager_OnClick">
+							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M4 4h7v7H4Z M13 4h7v7h-7Z M4 13h7v7H4Z M13 13h7v7h-7Z" /></Canvas></Viewbox>
+						</Button>
+						<Button Classes="tool" ToolTip.Tip="Plugins and store" Click="OpenPluginManager_OnClick">
+							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M10 3a2 2 0 0 1 4 0v2h4v4h2a2 2 0 0 1 0 4h-2v6h-5v-2a2 2 0 0 0-4 0v2H4v-6h2a2 2 0 0 0 0-4H4V5h6Z" /></Canvas></Viewbox>
+						</Button>
+						<Button Classes="tool" ToolTip.Tip="Device settings" Click="OpenDeviceSettings_OnClick">
+							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M3 5h18v14H3Z M5 7v10h14V7Z M7 9h4v3H7Z M13 9h4v3h-4Z M8 14h8v1.5H8Z" /></Canvas></Viewbox>
+						</Button>
+						<Button Classes="tool" ToolTip.Tip="DeckHost settings" Click="OpenAppSettings_OnClick">
+							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M10.3 2h3.4l.5 2.6 1.7.9 2.4-1.2 2.4 2.4-1.2 2.4.9 1.7 2.6.5v3.4l-2.6.5-.9 1.7 1.2 2.4-2.4 2.4-2.4-1.2-1.7.9-.5 2.6h-3.4l-.5-2.6-1.7-.9-2.4 1.2-2.4-2.4 1.2-2.4-.9-1.7L2 13.7v-3.4l2.6-.5.9-1.7-1.2-2.4 2.4-2.4 2.4 1.2 1.7-.9Z M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7Z" /></Canvas></Viewbox>
+						</Button>
+					</StackPanel>
+				</Grid>
+			</Border>
 
-				<DockPanel Grid.Row="2">
-					<Button DockPanel.Dock="Right"
-							Margin="8,0,0,0"
-							Content="Plugins…"
-							ToolTip.Tip="Install, enable or remove plugins"
-							Click="OpenPluginManager_OnClick" />
-					<TextBox PlaceholderText="Search plugin actions..."
-							 Text="{Binding SearchText, Mode=TwoWay}" />
-				</DockPanel>
+			<!-- The workspace: the device and the selected control's editor, the debug panel, the actions. -->
+			<Grid Grid.Row="1" ColumnDefinitions="*,Auto,320">
+				<Grid RowDefinitions="400,5,*" MinWidth="560">
+					<!-- The device, at a fixed size: opening plugins or the editor doesn't resize it. -->
+					<Grid Background="#111318">
+						<Viewbox Stretch="Uniform" StretchDirection="Both" Margin="24,20,24,30" HorizontalAlignment="Center" VerticalAlignment="Center">
+							<Border Padding="18" Background="#0B0D12" BorderBrush="#262B36" BorderThickness="1" CornerRadius="24">
+								<!-- The background is the color the device shows between its controls for this profile. -->
+								<ItemsControl ItemsSource="{Binding ControlItems}"
+											  Width="{Binding CanvasWidth}"
+											  Height="{Binding CanvasHeight}"
+											  Background="{Binding CanvasBackground}">
+									<ItemsControl.ItemsPanel>
+										<ItemsPanelTemplate>
+											<Canvas Background="Transparent" />
+										</ItemsPanelTemplate>
+									</ItemsControl.ItemsPanel>
+									<ItemsControl.ItemTemplate>
+										<DataTemplate x:DataType="vm:ControlItemViewModel">
+											<!-- Shows the exact image the device shows (rendered by the host), with live press feedback. -->
+											<Border Width="{Binding Width}"
+													Height="{Binding Height}"
+													Background="{Binding SurfaceBrush}"
+													BorderBrush="{Binding OutlineBrush}"
+													BorderThickness="{Binding OutlineThickness}"
+													CornerRadius="{Binding CornerRadius}"
+													ClipToBounds="True"
+													Cursor="Hand"
+													Focusable="True"
+													PointerPressed="ControlCard_OnPointerPressed"
+													PointerMoved="ControlCard_OnPointerMoved"
+													PointerReleased="ControlCard_OnPointerReleased"
+													PointerWheelChanged="ControlCard_OnPointerWheelChanged"
+													ToolTip.Tip="{Binding ToolTipText}">
+												<Border.ContextMenu>
+													<ContextMenu DataContext="{Binding}">
+														<MenuItem Header="Customize"
+																  IsEnabled="{Binding SupportsCustomization}"
+																  Click="ControlCustomize_OnClick" />
+														<MenuItem Header="Remove Assignment"
+																  IsEnabled="{Binding HasAssignment}"
+																  Click="ControlRemove_OnClick" />
+													</ContextMenu>
+												</Border.ContextMenu>
+												<Border.RenderTransform>
+													<TranslateTransform X="{Binding X}" Y="{Binding Y}" />
+												</Border.RenderTransform>
+												<Grid>
+													<!-- A knob: a flat circle like the keys, inside its LED ring in the light's live color. -->
+													<Ellipse IsVisible="{Binding SupportsLight}" Stroke="{Binding LightBrush}" StrokeThickness="3" Margin="3" IsHitTestVisible="False" />
+													<Image Source="{Binding PreviewBitmap}"
+														   IsVisible="{Binding HasPreview}"
+														   Stretch="Fill" />
 
-				<ScrollViewer Grid.Row="3"
-							  HorizontalScrollBarVisibility="Disabled">
-					<ItemsControl ItemsSource="{Binding ActionGroups}">
-						<ItemsControl.ItemTemplate>
-							<DataTemplate x:DataType="vm:PluginActionGroupViewModel">
-								<Expander Margin="0,0,0,10"
-										  IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
-										  Background="#111827"
-										  BorderBrush="#334155"
-										  BorderThickness="1">
-									<Expander.Header>
-										<StackPanel Margin="10,8"
-													Spacing="2">
-											<TextBlock Text="{Binding PluginName}"
-													   FontWeight="SemiBold"
-													   Foreground="#F8FAFC" />
-											<TextBlock Text="{Binding ActionCountLabel}"
-													   FontSize="11"
-													   Foreground="#64748B" />
-										</StackPanel>
-									</Expander.Header>
-									<ItemsControl ItemsSource="{Binding Actions}">
-										<ItemsControl.ItemTemplate>
-											<DataTemplate x:DataType="vm:ActionItemViewModel">
-												<Border Margin="10,0,10,10"
-														Padding="12"
-														Background="#0B1120"
-														BorderBrush="#334155"
-														BorderThickness="1"
-														CornerRadius="12"
-														Cursor="Hand"
-														PointerPressed="ActionCard_OnPointerPressed">
-													<StackPanel Spacing="6">
-														<TextBlock Text="{Binding Name}"
+													<Grid RowDefinitions="Auto,*,Auto"
+														  RowSpacing="4"
+														  Margin="8,4"
+														  IsVisible="{Binding !HasPreview}">
+														<TextBlock Text="{Binding DisplayName}"
+																   IsVisible="{Binding ShowName}"
+																   FontSize="11"
 																   FontWeight="SemiBold"
-																   Foreground="#F8FAFC" />
-														<TextBlock Text="{Binding Summary}"
-																   FontSize="12"
-																   Foreground="#94A3B8"
-																   TextWrapping="Wrap" />
-													</StackPanel>
-												</Border>
+																   HorizontalAlignment="Center"
+																   Foreground="#64748B" />
+														<TextBlock Grid.Row="1"
+																   IsVisible="{Binding ShowTextPreview}"
+																   Text="{Binding PreviewText}"
+																   FontSize="11"
+																   Foreground="#E2E8F0"
+																   TextWrapping="Wrap"
+																   TextAlignment="Center"
+																   HorizontalAlignment="Center"
+																   VerticalAlignment="Center" />
+														<TextBlock Grid.Row="2"
+																   IsVisible="{Binding ShowDetails}"
+																   Text="{Binding TypeLabel}"
+																   HorizontalAlignment="Center"
+																   FontSize="10"
+																   Foreground="#475569" />
+													</Grid>
+
+													<!-- Press feedback from the device or test mode. -->
+													<Border Background="#66FFFFFF"
+															IsVisible="{Binding IsPressed}"
+															IsHitTestVisible="False" />
+													<TextBlock Text="{Binding InputIndicator}"
+															   IsVisible="{Binding HasInputIndicator}"
+															   IsHitTestVisible="False"
+															   FontSize="28"
+															   FontWeight="Bold"
+															   Foreground="#0F172A"
+															   HorizontalAlignment="Center"
+															   VerticalAlignment="Center" />
+												</Grid>
+											</Border>
+										</DataTemplate>
+									</ItemsControl.ItemTemplate>
+								</ItemsControl>
+							</Border>
+						</Viewbox>
+						<TextBlock Text="{Binding StatusMessage}"
+								   Margin="20,0,20,8"
+								   VerticalAlignment="Bottom"
+								   HorizontalAlignment="Center"
+								   FontSize="12"
+								   Foreground="#64748B"
+								   TextTrimming="CharacterEllipsis" />
+					</Grid>
+
+					<GridSplitter Grid.Row="1" Background="#262B36" ResizeDirection="Rows" ToolTip.Tip="Drag to give the device or the editor more room" />
+
+					<!-- The selected control's editor (what Customize was). -->
+					<Border Grid.Row="2" Background="#16181E">
+						<Panel>
+							<ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasEditor}">
+								<ContentControl Content="{Binding Editor}" />
+							</ScrollViewer>
+							<TextBlock IsVisible="{Binding !HasEditor}"
+									   Text="Select a control to configure its action."
+									   Foreground="#64748B"
+									   FontSize="15"
+									   HorizontalAlignment="Center"
+									   VerticalAlignment="Center" />
+						</Panel>
+					</Border>
+				</Grid>
+
+				<!-- Debug panel (DeckHost settings → Show the debug panel). -->
+				<Border Grid.Column="1" Width="300" IsVisible="{Binding ShowDebugPanel}" Background="#13161C" BorderBrush="#262B36" BorderThickness="1,0,0,0">
+					<ScrollViewer HorizontalScrollBarVisibility="Disabled">
+						<StackPanel Margin="14" Spacing="10">
+							<TextBlock Classes="panelTitle" Text="DEBUG" />
+							<Border Classes="debugCard">
+								<StackPanel Spacing="3">
+									<TextBlock Text="Selected control" FontSize="11" Foreground="#64748B" />
+									<TextBlock Text="{Binding SelectedControlName}" FontWeight="SemiBold" Foreground="#F8FAFC" />
+									<TextBlock Text="{Binding SelectedControlType}" Foreground="#CBD5E1" />
+								</StackPanel>
+							</Border>
+							<Border Classes="debugCard">
+								<StackPanel Spacing="3">
+									<TextBlock Text="Inputs" FontSize="11" Foreground="#64748B" />
+									<TextBlock Text="{Binding SelectedControlInputs}" Foreground="#E2E8F0" TextWrapping="Wrap" />
+									<TextBlock Text="Outputs" FontSize="11" Foreground="#64748B" Margin="0,6,0,0" />
+									<TextBlock Text="{Binding SelectedControlOutputs}" Foreground="#E2E8F0" TextWrapping="Wrap" />
+								</StackPanel>
+							</Border>
+							<Border Classes="debugCard">
+								<StackPanel Spacing="3">
+									<TextBlock Text="Assigned action" FontSize="11" Foreground="#64748B" />
+									<TextBlock Text="{Binding SelectedAssignmentName}" FontWeight="SemiBold" Foreground="#F8FAFC" />
+									<TextBlock Text="{Binding SelectedAssignmentCapabilities}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+								</StackPanel>
+							</Border>
+							<Border Classes="debugCard">
+								<StackPanel Spacing="3">
+									<TextBlock Text="Runtime connection" FontSize="11" Foreground="#64748B" />
+									<TextBlock Text="{Binding ConnectionStatus}" FontWeight="SemiBold" Foreground="#F8FAFC" />
+									<TextBlock Text="{Binding ConnectionDetail}" Foreground="#CBD5E1" TextWrapping="Wrap" />
+								</StackPanel>
+							</Border>
+							<Border Classes="debugCard">
+								<StackPanel Spacing="4">
+									<TextBlock Text="Runtime log" FontSize="11" Foreground="#64748B" />
+									<ItemsControl ItemsSource="{Binding RuntimeLogs}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate>
+												<TextBlock FontSize="11" Foreground="#CBD5E1" TextWrapping="Wrap" Text="{Binding Message}" />
 											</DataTemplate>
 										</ItemsControl.ItemTemplate>
 									</ItemsControl>
-								</Expander>
-							</DataTemplate>
-						</ItemsControl.ItemTemplate>
-					</ItemsControl>
-				</ScrollViewer>
-			</Grid>
-		</Border>
+								</StackPanel>
+							</Border>
+						</StackPanel>
+					</ScrollViewer>
+				</Border>
 
-		<Grid Grid.Row="1"
-			  Grid.Column="1"
-			  Margin="0,18,0,18"
-			  RowDefinitions="Auto,*"
-			  RowSpacing="14">
-			<Border Padding="14,12"
-					Background="#0F172A"
-					BorderBrush="#1E293B"
-					BorderThickness="1"
-					CornerRadius="14">
-				<DockPanel>
-					<StackPanel>
-						<TextBlock Text="Visual Device Canvas"
-								   FontSize="18"
-								   FontWeight="SemiBold"
-								   Foreground="#F8FAFC" />
-						<TextBlock Text="{Binding DeviceName}"
-								   FontSize="12"
-								   Foreground="#64748B" />
-					</StackPanel>
-					<ToggleButton DockPanel.Dock="Right"
-								  Margin="12,0,0,0"
-								  VerticalAlignment="Center"
-								  IsChecked="{Binding IsTestMode, Mode=TwoWay}"
-								  Content="Test mode"
-								  ToolTip.Tip="Click controls to press them, mouse wheel turns knobs. Runs the real actions." />
-					<TextBlock DockPanel.Dock="Right"
-							   Margin="16,0,0,0"
-							   Text="{Binding StatusMessage}"
-							   VerticalAlignment="Center"
-							   TextAlignment="Right"
-							   Foreground="#94A3B8"
-							   TextTrimming="CharacterEllipsis" />
-				</DockPanel>
-			</Border>
-
-			<Border Grid.Row="1"
-					Padding="18"
-					Background="#0B1120"
-					BorderBrush="#1E293B"
-					BorderThickness="1"
-					CornerRadius="18">
-				<ScrollViewer HorizontalScrollBarVisibility="Auto"
-							  VerticalScrollBarVisibility="Auto">
-					<Viewbox Stretch="Uniform"
-							 HorizontalAlignment="Center"
-							 VerticalAlignment="Center">
-						<Border Padding="18"
-								Background="#020617"
-								BorderBrush="#334155"
-								BorderThickness="1"
-								CornerRadius="24">
-							<!-- The background is the color the device shows between its controls for this profile. -->
-							<ItemsControl ItemsSource="{Binding ControlItems}"
-										  Width="{Binding CanvasWidth}"
-										  Height="{Binding CanvasHeight}"
-										  Background="{Binding CanvasBackground}">
-								<ItemsControl.ItemsPanel>
-									<ItemsPanelTemplate>
-										<Canvas Background="Transparent" />
-									</ItemsPanelTemplate>
-								</ItemsControl.ItemsPanel>
+				<!-- Actions, grouped by plugin. Drag one onto a control (or into a Multi Action's steps). -->
+				<Border Grid.Column="2" Background="#16181E" BorderBrush="#262B36" BorderThickness="1,0,0,0">
+					<Grid RowDefinitions="Auto,*">
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="12,12,12,8">
+							<TextBox PlaceholderText="Search actions" Text="{Binding SearchText, Mode=TwoWay}" />
+							<Button Grid.Column="1" Classes="tool" ToolTip.Tip="Get more plugins" Click="OpenPluginManager_OnClick">
+								<Viewbox Width="18" Height="18"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7Z" /></Canvas></Viewbox>
+							</Button>
+						</Grid>
+						<ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+							<ItemsControl ItemsSource="{Binding ActionGroups}" Margin="6,0,6,12">
 								<ItemsControl.ItemTemplate>
-									<DataTemplate x:DataType="vm:ControlItemViewModel">
-										<!-- Shows the exact image the device shows (rendered by the host), with live press feedback. -->
-										<Border Width="{Binding Width}"
-												Height="{Binding Height}"
-												Background="{Binding SurfaceBrush}"
-												BorderBrush="{Binding OutlineBrush}"
-												BorderThickness="{Binding OutlineThickness}"
-												CornerRadius="{Binding CornerRadius}"
-												ClipToBounds="True"
-												Cursor="Hand"
-												Focusable="True"
-												PointerPressed="ControlCard_OnPointerPressed"
-												PointerMoved="ControlCard_OnPointerMoved"
-												PointerReleased="ControlCard_OnPointerReleased"
-												PointerWheelChanged="ControlCard_OnPointerWheelChanged"
-												ToolTip.Tip="{Binding ToolTipText}">
-											<Border.ContextMenu>
-												<ContextMenu DataContext="{Binding}">
-													<MenuItem Header="Customize"
-															  IsEnabled="{Binding SupportsCustomization}"
-															  Click="ControlCustomize_OnClick" />
-													<MenuItem Header="Remove Assignment"
-															  IsEnabled="{Binding HasAssignment}"
-															  Click="ControlRemove_OnClick" />
-												</ContextMenu>
-											</Border.ContextMenu>
-											<Border.RenderTransform>
-												<TranslateTransform X="{Binding X}" Y="{Binding Y}" />
-											</Border.RenderTransform>
-											<Grid>
-												<!-- A knob: a round metal face inside its LED ring, which shows the light's color live. -->
-												<Ellipse IsVisible="{Binding IsKnob}" Fill="{Binding KnobFaceBrush}" Margin="9" IsHitTestVisible="False" />
-												<Ellipse IsVisible="{Binding SupportsLight}" Stroke="{Binding LightBrush}" StrokeThickness="5" Margin="2" IsHitTestVisible="False" />
-												<Ellipse IsVisible="{Binding IsLightOn}" Stroke="{Binding LightBrush}" StrokeThickness="2" Margin="7" Opacity="0.45" IsHitTestVisible="False" />
-												<Image Source="{Binding PreviewBitmap}"
-													   IsVisible="{Binding HasPreview}"
-													   Stretch="Fill" />
-
-												<Grid RowDefinitions="Auto,*,Auto"
-													  RowSpacing="4"
-													  Margin="8,4"
-													  IsVisible="{Binding !HasPreview}">
-													<TextBlock Text="{Binding DisplayName}"
-															   IsVisible="{Binding ShowName}"
-															   FontSize="11"
-															   FontWeight="SemiBold"
-															   HorizontalAlignment="Center"
-															   Foreground="#F8FAFC" />
-													<TextBlock Grid.Row="1"
-															   IsVisible="{Binding ShowTextPreview}"
-															   Text="{Binding PreviewText}"
-															   FontSize="11"
-															   Foreground="#E2E8F0"
-															   TextWrapping="Wrap"
-															   TextAlignment="Center"
-															   HorizontalAlignment="Center"
-															   VerticalAlignment="Center" />
-													<TextBlock Grid.Row="2"
-															   IsVisible="{Binding ShowDetails}"
-															   Text="{Binding TypeLabel}"
-															   HorizontalAlignment="Center"
-															   FontSize="10"
-															   Foreground="#94A3B8" />
+									<DataTemplate x:DataType="vm:PluginActionGroupViewModel">
+										<StackPanel>
+											<ToggleButton Classes="groupHeader" IsChecked="{Binding IsExpanded, Mode=TwoWay}">
+												<Grid ColumnDefinitions="14,26,*,Auto" ColumnSpacing="8">
+													<TextBlock Text="›" FontSize="16" Foreground="#94A3B8" VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}" />
+													<TextBlock Text="⌄" FontSize="14" Foreground="#94A3B8" VerticalAlignment="Top" IsVisible="{Binding IsExpanded}" />
+													<Panel Grid.Column="1" Width="26" Height="26">
+														<Viewbox IsVisible="{Binding Icon.HasGeometry}">
+															<Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas>
+														</Viewbox>
+														<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" Stretch="Uniform" />
+													</Panel>
+													<TextBlock Grid.Column="2" Text="{Binding PluginName}" FontWeight="SemiBold" Foreground="#F1F5F9" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+													<TextBlock Grid.Column="3" Text="{Binding Actions.Count}" FontSize="11" Foreground="#64748B" VerticalAlignment="Center" />
 												</Grid>
-
-												<!-- Press feedback from the device or test mode. -->
-												<Border Background="#66FFFFFF"
-														IsVisible="{Binding IsPressed}"
-														IsHitTestVisible="False" />
-												<TextBlock Text="{Binding InputIndicator}"
-														   IsVisible="{Binding HasInputIndicator}"
-														   IsHitTestVisible="False"
-														   FontSize="28"
-														   FontWeight="Bold"
-														   Foreground="#0F172A"
-														   HorizontalAlignment="Center"
-														   VerticalAlignment="Center" />
-											</Grid>
-										</Border>
+											</ToggleButton>
+											<ItemsControl ItemsSource="{Binding Actions}" IsVisible="{Binding IsExpanded}" Margin="16,0,0,6">
+												<ItemsControl.ItemTemplate>
+													<DataTemplate x:DataType="vm:ActionItemViewModel">
+														<Border Classes="actionItem"
+																Padding="10,7"
+																CornerRadius="8"
+																Cursor="Hand"
+																ToolTip.Tip="{Binding Summary}"
+																PointerPressed="ActionCard_OnPointerPressed">
+															<Grid ColumnDefinitions="22,*" ColumnSpacing="10">
+																<Panel Width="22" Height="22">
+																	<Viewbox IsVisible="{Binding Icon.HasGeometry}">
+																		<Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas>
+																	</Viewbox>
+																	<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" Stretch="Uniform" />
+																</Panel>
+																<TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="#E2E8F0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+															</Grid>
+														</Border>
+													</DataTemplate>
+												</ItemsControl.ItemTemplate>
+											</ItemsControl>
+										</StackPanel>
 									</DataTemplate>
 								</ItemsControl.ItemTemplate>
 							</ItemsControl>
-						</Border>
-					</Viewbox>
-				</ScrollViewer>
+						</ScrollViewer>
+					</Grid>
+				</Border>
+			</Grid>
+
+			<!-- Pages (settings, plugins, profiles, updates) open here, over the workspace. -->
+			<Border Grid.Row="1" x:Name="PageHost" IsVisible="False" Background="#111318">
+				<Grid RowDefinitions="Auto,*">
+					<Border Padding="12,8" Background="#16181E" BorderBrush="#262B36" BorderThickness="0,0,0,1">
+						<StackPanel Orientation="Horizontal" Spacing="12">
+							<Button Classes="tool" Click="PageBack_OnClick" ToolTip.Tip="Back">
+								<StackPanel Orientation="Horizontal" Spacing="6">
+									<Viewbox Width="16" Height="16"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M15.5 4L17 5.5L10.5 12L17 18.5L15.5 20L7.5 12Z" /></Canvas></Viewbox>
+									<TextBlock Text="Back" VerticalAlignment="Center" Foreground="#CBD5E1" />
+								</StackPanel>
+							</Button>
+							<TextBlock x:Name="PageTitle" FontSize="17" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" />
+						</StackPanel>
+					</Border>
+					<!-- Pages keep a readable width on a wide window. -->
+					<ContentControl Grid.Row="1" x:Name="PageContent" MaxWidth="1100" HorizontalAlignment="Stretch" />
+				</Grid>
 			</Border>
 		</Grid>
 
-		<Border Grid.Row="1"
-				Grid.Column="2"
-				Margin="18"
-				Padding="16"
-				Background="#0F172A"
-				BorderBrush="#1E293B"
-				BorderThickness="1"
-				CornerRadius="16">
-			<ScrollViewer HorizontalScrollBarVisibility="Disabled">
-				<Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*"
-					  RowSpacing="14">
-					<TextBlock Text="Property Inspector"
-							   FontSize="18"
-							   FontWeight="SemiBold"
-							   Foreground="#F8FAFC" />
-
-					<Border Grid.Row="1"
-							Padding="12"
-							Background="#111827"
-							BorderBrush="#334155"
-							BorderThickness="1"
-							CornerRadius="12">
-						<StackPanel Spacing="4">
-							<TextBlock Text="Selected Control"
-									   FontSize="12"
-									   Foreground="#94A3B8" />
-							<TextBlock Text="{Binding SelectedControlName}"
-									   FontWeight="SemiBold"
-									   Foreground="#F8FAFC" />
-							<TextBlock Text="{Binding SelectedControlType}"
-									   Foreground="#CBD5E1" />
-						</StackPanel>
-					</Border>
-
-					<Border Grid.Row="2"
-							Padding="12"
-							Background="#111827"
-							BorderBrush="#334155"
-							BorderThickness="1"
-							CornerRadius="12">
-						<StackPanel Spacing="6">
-							<TextBlock Text="Input Capabilities"
-									   FontSize="12"
-									   Foreground="#94A3B8" />
-							<TextBlock Text="{Binding SelectedControlInputs}"
-									   Foreground="#E2E8F0"
-									   TextWrapping="Wrap" />
-						</StackPanel>
-					</Border>
-
-					<Border Grid.Row="3"
-							Padding="12"
-							Background="#111827"
-							BorderBrush="#334155"
-							BorderThickness="1"
-							CornerRadius="12">
-						<StackPanel Spacing="6">
-							<TextBlock Text="Output Capabilities"
-									   FontSize="12"
-									   Foreground="#94A3B8" />
-							<TextBlock Text="{Binding SelectedControlOutputs}"
-									   Foreground="#E2E8F0"
-									   TextWrapping="Wrap" />
-						</StackPanel>
-					</Border>
-
-					<Border Grid.Row="4"
-							Padding="12"
-							Background="#111827"
-							BorderBrush="#334155"
-							BorderThickness="1"
-							CornerRadius="12">
-						<StackPanel Spacing="6">
-							<TextBlock Text="Assigned Action"
-									   FontSize="12"
-									   Foreground="#94A3B8" />
-							<TextBlock Text="{Binding SelectedAssignmentName}"
-									   FontWeight="SemiBold"
-									   Foreground="#F8FAFC" />
-							<TextBlock Text="{Binding SelectedAssignmentCapabilities}"
-									   Foreground="#CBD5E1"
-									   TextWrapping="Wrap" />
-							<Button Content="Customize Selected Control"
-									HorizontalAlignment="Left"
-									Click="CustomizeSelectedControl_OnClick" />
-						</StackPanel>
-					</Border>
-
-					<Border Grid.Row="5"
-							Padding="12"
-							Background="#111827"
-							BorderBrush="#334155"
-							BorderThickness="1"
-							CornerRadius="12">
-						<StackPanel Spacing="6">
-							<TextBlock Text="Runtime Connection"
-									   FontSize="12"
-									   Foreground="#94A3B8" />
-							<TextBlock Text="{Binding ConnectionStatus}"
-									   FontWeight="SemiBold"
-									   Foreground="#F8FAFC" />
-							<TextBlock Text="{Binding ConnectionDetail}"
-									   Foreground="#CBD5E1"
-									   TextWrapping="Wrap" />
-						</StackPanel>
-					</Border>
-
-					<Border Grid.Row="6"
-							Padding="12"
-							Background="#111827"
-							BorderBrush="#334155"
-							BorderThickness="1"
-							CornerRadius="12">
-						<StackPanel Spacing="10">
-							<TextBlock Text="Multi Action Steps"
-									   FontSize="12"
-									   Foreground="#94A3B8" />
-							<TextBlock IsVisible="{Binding SelectedAssignmentIsMultiAction}"
-									   Text="Add, remove, reorder and configure steps with Customize, or drop more actions onto the control."
-									   Foreground="#E2E8F0"
-									   TextWrapping="Wrap" />
-							<ItemsControl IsVisible="{Binding SelectedAssignmentIsMultiAction}"
-										  ItemsSource="{Binding SelectedMultiActionSteps}">
-								<ItemsControl.ItemTemplate>
-									<DataTemplate x:DataType="vm:StepItemViewModel">
-										<Border Margin="0,0,0,8"
-												Padding="10"
-												Background="#0B1120"
-												BorderBrush="#334155"
-												BorderThickness="1"
-												CornerRadius="10">
-											<StackPanel Spacing="4">
-												<TextBlock Text="{Binding Name}"
-														   FontWeight="SemiBold"
-														   Foreground="#F8FAFC" />
-												<TextBlock Text="{Binding PluginName}"
-														   FontSize="11"
-														   Foreground="#94A3B8" />
-											</StackPanel>
-										</Border>
-									</DataTemplate>
-								</ItemsControl.ItemTemplate>
-							</ItemsControl>
-							<TextBlock IsVisible="{Binding ShowMultiActionHint}"
-									   Text="Drop the Multi Action (DeckHost Built-ins) onto a control to run several actions from one press."
-									   Foreground="#64748B"
-									   TextWrapping="Wrap" />
-							<TextBlock Margin="0,10,0,0"
-									   Text="Runtime Log"
-									   FontSize="12"
-									   Foreground="#94A3B8" />
-							<ItemsControl ItemsSource="{Binding RuntimeLogs}">
-								<ItemsControl.ItemTemplate>
-									<DataTemplate>
-										<TextBlock FontSize="11"
-												   Foreground="#CBD5E1"
-												   TextWrapping="Wrap"
-												   Text="{Binding Message}" />
-									</DataTemplate>
-								</ItemsControl.ItemTemplate>
-							</ItemsControl>
-						</StackPanel>
-					</Border>
-				</Grid>
-			</ScrollViewer>
-		</Border>
-	</Grid>
+		<!-- The drag ghost: what is being dragged (the action's icon and name) follows the pointer. -->
+		<Canvas x:Name="DragLayer" IsHitTestVisible="False">
+			<Border x:Name="DragGhostVisual" IsVisible="False" Padding="10,7" CornerRadius="10" Background="#E61E222B" BorderBrush="#3B82F6" BorderThickness="1"
+					BoxShadow="0 6 18 0 #80000000">
+				<StackPanel Orientation="Horizontal" Spacing="8">
+					<Panel Width="22" Height="22">
+						<Viewbox x:Name="DragGhostIconBox">
+							<Canvas Width="24" Height="24"><Path x:Name="DragGhostPath" /></Canvas>
+						</Viewbox>
+						<Image x:Name="DragGhostImage" Stretch="Uniform" />
+					</Panel>
+					<TextBlock x:Name="DragGhostText" Foreground="#F8FAFC" FontWeight="SemiBold" VerticalAlignment="Center" />
+				</StackPanel>
+			</Border>
+		</Canvas>
+	</Panel>
 </Window>

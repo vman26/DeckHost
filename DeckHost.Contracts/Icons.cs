@@ -23,5 +23,11 @@ public static class Icons
     public const string SwitchProfile = "M3 6.5h12v2H3Z M14 3.5L21 7.5L14 11.5Z M9 15.5h12v2H9Z M10 12.5L3 16.5L10 20.5Z";
     public const string Stack = "M4 4h16v4H4Z M4 10h16v4H4Z M4 16h16v4H4Z";
     public const string Chip = "M7 7h10v10H7Z M9.5 9.5h5v5h-5Z M9 3h2v3H9Z M13 3h2v3h-2Z M9 18h2v3H9Z M13 18h2v3h-2Z M3 9h3v2H3Z M3 13h3v2H3Z M18 9h3v2h-3Z M18 13h3v2h-3Z";
+    /// <summary>A clock face with hands.</summary>
+    public const string Clock = "M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20Z M12 4.2a7.8 7.8 0 1 1 0 15.6a7.8 7.8 0 1 1 0-15.6Z M11 6.5h2v5h4v2h-6Z";
+
+    /// <summary>A hand swiping left and right.</summary>
+    public const string Swipe = "M3 12L8 7v3.5h8V7l5 5-5 5v-3.5H8V17Z";
+
     public const string Counter = "M11 5h2v14h-2Z M5 11h14v2H5Z";
 }

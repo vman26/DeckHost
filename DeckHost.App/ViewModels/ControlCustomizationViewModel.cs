@@ -17,6 +17,7 @@ namespace DeckHost.App.ViewModels;
 public partial class ControlCustomizationViewModel : ViewModelBase
 {
     private readonly ControlBinding? _original;
+    private int? _dropIndex;
     private readonly ActionItemViewModel? _primaryAction;
     private readonly ActionItemViewModel? _displayContentAction;
     private string _displayText;
@@ -198,7 +199,10 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     public IReadOnlyList<string> VerticalOptions { get; } = [AutomaticAlignment, nameof(TextVerticalAlignment.Top), nameof(TextVerticalAlignment.Middle), nameof(TextVerticalAlignment.Bottom)];
 
     /// <summary>Installed font families (empty = the default font).</summary>
-    public IReadOnlyList<string> FontFamilies { get; } = LoadFontFamilies();
+    private static readonly Lazy<IReadOnlyList<string>> Fonts = new(LoadFontFamilies);
+
+    /// <summary>The installed fonts (read once; the editor is created for every selected control).</summary>
+    public IReadOnlyList<string> FontFamilies => Fonts.Value;
 
     public string TextColor
     {
@@ -297,6 +301,80 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         get => _selectedStepAction;
         set => SetProperty(ref _selectedStepAction, value);
     }
+
+    /// <summary>Where a dragged action or step would land (null: no drag over the steps).</summary>
+    public int? DropIndex
+    {
+        get => _dropIndex;
+        set
+        {
+            if (_dropIndex == value)
+            {
+                return;
+            }
+
+            _dropIndex = value;
+            for (var index = 0; index < Steps.Count; index++)
+            {
+                Steps[index].IsDropBefore = value == index;
+            }
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsDropAtEnd));
+        }
+    }
+
+    public bool IsDropAtEnd => _dropIndex is { } index && index >= Steps.Count;
+
+    /// <summary>Whether <paramref name="action"/> can be a step here.</summary>
+    public bool CanInsertStep(Contracts.Interfaces.IDeckAction action) =>
+        IsMultiAction && AvailableStepActions.Any(item => ReferenceEquals(item.Action, action));
+
+    /// <summary>Adds <paramref name="action"/> as a step at <paramref name="index"/> (dropped from the action list).</summary>
+    public bool InsertStep(Contracts.Interfaces.IDeckAction action, int index)
+    {
+        if (!IsMultiAction || AvailableStepActions.FirstOrDefault(item => ReferenceEquals(item.Action, action)) is not { } item)
+        {
+            return false;
+        }
+
+        Steps.Insert(Math.Clamp(index, 0, Steps.Count), CreateStep(item, item.DefaultSettings));
+        OnStepsChanged();
+        return true;
+    }
+
+    /// <summary>Moves the step at <paramref name="from"/> so it lands before the step now at <paramref name="to"/> (dragged).</summary>
+    public void MoveStepTo(int from, int to)
+    {
+        if (from < 0 || from >= Steps.Count)
+        {
+            return;
+        }
+
+        // Dropping below itself counts the gap it leaves.
+        var target = Math.Clamp(to > from ? to - 1 : to, 0, Steps.Count - 1);
+        if (target == from)
+        {
+            return;
+        }
+
+        Steps.Move(from, target);
+        OnStepsChanged();
+    }
+
+    /// <summary>Put the control back as it was when the editor opened.</summary>
+    public event EventHandler? RevertRequested;
+
+    /// <summary>Remove the control's binding.</summary>
+    public event EventHandler? RemoveRequested;
+
+    public bool HasAssignment => _original is not null;
+
+    [RelayCommand]
+    private void Revert() => RevertRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void Remove() => RemoveRequested?.Invoke(this, EventArgs.Empty);
 
     [RelayCommand]
     private void AddStep()
@@ -764,6 +842,15 @@ public partial class MultiActionStepEditorViewModel : ViewModelBase
     public bool CanMoveUp => Position > 1;
 
     public bool CanMoveDown => Position < _owner.Steps.Count;
+
+    private bool _isDropBefore;
+
+    /// <summary>A dragged action or step would land just above this step.</summary>
+    public bool IsDropBefore
+    {
+        get => _isDropBefore;
+        set => SetProperty(ref _isDropBefore, value);
+    }
 
     public void RefreshPosition()
     {

@@ -3,12 +3,11 @@ using Avalonia.Interactivity;
 
 namespace DeckHost.App.Views;
 
-public partial class AppSettingsWindow : Window
+public partial class AppSettingsView : UserControl
 {
-    public AppSettingsWindow()
+    public AppSettingsView()
     {
         InitializeComponent();
     }
 
-    private void Close_OnClick(object? sender, RoutedEventArgs e) => Close();
 }

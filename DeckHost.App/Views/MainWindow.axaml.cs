@@ -2,30 +2,30 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using CommunityToolkit.Mvvm.DependencyInjection;
+using DeckHost.App.Platform;
 using DeckHost.App.ViewModels;
 using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
 using System;
-using System.ComponentModel;
-using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace DeckHost.App.Views;
 
-public partial class MainWindow : Window
+/// <summary>
+/// The main window, laid out like the Stream Deck app: the device on top (a fixed size, so it
+/// doesn't move while you work), the selected control's editor below it, the actions on the right.
+/// Settings, plugins, profiles and updates open as pages inside the window (<see cref="IPageHost"/>).
+/// </summary>
+public partial class MainWindow : Window, IPageHost, IDragGhostHost
 {
-    private static readonly DataFormat<IDeckAction> ActionPayloadFormat =
-        DataFormat.CreateInProcessFormat<IDeckAction>("ActionPayload");
-
-    private static readonly DataFormat<string> ControlPayloadFormat =
-        DataFormat.CreateInProcessFormat<string>("AssignedControlPayload");
-
     private const double DragThreshold = 6;
 
-    private PluginManagerWindow? _pluginManagerWindow;
-    private ProfileManagerWindow? _profileManagerWindow;
+    private readonly List<(string Title, Control Page)> _pages = [];
     private (ControlItemViewModel Control, Point Start, PointerPressedEventArgs Press)? _pendingControlDrag;
     private ControlItemViewModel? _simulatedPress;
 
@@ -36,12 +36,25 @@ public partial class MainWindow : Window
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnControlDragOver, handledEventsToo: true);
         AddHandler(DragDrop.DropEvent, OnControlDrop, handledEventsToo: true);
+        AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble);
 
         if (TryResolve<UpdateViewModel>() is { } updates)
         {
             UpdateBanner.DataContext = updates;
             UpdateBanner.Bind(IsVisibleProperty, new Avalonia.Data.Binding(nameof(UpdateViewModel.ShowBanner)) { Source = updates });
-            updates.DetailsRequested += () => UpdateWindow.ShowFor(this, updates);
+            updates.DetailsRequested += OpenUpdates;
+        }
+
+        // The debug panel is a DeckHost setting.
+        DataContextChanged += (_, _) => ApplyDebugSetting(AppSettings.Load());
+        AppSettingsViewModel.Changed += settings => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyDebugSetting(settings));
+    }
+
+    private void ApplyDebugSetting(AppSettingsData settings)
+    {
+        if (DataContext is MainViewModel vm)
+        {
+            vm.ShowDebugPanel = settings.ShowDebugPanel;
         }
     }
 
@@ -59,6 +72,141 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---------------------------------------------------------------- pages
+
+    public void OpenPage(string title, Control page)
+    {
+        _pages.Add((title, page));
+        ShowTopPage();
+    }
+
+    public void ClosePage(Control page)
+    {
+        var index = _pages.FindIndex(entry => ReferenceEquals(entry.Page, page) || entry.Page.IsVisualAncestorOf(page));
+        if (index < 0)
+        {
+            return;
+        }
+
+        _pages.RemoveRange(index, _pages.Count - index);
+        ShowTopPage();
+    }
+
+    /// <summary>Shows the page of type <typeparamref name="T"/> if it's open (on top), else opens a new one.</summary>
+    private void OpenSingle<T>(string title, Func<T> create)
+        where T : Control
+    {
+        var index = _pages.FindIndex(entry => entry.Page is T);
+        if (index >= 0)
+        {
+            var existing = _pages[index];
+            _pages.RemoveAt(index);
+            _pages.Add(existing);
+            ShowTopPage();
+            return;
+        }
+
+        OpenPage(title, create());
+    }
+
+    private void ShowTopPage()
+    {
+        if (_pages.Count == 0)
+        {
+            PageContent.Content = null;
+            PageHost.IsVisible = false;
+            return;
+        }
+
+        var (title, page) = _pages[^1];
+        PageTitle.Text = title;
+        PageContent.Content = page;
+        PageHost.IsVisible = true;
+    }
+
+    private void PageBack_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (_pages.Count > 0)
+        {
+            _pages.RemoveAt(_pages.Count - 1);
+            ShowTopPage();
+        }
+    }
+
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Esc leaves a page (unless something inside used it, like a hotkey recorder).
+        if (e.Key == Key.Escape && !e.Handled && _pages.Count > 0)
+        {
+            e.Handled = true;
+            PageBack_OnClick(sender, e);
+        }
+    }
+
+    private void OpenAppSettings_OnClick(object? sender, RoutedEventArgs e) => OpenAppSettings();
+
+    /// <summary>Opens DeckHost's settings (also from the tray, which shows this window first).</summary>
+    public void OpenAppSettings() =>
+        OpenSingle("DeckHost settings", () => new AppSettingsView { DataContext = new AppSettingsViewModel(TryResolve<UpdateViewModel>()) });
+
+    /// <summary>Opens the update page (the banner's What's new, the tray's update item).</summary>
+    public void OpenUpdates()
+    {
+        if (TryResolve<UpdateViewModel>() is { } updates)
+        {
+            OpenSingle("Update", () => new UpdateView { DataContext = updates });
+        }
+    }
+
+    private void OpenDeviceSettings_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel { SelectedDevice: { } device } &&
+            TryResolve<DeviceSettingsService>()?.Create(device) is { } settings)
+        {
+            OpenSingle($"{device.Name} settings", () => new DeviceSettingsView { DataContext = settings });
+        }
+    }
+
+    private void OpenPluginManager_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TryResolve<PluginManagerViewModel>() is { } plugins)
+        {
+            OpenSingle("Plugins", () => new PluginManagerView { DataContext = plugins });
+        }
+    }
+
+    private void OpenProfileManager_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TryResolve<ProfileManagerViewModel>() is { } profiles)
+        {
+            OpenSingle("Profiles", () => new ProfileManagerView { DataContext = profiles });
+        }
+    }
+
+    // ---------------------------------------------------------------- drag ghost
+
+    public void ShowGhost(string text, IDeckAction? action)
+    {
+        DragGhostText.Text = text;
+        var icon = action is not null && DataContext is MainViewModel vm ? vm.FindActionItem(action)?.Icon : null;
+        DragGhostPath.Data = icon?.Geometry;
+        DragGhostPath.Fill = icon?.Brush ?? Brushes.White;
+        DragGhostIconBox.IsVisible = icon?.HasGeometry == true;
+        DragGhostImage.Source = icon?.Image;
+        DragGhostImage.IsVisible = icon?.HasImage == true;
+        DragGhostVisual.IsVisible = true;
+    }
+
+    public void MoveGhost(Point position)
+    {
+        Canvas.SetLeft(DragGhostVisual, position.X + 14);
+        Canvas.SetTop(DragGhostVisual, position.Y + 10);
+    }
+
+    public void HideGhost() => DragGhostVisual.IsVisible = false;
+
+    // ---------------------------------------------------------------- dragging actions and controls
+
     private async void ActionCard_OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed ||
@@ -68,13 +216,22 @@ public partial class MainWindow : Window
         }
 
         var dataTransfer = new DataTransfer();
-        dataTransfer.Add(DataTransferItem.Create(ActionPayloadFormat, actionItem.Action));
+        dataTransfer.Add(DataTransferItem.Create(DragFormats.Action, actionItem.Action));
 
         e.Handled = true;
-        await DragDrop.DoDragDropAsync(e, dataTransfer, DragDropEffects.Copy);
+        ShowGhost(actionItem.Name, actionItem.Action);
+        MoveGhost(e.GetPosition(this));
+        try
+        {
+            await DragDrop.DoDragDropAsync(e, dataTransfer, DragDropEffects.Copy);
+        }
+        finally
+        {
+            HideGhost();
+        }
     }
 
-    private async void ControlCard_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    private void ControlCard_OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not MainViewModel vm ||
             sender is not Control { DataContext: ControlItemViewModel controlItem } control)
@@ -96,17 +253,10 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Selecting a control opens its editor below the device.
         vm.SelectControl(controlItem.Control);
 
-        if (e.ClickCount >= 2)
-        {
-            // Double-click: shortcut to Customize.
-            _pendingControlDrag = null;
-            await OpenCustomizationDialogAsync(vm, controlItem);
-            return;
-        }
-
-        // Only start dragging once the pointer actually moves, so clicks and double-clicks work.
+        // Only start dragging once the pointer actually moves, so clicks still select.
         _pendingControlDrag = controlItem.AssignedBinding is null ? null : (controlItem, e.GetPosition(control), e);
     }
 
@@ -128,18 +278,27 @@ public partial class MainWindow : Window
 
         _pendingControlDrag = null;
         var controlItem = pending.Control;
-        if (controlItem.AssignedBinding is null)
+        if (controlItem.AssignedBinding is not { } binding)
         {
             return;
         }
 
         var dataTransfer = new DataTransfer();
-        dataTransfer.Add(DataTransferItem.Create(ControlPayloadFormat, controlItem.Id));
-        dataTransfer.Add(DataTransferItem.Create(ActionPayloadFormat, controlItem.AssignedBinding.PrimaryAction.Action));
+        dataTransfer.Add(DataTransferItem.Create(DragFormats.Control, controlItem.Id));
+        dataTransfer.Add(DataTransferItem.Create(DragFormats.Action, binding.PrimaryAction.Action));
 
         // The drop handler moves (or with Ctrl copies/swaps) the binding, or removes it when it's
         // dropped where there is no control. A cancelled drag (Esc, outside the window) changes nothing.
-        await DragDrop.DoDragDropAsync(pending.Press, dataTransfer, DragDropEffects.Copy | DragDropEffects.Move);
+        ShowGhost(binding.DisplayName, binding.PrimaryAction.Action);
+        MoveGhost(e.GetPosition(this));
+        try
+        {
+            await DragDrop.DoDragDropAsync(pending.Press, dataTransfer, DragDropEffects.Copy | DragDropEffects.Move);
+        }
+        finally
+        {
+            HideGhost();
+        }
     }
 
     private void ControlCard_OnPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -195,6 +354,14 @@ public partial class MainWindow : Window
 
     private void OnControlDragOver(object? sender, DragEventArgs e)
     {
+        MoveGhost(e.GetPosition(this));
+
+        // Handled already: a drop zone inside the editor (Multi Action steps) took it.
+        if (e.Handled)
+        {
+            return;
+        }
+
         e.DragEffects = DragDropEffects.None;
         e.Handled = true;
 
@@ -229,6 +396,12 @@ public partial class MainWindow : Window
 
     private void OnControlDrop(object? sender, DragEventArgs e)
     {
+        HideGhost();
+        if (e.Handled)
+        {
+            return;
+        }
+
         e.Handled = true;
 
         if (DataContext is not MainViewModel vm || !TryGetDraggedAction(e, out var action))
@@ -264,29 +437,17 @@ public partial class MainWindow : Window
 
     private static bool TryGetDraggedSourceControl(DragEventArgs e, out string controlId)
     {
-        controlId = e.DataTransfer.TryGetValue(ControlPayloadFormat) ?? string.Empty;
+        controlId = e.DataTransfer.TryGetValue(DragFormats.Control) ?? string.Empty;
         return controlId.Length > 0;
     }
 
-    private async void CustomizeSelectedControl_OnClick(object? sender, RoutedEventArgs e)
+    private void ControlCustomize_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm || vm.SelectedControl is null)
+        if (DataContext is MainViewModel vm && TryGetMenuControl(sender, out var controlItem))
         {
-            return;
+            // The editor below the device shows the selected control.
+            vm.SelectControl(controlItem.Control);
         }
-
-        await OpenCustomizationDialogAsync(vm, vm.SelectedControl);
-    }
-
-    private async void ControlCustomize_OnClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm || !TryGetMenuControl(sender, out var controlItem))
-        {
-            return;
-        }
-
-        vm.SelectControl(controlItem.Control);
-        await OpenCustomizationDialogAsync(vm, controlItem);
     }
 
     private void ControlRemove_OnClick(object? sender, RoutedEventArgs e)
@@ -299,115 +460,9 @@ public partial class MainWindow : Window
         vm.RemoveAssignment(controlItem.Control);
     }
 
-    private AppSettingsWindow? _appSettingsWindow;
-
-    private void OpenAppSettings_OnClick(object? sender, RoutedEventArgs e) => OpenAppSettings();
-
-    /// <summary>Opens the DeckHost settings window (also from the tray, when this window is hidden).</summary>
-    public void OpenAppSettings()
-    {
-        if (_appSettingsWindow is { IsVisible: true })
-        {
-            _appSettingsWindow.Activate();
-            return;
-        }
-
-        _appSettingsWindow = new AppSettingsWindow { DataContext = new AppSettingsViewModel(TryResolve<UpdateViewModel>()) };
-        _appSettingsWindow.Closed += (_, _) => _appSettingsWindow = null;
-        if (IsVisible)
-        {
-            _appSettingsWindow.Show(this);
-        }
-        else
-        {
-            _appSettingsWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            _appSettingsWindow.Show();
-        }
-    }
-
-    private void OpenDeviceSettings_OnClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel { SelectedDevice: { } device }
-            && Ioc.Default.GetRequiredService<DeviceSettingsService>().Create(device) is { } settings)
-        {
-            new DeviceSettingsWindow { DataContext = settings }.Show(this);
-        }
-    }
-
-    private void OpenPluginManager_OnClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel)
-        {
-            return;
-        }
-
-        if (_pluginManagerWindow is { IsVisible: true })
-        {
-            _pluginManagerWindow.Activate();
-            return;
-        }
-
-        _pluginManagerWindow = new PluginManagerWindow
-        {
-            DataContext = Ioc.Default.GetRequiredService<PluginManagerViewModel>(),
-        };
-        _pluginManagerWindow.Closed += (_, _) => _pluginManagerWindow = null;
-        _pluginManagerWindow.Show(this);
-    }
-
-    private void OpenProfileManager_OnClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel)
-        {
-            return;
-        }
-
-        if (_profileManagerWindow is { IsVisible: true })
-        {
-            _profileManagerWindow.Activate();
-            return;
-        }
-
-        _profileManagerWindow = new ProfileManagerWindow
-        {
-            DataContext = Ioc.Default.GetRequiredService<ProfileManagerViewModel>(),
-        };
-        _profileManagerWindow.Closed += (_, _) => _profileManagerWindow = null;
-        _profileManagerWindow.Show(this);
-    }
-
-    private async Task OpenCustomizationDialogAsync(MainViewModel vm, ControlItemViewModel controlItem)
-    {
-        var customization = vm.CreateCustomizationViewModel(controlItem.Id);
-        if (customization.HasSettingsPage && vm.SelectedDevice is { } device)
-        {
-            // Plugin settings pages are shown inside the Customize window.
-            customization.SettingsPageUri = await vm.DeviceHost.GetActionSettingsPageAsync(device.Id, controlItem.Id);
-        }
-
-        var window = new ControlCustomizationWindow
-        {
-            DataContext = customization,
-        };
-
-        // Every edit previews live on the device; Cancel puts the original binding back.
-        void OnCustomizationChanged(object? sender, EventArgs e) => vm.ApplyBinding(customization.ControlId, customization.BuildBinding());
-
-        customization.Changed += OnCustomizationChanged;
-        try
-        {
-            var saved = await window.ShowDialog<bool?>(this);
-            vm.ApplyBinding(customization.ControlId, saved == true ? customization.BuildBinding() : customization.OriginalBinding);
-        }
-        finally
-        {
-            customization.Changed -= OnCustomizationChanged;
-        }
-    }
-
     private static bool TryGetDraggedAction(DragEventArgs e, out IDeckAction action)
     {
-        if (e.DataTransfer.TryGetValue(ActionPayloadFormat) is { } draggedAction)
+        if (e.DataTransfer.TryGetValue(DragFormats.Action) is { } draggedAction)
         {
             action = draggedAction;
             return true;

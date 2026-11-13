@@ -12,6 +12,7 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
     private bool _startAtLogin;
     private bool _startMinimized;
     private bool _closeToTray;
+    private bool _showDebugPanel;
     private string _status = string.Empty;
 
     public AppSettingsViewModel(UpdateViewModel? updates = null)
@@ -21,6 +22,7 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
         _startMinimized = settings.StartMinimized;
         _closeToTray = settings.KeepsRunningInTray;
         _startAtLogin = AppSettings.IsStartAtLoginEnabled();
+        _showDebugPanel = settings.ShowDebugPanel;
     }
 
     /// <summary>Update checks and the available update (null where there is no update service, e.g. in tests).</summary>
@@ -79,6 +81,19 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The debug panel next to the editor: the selected control's capabilities, the runtime connection and log.</summary>
+    public bool ShowDebugPanel
+    {
+        get => _showDebugPanel;
+        set
+        {
+            if (SetProperty(ref _showDebugPanel, value))
+            {
+                Save();
+            }
+        }
+    }
+
     public string Status
     {
         get => _status;
@@ -114,7 +129,7 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
     private void Save()
     {
         // The update fields are the update view model's; keep what's stored.
-        var settings = AppSettings.Load() with { StartMinimized = StartMinimized, CloseToTray = CloseToTray };
+        var settings = AppSettings.Load() with { StartMinimized = StartMinimized, CloseToTray = CloseToTray, ShowDebugPanel = ShowDebugPanel };
         try
         {
             AppSettings.Save(settings);

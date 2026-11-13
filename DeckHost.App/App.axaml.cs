@@ -96,7 +96,20 @@ public partial class App : Application
                 ExitApplication();
             };
 
-            CreateTrayIcon(ShowMainWindow, () => mainWindow.OpenAppSettings(), ExitApplication, updates, () => UpdateWindow.ShowFor(mainWindow, updates));
+            CreateTrayIcon(
+                ShowMainWindow,
+                () =>
+                {
+                    ShowMainWindow();
+                    mainWindow.OpenAppSettings();
+                },
+                ExitApplication,
+                updates,
+                () =>
+                {
+                    ShowMainWindow();
+                    mainWindow.OpenUpdates();
+                });
             ListenForActivation(ShowMainWindow);
             updates.StartAutomaticChecks();
 

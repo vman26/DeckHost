@@ -24,6 +24,12 @@ public interface IDeckAction
     /// <summary>False for actions the editor uses internally and that shouldn't be dragged onto controls.</summary>
     bool ShowInPalette => true;
 
+    /// <summary>
+    /// The action's icon in DeckHost's action list (and while it's dragged): SVG path data on the
+    /// 24×24 grid (see <see cref="Icons"/>) or the absolute path of an image file. Null: a generic icon.
+    /// </summary>
+    string? ListIcon => null;
+
     /// <summary>Whether the action can be a step of a Multi Action.</summary>
     bool CanBeMultiActionStep => true;
 

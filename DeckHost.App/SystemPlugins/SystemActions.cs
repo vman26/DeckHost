@@ -220,6 +220,8 @@ internal sealed class SystemInfoAction() : DeckActionBase(
     OutputCapabilities.Text,
     "Shows CPU, memory, disk or uptime, updated every second.")
 {
+    protected override string? PaletteIcon => Icons.Chip;
+
     private const string MetricKey = "metric";
     private const string DriveKey = "drive";
     private const uint BarNormal = 0xFF22C55E;

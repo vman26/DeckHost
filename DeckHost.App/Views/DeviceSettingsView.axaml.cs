@@ -5,9 +5,9 @@ using DeckHost.App.ViewModels;
 
 namespace DeckHost.App.Views;
 
-public partial class DeviceSettingsWindow : Window
+public partial class DeviceSettingsView : UserControl
 {
-    public DeviceSettingsWindow()
+    public DeviceSettingsView()
     {
         InitializeComponent();
     }
@@ -19,7 +19,7 @@ public partial class DeviceSettingsWindow : Window
             return;
         }
 
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = $"Select {field.Label.ToLowerInvariant()}",
             AllowMultiple = false,
@@ -32,5 +32,5 @@ public partial class DeviceSettingsWindow : Window
         }
     }
 
-    private void Close_OnClick(object? sender, RoutedEventArgs e) => Close();
+    private void Close_OnClick(object? sender, RoutedEventArgs e) => Pages.Close(this);
 }
