@@ -88,6 +88,68 @@ public sealed class PluginCatalogTests : IDisposable
         Assert.Equal(4, changes);
     }
 
+    /// <summary>The OBS package with its version (and optionally more of plugin.json) changed.</summary>
+    private string ObsPackageWithVersion(string version)
+    {
+        var copy = Path.Combine(_root, $"obs-{version}.zip");
+        Directory.CreateDirectory(_root);
+        File.Copy(ObsPackagePath, copy, overwrite: true);
+        using var zip = ZipFile.Open(copy, ZipArchiveMode.Update);
+        var entry = zip.GetEntry("plugin.json")!;
+        string json;
+        using (var reader = new StreamReader(entry.Open()))
+        {
+            json = reader.ReadToEnd();
+        }
+
+        entry.Delete();
+        using var writer = new StreamWriter(zip.CreateEntry("plugin.json").Open());
+        writer.Write(json.Replace("\"version\": \"1.0.0\"", $"\"version\": \"{version}\"", StringComparison.Ordinal));
+        return copy;
+    }
+
+    [Fact]
+    public void An_update_keeps_the_previous_version_which_can_be_rolled_back_and_forth()
+    {
+        using var catalog = CreateCatalog();
+        catalog.Install(ObsPackageWithVersion("1.0.0"));
+        Assert.Null(catalog.Entries.Single(entry => entry.Id == "deckhost.plugin.obs").PreviousVersion);
+
+        var updated = catalog.Install(ObsPackageWithVersion("1.1.0"));
+        Assert.Equal("1.1.0", updated.Version);
+        Assert.Equal("1.0.0", updated.PreviousVersion);
+
+        var back = catalog.RollBack("deckhost.plugin.obs");
+        Assert.Equal("1.0.0", back.Version);
+        Assert.Equal("1.1.0", back.PreviousVersion);
+        Assert.Contains(catalog.EnabledApplicationPlugins, plugin => plugin.Id == "deckhost.plugin.obs");
+
+        catalog.Uninstall("deckhost.plugin.obs");
+        Assert.Throws<PluginException>(() => catalog.RollBack("deckhost.plugin.obs"));
+    }
+
+    [Fact]
+    public void A_package_declares_its_permissions_and_diagnostics_find_what_is_wrong()
+    {
+        using var catalog = CreateCatalog();
+        var entry = catalog.Install(ObsPackagePath);
+        Assert.Equal(["network"], entry.Permissions);
+        Assert.Equal("It can use the network.", PluginPermissions.Describe(entry.Permissions));
+        Assert.Empty(entry.Warnings ?? []);
+        Assert.Empty(PluginDiagnostics.Check(ObsPackagePath));
+
+        var broken = CreatePackage(
+            ("plugin.json", """{"id":"good.id","name":"x","version":"one","assembly":"x.dll","icon":"icon.png","permissions":["network","telepathy"]}"""),
+            ("DeckHost.Contracts.dll", "x"));
+        var problems = PluginDiagnostics.Check(broken).Select(static problem => problem.ToString()).ToList();
+        Assert.Contains(problems, static problem => problem.StartsWith("error:", StringComparison.Ordinal) && problem.Contains("x.dll", StringComparison.Ordinal));
+        Assert.Contains(problems, static problem => problem.Contains("'one'", StringComparison.Ordinal));
+        Assert.Contains(problems, static problem => problem.Contains("icon.png", StringComparison.Ordinal));
+        Assert.Contains(problems, static problem => problem.Contains("telepathy", StringComparison.Ordinal));
+        Assert.Contains(problems, static problem => problem.Contains("DeckHost.Contracts.dll", StringComparison.Ordinal));
+        Assert.Contains(problems, static problem => problem.Contains("author", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Installed_plugins_load_again_after_a_restart()
     {

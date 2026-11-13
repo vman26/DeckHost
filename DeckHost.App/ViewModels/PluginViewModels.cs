@@ -115,8 +115,23 @@ public partial class PluginManagerViewModel : ViewModelBase
             $"Installing {Path.GetFileName(packagePath)}…",
             progress => _catalog.Install(packagePath, progress: progress, origin: "File"),
             entry => entry.Error is null
-                ? $"Installed {entry.Name} {entry.Version}. Its actions are in the action list now."
+                ? $"Installed {entry.Name} {entry.Version}. Its actions are in the action list now.{PermissionNote(entry)}"
                 : $"Installed {entry.Name}, but it can't run: {entry.Error}");
+    }
+
+    /// <summary>What an installed DeckHost plugin declared it may do (Stream Deck plugins declare nothing).</summary>
+    internal static string PermissionNote(PluginEntry entry) =>
+        entry.Source == PluginCatalog.DeckHostSource && entry.Permissions is { Count: > 0 } ? " " + PluginPermissions.Describe(entry.Permissions) : string.Empty;
+
+    internal async Task RollBackAsync(PluginEntryViewModel plugin)
+    {
+        await RunBusyAsync(
+            $"Going back to {plugin.Name} {plugin.Entry.PreviousVersion}…",
+            progress => _catalog.RollBack(plugin.Id, progress),
+            entry => entry.Error is null
+                ? $"{entry.Name} is back at {entry.Version}. Use the same button to return to {entry.PreviousVersion}."
+                : $"{entry.Name} {entry.Version} is back, but it can't run: {entry.Error}",
+            plugin);
     }
 
     public void Detach()
@@ -366,6 +381,24 @@ public partial class PluginEntryViewModel : ViewModelBase
 
     [RelayCommand]
     private Task Uninstall() => _owner.UninstallAsync(this);
+
+    /// <summary>"It can use the network." for DeckHost plugins that declare permissions.</summary>
+    public string PermissionsText => Entry.Source == PluginCatalog.DeckHostSource && !Entry.IsSystem && Entry.Kind != PluginKind.Device
+        ? PluginPermissions.Describe(Entry.Permissions)
+        : Entry.Source == PluginCatalog.StreamDeckSource ? "Runs as its own program with your user's rights." : string.Empty;
+
+    public bool HasPermissionsText => PermissionsText.Length > 0;
+
+    public string WarningsText => string.Join("\n", (Entry.Warnings ?? []).Select(static warning => "⚠ " + warning));
+
+    public bool HasWarnings => Entry.Warnings is { Count: > 0 };
+
+    public bool CanRollBack => Entry.PreviousVersion is not null;
+
+    public string RollBackLabel => $"Back to v{Entry.PreviousVersion}";
+
+    [RelayCommand]
+    private Task RollBack() => _owner.RollBackAsync(this);
 }
 
 public sealed class DeviceInfoViewModel(DeviceDefinition device, string? status, bool hasSettings = false)
