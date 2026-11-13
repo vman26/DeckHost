@@ -42,7 +42,7 @@
 							<TextBlock Classes="hint" Text="One platform. Unlimited control." />
 						</StackPanel>
 					</StackPanel>
-					<TextBlock Classes="hint" Text="DeckHost drives your control surfaces: the MiraBox N4 Pro, Elgato Stream Decks, and a Web Deck on your phone or tablet. Each key, knob and touch zone runs what you put on it." />
+					<TextBlock Classes="hint" Text="DeckHost drives your control surfaces: the MiraBox N4 Pro, Elgato Stream Decks, a Web Deck on your phone or tablet, and other USB button boxes, pedals and jog wheels you teach it. Each key, knob and touch zone runs what you put on it." />
 					<Border Classes="card">
 						<StackPanel Spacing="10">
 							<Grid ColumnDefinitions="*,Auto">
@@ -72,6 +72,15 @@
 								</StackPanel>
 							</Border>
 						</StackPanel>
+					</Border>
+					<Border Classes="card">
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+							<StackPanel Spacing="4">
+								<TextBlock Text="Another USB device?" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+								<TextBlock Classes="hint" Text="A button box, foot pedal, jog wheel or game controller can become a deck too: press each key and turn each knob once so DeckHost learns them, place them as they sit, and save." />
+							</StackPanel>
+							<Button Grid.Column="1" Content="Add a USB device" VerticalAlignment="Center" Command="{Binding AddUsbDeviceCommand}" />
+						</Grid>
 					</Border>
 				</StackPanel>
 
@@ -108,6 +117,10 @@
 								<CheckBox Content="Check for DeckHost updates" IsChecked="{Binding CheckForUpdates}" />
 								<TextBlock Classes="hint" Margin="28,0,0,0" Text="Asks GitHub for new releases now and then. Updates are only installed when you choose to." />
 							</StackPanel>
+							<StackPanel Orientation="Horizontal" Spacing="10">
+								<TextBlock Text="Look" VerticalAlignment="Center" Foreground="{DynamicResource C.E2E8F0}" />
+								<ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" MinWidth="200" />
+							</StackPanel>
 							<StackPanel Spacing="2">
 								<CheckBox Content="After a crash, offer to report it" IsChecked="{Binding OfferCrashReports}" />
 								<TextBlock Classes="hint" Margin="28,0,0,0" Text="A crash report is kept on this computer. On the next start DeckHost asks whether you want to report it; nothing is ever sent by itself." />
@@ -120,10 +133,11 @@
 				<StackPanel Spacing="12" IsVisible="{Binding IsTipsStep}">
 					<TextBlock Classes="heading" Text="How DeckHost works" />
 					<Border Classes="tip"><TextBlock Classes="hint" Text="Drag an action from the list on the right onto a key, knob or touch zone. Drag it off again to remove it." /></Border>
-					<Border Classes="tip"><TextBlock Classes="hint" Text="Click a control to set it up below the device: the action's settings, text, icon, background and light. Double-click it to try it." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Click a control to set it up below the device: the action's settings, text, icon, background and light. Double-click it to try it. Made a mistake? Undo with Ctrl+Z or the arrows at the top." /></Border>
 					<Border Classes="tip"><TextBlock Classes="hint" Text="Multi Action runs several actions in a row; Key Logic does something else on a double press or a hold; Workflow links triggers, conditions, waits and loops on a canvas." /></Border>
-					<Border Classes="tip"><TextBlock Classes="hint" Text="Profiles switch the whole device, pages flip with a swipe, and folders open a set of keys. A profile can turn on by itself when an app comes to the front." /></Border>
-					<Border Classes="tip"><TextBlock Classes="hint" Text="More actions: Plugins → Store has DeckHost, OpenAction and Stream Deck plugins. Help and support (☰ menu) has the documentation and a way to report problems." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Profiles switch the whole device, pages flip with a swipe, and folders open a set of keys. A profile can turn on by itself when an app comes to the front, and be copied to another device (Profiles → Copy to)." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="More actions: Plugins → Store has DeckHost, OpenAction and Stream Deck plugins. Each runs in its own process, so one that crashes can't take DeckHost down; it's restarted by itself." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Device settings has each device's brightness, lights and firmware version. Help and support (☰ menu) has the documentation, a way to report problems, and what DeckHost sees of each device." /></Border>
 				</StackPanel>
 			</StackPanel>
 		</ScrollViewer>
