@@ -36,6 +36,27 @@ public partial class MainWindow : Window
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnControlDragOver, handledEventsToo: true);
         AddHandler(DragDrop.DropEvent, OnControlDrop, handledEventsToo: true);
+
+        if (TryResolve<UpdateViewModel>() is { } updates)
+        {
+            UpdateBanner.DataContext = updates;
+            UpdateBanner.Bind(IsVisibleProperty, new Avalonia.Data.Binding(nameof(UpdateViewModel.ShowBanner)) { Source = updates });
+            updates.DetailsRequested += () => UpdateWindow.ShowFor(this, updates);
+        }
+    }
+
+    /// <summary>A service from the app's container, or null when there is none (tests, previews).</summary>
+    private static T? TryResolve<T>()
+        where T : class
+    {
+        try
+        {
+            return Ioc.Default.GetService<T>();
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private async void ActionCard_OnPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -291,7 +312,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        _appSettingsWindow = new AppSettingsWindow { DataContext = new AppSettingsViewModel() };
+        _appSettingsWindow = new AppSettingsWindow { DataContext = new AppSettingsViewModel(TryResolve<UpdateViewModel>()) };
         _appSettingsWindow.Closed += (_, _) => _appSettingsWindow = null;
         if (IsVisible)
         {

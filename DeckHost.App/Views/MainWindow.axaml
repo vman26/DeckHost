@@ -63,6 +63,30 @@
 					</Button.Flyout>
 				</Button>
 
+				<!-- An available update (DataContext: the update service, set in code). -->
+				<Border x:Name="UpdateBanner"
+						DockPanel.Dock="Right"
+						IsVisible="False"
+						Margin="12,0,0,0"
+						Padding="12,8"
+						Background="#172554"
+						BorderBrush="#1D4ED8"
+						BorderThickness="1"
+						CornerRadius="12"
+						x:DataType="vm:UpdateViewModel">
+					<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+						<TextBlock Text="⬆" FontSize="18" Foreground="#93C5FD" VerticalAlignment="Center" />
+						<StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+							<TextBlock Text="{Binding AvailableTitle}" FontWeight="SemiBold" Foreground="#E2E8F0" />
+							<TextBlock Text="{Binding AvailableSummary}" FontSize="12" Foreground="#93C5FD" />
+						</StackPanel>
+						<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+							<Button Content="What's new" Classes="accent" Command="{Binding ShowDetailsCommand}" />
+							<Button Content="✕" ToolTip.Tip="Remind me next time DeckHost starts" Command="{Binding LaterCommand}" />
+						</StackPanel>
+					</Grid>
+				</Border>
+
 				<StackPanel Spacing="4">
 					<TextBlock Text="DeckHost Studio"
 							   FontSize="24"

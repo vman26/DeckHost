@@ -58,7 +58,15 @@ Name: "{autodesktop}\DeckHost"; Filename: "{app}\DeckHost.App.exe"; Tasks: deskt
 
 [Run]
 Filename: "{app}\DeckHost.App.exe"; Description: "{cm:LaunchProgram,DeckHost}"; Flags: nowait postinstall skipifsilent
+; An update started from DeckHost (silent, /relaunch=1) starts it again.
+Filename: "{app}\DeckHost.App.exe"; Flags: nowait; Check: RelaunchAfterUpdate
 
 [UninstallRun]
 ; Removes the start-with-Windows entry DeckHost may have added (HKCU\...\Run\DeckHost).
 Filename: "{sys}\reg.exe"; Parameters: "delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v DeckHost /f"; Flags: runhidden; RunOnceId: "RemoveRunEntry"
+
+[Code]
+function RelaunchAfterUpdate: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:relaunch|0}') = '1');
+end;

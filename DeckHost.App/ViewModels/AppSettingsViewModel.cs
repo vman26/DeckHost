@@ -14,13 +14,19 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
     private bool _closeToTray;
     private string _status = string.Empty;
 
-    public AppSettingsViewModel()
+    public AppSettingsViewModel(UpdateViewModel? updates = null)
     {
+        Updates = updates;
         var settings = AppSettings.Load();
         _startMinimized = settings.StartMinimized;
         _closeToTray = settings.KeepsRunningInTray;
         _startAtLogin = AppSettings.IsStartAtLoginEnabled();
     }
+
+    /// <summary>Update checks and the available update (null where there is no update service, e.g. in tests).</summary>
+    public UpdateViewModel? Updates { get; }
+
+    public bool HasUpdates => Updates is not null;
 
     /// <summary>Raised after a change, so the app can update its tray and close behavior.</summary>
     public static event Action<AppSettingsData>? Changed;
@@ -107,7 +113,8 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
 
     private void Save()
     {
-        var settings = new AppSettingsData(StartMinimized, CloseToTray);
+        // The update fields are the update view model's; keep what's stored.
+        var settings = AppSettings.Load() with { StartMinimized = StartMinimized, CloseToTray = CloseToTray };
         try
         {
             AppSettings.Save(settings);
