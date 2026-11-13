@@ -47,7 +47,33 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
         // The debug panel is a DeckHost setting.
         DataContextChanged += (_, _) => ApplyDebugSetting(AppSettings.Load());
+        DataContextChanged += (_, _) =>
+        {
+            if (_workflowSource is not null)
+            {
+                _workflowSource.WorkflowEditorRequested -= OpenWorkflowEditor;
+            }
+
+            _workflowSource = DataContext as MainViewModel;
+            if (_workflowSource is not null)
+            {
+                _workflowSource.WorkflowEditorRequested += OpenWorkflowEditor;
+            }
+        };
         AppSettingsViewModel.Changed += settings => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyDebugSetting(settings));
+    }
+
+    private MainViewModel? _workflowSource;
+
+    /// <summary>The workflow editor as a page (one at a time: a second one replaces the first).</summary>
+    private void OpenWorkflowEditor(WorkflowEditorViewModel editor)
+    {
+        foreach (var open in _pages.Where(static entry => entry.Page is WorkflowEditorView).ToList())
+        {
+            _pages.Remove(open);
+        }
+
+        OpenPage(editor.Title, new WorkflowEditorView { DataContext = editor });
     }
 
     private void ApplyDebugSetting(AppSettingsData settings)
@@ -123,6 +149,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
         var (title, page) = _pages[^1];
         PageTitle.Text = title;
+        PageContent.MaxWidth = page is IWidePage ? double.PositiveInfinity : 1100;
         PageContent.Content = page;
         PageHost.IsVisible = true;
     }

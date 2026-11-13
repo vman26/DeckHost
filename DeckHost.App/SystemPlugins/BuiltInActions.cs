@@ -77,6 +77,57 @@ internal sealed class KeyLogicAction() : DeckActionBase(
     protected override (uint From, uint To) TileColors => Palette.Multi;
 }
 
+/// <summary>A visual workflow: nodes linked on a canvas (triggers, actions, waits, conditions, loops).</summary>
+internal sealed class WorkflowAction() : DeckActionBase(
+    ActionId,
+    "Workflow",
+    InputCapabilities.None,
+    OutputCapabilities.None,
+    "Build what the control does from linked nodes: what starts it (press, tap, double press, hold, turn), actions, waits, If (a variable, the app in front, the time), toggles, repeats and variables.")
+{
+    public const string ActionId = "builtin.workflow";
+
+    public override bool CanBeMultiActionStep => false;
+
+    protected override string? Icon(IRenderContext context) => Icons.Workflow;
+
+    protected override (uint From, uint To) TileColors => Palette.Multi;
+}
+
+/// <summary>Shows the value of a workflow variable (set by a Set variable node).</summary>
+internal sealed class ShowVariableAction() : DeckActionBase(
+    "builtin.show-variable",
+    "Show Variable",
+    InputCapabilities.None,
+    OutputCapabilities.Text,
+    "Shows a workflow variable's value; workflows set it with a Set variable node.")
+{
+    private const string NameKey = "name";
+    private const string EmptyKey = "empty";
+
+    protected override string? PaletteIcon => Icons.Variable;
+
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
+    [
+        new(NameKey, "Variable", Placeholder: "e.g. mode"),
+        new(EmptyKey, "Shown while it's empty", Placeholder: "–"),
+    ];
+
+    public override bool CanBeMultiActionStep => false;
+
+    // Workflows on other controls change it, so look again now and then.
+    public override TimeSpan? RefreshInterval => TimeSpan.FromMilliseconds(500);
+
+    public override void Render(IRenderContext context)
+    {
+        var name = context.Settings.Get(NameKey);
+        var value = name.Length > 0 && context.Variables.TryGetValue<string>(VariableKeys.UserVariable(name), out var stored) && !string.IsNullOrEmpty(stored)
+            ? stored
+            : context.Settings.Get(EmptyKey, "–");
+        context.DrawReading(ResolveDisplayText(context, name.Length > 0 ? name : Name), value, null, SecondaryTextColor, ResolveIcon(context, Icons.Variable));
+    }
+}
+
 /// <summary>
 /// Used internally when a control only shows text or an image. Not in the action list: setting
 /// the appearance of an empty control creates it automatically.

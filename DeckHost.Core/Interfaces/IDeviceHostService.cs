@@ -26,6 +26,13 @@ public interface IDeviceHostService : IAsyncDisposable
     /// <summary>A control's LED changed color (effects included, also while the device is unplugged).</summary>
     event Action<LightState>? LightChanged;
 
+    /// <summary>A workflow run started, entered a node or ended (the workflow editor's live view).</summary>
+    event Action<WorkflowTrace>? WorkflowTraced
+    {
+        add { }
+        remove { }
+    }
+
     IReadOnlyCollection<DeviceDefinition> Devices { get; }
     IReadOnlyCollection<DeviceProfile> Profiles { get; }
     IReadOnlyCollection<RuntimeLogEntry> RuntimeLogs { get; }
@@ -47,6 +54,21 @@ public interface IDeviceHostService : IAsyncDisposable
 
     /// <summary>Renders every control of the device again and raises their frames (e.g. when the editor switches to it).</summary>
     void Redraw(string deviceId);
+
+    /// <summary>Sets a variable in the host's variable store (e.g. the app in the foreground).</summary>
+    void SetVariable(string key, string value)
+    {
+    }
+
+    /// <summary>Stops every run of the workflow on a control.</summary>
+    void StopWorkflows(string deviceId, string controlId)
+    {
+    }
+
+    /// <summary>Starts the workflow on a control in the active profile as if <paramref name="trigger"/> happened (the editor's Run).</summary>
+    void RunWorkflowTrigger(string deviceId, string controlId, string trigger)
+    {
+    }
 
     /// <summary>Adds a line to the runtime log (for parts of the app outside the host).</summary>
     void AppendLog(string level, string message);

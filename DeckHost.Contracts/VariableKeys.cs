@@ -26,6 +26,15 @@ public static class VariableKeys
     /// <summary>A Multi Action Switch's set that the next press runs (<see cref="Models.StepGroups.First"/> or <see cref="Models.StepGroups.Second"/>).</summary>
     public const string SwitchState = "switchState";
 
+    /// <summary>Prefix of a workflow's own state under a control (e.g. which output a Toggle node takes next).</summary>
+    public const string WorkflowState = "workflow";
+
+    /// <summary>The name of the app in the foreground (where the platform reports it).</summary>
+    public const string ForegroundApp = "system.foregroundApp";
+
+    /// <summary><c>vars.{name}</c>: a variable that workflows set and check (names ignore case).</summary>
+    public static string UserVariable(string name) => $"vars.{name.Trim().ToLowerInvariant()}";
+
     /// <summary><c>devices.{deviceId}.</c></summary>
     public static string Device(string deviceId) => $"devices.{deviceId}.";
 

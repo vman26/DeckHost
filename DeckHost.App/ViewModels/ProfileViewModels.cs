@@ -210,15 +210,22 @@ public class ControlBindingViewModel : ViewModelBase
     public RgbFeedback? LightFeedback => Model.Appearance.RgbFeedback;
 
     /// <summary>A binding with steps: a Multi Action, a Multi Action Switch or Key Logic.</summary>
-    public bool IsMultiAction => Model.ActionKind != ProfileActionKind.Single;
+    public bool IsMultiAction => Model.ActionKind is not (ProfileActionKind.Single or ProfileActionKind.Workflow);
+
+    /// <summary>A visual workflow (<see cref="ControlBinding.Workflow"/>); its action nodes are <see cref="Steps"/>.</summary>
+    public bool IsWorkflow => Model.ActionKind == ProfileActionKind.Workflow;
 
     public bool IsDisplayContentOnly => PrimaryAction.IsDisplayContentAction;
 
-    public string DisplayName => IsMultiAction
+    public string DisplayName => IsWorkflow
+        ? $"{PrimaryAction.Name} ({Model.Workflow?.Nodes.Count ?? 0} node{(Model.Workflow?.Nodes.Count == 1 ? string.Empty : "s")})"
+        : IsMultiAction
         ? $"{PrimaryAction.Name} ({Steps.Count} step{(Steps.Count == 1 ? string.Empty : "s")})"
         : IsDisplayContentOnly ? "Text / image only" : PrimaryAction.Name;
 
-    public string CapabilitySummary => IsMultiAction
+    public string CapabilitySummary => IsWorkflow
+        ? Steps.Count == 0 ? "No actions yet: open the workflow editor." : string.Join(", ", Steps.Select(static step => step.Name).Distinct())
+        : IsMultiAction
         ? Steps.Count == 0 ? "No steps yet: add them in Customize." : string.Join(" → ", Steps.Select(static step => step.Name))
         : PrimaryAction.Summary;
 }

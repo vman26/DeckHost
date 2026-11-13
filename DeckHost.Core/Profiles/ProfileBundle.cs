@@ -158,7 +158,7 @@ public static class ProfileBundle
     {
         ActionReference Point(ActionReference action) => action with
         {
-            Settings = new ActionSettings(action.Settings.Select(pair =>
+            Settings = new ActionSettings(action.EffectiveSettings.Select(pair =>
                 ids.TryGetValue(pair.Value, out var newId) ? new KeyValuePair<string, string>(pair.Key, newId) : pair)),
         };
 
@@ -171,6 +171,9 @@ public static class ProfileBundle
             {
                 Action = Point(binding.Action),
                 Steps = [.. binding.Steps.Select(step => step with { Action = Point(step.Action) })],
+                Workflow = binding.Workflow is { } workflow
+                    ? workflow with { Nodes = [.. workflow.Nodes.Select(node => node.Action is { } action ? node with { Action = Point(action) } : node)] }
+                    : null,
             })],
         };
     }

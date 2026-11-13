@@ -4,6 +4,7 @@ using DeckHost.Contracts.Interfaces;
 using DeckHost.Contracts.Models;
 using DeckHost.Core.Interfaces;
 using DeckHost.Core.Models;
+using DeckHost.Core.Workflows;
 
 namespace DeckHost.Core
 {
@@ -20,7 +21,20 @@ namespace DeckHost.Core
         /// Runs work later on the host's worker (for steps with a wait): device id, delay, work.
         /// Without it, waits are skipped and every step runs at once.
         /// </summary>
-        public Action<string, TimeSpan, Action>? Scheduler { get; set; }
+        public Action<string, TimeSpan, Action>? Scheduler
+        {
+            get => _scheduler;
+            set
+            {
+                _scheduler = value;
+                Workflows.Scheduler = value;
+            }
+        }
+
+        private Action<string, TimeSpan, Action>? _scheduler;
+
+        /// <summary>Runs the controls' visual workflows (<see cref="ProfileActionKind.Workflow"/>).</summary>
+        public WorkflowEngine Workflows { get; }
         private List<string> _duplicateActionKeys = [];
 
         public ActionRouter(
@@ -31,6 +45,7 @@ namespace DeckHost.Core
             ArgumentNullException.ThrowIfNull(variableStore);
             _variableStore = variableStore;
             _onActionFailed = onActionFailed;
+            Workflows = new WorkflowEngine(variableStore, DispatchActionReference);
             SetApplicationPlugins(applicationPlugins);
         }
 
@@ -113,6 +128,14 @@ namespace DeckHost.Core
 
                     var dispatched = DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
                     return RunSteps(StepsOf(binding, set), inputEvent, host, profile.Id) | dispatched;
+                }
+
+                case ProfileActionKind.Workflow:
+                {
+                    // Inputs that start a trigger right away; tap, double press and hold need timing (the host).
+                    var dispatched = DispatchActionReference(binding.Action, inputEvent, host, profile.Id);
+                    return (WorkflowTriggers.Immediate(inputEvent.EventType, inputEvent.Value) is { } trigger &&
+                            Workflows.Fire(profile, binding, trigger, inputEvent, host)) | dispatched;
                 }
 
                 case ProfileActionKind.KeyLogic:

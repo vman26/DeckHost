@@ -1,0 +1,295 @@
+<UserControl
+		xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		xmlns:local="using:DeckHost.App.Views"
+		x:Class="DeckHost.App.Views.WorkflowEditorView"
+		x:DataType="vm:WorkflowEditorViewModel">
+
+	<UserControl.Styles>
+		<Style Selector="TextBlock.section">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+		</Style>
+		<Style Selector="TextBlock.label">
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="#E2E8F0" />
+		</Style>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+		<Style Selector="TextBlock.error">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="#FCA5A5" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+		<Style Selector="Border.card">
+			<Setter Property="Background" Value="#0F172A" />
+			<Setter Property="BorderBrush" Value="#1E293B" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="12" />
+			<Setter Property="Padding" Value="12" />
+		</Style>
+		<Style Selector="Border.paletteItem">
+			<Setter Property="Background" Value="#111827" />
+			<Setter Property="BorderBrush" Value="#1E293B" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="8,6" />
+			<Setter Property="Cursor" Value="Hand" />
+		</Style>
+		<Style Selector="Border.paletteItem:pointerover">
+			<Setter Property="Background" Value="#1E293B" />
+		</Style>
+	</UserControl.Styles>
+
+	<UserControl.DataTemplates>
+		<!-- The fields of a node's settings (or its action's), like in Customize. -->
+		<DataTemplate DataType="vm:TextSettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<TextBox Text="{Binding Value, Mode=TwoWay}" PlaceholderText="{Binding Placeholder}" />
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
+		<DataTemplate DataType="vm:SecretSettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<TextBox Text="{Binding Value, Mode=TwoWay}" PasswordChar="•" PlaceholderText="{Binding Placeholder}" />
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
+		<DataTemplate DataType="vm:NumberSettingField">
+			<local:NumberSettingEditor />
+		</DataTemplate>
+		<DataTemplate DataType="vm:ToggleSettingField">
+			<StackPanel Spacing="4">
+				<CheckBox Content="{Binding Label}" IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
+		<DataTemplate DataType="vm:ChoiceSettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
+						  HorizontalAlignment="Stretch" DisplayMemberBinding="{Binding Label}" />
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
+		<DataTemplate DataType="vm:FilePathSettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+					<TextBox Text="{Binding Value, Mode=TwoWay}" PlaceholderText="{Binding Placeholder}" />
+					<Button Grid.Column="1" Content="Browse…" Click="BrowseSettingFile_OnClick" />
+				</Grid>
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
+		<DataTemplate DataType="vm:HotkeySettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+					<TextBox Text="{Binding Value, Mode=TwoWay}" PlaceholderText="{Binding Placeholder}" IsReadOnly="{Binding IsRecording}" />
+					<ToggleButton Grid.Column="1" MinWidth="80" Content="{Binding RecordButtonText}"
+								  IsChecked="{Binding IsRecording, Mode=TwoWay}" IsCheckedChanged="HotkeyRecord_OnIsCheckedChanged" />
+				</Grid>
+				<Border IsVisible="{Binding ShowRecordingHint}" Background="#1E3A8A" CornerRadius="8" Padding="10,6">
+					<TextBlock Foreground="#DBEAFE" TextWrapping="Wrap">
+						<Run Text="Press the key combination now (Esc cancels). " />
+						<Run Text="{Binding RecordingPreview}" FontWeight="SemiBold" />
+					</TextBlock>
+				</Border>
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+				<TextBlock Classes="error" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+			</StackPanel>
+		</DataTemplate>
+		<DataTemplate DataType="vm:SettingsEditorViewModel">
+			<ItemsControl ItemsSource="{Binding Fields}">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<StackPanel Spacing="10" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+				<ItemsControl.Styles>
+					<Style Selector="ContentPresenter" x:DataType="vm:SettingFieldViewModel">
+						<Setter Property="IsVisible" Value="{Binding IsVisible}" />
+					</Style>
+				</ItemsControl.Styles>
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="vm:SettingFieldViewModel">
+						<StackPanel Spacing="6">
+							<TextBlock Text="{Binding SectionTitle}" IsVisible="{Binding HasSectionTitle}" FontWeight="SemiBold" Foreground="#93C5FD" Margin="0,6,0,0" />
+							<ContentControl Content="{Binding}" />
+						</StackPanel>
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+		</DataTemplate>
+	</UserControl.DataTemplates>
+
+	<Grid RowDefinitions="Auto,*,Auto">
+		<!-- Toolbar -->
+		<Border Padding="14,8" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+			<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+				<TextBlock Text="{Binding Overview}" Foreground="#CBD5E1" VerticalAlignment="Center" TextWrapping="Wrap" />
+				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+					<Button Content="↶ Undo" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" ToolTip.Tip="Undo (Ctrl+Z)" />
+					<Button Content="↷ Redo" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" ToolTip.Tip="Redo (Ctrl+Y)" />
+					<Button Content="Arrange" Command="{Binding ArrangeCommand}" ToolTip.Tip="Lay the nodes out from left to right" />
+					<Button Content="Fit" Click="Fit_OnClick" ToolTip.Tip="Show every node (Ctrl + wheel zooms, drag the background to pan)" />
+					<Button Content="Revert" Command="{Binding RevertAllCommand}" ToolTip.Tip="Put back the workflow as it was when you opened the editor" />
+					<Border Width="1" Background="#334155" Margin="4,2" />
+					<Button Content="▶ Run" Classes="accent" Command="{Binding RunCommand}" ToolTip.Tip="Start the workflow as if the control was used: the selected When node, else the first" />
+					<Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop every run of this workflow" />
+				</StackPanel>
+			</Grid>
+		</Border>
+
+		<Grid Grid.Row="1" ColumnDefinitions="230,*,320">
+			<!-- Palette: node kinds and actions; click to add (after the selected node), or drag onto the canvas. -->
+			<Border BorderBrush="#1E293B" BorderThickness="0,0,1,0" Background="#0F172A">
+				<Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10">
+					<TextBlock Classes="section" Text="NODES" Margin="2,0,0,6" />
+					<ItemsControl Grid.Row="1" ItemsSource="{Binding NodePalette}">
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate><StackPanel Spacing="4" /></ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+						<ItemsControl.ItemTemplate>
+							<DataTemplate x:DataType="vm:WorkflowPaletteItem">
+								<Border Classes="paletteItem" ToolTip.Tip="{Binding Description}" PointerPressed="PaletteNode_OnPointerPressed">
+									<StackPanel Orientation="Horizontal" Spacing="8">
+										<Viewbox Width="16" Height="16"><Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas></Viewbox>
+										<TextBlock Text="{Binding Name}" Foreground="#E2E8F0" VerticalAlignment="Center" />
+									</StackPanel>
+								</Border>
+							</DataTemplate>
+						</ItemsControl.ItemTemplate>
+					</ItemsControl>
+					<StackPanel Grid.Row="2" Spacing="6" Margin="0,14,0,6">
+						<TextBlock Classes="section" Text="ACTIONS" Margin="2,0,0,0" />
+						<TextBox Name="ActionSearch" PlaceholderText="Search actions" TextChanged="ActionSearch_OnTextChanged" />
+					</StackPanel>
+					<ListBox Grid.Row="3" Name="ActionList" Background="Transparent" ItemsSource="{Binding AvailableActions}">
+						<ListBox.ItemTemplate>
+							<DataTemplate x:DataType="vm:ActionItemViewModel">
+								<Border Background="Transparent" PointerPressed="PaletteAction_OnPointerPressed" ToolTip.Tip="{Binding Summary}">
+									<StackPanel Orientation="Horizontal" Spacing="8">
+										<Grid Width="16" Height="16">
+											<Viewbox IsVisible="{Binding Icon.HasGeometry}"><Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas></Viewbox>
+											<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" />
+										</Grid>
+										<StackPanel>
+											<TextBlock Text="{Binding Name}" Foreground="#E2E8F0" />
+											<TextBlock Text="{Binding PluginName}" FontSize="11" Foreground="#64748B" />
+										</StackPanel>
+									</StackPanel>
+								</Border>
+							</DataTemplate>
+						</ListBox.ItemTemplate>
+					</ListBox>
+				</Grid>
+			</Border>
+
+			<!-- The canvas -->
+			<local:WorkflowCanvas Grid.Column="1" Name="Canvas" />
+
+			<!-- Inspector: the selected node (or link) and the run log. -->
+			<Border Grid.Column="2" BorderBrush="#1E293B" BorderThickness="1,0,0,0" Background="#0F172A">
+				<Grid RowDefinitions="*,Auto">
+					<ScrollViewer>
+						<StackPanel Spacing="12" Margin="12">
+							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
+								<StackPanel Spacing="6">
+									<TextBlock Classes="section" Text="HOW IT WORKS" />
+									<TextBlock Classes="hint" Text="A run starts at a When node and follows the links from left to right. Drag from a dot on the right of a node onto another node to link them; a dot with several links runs them side by side." />
+									<TextBlock Classes="hint" Text="Click a node to set it up, click a link to select it; Delete removes, Ctrl+D duplicates, Ctrl+Z undoes. Changes reach the device right away." />
+								</StackPanel>
+							</Border>
+							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
+								<StackPanel Spacing="6">
+									<TextBlock Classes="section" Text="WHILE A RUN IS GOING" />
+									<TextBlock Classes="hint" Text="When the same input comes again before a run is done (it is waiting):" />
+									<ComboBox ItemsSource="{Binding WhileRunningOptions}" SelectedItem="{Binding WhileRunning, Mode=TwoWay}"
+											  DisplayMemberBinding="{Binding Label}" HorizontalAlignment="Stretch" />
+								</StackPanel>
+							</Border>
+
+							<Border Classes="card" IsVisible="{Binding HasSelectedNode}">
+								<StackPanel Spacing="10">
+									<StackPanel Spacing="2">
+										<TextBlock Classes="section" Text="{Binding SelectedKindName}" />
+										<TextBlock Classes="hint" Text="{Binding SelectedDescription}" />
+									</StackPanel>
+									<StackPanel Spacing="4" IsVisible="{Binding SelectedIsAction}">
+										<TextBlock Classes="label" Text="Action" />
+										<ComboBox ItemsSource="{Binding AvailableActions}" SelectedItem="{Binding SelectedAction, Mode=TwoWay}"
+												  HorizontalAlignment="Stretch" PlaceholderText="Choose an action">
+											<ComboBox.ItemTemplate>
+												<DataTemplate x:DataType="vm:ActionItemViewModel">
+													<TextBlock>
+														<Run Text="{Binding Name}" />
+														<Run Text="  ·  " Foreground="#64748B" />
+														<Run Text="{Binding PluginName}" Foreground="#64748B" />
+													</TextBlock>
+												</DataTemplate>
+											</ComboBox.ItemTemplate>
+										</ComboBox>
+										<TextBlock Classes="error" IsVisible="{Binding SelectedIsMissing}"
+												   Text="This action isn't loaded (its plugin is disabled or uninstalled). It is skipped when the workflow runs." />
+									</StackPanel>
+									<ContentControl Content="{Binding NodeSettings}" IsVisible="{Binding HasNodeSettings}" />
+									<StackPanel Spacing="4">
+										<TextBlock Classes="label" Text="Name on the canvas" />
+										<TextBox Text="{Binding NodeTitle, Mode=TwoWay}" PlaceholderText="{Binding NodeTitlePlaceholder}" />
+									</StackPanel>
+									<StackPanel Orientation="Horizontal" Spacing="8">
+										<Button Content="▶ Run from here" Command="{Binding RunCommand}" IsVisible="{Binding SelectedIsTrigger}" />
+										<Button Content="Duplicate" Command="{Binding DuplicateSelectionCommand}" />
+										<Button Content="Remove" Command="{Binding DeleteSelectionCommand}" />
+									</StackPanel>
+								</StackPanel>
+							</Border>
+
+							<Border Classes="card" IsVisible="{Binding HasSelectedLink}">
+								<StackPanel Spacing="8">
+									<TextBlock Classes="section" Text="LINK" />
+									<TextBlock Text="{Binding SelectedLinkText}" Foreground="#E2E8F0" TextWrapping="Wrap" />
+									<Button Content="Remove link" Command="{Binding DeleteSelectionCommand}" HorizontalAlignment="Left" />
+								</StackPanel>
+							</Border>
+						</StackPanel>
+					</ScrollViewer>
+
+					<!-- Every step of the latest runs (newest on top). -->
+					<Border Grid.Row="1" BorderBrush="#1E293B" BorderThickness="0,1,0,0" Padding="12,8">
+						<StackPanel Spacing="6">
+							<Grid ColumnDefinitions="*,Auto">
+								<TextBlock Classes="section" Text="RUN LOG" VerticalAlignment="Center" />
+								<Button Grid.Column="1" Content="Clear" Padding="8,2" FontSize="11" Command="{Binding ClearRunLogCommand}" IsVisible="{Binding HasRunLog}" />
+							</Grid>
+							<TextBlock Classes="hint" Text="Press the control (or Run) to see each step light up and appear here." IsVisible="{Binding !HasRunLog}" />
+							<ScrollViewer Height="170" IsVisible="{Binding HasRunLog}">
+								<ItemsControl ItemsSource="{Binding RunLog}">
+									<ItemsControl.ItemTemplate>
+										<DataTemplate x:DataType="x:String">
+											<TextBlock Text="{Binding}" FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace" FontSize="11" Foreground="#CBD5E1" TextWrapping="Wrap" />
+										</DataTemplate>
+									</ItemsControl.ItemTemplate>
+								</ItemsControl>
+							</ScrollViewer>
+						</StackPanel>
+					</Border>
+				</Grid>
+			</Border>
+		</Grid>
+
+		<!-- What just happened (and why a link couldn't be made). -->
+		<Border Grid.Row="2" Padding="14,6" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
+			<TextBlock Name="StatusText" Text="{Binding Status}" Classes="hint" />
+		</Border>
+	</Grid>
+</UserControl>

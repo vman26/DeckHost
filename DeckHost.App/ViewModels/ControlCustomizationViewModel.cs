@@ -379,12 +379,48 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     /// <summary>The folder a Folder key opens (null for other actions).</summary>
     public string? FolderId =>
         _original?.Action.ActionId == SystemPlugins.FolderAction.ActionId &&
-        _original.Action.Settings.TryGetValue(SystemPlugins.FolderAction.FolderIdKey, out var id) ? id : null;
+        _original.Action.EffectiveSettings.TryGetValue(SystemPlugins.FolderAction.FolderIdKey, out var id) ? id : null;
 
     public bool IsFolder => FolderId is not null;
 
     /// <summary>Show the folder in the editor (its keys can then be set up).</summary>
     public event EventHandler<string>? OpenFolderRequested;
+
+    /// <summary>A visual workflow: its editor opens as a page.</summary>
+    public bool IsWorkflow => _original?.ActionKind == ProfileActionKind.Workflow;
+
+    /// <summary>Steps or a plain action that can become a workflow doing the same.</summary>
+    public bool CanConvertToWorkflow => _original is not null && !IsWorkflow && _primaryAction is { IsDisplayContentAction: false } &&
+                                        (IsMultiAction || _primaryAction.CanBeMultiActionStep);
+
+    /// <summary>The workflow in a line: what starts it and how many nodes it has.</summary>
+    public string WorkflowSummary
+    {
+        get
+        {
+            if (_original?.Workflow is not { } workflow)
+            {
+                return string.Empty;
+            }
+
+            var triggers = DeckHost.Core.Workflows.WorkflowEngine.TriggersOf(workflow).Select(WorkflowTriggers.Describe).ToList();
+            var actions = workflow.Nodes.Where(static node => node.Kind == WorkflowNodeKinds.Action)
+                .Select(static node => node.Action?.ActionName).OfType<string>().Distinct().ToList();
+            return (triggers.Count == 0 ? "Nothing starts it yet." : $"Starts when {string.Join(" / ", triggers).ToLowerInvariant()}.") +
+                   (actions.Count == 0 ? " No actions yet." : $" Runs {string.Join(", ", actions.Take(6))}{(actions.Count > 6 ? ", …" : string.Empty)}.") +
+                   $" {workflow.Nodes.Count} node{(workflow.Nodes.Count == 1 ? string.Empty : "s")}.";
+        }
+    }
+
+    public event EventHandler? OpenWorkflowRequested;
+
+    public event EventHandler? ConvertToWorkflowRequested;
+
+    [RelayCommand]
+    private void OpenWorkflow() => OpenWorkflowRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void ConvertToWorkflow() => ConvertToWorkflowRequested?.Invoke(this, EventArgs.Empty);
 
     [RelayCommand]
     private void OpenFolder()
@@ -706,7 +742,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
 
     public bool HasLightError => LightError is not null;
 
-    public bool ShowNothingToCustomize => !SupportsAppearance && !HasActionSettings && !IsMultiAction && !SupportsLight;
+    public bool ShowNothingToCustomize => !SupportsAppearance && !HasActionSettings && !IsMultiAction && !IsWorkflow && !SupportsLight;
 
     // ---------------------------------------------------------------- result
 

@@ -1,0 +1,209 @@
+using DeckHost.Contracts.Enums;
+using DeckHost.Contracts.Models;
+
+namespace DeckHost.Core.Workflows;
+
+/// <summary>How the editor shows a kind of node and which parameters it has.</summary>
+/// <param name="Color">The node's accent (ARGB).</param>
+/// <param name="Icon">SVG path data on a 24×24 grid (<see cref="Contracts.Icons"/>).</param>
+public sealed record WorkflowNodeType(
+    string Kind,
+    string Name,
+    string Description,
+    uint Color,
+    string Icon,
+    IReadOnlyList<ActionSettingDefinition> Settings);
+
+/// <summary>The built-in node kinds, their parameters, and how a node is summed up in one line.</summary>
+public static class WorkflowNodeTypes
+{
+    private static readonly NumberRange WaitRange = new(0, 10_000, 50) { Unit = "ms" };
+
+    public static WorkflowNodeType Trigger { get; } = new(
+        WorkflowNodeKinds.Trigger,
+        "When",
+        "Starts the workflow when this happens on the control.",
+        0xFF22C55E,
+        Contracts.Icons.Bolt,
+        [
+            new(WorkflowKeys.On, "When the control is", ActionSettingKind.Choice, WorkflowTriggers.Down, Options:
+            [
+                new(WorkflowTriggers.Down, "Pressed (right away)") { Requires = InputCapabilities.Press },
+                new(WorkflowTriggers.Up, "Released") { Requires = InputCapabilities.Release },
+                new(WorkflowTriggers.Tap, "Tapped (not held; waits for a double press if there is one)") { Requires = InputCapabilities.Release },
+                new(WorkflowTriggers.DoublePress, "Double pressed") { Requires = InputCapabilities.Release },
+                new(WorkflowTriggers.Hold, "Held down") { Requires = InputCapabilities.LongPress },
+                new(WorkflowTriggers.RotateLeft, "Turned left") { Requires = InputCapabilities.Rotate },
+                new(WorkflowTriggers.RotateRight, "Turned right") { Requires = InputCapabilities.Rotate },
+                new(WorkflowTriggers.SwipeLeft, "Swiped left") { Requires = InputCapabilities.Swipe },
+                new(WorkflowTriggers.SwipeRight, "Swiped right") { Requires = InputCapabilities.Swipe },
+            ]),
+        ]);
+
+    public static WorkflowNodeType Action { get; } = new(
+        WorkflowNodeKinds.Action,
+        "Action",
+        "Runs an action. Drop an action from the list onto the canvas to add one.",
+        0xFF3B82F6,
+        Contracts.Icons.Play,
+        []);
+
+    public static WorkflowNodeType Wait { get; } = new(
+        WorkflowNodeKinds.Wait,
+        "Wait",
+        "Waits, then continues.",
+        0xFFF59E0B,
+        Contracts.Icons.Timer,
+        [new(WorkflowKeys.Milliseconds, "Wait", ActionSettingKind.Number, "500") { Range = WaitRange }]);
+
+    public static WorkflowNodeType If { get; } = new(
+        WorkflowNodeKinds.If,
+        "If",
+        "Continues at Yes or No.",
+        0xFFA855F7,
+        Contracts.Icons.Branch,
+        [
+            new(WorkflowKeys.Check, "Check", ActionSettingKind.Choice, WorkflowKeys.CheckVariable, Options:
+            [
+                new(WorkflowKeys.CheckVariable, "A variable"),
+                new(WorkflowKeys.CheckApp, "The app in front"),
+                new(WorkflowKeys.CheckTime, "The time of day"),
+            ]),
+            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode", Description: "Set it with a Set variable node; names ignore case.")
+            {
+                ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckVariable),
+            },
+            new(WorkflowKeys.Operation, "Is", ActionSettingKind.Choice, WorkflowKeys.IsEqual, Options:
+            [
+                new(WorkflowKeys.IsEqual, "equal to"),
+                new(WorkflowKeys.IsNotEqual, "not equal to"),
+                new(WorkflowKeys.IsGreater, "greater than"),
+                new(WorkflowKeys.IsLess, "less than"),
+                new(WorkflowKeys.Contains, "containing"),
+                new(WorkflowKeys.IsSet, "set (not empty)"),
+                new(WorkflowKeys.IsEmpty, "empty"),
+            ])
+            {
+                ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckVariable),
+            },
+            new(WorkflowKeys.Value, "Value", Placeholder: "text or number")
+            {
+                ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckVariable),
+            },
+            new(WorkflowKeys.App, "App name contains", Placeholder: "e.g. obs", Description: "Where DeckHost can see the app in front (Windows, macOS, Linux on X11).")
+            {
+                ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckApp),
+            },
+            new(WorkflowKeys.From, "From", Placeholder: "09:00")
+            {
+                ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckTime),
+            },
+            new(WorkflowKeys.To, "Until", Placeholder: "17:30", Description: "24-hour times; a range past midnight (22:00–06:00) works too.")
+            {
+                ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckTime),
+            },
+        ]);
+
+    public static WorkflowNodeType Toggle { get; } = new(
+        WorkflowNodeKinds.Toggle,
+        "Toggle",
+        "Takes 1st and 2nd in turn: on, then off.",
+        0xFF14B8A6,
+        Contracts.Icons.Toggle,
+        []);
+
+    public static WorkflowNodeType Repeat { get; } = new(
+        WorkflowNodeKinds.Repeat,
+        "Repeat",
+        "Runs Each time a number of times, one round after the other, then Done.",
+        0xFFEC4899,
+        Contracts.Icons.Repeat,
+        [new(WorkflowKeys.Count, "Times", ActionSettingKind.Number, "2") { Range = new NumberRange(1, 100) }]);
+
+    public static WorkflowNodeType SetVariable { get; } = new(
+        WorkflowNodeKinds.SetVariable,
+        "Set variable",
+        "Stores a value that If nodes (and the Show Variable action) can read.",
+        0xFF64748B,
+        Contracts.Icons.Variable,
+        [
+            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode"),
+            new(WorkflowKeys.Operation, "Do", ActionSettingKind.Choice, WorkflowKeys.Set, Options:
+            [
+                new(WorkflowKeys.Set, "Set to"),
+                new(WorkflowKeys.Add, "Add"),
+                new(WorkflowKeys.Subtract, "Subtract"),
+                new(WorkflowKeys.Flip, "Flip true / false"),
+                new(WorkflowKeys.Clear, "Clear"),
+            ]),
+            new(WorkflowKeys.Value, "Value", Placeholder: "text or number (add: 1)")
+            {
+                ShowWhen = new(WorkflowKeys.Operation, WorkflowKeys.Set, WorkflowKeys.Add, WorkflowKeys.Subtract),
+            },
+        ]);
+
+    public static WorkflowNodeType Stop { get; } = new(
+        WorkflowNodeKinds.Stop,
+        "Stop",
+        "Ends the run, also its branches that are still waiting.",
+        0xFFEF4444,
+        Contracts.Icons.Stop,
+        []);
+
+    /// <summary>All kinds, in the order the editor's palette lists them.</summary>
+    public static IReadOnlyList<WorkflowNodeType> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Stop];
+
+    public static WorkflowNodeType Of(string kind) => All.FirstOrDefault(type => type.Kind == kind) ?? Action;
+
+    /// <summary>A node in one line ("Wait 500 ms", "If mode equal to 2").</summary>
+    public static string Summarize(WorkflowNode node)
+    {
+        var settings = node.EffectiveSettings;
+        if (!string.IsNullOrWhiteSpace(node.Title))
+        {
+            return node.Title!;
+        }
+
+        return node.Kind switch
+        {
+            WorkflowNodeKinds.Trigger => $"When {WorkflowTriggers.Describe(settings.Get(WorkflowKeys.On, WorkflowTriggers.Down)).ToLowerInvariant()}",
+            WorkflowNodeKinds.Action => node.Action?.ActionName ?? "Choose an action",
+            WorkflowNodeKinds.Wait => $"Wait {WorkflowEngine.FormatDuration(Math.Clamp(settings.GetInt(WorkflowKeys.Milliseconds, 500), 0, WorkflowKeys.MaxWaitMs))}",
+            WorkflowNodeKinds.If => settings.Get(WorkflowKeys.Check, WorkflowKeys.CheckVariable) switch
+            {
+                WorkflowKeys.CheckApp => $"If {Or(settings.Get(WorkflowKeys.App), "…")} is in front",
+                WorkflowKeys.CheckTime => $"If between {Or(settings.Get(WorkflowKeys.From), "…")} and {Or(settings.Get(WorkflowKeys.To), "…")}",
+                _ => $"If {Or(settings.Get(WorkflowKeys.Name), "…")} {DescribeComparison(settings)}",
+            },
+            WorkflowNodeKinds.Toggle => "Toggle",
+            WorkflowNodeKinds.Repeat => $"Repeat {Math.Clamp(settings.GetInt(WorkflowKeys.Count, 2), 1, WorkflowKeys.MaxRepeat)}×",
+            WorkflowNodeKinds.SetVariable => settings.Get(WorkflowKeys.Operation, WorkflowKeys.Set) switch
+            {
+                WorkflowKeys.Add => $"{Or(settings.Get(WorkflowKeys.Name), "…")} + {Or(settings.Get(WorkflowKeys.Value), "1")}",
+                WorkflowKeys.Subtract => $"{Or(settings.Get(WorkflowKeys.Name), "…")} − {Or(settings.Get(WorkflowKeys.Value), "1")}",
+                WorkflowKeys.Flip => $"Flip {Or(settings.Get(WorkflowKeys.Name), "…")}",
+                WorkflowKeys.Clear => $"Clear {Or(settings.Get(WorkflowKeys.Name), "…")}",
+                _ => $"{Or(settings.Get(WorkflowKeys.Name), "…")} = {Or(settings.Get(WorkflowKeys.Value), "\"\"")}",
+            },
+            WorkflowNodeKinds.Stop => "Stop",
+            _ => node.Kind,
+        };
+    }
+
+    private static string DescribeComparison(ActionSettings settings)
+    {
+        var value = Or(settings.Get(WorkflowKeys.Value), "\"\"");
+        return settings.Get(WorkflowKeys.Operation, WorkflowKeys.IsEqual) switch
+        {
+            WorkflowKeys.IsNotEqual => $"≠ {value}",
+            WorkflowKeys.IsGreater => $"> {value}",
+            WorkflowKeys.IsLess => $"< {value}",
+            WorkflowKeys.Contains => $"contains {value}",
+            WorkflowKeys.IsSet => "is set",
+            WorkflowKeys.IsEmpty => "is empty",
+            _ => $"= {value}",
+        };
+    }
+
+    private static string Or(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+}

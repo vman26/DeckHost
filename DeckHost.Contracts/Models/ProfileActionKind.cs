@@ -10,5 +10,8 @@ namespace DeckHost.Contracts.Models
 
         /// <summary>Steps for a press, a double press and holding the key down (Elgato's Key Logic).</summary>
         KeyLogic,
+
+        /// <summary>A visual workflow of connected nodes (<see cref="ControlBinding.Workflow"/>).</summary>
+        Workflow,
     }
 }

@@ -48,4 +48,23 @@ public static class Icons
     public const string Swipe = "M3 12L8 7v3.5h8V7l5 5-5 5v-3.5H8V17Z";
 
     public const string Counter = "M11 5h2v14h-2Z M5 11h14v2H5Z";
+
+    /// <summary>A lightning bolt (a workflow trigger).</summary>
+    public const string Bolt = "M13 2 4 14h7l-1 8 9-12h-7Z";
+
+    public const string Play = "M8 5v14l11-7Z";
+
+    /// <summary>An hourglass.</summary>
+    public const string Timer = "M6 2h12v2h-1.5v3.5L13 12l3.5 4.5V20H18v2H6v-2h1.5v-3.5L11 12 7.5 7.5V4H6Z";
+
+    /// <summary>A decision diamond.</summary>
+    public const string Branch = "M12 2 22 12 12 22 2 12Z M12 5 5 12 12 19 19 12Z";
+
+    public const string Repeat = "M17 1l4 4-4 4V6H7a2 2 0 0 0-2 2v3H3V8a4 4 0 0 1 4-4h10Z M7 23l-4-4 4-4v3h10a2 2 0 0 0 2-2v-3h2v3a4 4 0 0 1-4 4H7Z";
+
+    /// <summary>Brackets around an x.</summary>
+    public const string Variable = "M4 4h6v2H6v12h4v2H4Z M14 4h6v16h-6v-2h4V6h-4Z M9 9h2l1 2 1-2h2l-2 3 2 3h-2l-1-2-1 2H9l2-3Z";
+
+    /// <summary>Two nodes and a link.</summary>
+    public const string Workflow = "M3 3h7v7H3Z M14 14h7v7h-7Z M10 5.5h4a3.5 3.5 0 0 1 3.5 3.5v5h-2V9A1.5 1.5 0 0 0 14 7.5h-4Z";
 }
