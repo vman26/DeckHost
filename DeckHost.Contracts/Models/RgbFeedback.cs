@@ -31,6 +31,20 @@ public sealed record RgbFeedback(
     bool PulseOnActive = false)
 {
     /// <summary>
+    /// The idle effect (<see cref="LightEffects"/>) of this control's light; null for a steady
+    /// <see cref="IdleColor"/>. Overrides the device's default lights (<see cref="LightStyle"/>).
+    /// </summary>
+    [JsonPropertyName("idleEffect")]
+    public string? IdleEffect { get; init; }
+
+    /// <summary>How long one cycle of <see cref="IdleEffect"/> takes; null for the default.</summary>
+    [JsonPropertyName("effectPeriodSeconds")]
+    public double? EffectPeriodSeconds { get; init; }
+
+    /// <summary>The idle light as a <see cref="LightStyle"/>.</summary>
+    public LightStyle IdleStyle => new(IdleColor, IdleEffect ?? LightEffects.Solid, EffectPeriodSeconds ?? LightStyle.DefaultPeriodSeconds);
+
+    /// <summary>
     /// Parse RGB hex string (e.g., "FF0000") to (R, G, B) tuple.
     /// </summary>
     public static (byte R, byte G, byte B) ParseColor(string hexColor)

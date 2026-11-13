@@ -15,7 +15,7 @@ namespace DeckHost.Device.MiraBox;
 /// The primary definition always exists, connected or not, so profiles can be edited offline.
 /// </para>
 /// </summary>
-public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IConfigurableDevicePlugin
+public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin
 {
     public IReadOnlyList<ActionSettingDefinition> GetDeviceSettingDefinitions(string deviceId) => N4ProDeviceSettings.Definitions;
 
@@ -202,29 +202,36 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         return CheckResult(deviceId, result, out error);
     }
 
-    public bool TrySetLight(string deviceId, string controlId, byte red, byte green, byte blue, out string? error)
-    {
-        if (N4ProLayout.GetLedIndex(controlId) is not { } ledIndex)
-        {
-            error = $"'{controlId}' has no LED.";
-            return false;
-        }
+    public bool TrySetLight(string deviceId, string controlId, byte red, byte green, byte blue, out string? error) =>
+        TrySetLights(deviceId, [new LightColor(controlId, red, green, blue)], out error);
 
+    /// <summary>Sets several LEDs with one SDK call (it always sets all of them), for light effects.</summary>
+    public bool TrySetLights(string deviceId, IReadOnlyList<LightColor> lights, out string? error)
+    {
         byte[] colors;
         string deviceKey;
         lock (_sync)
         {
             var session = FindSession(deviceId);
-            if (session is not { DeviceKey: not null } || session.LedColors.Length < (ledIndex + 1) * 3)
+            if (session is not { DeviceKey: not null })
             {
-                error = session?.DeviceKey is null ? "device not connected" : $"LED {ledIndex} does not exist.";
+                error = "device not connected";
                 return false;
             }
 
-            // The SDK sets all LEDs in one call, so keep the full state and always send all of it.
-            session.LedColors[ledIndex * 3] = red;
-            session.LedColors[(ledIndex * 3) + 1] = green;
-            session.LedColors[(ledIndex * 3) + 2] = blue;
+            foreach (var light in lights)
+            {
+                if (N4ProLayout.GetLedIndex(light.ControlId) is not { } ledIndex || session.LedColors.Length < (ledIndex + 1) * 3)
+                {
+                    error = $"'{light.ControlId}' has no LED.";
+                    return false;
+                }
+
+                session.LedColors[ledIndex * 3] = light.Red;
+                session.LedColors[(ledIndex * 3) + 1] = light.Green;
+                session.LedColors[(ledIndex * 3) + 2] = light.Blue;
+            }
+
             colors = (byte[])session.LedColors.Clone();
             deviceKey = session.DeviceKey;
         }
