@@ -136,6 +136,10 @@ internal static class N4ProDeviceSettings
         return (problems, idleWritten);
     }
 
+    /// <summary>The LED brightness to use (0–255): the device setting, else full.</summary>
+    public static byte LedBrightnessLevel(string deviceId) =>
+        (byte)Math.Round((Load(deviceId).GetInt(LedBrightness, -1) is >= 0 and <= 100 and var percent ? percent : DefaultBrightness) * 2.55);
+
     private static void ApplyBrightness(ActionSettings settings, string key, string marker, string what, Func<int, int> send, Action<string, string?> remember, List<string> problems)
     {
         if (settings.GetInt(key, -1) is >= 0 and <= 100 and var value)

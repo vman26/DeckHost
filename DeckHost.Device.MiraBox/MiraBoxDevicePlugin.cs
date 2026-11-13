@@ -41,14 +41,26 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         return problems.Count == 0 ? null : "Not everything could be applied: " + string.Join("; ", problems);
     }
 
+    /// <summary>When the images are sent again after writing the idle screen.</summary>
+    internal static readonly TimeSpan[] IdleScreenRedrawDelays = [TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(4)];
+
     private List<string> ApplyStoredSettings(string deviceId, string deviceKey)
     {
         var settings = N4ProDeviceSettings.Load(deviceId);
-        var (problems, _) = N4ProDeviceSettings.Apply(deviceKey, settings, (marker, value) =>
+        var (problems, idleScreenWritten) = N4ProDeviceSettings.Apply(deviceKey, settings, (marker, value) =>
             N4ProDeviceSettings.Save(deviceId, N4ProDeviceSettings.Load(deviceId).With(marker, value)));
         // Writing the idle screen blanks the keys, and the device configuration resets the LEDs to
         // the device's own lighting: send images and lights again.
         _context?.RequestRedraw(deviceId);
+        if (idleScreenWritten)
+        {
+            // The device stores the idle screen and shows it while it does, over the keys; what is
+            // sent meanwhile can be lost. Send everything again once it's done.
+            foreach (var delay in IdleScreenRedrawDelays)
+            {
+                _ = Task.Delay(delay).ContinueWith(_ => _context?.RequestRedraw(deviceId), TaskScheduler.Default);
+            }
+        }
 
         foreach (var problem in problems)
         {
@@ -208,6 +220,8 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
     {
         byte[] colors;
         string deviceKey;
+        bool allDark;
+        bool restoreBrightness;
         lock (_sync)
         {
             var session = FindSession(deviceId);
@@ -232,6 +246,21 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
             colors = (byte[])session.LedColors.Clone();
             deviceKey = session.DeviceKey;
+            allDark = Array.TrueForAll(colors, static value => value == 0);
+            restoreBrightness = !allDark && session.LedsDimmed;
+            session.LedsDimmed = allDark;
+        }
+
+        if (allDark)
+        {
+            // The N4 Pro's firmware shows its own rainbow when every LED is set to black, so "off"
+            // is LED brightness 0 instead (sent every time: applying device settings can raise it).
+            return CheckResult(deviceId, MiraBoxNative.SetLedBrightness(deviceKey, 0), out error);
+        }
+
+        if (restoreBrightness && !CheckResult(deviceId, MiraBoxNative.SetLedBrightness(deviceKey, N4ProDeviceSettings.LedBrightnessLevel(deviceId)), out error))
+        {
+            return false;
         }
 
         return CheckResult(deviceId, MiraBoxNative.SetLedColors(deviceKey, colors), out error);
@@ -605,6 +634,9 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         public MiraBoxDeviceInfo? Info { get; set; }
 
         public byte[] LedColors { get; set; } = new byte[N4ProLayout.EncoderCount * 3];
+
+        /// <summary>The LEDs are off through brightness 0 (see <see cref="TrySetLights"/>).</summary>
+        public bool LedsDimmed { get; set; }
 
         public bool StatusReported { get; set; }
     }
