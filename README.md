@@ -203,6 +203,7 @@ You can also install a `.streamDeckPlugin` file with **Install plugin…**.
 - **Start DeckHost when I sign in**: Windows: the `HKCU\…\Run` key; Linux: `~/.config/autostart/deckhost.desktop`; macOS: a LaunchAgent (`~/Library/LaunchAgents/app.deckhost.DeckHost.plist`). No admin rights needed.
 - **Start in the tray when started at sign-in**: the device works without the window.
 - **Closing the window keeps DeckHost running in the tray**: use **Exit** in the tray menu to quit.
+- **Updates**: **Check for updates automatically** (on by default: 15 seconds after start and every 6 hours) asks GitHub for a newer release; **Include pre-releases** (on by default when you run one) also offers alpha, beta and rc builds; **Check now** checks right away. A new release shows a notice at the top of the main window (and an item in the tray menu): **What's new** lists the release notes of every release since yours, then **Install and restart** downloads the package for your system, checks it against the release's `SHA256SUMS.txt`, closes DeckHost, installs and starts the new version (Windows: the setup, silently when DeckHost was installed with it; Linux and macOS: the install folder or `DeckHost.app` is replaced). Where DeckHost can't replace itself (a folder you can't write, or a development build), the button is **Download** and the file is shown so you can install it like the first time. **Skip this version** stops the notice until a newer release; **✕** / **Later** hides it until the next start.
 
 The settings window also shows DeckHost's version.
 
