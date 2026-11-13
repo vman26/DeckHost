@@ -10,7 +10,14 @@
     <IsLinux>$([MSBuild]::IsOsPlatform('Linux'))</IsLinux>
     <IsMacOS>$([MSBuild]::IsOsPlatform('OSX'))</IsMacOS>
     <MiraBoxNativeRuntimeDir>$(MSBuildProjectDirectory)/../native/MiraBoxBridge/out/$(Configuration)/bin/$(Configuration)</MiraBoxNativeRuntimeDir>
+    <!-- The GitHub repository (owner/name) the updater checks for releases. The release workflow
+         sets it to the public releases repository when the source repository is private. -->
+    <DeckHostUpdateRepository Condition="'$(DeckHostUpdateRepository)' == ''">vman26/DeckHost</DeckHostUpdateRepository>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="UpdateRepository" Value="$(DeckHostUpdateRepository)" />
+  </ItemGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />

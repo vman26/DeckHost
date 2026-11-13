@@ -284,7 +284,7 @@ public partial class App : Application
 
         // Updates: GitHub releases of DeckHost.
         services.AddSingleton(_ => new UpdateViewModel(
-            new Core.Updates.UpdateChecker(Core.Updates.UpdateChecker.CreateHttpClient()),
+            new Core.Updates.UpdateChecker(Core.Updates.UpdateChecker.CreateHttpClient(), AppInfo.UpdateRepository),
             AppInfo.Version,
             Platform.AppSettings.Load,
             Platform.AppSettings.Save));
