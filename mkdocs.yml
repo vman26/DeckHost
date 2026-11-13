@@ -41,3 +41,13 @@ nav:
   - For maintainers:
       - Releasing and signing: maintainers/releasing.md
       - Writing plugins: maintainers/plugins.md
+      - Architecture: maintainers/architecture.md
+      - Decisions:
+          - maintainers/adr/index.md
+          - "0001 Dependency rule": maintainers/adr/0001-dependency-rule.md
+          - "0002 One worker": maintainers/adr/0002-single-worker.md
+          - "0003 Plugin API": maintainers/adr/0003-plugin-api.md
+          - "0004 Immutable bindings": maintainers/adr/0004-immutable-bindings.md
+          - "0005 Profile migrations": maintainers/adr/0005-profile-migrations.md
+          - "0006 Workflows": maintainers/adr/0006-workflows.md
+          - "0007 In-process plugins": maintainers/adr/0007-in-process-plugins.md
