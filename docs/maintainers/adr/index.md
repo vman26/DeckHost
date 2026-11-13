@@ -13,5 +13,6 @@ Architecture decision records: why DeckHost is built the way it is. Each one say
 | [0007](0007-in-process-plugins.md) | DeckHost plugins run in their own process | Accepted |
 | [0008](0008-generic-usb-devices.md) | Generic USB devices are descriptions, learned by pressing | Accepted |
 | [0009](0009-firmware-updates.md) | Firmware updates go through the host, written by the device plugin | Accepted |
+| [0010](0010-license.md) | GPL-3.0 for DeckHost, MIT for the plugin API | Accepted |
 
 Format: *Context* (what forced a choice), *Decision*, *Consequences* (good and bad). Keep them short.

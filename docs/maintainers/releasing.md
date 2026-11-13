@@ -6,9 +6,15 @@ Push a tag; the tag is the version (`v1.4.0`, or `v1.4.0-rc.1` for a pre-release
 
 Versions come from git (GitVersion, git-flow): `develop` builds alpha versions of the next minor, `release/x.y.z` builds release candidates, `hotfix/*` betas of the next patch.
 
-## A private source repository
+## Where releases, docs and reports go
 
-The updater reads releases without signing in, so they must be public. With a private source repository:
+With a public repository (the default), everything happens here: releases, the in-app update check,
+the documentation (GitHub Pages, **Settings → Pages → Source: GitHub Actions**) and problem reports.
+Nothing else to set up.
+
+## Optional: a private source repository
+
+The updater reads releases without signing in, so they must be public. If you keep the source private:
 
 1. Create a public repository for releases, for example `vman26/DeckHost-releases`, with one commit (a README).
 2. Create a fine-grained token: resource owner you, **only** that repository, **Contents: Read and write**, with an expiry date. Add it to the source repository as the Actions **secret** `RELEASES_TOKEN`.
@@ -44,11 +50,11 @@ Without signing the packages still work: Windows SmartScreen warns, and macOS as
 |---|---|---|---|
 | **Azure Artifact Signing** (Windows) | about 10 USD/month | organizations in the US, Canada, EU, UK and several other countries; individual developers only in the US and Canada | `scripts/setup-azure-signing.sh` sets it up; Microsoft renews the certificates, nothing expires on you except the app secret (2 years) |
 | A **code-signing certificate** from a CA (Windows) | 150–400 USD/year | anyone, also individuals in Europe (Certum, Sectigo, SSL.com, …) | the `.pfx` secrets below; cloud-only certificates need the CA's tool |
-| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository | their GitHub action; not for a private source repository |
+| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository: DeckHost qualifies once it's public | their GitHub action, added to the release workflow after they approve the project ([checklist](going-public.md#step-4-release-and-announce)) |
 | **Apple Developer ID** (macOS) | 99 USD/year | anyone with an Apple Developer account | the macOS secrets below; signing and notarizing are automatic |
 | **Build provenance** (all files) | free | public source repositories (private ones need GitHub Enterprise Cloud) | on by itself: the release job attests every file (`gh attestation verify <file> --repo <owner/repo>`) |
 
-For a person in Europe with a private source repository: a CA certificate for Windows (or Artifact Signing through a registered business) and the Apple Developer Program for macOS.
+For DeckHost as a public open-source project: SignPath Foundation for Windows (free) and the Apple Developer Program for macOS. With a private source repository instead: a CA certificate for Windows (or Artifact Signing through a registered business).
 
 ### Windows: Azure Artifact Signing
 

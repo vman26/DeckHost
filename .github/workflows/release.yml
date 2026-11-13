@@ -247,6 +247,12 @@ jobs:
           exclude-azure-developer-cli-credential: true
           exclude-interactive-browser-credential: true
 
+      # The OBS plugin (built by the tests) goes out with each release, for the plugin catalog
+      # (packaging/plugins-repo): its download_url and sha256 point at this file.
+      - name: Plugin packages
+        if: runner.os == 'Linux'
+        run: cp artifacts/plugins/deckhost.plugin.obs.zip artifacts/release/
+
       - uses: actions/upload-artifact@v4
         with:
           name: DeckHost-${{ steps.version.outputs.file }}-${{ matrix.rid }}

@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <!-- The plugin API: MIT, so plugins can use any license (NOTICE.md). -->
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- The XML docs feed the API reference (docs/reference/api.md) and plugin authors' IntelliSense. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
   </PropertyGroup>
 
 </Project>

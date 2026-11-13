@@ -4,7 +4,11 @@
 
 ## The store
 
-The **Store** tab lists plugins from DeckHost sources, OpenAction, and the Elgato community archive, with their icons and README (**More ▾**). Install with one click.
+The **Store** tab lists plugins from the [DeckHost plugin catalog](https://github.com/vman26/deckhost-plugins), OpenAction, and the Elgato community archive, with their icons and README (**More ▾**). Install with one click; DeckHost checks a catalog download against its checksum, and shows what a plugin may do (use the network, start programs, …) before you install it.
+
+Some plugins are **paid**: **Buy** opens the author's page; install the file you get with **Install plugin…**. **Sources** adds catalogs of your own (a web address, a catalog file or a folder of packages).
+
+Writing a plugin? See [Writing a plugin](maintainers/plugins.md) and the [plugin catalog](maintainers/plugin-store.md).
 
 ## Stream Deck and OpenAction plugins
 
