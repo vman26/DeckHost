@@ -115,7 +115,7 @@ DeckHost ships with three **system plugins**. You can switch them off in the Plu
 
 | Plugin | Actions |
 |---|---|
-| DeckHost Built-ins (always on) | Multi Action, Switch Profile, Clock, Counter, Key ID (Diagnostic) |
+| DeckHost Built-ins (always on) | Multi Action, Pages, Folder, Back, Switch Profile, Clock, Counter, Key ID (Diagnostic) |
 | Media Controls | Play / Pause, Next, Previous, Stop, Volume Up / Down, Mute, Volume Knob, Track Swipe |
 | System Controls | Launch App, Open Website or File, Hotkey, Type Text, Lock Computer, System Info (CPU, memory, disk, uptime) |
 
@@ -133,6 +133,14 @@ The window is laid out like the Stream Deck app:
 - **Actions** on the right, grouped by plugin like the Stream Deck app: each plugin and action with its icon, groups folded until you open them (a search opens every match). Drag an action onto a control; while you drag, its icon and name follow the pointer.
 - Settings, plugins, profiles, device settings and the update notes open as pages inside the window; **Back** (or Esc) returns.
 - **DeckHost settings → Show the debug panel** adds a panel with the selected control's inputs and outputs, the runtime connection and the runtime log.
+
+**Pages and folders**, like the Stream Deck app:
+
+- **Pages:** a profile can have several pages of keys. **+** under the device adds one; the numbers switch between them (right-click one to remove it). On the device, the **Pages** action goes to the next, the previous or a specific page (on a knob: turn to flip through them), and swiping a touch strip that has no action of its own flips pages like a phone (swipe left for the next page).
+- **Folders:** drop the **Folder** action on a key and it gets a layout of its own, with a **Back** key in its first key. Press it on the device, double-click it, or use **Open folder** in its editor to fill it; **Back** under the device (or the Back key) returns. Folders can hold folders. Removing the Folder key removes its folder.
+- Profile switching (Switch Profile, apps) always lands on a profile's first page; pages and folders use the profile's background unless they get their own.
+
+**Testing in the editor:** double-click a control to press it (it runs the real action, as the device would), and scroll over a knob to turn it. Double-clicking the left or right half of the swipe bar swipes it.
 
 Actions with settings (the app to launch, a hotkey, a scene name, ...) are set up in the editor. A **Multi Action** shows its steps there: drop actions from the list onto the steps to add them exactly where you drop them, drag **⠿** to change the order, or use **Or choose an action** / **Add step**. Dropping an action onto the control itself adds it as the last step. For a Hotkey, click **Record** and press the combination.
 

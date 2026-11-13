@@ -14,6 +14,26 @@ public interface IActionHost
 
     /// <summary>Activates the next (+1) or previous (-1) profile of the device, wrapping around.</summary>
     void ActivateRelativeProfile(string deviceId, int offset);
+
+    /// <summary>Shows the next (+1) or previous (-1) page of the active profile, wrapping around.</summary>
+    void ActivateRelativePage(string deviceId, int offset)
+    {
+    }
+
+    /// <summary>Shows page <paramref name="number"/> (from 1) of the active profile.</summary>
+    void ActivatePage(string deviceId, int number)
+    {
+    }
+
+    /// <summary>Opens a folder (a layout of the active profile) on the device.</summary>
+    void OpenFolder(string deviceId, string folderId)
+    {
+    }
+
+    /// <summary>Leaves the open folder: back to the layout whose key opened it.</summary>
+    void CloseFolder(string deviceId)
+    {
+    }
 }
 
 public sealed class NullActionHost : IActionHost

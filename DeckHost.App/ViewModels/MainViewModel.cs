@@ -151,11 +151,13 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
                 if (!_switchingAutomatically && value is not null)
                 {
                     // Chosen by hand (or by a Switch Profile key): the profile to return to when no app rule matches.
-                    _manualProfileId = value.Id;
+                    _manualProfileId = value.RootProfile.Id;
                 }
 
                 OnPropertyChanged(nameof(SelectedProfileName));
                 OnPropertyChanged(nameof(SelectedProfileSummary));
+                OnPropertyChanged(nameof(SelectedRootProfile));
+                RefreshPageTabs();
                 ApplyProfileBindings();
                 if (!_suppressHostSync)
                 {
@@ -217,6 +219,222 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     /// <summary>Pages are not implemented yet; a profile is one page of the device.</summary>
     public string CurrentPageName => SelectedProfile?.Name ?? "No profile";
+
+    // ---------------------------------------------------------------- pages and folders
+
+    /// <summary>Every profile with its pages and folders.</summary>
+    public IEnumerable<ProfileItemViewModel> AllLayouts => Profiles.SelectMany(static profile => profile.AllLayouts);
+
+    /// <summary>The profile the editor shows (the header's profile picker); the page or folder within it is <see cref="SelectedProfile"/>.</summary>
+    public ProfileItemViewModel? SelectedRootProfile
+    {
+        get => SelectedProfile?.RootProfile;
+        set
+        {
+            if (value is not null && value != SelectedProfile?.RootProfile)
+            {
+                SelectedProfile = value;
+            }
+        }
+    }
+
+    /// <summary>The page buttons under the device: one per page of the profile.</summary>
+    public ObservableCollection<PageTabViewModel> PageTabs { get; } = [];
+
+    public bool IsInFolder => SelectedProfile?.IsFolder == true;
+
+    /// <summary>Where the open folder is: "Page 2 › Tools › Audio".</summary>
+    public string FolderTrail
+    {
+        get
+        {
+            if (SelectedProfile is not { IsFolder: true } folder)
+            {
+                return string.Empty;
+            }
+
+            var names = new List<string>();
+            for (ProfileItemViewModel? current = folder; current is not null && names.Count < 32; current = current.IsFolder ? current.ParentLayout : null)
+            {
+                names.Insert(0, current.IsFolder ? current.Name : PageName(current));
+            }
+
+            return string.Join("  ›  ", names);
+        }
+    }
+
+    /// <summary>Adds a page to the profile and shows it.</summary>
+    public void AddPage()
+    {
+        if (SelectedProfile?.RootProfile is not { } root)
+        {
+            return;
+        }
+
+        var number = root.PageLayouts.Count + 1;
+        var page = new ProfileItemViewModel(NewLayoutId(root, "page"), $"Page {number}", root.DeviceId)
+        {
+            ParentId = root.Id,
+            Kind = ProfileKinds.Page,
+            Owner = root,
+        };
+        root.Layouts.Add(page);
+        SelectedProfile = page;
+        StatusMessage = $"Added page {number}. Put a Pages action on a key (or swipe the touch strip) to flip between pages on the device.";
+    }
+
+    /// <summary>Removes a page (not the first) with its folders.</summary>
+    public void DeletePage(ProfileItemViewModel page)
+    {
+        if (page.IsRoot || page.Kind != ProfileKinds.Page)
+        {
+            return;
+        }
+
+        var root = page.RootProfile;
+        var number = root.PageLayouts.ToList().IndexOf(page) + 1;
+        RemoveLayoutTree(page);
+        if (SelectedProfile is null || !root.AllLayouts.Contains(SelectedProfile))
+        {
+            SelectedProfile = root.PageLayouts[Math.Clamp(number - 2, 0, root.PageLayouts.Count - 1)];
+        }
+        else
+        {
+            RefreshPageTabs();
+            SyncProfilesToHost();
+        }
+
+        StatusMessage = $"Removed page {number}.";
+    }
+
+    /// <summary>Leaves the open folder in the editor (and on the device).</summary>
+    public void CloseFolder()
+    {
+        if (SelectedProfile is { IsFolder: true, ParentLayout: { } parent })
+        {
+            SelectedProfile = parent;
+        }
+    }
+
+    /// <summary>Opens the folder of a Folder key in the editor (and on the device).</summary>
+    public void OpenFolder(string folderId)
+    {
+        if (AllLayouts.FirstOrDefault(layout => layout.Id == folderId && layout.IsFolder) is { } folder)
+        {
+            SelectedProfile = folder;
+        }
+    }
+
+    private static string PageName(ProfileItemViewModel layout) =>
+        layout.IsRoot ? "Page 1" : $"Page {layout.RootProfile.PageLayouts.ToList().IndexOf(layout) + 1}";
+
+    private void RefreshPageTabs()
+    {
+        PageTabs.Clear();
+        if (SelectedProfile is { } current)
+        {
+            var currentPage = current.PageLayout;
+            var number = 1;
+            foreach (var page in current.RootProfile.PageLayouts)
+            {
+                PageTabs.Add(new PageTabViewModel(this, page, number++, page == currentPage));
+            }
+        }
+
+        OnPropertyChanged(nameof(IsInFolder));
+        OnPropertyChanged(nameof(FolderTrail));
+        OnPropertyChanged(nameof(HasPages));
+    }
+
+    /// <summary>More than one page: the page bar shows numbers (one page shows only +).</summary>
+    public bool HasPages => PageTabs.Count > 1;
+
+    private static string NewLayoutId(ProfileItemViewModel root, string kind) => $"{root.Id}.{kind}.{Guid.NewGuid():N}"[..Math.Min(80, root.Id.Length + kind.Length + 34)];
+
+    /// <summary>Removes a page or folder and every folder inside it.</summary>
+    private static void RemoveLayoutTree(ProfileItemViewModel layout)
+    {
+        var root = layout.RootProfile;
+        var doomed = new HashSet<string>(StringComparer.Ordinal) { layout.Id };
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var candidate in root.Layouts.Where(candidate => candidate.ParentId is { } parent && doomed.Contains(parent) && !doomed.Contains(candidate.Id)).ToList())
+            {
+                added |= doomed.Add(candidate.Id);
+            }
+        }
+        while (added);
+
+        foreach (var removed in root.Layouts.Where(candidate => doomed.Contains(candidate.Id)).ToList())
+        {
+            root.Layouts.Remove(removed);
+        }
+    }
+
+    /// <summary>The profile a loaded page or folder belongs to (through its parents).</summary>
+    private ProfileItemViewModel? FindRoot(ProfileItemViewModel child, IReadOnlyList<ProfileItemViewModel> children)
+    {
+        var current = child;
+        for (var depth = 0; depth < 64 && current.ParentId is { } parentId; depth++)
+        {
+            if (Profiles.FirstOrDefault(profile => profile.Id == parentId) is { } root)
+            {
+                return root;
+            }
+
+            if (children.FirstOrDefault(candidate => candidate.Id == parentId) is not { } parent)
+            {
+                return null;
+            }
+
+            current = parent;
+        }
+
+        return null;
+    }
+
+    /// <summary>Makes the folder a new Folder key opens: a layout with a Back key in the first key.</summary>
+    private ActionReference CreateFolderFor(ActionItemViewModel folderAction, PhysicalControl control)
+    {
+        var parent = SelectedProfile!;
+        var root = parent.RootProfile;
+        var folder = new ProfileItemViewModel(NewLayoutId(root, "folder"), "Folder", root.DeviceId)
+        {
+            ParentId = parent.Id,
+            Kind = ProfileKinds.Folder,
+            Owner = root,
+        };
+
+        if (_actionsByKey.TryGetValue(EditorActionIds.Key(EditorActionIds.BuiltInPluginId, SystemPlugins.FolderBackAction.ActionId), out var back) &&
+            ControlItems.FirstOrDefault(item => back.FitsControl(item.Control)) is { } backKey &&
+            Resolve(new ControlBinding(backKey.Id, ProfileActionKind.Single, back.ToActionReference(back.DefaultSettings), new ControlAppearance(), [])) is { } backBinding)
+        {
+            folder.SetBinding(backBinding);
+        }
+
+        root.Layouts.Add(folder);
+        return folderAction.ToActionReference(new ActionSettings(folderAction.DefaultSettings.Concat(
+            [new KeyValuePair<string, string>(SystemPlugins.FolderAction.FolderIdKey, folder.Id)])));
+    }
+
+    /// <summary>The folder a binding's Folder key opens, if it is one.</summary>
+    private static string? FolderIdOf(ControlBinding? binding) =>
+        binding is { ActionKind: ProfileActionKind.Single } &&
+        binding.Action.ActionId == SystemPlugins.FolderAction.ActionId &&
+        binding.Action.Settings.TryGetValue(SystemPlugins.FolderAction.FolderIdKey, out var id) ? id : null;
+
+    /// <summary>Keeps a folder's name in step with its key's Folder name setting.</summary>
+    private void SyncFolderName(ControlBinding? binding)
+    {
+        if (FolderIdOf(binding) is { } folderId &&
+            AllLayouts.FirstOrDefault(layout => layout.Id == folderId) is { } folder &&
+            binding!.Action.Settings.TryGetValue(SystemPlugins.FolderAction.NameKey, out var name) && !string.IsNullOrWhiteSpace(name))
+        {
+            folder.Name = name;
+        }
+    }
 
     public string SelectedProfileName => SelectedProfile?.Name ?? "No profile selected";
 
@@ -318,6 +536,11 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             updated = existing.Model with { Steps = [.. existing.Model.Steps, step] };
             StatusMessage = $"Added {actionItem.Name} as step {updated.Steps.Count} on {control.DisplayName}.";
         }
+        else if (actionItem.PluginId == EditorActionIds.BuiltInPluginId && actionItem.Id == SystemPlugins.FolderAction.ActionId)
+        {
+            updated = new ControlBinding(control.Id, ProfileActionKind.Single, CreateFolderFor(actionItem, control), appearance, []);
+            StatusMessage = $"Made a folder on {control.DisplayName}. Double-click it (or Open folder below) to fill it; its first key goes back.";
+        }
         else
         {
             updated = new ControlBinding(control.Id, ProfileActionKind.Single, actionItem.ToActionReference(actionItem.DefaultSettings), appearance, []);
@@ -336,7 +559,16 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             return;
         }
 
+        // A removed Folder key takes its folder along, unless another key still opens it.
+        var folderId = FolderIdOf(SelectedProfile.GetBinding(control.Id)?.Model);
         ApplyBinding(control.Id, null);
+        if (folderId is not null &&
+            !AllLayouts.Any(layout => layout.ToModel().Bindings.Any(binding => FolderIdOf(binding) == folderId)) &&
+            AllLayouts.FirstOrDefault(layout => layout.Id == folderId) is { } folder)
+        {
+            RemoveLayoutTree(folder);
+            SyncProfilesToHost();
+        }
         StatusMessage = $"Removed the mapping from {control.DisplayName}.";
     }
 
@@ -428,6 +660,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         {
             SelectedProfile.SetBinding(binding);
             AttachBinding(controlItem, binding);
+            SyncFolderName(model);
         }
         else
         {
@@ -481,6 +714,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             old.Changed -= OnEditorChanged;
             old.RevertRequested -= OnEditorRevert;
             old.RemoveRequested -= OnEditorRemove;
+            old.OpenFolderRequested -= OnEditorOpenFolder;
         }
 
         if (SelectedControl is null || SelectedProfile is null)
@@ -493,6 +727,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         editor.Changed += OnEditorChanged;
         editor.RevertRequested += OnEditorRevert;
         editor.RemoveRequested += OnEditorRemove;
+        editor.OpenFolderRequested += OnEditorOpenFolder;
         Editor = editor;
         if (editor.HasSettingsPage && SelectedDevice is { } device)
         {
@@ -536,6 +771,8 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             StatusMessage = $"Put {editor.DisplayName} back as it was.";
         }
     }
+
+    private void OnEditorOpenFolder(object? sender, string folderId) => OpenFolder(folderId);
 
     private void OnEditorRemove(object? sender, EventArgs e)
     {
@@ -583,7 +820,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             _profileStore.Save(new ProfileDocument(
                 ProfileDocument.CurrentVersion,
                 _manualProfileId ?? SelectedProfile?.Id,
-                Profiles.Select(static profile => profile.ToModel()).ToList(),
+                Profiles.SelectMany(static profile => profile.ToModels()).ToList(),
                 AutoSwitchEnabled,
                 DefaultBackground,
                 _deviceLights.Count == 0 ? null : new Dictionary<string, LightStyle>(_deviceLights, StringComparer.OrdinalIgnoreCase)));
@@ -594,24 +831,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
     }
 
-    // ---------------------------------------------------------------- live preview and test mode
-
-    private bool _isTestMode;
-
-    /// <summary>When on, clicking a control presses it (and the wheel turns knobs) instead of selecting/dragging.</summary>
-    public bool IsTestMode
-    {
-        get => _isTestMode;
-        set
-        {
-            if (SetProperty(ref _isTestMode, value))
-            {
-                StatusMessage = value
-                    ? "Test mode: click controls to press them, use the mouse wheel on knobs, click the left/right half of the swipe bar."
-                    : "Test mode off.";
-            }
-        }
-    }
+    // ---------------------------------------------------------------- live preview and simulated input
 
     /// <summary>Sends a simulated input for a control through the normal runtime path.</summary>
     public void Simulate(ControlItemViewModel control, Contracts.Enums.InputCapabilities inputEvent, int value)
@@ -749,17 +969,24 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         var profile = new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], UniqueProfileName(name), SelectedDevice!.Id, source?.AutoSwitchApps, source?.Background);
         if (copyFrom is not null && source is not null)
         {
-            _pluginState?.CopyProfileSettings(copyFrom.Id, profile.Id);
-            foreach (var binding in source.Bindings)
+            // Pages and folders come along with new ids; Folder keys are pointed at the copies.
+            var ids = new Dictionary<string, string>(StringComparer.Ordinal) { [copyFrom.Id] = profile.Id };
+            foreach (var layout in copyFrom.Layouts)
             {
-                if (Resolve(binding) is { } resolved)
+                ids[layout.Id] = NewLayoutId(profile, layout.Kind ?? "page");
+            }
+
+            CopyLayout(copyFrom, profile, ids);
+            foreach (var layout in copyFrom.Layouts)
+            {
+                var copy = new ProfileItemViewModel(ids[layout.Id], layout.Name, profile.DeviceId, null, layout.ToModel().Background)
                 {
-                    profile.SetBinding(resolved);
-                }
-                else
-                {
-                    profile.AddUnresolvedBinding(binding);
-                }
+                    ParentId = layout.ParentId is { } parent && ids.TryGetValue(parent, out var newParent) ? newParent : profile.Id,
+                    Kind = layout.Kind,
+                    Owner = profile,
+                };
+                CopyLayout(layout, copy, ids);
+                profile.Layouts.Add(copy);
             }
         }
 
@@ -767,6 +994,34 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         NotifyProfilesEdited();
         StatusMessage = copyFrom is null ? $"Created profile {profile.Name}." : $"Duplicated {copyFrom.Name} as {profile.Name}.";
         return profile;
+    }
+
+    /// <summary>Copies a layout's bindings and plugin settings, pointing Folder keys at the copied folders.</summary>
+    private void CopyLayout(ProfileItemViewModel from, ProfileItemViewModel to, IReadOnlyDictionary<string, string> ids)
+    {
+        _pluginState?.CopyProfileSettings(from.Id, to.Id);
+        foreach (var binding in from.ToModel().Bindings)
+        {
+            var copy = FolderIdOf(binding) is { } folderId && ids.TryGetValue(folderId, out var newFolderId)
+                ? binding with
+                {
+                    Action = binding.Action with
+                    {
+                        Settings = new ActionSettings(binding.Action.Settings
+                            .Where(static pair => pair.Key != SystemPlugins.FolderAction.FolderIdKey)
+                            .Append(new KeyValuePair<string, string>(SystemPlugins.FolderAction.FolderIdKey, newFolderId))),
+                    },
+                }
+                : binding;
+            if (Resolve(copy) is { } resolved)
+            {
+                to.SetBinding(resolved);
+            }
+            else
+            {
+                to.AddUnresolvedBinding(copy);
+            }
+        }
     }
 
     /// <summary>Deletes a profile. The last profile can't be deleted.</summary>
@@ -842,7 +1097,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             return;
         }
 
-        if (Profiles.FirstOrDefault(profile => profile.Id == match.Id) is { } profile && profile != SelectedProfile)
+        if (Profiles.FirstOrDefault(profile => profile.Id == match.Id) is { } profile && profile != SelectedProfile?.RootProfile)
         {
             ActivateAutomatically(profile);
             StatusMessage = $"Switched to {profile.Name} because {appName} is active.";
@@ -852,7 +1107,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     private void ReturnToManualProfile()
     {
         if (_manualProfileId is not null &&
-            SelectedProfile?.Id != _manualProfileId &&
+            SelectedProfile?.RootProfile.Id != _manualProfileId &&
             Profiles.FirstOrDefault(profile => profile.Id == _manualProfileId) is { } manual)
         {
             ActivateAutomatically(manual);
@@ -887,7 +1142,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         RebuildActions();
 
         // Bindings to a disabled plugin become "unavailable" (kept); re-enabled ones come back.
-        foreach (var profile in Profiles)
+        foreach (var profile in AllLayouts.ToList())
         {
             foreach (var model in profile.TakeAllBindings())
             {
@@ -931,9 +1186,14 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             var document = TryLoadDocument();
             var unresolved = 0;
 
+            var children = new List<ProfileItemViewModel>();
             foreach (var profile in document?.Profiles ?? [])
             {
-                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps, profile.Background);
+                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps, profile.Background)
+                {
+                    ParentId = profile.ParentId,
+                    Kind = profile.Kind,
+                };
                 foreach (var binding in profile.Bindings)
                 {
                     if (Resolve(binding) is { } bindingViewModel)
@@ -947,7 +1207,25 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
                     }
                 }
 
-                Profiles.Add(item);
+                if (item.IsRoot)
+                {
+                    Profiles.Add(item);
+                }
+                else
+                {
+                    children.Add(item);
+                }
+            }
+
+            // Pages and folders join the profile they belong to (a folder through its page or folder).
+            foreach (var child in children)
+            {
+                var root = FindRoot(child, children);
+                if (root is not null)
+                {
+                    child.Owner = root;
+                    root.Layouts.Add(child);
+                }
             }
 
             if (Profiles.Count == 0)
@@ -957,7 +1235,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
                 Profiles.Add(new ProfileItemViewModel("profile.media", "Media", SelectedDevice.Id));
             }
 
-            SelectedProfile = Profiles.FirstOrDefault(profile => profile.Id == document?.SelectedProfileId) ?? Profiles[0];
+            SelectedProfile = AllLayouts.FirstOrDefault(profile => profile.Id == document?.SelectedProfileId) ?? Profiles[0];
             _autoSwitchEnabled = document?.AutoSwitchEnabled ?? true;
             _defaultBackgroundColor = document?.DefaultBackground?.Color ?? string.Empty;
             _defaultBackgroundImage = document?.DefaultBackground?.ImagePath ?? string.Empty;
@@ -978,7 +1256,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
-        _deviceHostService.SetProfiles(Profiles.Select(ToHostModel).ToList());
+        _deviceHostService.SetProfiles(AllLayouts.Select(ToHostModel).ToList());
         if (SelectedProfile is not null)
         {
             _deviceHostService.SetActiveProfile(SelectedProfile.Id);
@@ -1044,13 +1322,22 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     /// <summary>The profile as the host draws it: its own background, else the default for all profiles.</summary>
     private DeviceProfile ToHostModel(ProfileItemViewModel profile)
     {
+        // Pages and folders look like their profile unless they have a background of their own.
         var model = profile.ToModel();
-        return model.Background is { IsEmpty: false } || DefaultBackground is null ? model : model with { Background = DefaultBackground };
+        if (model.Background is { IsEmpty: false })
+        {
+            return model;
+        }
+
+        var inherited = profile.IsRoot ? null : profile.RootProfile.ToModel().Background;
+        return inherited is { IsEmpty: false } ? model with { Background = inherited }
+            : DefaultBackground is null ? model
+            : model with { Background = DefaultBackground };
     }
 
     private void SyncProfilesToHost()
     {
-        _deviceHostService.SetProfiles(Profiles.Select(ToHostModel).ToList());
+        _deviceHostService.SetProfiles(AllLayouts.Select(ToHostModel).ToList());
 
         if (SelectedProfile is not null)
         {
@@ -1070,7 +1357,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         if (SelectedDevice is null ||
             !string.Equals(deviceId, SelectedDevice.Id, StringComparison.OrdinalIgnoreCase) ||
             SelectedProfile?.Id == profileId ||
-            Profiles.FirstOrDefault(profile => profile.Id == profileId) is not { } profile)
+            AllLayouts.FirstOrDefault(profile => profile.Id == profileId) is not { } profile)
         {
             return;
         }
@@ -1211,7 +1498,13 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         OnPropertyChanged(nameof(CurrentPageName));
         OnPropertyChanged(nameof(SelectedProfileSummary));
         OnPropertyChanged(nameof(CanvasBackground));
-        StatusMessage = SelectedProfile is null ? "No profile selected." : $"Editing profile {SelectedProfile.Name}.";
+        StatusMessage = SelectedProfile switch
+        {
+            null => "No profile selected.",
+            { IsFolder: true } folder => $"Editing the folder {folder.Name} of {folder.RootProfile.Name}.",
+            { IsRoot: false } page => $"Editing {PageName(page).ToLowerInvariant()} of {page.RootProfile.Name}.",
+            { } profile => $"Editing profile {profile.Name}.",
+        };
     }
 
     private void AttachBinding(ControlItemViewModel controlItem, ControlBindingViewModel? binding)
@@ -1297,4 +1590,20 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         actionItem = _actionsByKey.Values.FirstOrDefault(candidate => ReferenceEquals(candidate.Action, action))!;
         return actionItem is not null;
     }
+}
+
+/// <summary>A page button under the device.</summary>
+public sealed class PageTabViewModel(MainViewModel owner, ProfileItemViewModel page, int number, bool isCurrent)
+{
+    public ProfileItemViewModel Page { get; } = page;
+
+    public int Number { get; } = number;
+
+    public bool IsCurrent { get; } = isCurrent;
+
+    public bool CanDelete => !Page.IsRoot;
+
+    public CommunityToolkit.Mvvm.Input.RelayCommand SelectCommand { get; } = new(() => owner.SelectedProfile = page);
+
+    public CommunityToolkit.Mvvm.Input.RelayCommand DeleteCommand { get; } = new(() => owner.DeletePage(page));
 }
