@@ -9,9 +9,11 @@ namespace DeckHost.Core.Plugins;
 /// <code>
 /// { "id": "deckhost.plugin.obs", "name": "OBS Studio", "version": "1.0.0",
 ///   "author": "...", "description": "...", "assembly": "DeckHost.Plugin.Obs.dll", "hostApiVersion": 1,
-///   "icon": "icon.png" }
+///   "icon": "icon.png", "permissions": ["network"] }
 /// </code>
 /// <c>icon</c> (optional) is an image in the package, shown in the Plugin Manager and the store.
+/// <c>permissions</c> (optional) says what the plugin does beyond drawing and reacting to input
+/// (<see cref="PluginPermissions"/>); shown to the user.
 /// </summary>
 public sealed partial record PluginManifest(
     string Id,
@@ -21,7 +23,8 @@ public sealed partial record PluginManifest(
     string? Author = null,
     string? Description = null,
     int HostApiVersion = PluginManifest.CurrentHostApiVersion,
-    string? Icon = null)
+    string? Icon = null,
+    IReadOnlyList<string>? Permissions = null)
 {
     public const string FileName = "plugin.json";
 

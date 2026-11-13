@@ -2,6 +2,7 @@ using Avalonia;
 using System;
 using System.IO;
 using System.IO.Pipes;
+using System.Linq;
 using System.Threading;
 
 namespace DeckHost.App;
@@ -35,6 +36,25 @@ sealed class Program
             var (ok, report) = Device.MiraBox.MiraBoxDevicePlugin.CheckNativeBridge();
             Console.WriteLine(report);
             return ok ? 0 : 1;
+        }
+
+        // "DeckHost --check-plugin <package.zip|folder>": checks a DeckHost plugin for its author and
+        // loads it in a scratch folder (nothing is installed). Exit code 1 on errors.
+        var check = Array.FindIndex(args, static arg => string.Equals(arg, "--check-plugin", StringComparison.OrdinalIgnoreCase));
+        if (check >= 0)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                AttachConsole(-1);
+            }
+
+            if (check + 1 >= args.Length)
+            {
+                Console.WriteLine("Usage: DeckHost --check-plugin <package.zip or folder>");
+                return 2;
+            }
+
+            return CheckPlugin(args[check + 1]);
         }
 
         // Only one DeckHost may own the device: a second instance would run every action twice
@@ -71,6 +91,65 @@ sealed class Program
     private static string ActivationPipeName => $"DeckHost.Activate.{Environment.UserName}";
 
     /// <summary>Asks the running DeckHost to show its window.</summary>
+    /// <summary>Checks a plugin package and trial-loads it into a scratch catalog; prints the result.</summary>
+    private static int CheckPlugin(string package)
+    {
+        var problems = Core.Plugins.PluginDiagnostics.Check(Path.GetFullPath(package));
+        foreach (var problem in problems)
+        {
+            Console.WriteLine(problem);
+        }
+
+        if (problems.Any(static problem => problem.IsError))
+        {
+            return 1;
+        }
+
+        var root = Path.Combine(Path.GetTempPath(), "deckhost-check-plugin-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var catalog = new Core.Plugins.PluginCatalog(root, [], [], []);
+            var source = Directory.Exists(package) ? ZipFolder(package, root) : package;
+            var entry = catalog.Install(source);
+            if (entry.Error is not null)
+            {
+                Console.WriteLine($"error: {entry.Error}");
+                return 1;
+            }
+
+            Console.WriteLine($"ok: {entry.Name} {entry.Version} loads with {entry.ActionCount} action(s). {Core.Plugins.PluginPermissions.Describe(entry.Permissions)}");
+            foreach (var action in catalog.EnabledApplicationPlugins.SelectMany(static plugin => plugin.Actions))
+            {
+                Console.WriteLine($"  {action.Id}: {action.Name}");
+            }
+
+            return 0;
+        }
+        catch (Core.Plugins.PluginException ex)
+        {
+            Console.WriteLine($"error: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static string ZipFolder(string folder, string scratch)
+    {
+        Directory.CreateDirectory(scratch);
+        var zip = Path.Combine(scratch, "package.zip");
+        System.IO.Compression.ZipFile.CreateFromDirectory(folder, zip);
+        return zip;
+    }
+
     private static void SignalFirstInstance()
     {
         try

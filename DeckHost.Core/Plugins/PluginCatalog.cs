@@ -32,7 +32,10 @@ public sealed record PluginEntry(
     string? Origin = null,
     string? Category = null,
     string? InstallDirectory = null,
-    string? IconPath = null);
+    string? IconPath = null,
+    IReadOnlyList<string>? Permissions = null,
+    string? PreviousVersion = null,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>
 /// Keeps track of all plugins:
@@ -51,6 +54,7 @@ public sealed class PluginCatalog : IDisposable
 
     private const string StateFileName = "state.json";
     private const string StagingDirectoryName = ".staging";
+    private const string PreviousDirectoryName = ".previous";
 
     private readonly string _rootDirectory;
     private readonly IReadOnlyList<IDevicePlugin> _devicePlugins;
@@ -177,6 +181,14 @@ public sealed class PluginCatalog : IDisposable
     });
 
     public void Uninstall(string id, IProgress<string>? progress = null) => Run(progress, () => UninstallCore(id));
+
+    /// <summary>Goes back to the version that was installed before the last update (which is kept in turn).</summary>
+    public PluginEntry RollBack(string id, IProgress<string>? progress = null)
+    {
+        PluginEntry? entry = null;
+        Run(progress, () => entry = RollBackCore(id));
+        return entry!;
+    }
 
     public void SetEnabled(string id, bool enabled, IProgress<string>? progress = null) => Run(progress, () => SetEnabledCore(id, enabled));
 
@@ -354,6 +366,8 @@ public sealed class PluginCatalog : IDisposable
             _pendingRemoval.Add(slot.Id);
         }
 
+        TryDeleteDirectory(PreviousDirectoryOf(slot.Id, slot.Kind));
+
         SaveState();
         OnChanged();
     }
@@ -458,7 +472,7 @@ public sealed class PluginCatalog : IDisposable
         Unload(trial);
 
         var targetDirectory = Path.Combine(InstallDirectory, manifest.Id);
-        ReplaceExisting(manifest.Id, targetDirectory);
+        ReplaceExisting(manifest.Id, targetDirectory, SlotKind.Package);
         Directory.CreateDirectory(InstallDirectory);
         Directory.Move(stagingDirectory, targetDirectory);
 
@@ -491,7 +505,7 @@ public sealed class PluginCatalog : IDisposable
 
         EnsureNotSystem(manifest.Uuid);
         var targetDirectory = Path.Combine(StreamDeckDirectory, manifest.Uuid + ".sdPlugin");
-        ReplaceExisting(manifest.Uuid, targetDirectory);
+        ReplaceExisting(manifest.Uuid, targetDirectory, SlotKind.StreamDeck);
         Directory.CreateDirectory(StreamDeckDirectory);
         Directory.Move(sdPluginDirectory, targetDirectory);
 
@@ -514,7 +528,11 @@ public sealed class PluginCatalog : IDisposable
         }
     }
 
-    private void ReplaceExisting(string id, string targetDirectory)
+    /// <summary>
+    /// Unloads the installed version of <paramref name="id"/> and moves its files aside as the
+    /// previous version (replacing an older one), so <see cref="RollBack"/> can bring it back.
+    /// </summary>
+    private void ReplaceExisting(string id, string targetDirectory, SlotKind kind)
     {
         var existing = _slots.FirstOrDefault(slot => string.Equals(slot.Id, id, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
@@ -523,9 +541,58 @@ public sealed class PluginCatalog : IDisposable
             _slots.Remove(existing);
         }
 
+        if (!Directory.Exists(targetDirectory))
+        {
+            return;
+        }
+
+        var previous = PreviousDirectoryOf(id, kind);
+        if (TryDeleteDirectory(previous))
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(previous)!);
+                Directory.Move(targetDirectory, previous);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Couldn't keep it: replace it without a way back.
+            }
+        }
+
         if (Directory.Exists(targetDirectory) && !TryDeleteDirectory(targetDirectory))
         {
             throw new PluginException("The previous version's files are in use; restart DeckHost and install again.");
+        }
+    }
+
+    private PluginEntry RollBackCore(string id)
+    {
+        var slot = FindSlot(id);
+        var previous = PreviousDirectoryOf(slot.Id, slot.Kind);
+        if (slot.Kind == SlotKind.System || !Directory.Exists(previous))
+        {
+            throw new PluginException($"There is no earlier version of {slot.DisplayName} to go back to.");
+        }
+
+        // Install the kept version like a package; the current one becomes the kept one.
+        var staging = Path.Combine(_rootDirectory, StagingDirectoryName, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(staging);
+        try
+        {
+            var unpacked = Path.Combine(staging, Path.GetFileName(previous));
+            Directory.Move(previous, unpacked);
+            Report($"Going back to the earlier version of {slot.DisplayName}…");
+            return slot.Kind == SlotKind.StreamDeck ? InstallStreamDeckPlugin(unpacked) : InstallDeckHostPackage(unpacked);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new PluginException($"Could not go back: {ex.Message}");
+        }
+        finally
+        {
+            TryDeleteDirectory(staging);
         }
     }
 
@@ -660,7 +727,37 @@ public sealed class PluginCatalog : IDisposable
             slot.Kind == SlotKind.System ? "Built into DeckHost" : _origins.GetValueOrDefault(slot.Id, "File"),
             slot.StreamDeckManifest?.Category,
             slot.Directory,
-            IconPathOf(slot));
+            IconPathOf(slot),
+            slot.Manifest?.Permissions,
+            PreviousVersionOf(slot),
+            slot.Kind == SlotKind.Package && slot.Directory is { } directory && slot.Error is null
+                ? [.. PluginDiagnostics.CheckFolder(directory).Select(static problem => problem.Message)]
+                : null);
+    }
+
+    /// <summary>Where the version before the last update of a plugin is kept (for a roll back).</summary>
+    private string PreviousDirectoryOf(string id, SlotKind kind) => kind == SlotKind.StreamDeck
+        ? Path.Combine(_rootDirectory, PreviousDirectoryName, "streamdeck", id + ".sdPlugin")
+        : Path.Combine(_rootDirectory, PreviousDirectoryName, "functional", id);
+
+    private string? PreviousVersionOf(Slot slot)
+    {
+        if (slot.Kind == SlotKind.System)
+        {
+            return null;
+        }
+
+        var previous = PreviousDirectoryOf(slot.Id, slot.Kind);
+        try
+        {
+            return slot.Kind == SlotKind.StreamDeck
+                ? Directory.Exists(previous) ? StreamDeckManifest.Load(previous).Version ?? "?" : null
+                : File.Exists(Path.Combine(previous, PluginManifest.FileName)) ? PluginManifest.Parse(File.ReadAllText(Path.Combine(previous, PluginManifest.FileName))).Version : null;
+        }
+        catch (Exception ex) when (ex is PluginException or IOException or InvalidDataException or JsonException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The plugin's icon file: the Stream Deck manifest's Icon, or plugin.json's icon.</summary>

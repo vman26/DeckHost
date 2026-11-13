@@ -45,6 +45,8 @@
 						<TextBlock Text="{Binding Details}" FontSize="12" Foreground="#94A3B8" />
 						<TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Foreground="#CBD5E1" TextWrapping="Wrap" />
 						<TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="#FCA5A5" TextWrapping="Wrap" />
+						<TextBlock Text="{Binding PermissionsText}" IsVisible="{Binding HasPermissionsText}" FontSize="12" Foreground="#FDE68A" TextWrapping="Wrap" />
+						<TextBlock Text="{Binding WarningsText}" IsVisible="{Binding HasWarnings}" FontSize="12" Foreground="#FCD34D" TextWrapping="Wrap" />
 							<TextBlock Text="{Binding Id}" FontSize="11" Foreground="#475569" />
 							<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsBusy}">
 								<ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" />
@@ -65,6 +67,12 @@
 								HorizontalAlignment="Right"
 								ToolTip.Tip="{Binding InstallDirectory}"
 								Command="{Binding OpenFolderCommand}" />
+						<Button Content="{Binding RollBackLabel}"
+								IsVisible="{Binding CanRollBack}"
+								IsEnabled="{Binding IsIdle}"
+								HorizontalAlignment="Right"
+								ToolTip.Tip="Go back to the version installed before the last update (this one is kept in turn)"
+								Command="{Binding RollBackCommand}" />
 						<Button Content="Uninstall"
 								IsVisible="{Binding CanUninstall}"
 								IsEnabled="{Binding IsIdle}"

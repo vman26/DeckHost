@@ -16,4 +16,8 @@ DeckHost runs Stream Deck plugins in their own processes and speaks their protoc
 
 ## Installing a package
 
-**Install plugin…** takes a DeckHost plugin package (`.zip`, `.dhplugin`) or a `.streamDeckPlugin`. Icon packs are installed from the icon picker. Plugins run with your user's rights: only install what you trust.
+**Install plugin…** takes a DeckHost plugin package (`.zip`, `.dhplugin`) or a `.streamDeckPlugin`. Icon packs are installed from the icon picker. Plugins run with your user's rights: only install what you trust. A DeckHost plugin says what it may do (use the network, start programs, …); that is shown when it's installed and on the Plugins page.
+
+## Going back to an earlier version
+
+When a plugin is updated, DeckHost keeps the version before it. If the new one misbehaves, **Back to v…** on the Plugins page brings the earlier one back (and keeps the newer one, so you can switch again).
