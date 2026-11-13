@@ -52,6 +52,7 @@
 									  ToolTip.Tip="Recommended: a plugin that crashes or hangs then can't take DeckHost and your devices with it, and DeckHost restarts it." />
 							<TextBlock Text="{Binding ProcessStatus}" IsVisible="{Binding HasProcessStatus}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Center" TextWrapping="Wrap" />
 						</StackPanel>
+						<TextBlock Text="{Binding ProcessStatus}" IsVisible="{Binding ShowsOnlyStatus}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
 						<Border IsVisible="{Binding ConfirmingInProcess}" Padding="10" CornerRadius="8" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.7F1D1D}" BorderThickness="1">
 							<StackPanel Spacing="8">
 								<TextBlock Text="{Binding InProcessWarning}" TextWrapping="Wrap" Foreground="{DynamicResource C.FECACA}" />

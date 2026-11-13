@@ -466,6 +466,9 @@ public partial class PluginEntryViewModel : ViewModelBase
 
     public bool HasProcessStatus => ProcessStatus.Length > 0;
 
+    /// <summary>A Stream Deck / OpenAction plugin: always its own process, so only the status is shown.</summary>
+    public bool ShowsOnlyStatus => HasProcessStatus && !CanChooseProcess;
+
     [RelayCommand]
     private void ConfirmInProcess()
     {

@@ -142,6 +142,98 @@ public sealed class StreamDeckTests : IDisposable
         Assert.True(await WaitForTitleAsync(action, "Pressed 2"), "settings round trip: " + string.Join(" | ", logs));
     }
 
+    private const string PidTitleScript = """
+        const args = process.argv.slice(2);
+        const value = name => args[args.indexOf(name) + 1];
+        const socket = new WebSocket(`ws://127.0.0.1:${value('-port')}`);
+        socket.onopen = () => socket.send(JSON.stringify({ event: value('-registerEvent'), uuid: value('-pluginUUID') }));
+        socket.onmessage = message => {
+          const data = JSON.parse(message.data);
+          if (data.event === 'willAppear') socket.send(JSON.stringify({ event: 'setTitle', context: data.context, payload: { title: `Hello ${process.pid}` } }));
+        };
+        """;
+
+    private static async Task<string?> WaitForTitleStartingAsync(IDeckAction action, string prefix, string? not = null)
+    {
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            var context = new CapturingRenderContext();
+            action.Render(context);
+            if (context.Texts.FirstOrDefault(text => text.StartsWith(prefix, StringComparison.Ordinal) && text != not) is { } title)
+            {
+                return title;
+            }
+
+            await Task.Delay(50);
+        }
+
+        return null;
+    }
+
+    [Fact]
+    public async Task A_plugin_whose_process_dies_is_restarted_and_its_keys_come_back()
+    {
+        if (!IsNodeAvailable())
+        {
+            return;
+        }
+
+        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (_, _) => { }) { RestartDelays = [TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100)] };
+        using var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
+        catalog.Load();
+        var plugin = new FakeDevicePlugin();
+        runtime.DevicesProvider = () => plugin.Devices;
+        Assert.Null(catalog.Install(PackPlugin(WritePlugin("plugin.js", script: PidTitleScript))).Error);
+        var changes = 0;
+        catalog.Changed += (_, _) => Interlocked.Increment(ref changes);
+
+        using var store = new VariableStore();
+        await using var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
+        var reference = new ActionReference(PluginUuid, "Test", ActionUuid, "Test action", InputCapabilities.None, OutputCapabilities.None);
+        host.SetProfiles([new DeviceProfile("p1", "P", FakeDevicePlugin.DeviceId, [new ControlBinding("key.0", ProfileActionKind.Single, reference, new ControlAppearance(), [])])]);
+        await host.StartAsync(CancellationToken.None);
+        var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
+
+        var first = await WaitForTitleStartingAsync(action, "Hello ");
+        Assert.NotNull(first);
+        Assert.StartsWith("Runs in its own process (pid", catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus);
+
+        // The plugin's process dies: it's started again and told what's on the device.
+        System.Diagnostics.Process.GetProcessById(int.Parse(first!["Hello ".Length..], System.Globalization.CultureInfo.InvariantCulture)).Kill();
+
+        var second = await WaitForTitleStartingAsync(action, "Hello ", not: first);
+        Assert.NotNull(second);
+        Assert.Contains("restarted 1×", catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus);
+        Assert.True(changes >= 2);
+    }
+
+    [Fact]
+    public async Task A_plugin_that_keeps_crashing_is_stopped_with_a_message()
+    {
+        if (!IsNodeAvailable())
+        {
+            return;
+        }
+
+        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (_, _) => { }) { RestartDelays = [TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(50)] };
+        using var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
+        catalog.Load();
+        catalog.Install(PackPlugin(WritePlugin("plugin.js", script: "process.exit(1);")));
+
+        for (var attempt = 0; attempt < 200 && runtime.ProblemOf(PluginUuid) is null; attempt++)
+        {
+            await Task.Delay(50);
+        }
+
+        Assert.Contains("stopped 3 times", runtime.ProblemOf(PluginUuid));
+        Assert.Equal(runtime.ProblemOf(PluginUuid), catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus);
+
+        // Disabling and enabling starts it fresh.
+        catalog.SetEnabled(PluginUuid, false);
+        catalog.SetEnabled(PluginUuid, true);
+        Assert.Null(runtime.ProblemOf(PluginUuid));
+    }
+
     private const string TestPluginScript = """
         const args = process.argv.slice(2);
         const value = name => args[args.indexOf(name) + 1];

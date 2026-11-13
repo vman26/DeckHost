@@ -22,7 +22,9 @@ DeckHost runs Stream Deck plugins in their own processes and speaks their protoc
 
 DeckHost plugins run in their own process: if one crashes or hangs, DeckHost and your devices keep working, and DeckHost restarts it (up to three times; then the Plugins page says it stopped). The Plugins page shows this as **Run in its own process**, with the process it runs in.
 
-You can turn it off for a plugin, after a warning: it then runs inside DeckHost, which is a little faster but means a crash or hang takes DeckHost and your devices with it. Only do that for a plugin you trust, or when its author asks you to. Stream Deck plugins always run on their own; the plugins that come with DeckHost always run inside it.
+You can turn it off for a plugin, after a warning: it then runs inside DeckHost, which is a little faster but means a crash or hang takes DeckHost and your devices with it. Only do that for a plugin you trust, or when its author asks you to. Stream Deck and OpenAction plugins always run as programs of their own, so they don't have the setting; the plugins that come with DeckHost always run inside it.
+
+Stream Deck and OpenAction plugins are restarted the same way when their program ends unexpectedly, and get back what they had on your devices; the Plugins page shows their process too. One that keeps stopping (three times in a row) is left stopped with a message: disable and enable it to try again. A plugin that runs for a few minutes between crashes starts the count again.
 
 ## Going back to an earlier version
 
