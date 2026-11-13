@@ -85,6 +85,10 @@ public sealed class PluginCatalog : IDisposable
         _rootDirectory = rootDirectory;
         _devicePlugins = devicePlugins.ToList();
         _streamDeck = streamDeckRuntime;
+        if (_streamDeck is not null)
+        {
+            _streamDeck.StatusChanged += OnStreamDeckStatusChanged;
+        }
 
         var required = requiredPluginIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var plugin in systemPlugins)
@@ -132,6 +136,8 @@ public sealed class PluginCatalog : IDisposable
     });
 
     private void OnProcessStatusChanged(object? sender, EventArgs e) => Changed?.Invoke(this, EventArgs.Empty);
+
+    private void OnStreamDeckStatusChanged(string pluginUuid) => Changed?.Invoke(this, EventArgs.Empty);
 
     public static string DefaultRootDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create),
@@ -455,6 +461,11 @@ public sealed class PluginCatalog : IDisposable
 
     private void DisposeCore()
     {
+        if (_streamDeck is not null)
+        {
+            _streamDeck.StatusChanged -= OnStreamDeckStatusChanged;
+        }
+
         foreach (var slot in _slots)
         {
             Unload(slot);
@@ -825,7 +836,9 @@ public sealed class PluginCatalog : IDisposable
                 ? [.. PluginDiagnostics.CheckFolder(directory).Select(static problem => problem.Message)]
                 : null,
             slot.Kind == SlotKind.Package && ProcessLauncher is not null ? !_inProcess.Contains(slot.Id) : null,
-            slot.Process is { } process ? process.Problem ?? process.Status : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost" : null);
+            slot.Process is { } process ? process.Problem ?? process.Status
+                : slot.Kind == SlotKind.StreamDeck && _streamDeck is not null && !_disabled.Contains(slot.Id) ? _streamDeck.ProblemOf(slot.Id) ?? _streamDeck.StatusOf(slot.Id)
+                : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost" : null);
     }
 
     /// <summary>Where the version before the last update of a plugin is kept (for a roll back).</summary>

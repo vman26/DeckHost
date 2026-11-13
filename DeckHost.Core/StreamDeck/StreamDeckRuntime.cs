@@ -45,6 +45,24 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         _server = new StreamDeckServer(HandleWebSocketAsync, HandleGet);
     }
 
+    /// <summary>
+    /// Waits before restarting a plugin whose process ended unexpectedly, in order; after the last one
+    /// the plugin stays stopped (<see cref="ProblemOf"/>). A process that ran for
+    /// <see cref="StableRunTime"/> starts the count again.
+    /// </summary>
+    public IReadOnlyList<TimeSpan> RestartDelays { get; set; } = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(10)];
+
+    public TimeSpan StableRunTime { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>Raised (on a background thread, with the plugin's UUID) when a plugin stopped, restarted or gave up.</summary>
+    public event Action<string>? StatusChanged;
+
+    /// <summary>"Runs in its own process (pid 1234)", "Restarting…"; null for a plugin that isn't running.</summary>
+    public string? StatusOf(string pluginUuid) => _plugins.TryGetValue(pluginUuid, out var running) ? running.Status : null;
+
+    /// <summary>Why the plugin stopped for good; null while it runs (or is being restarted).</summary>
+    public string? ProblemOf(string pluginUuid) => _plugins.TryGetValue(pluginUuid, out var running) ? running.Problem : null;
+
     /// <summary>Devices reported to plugins in the -info argument and deviceDidConnect.</summary>
     public Func<IReadOnlyCollection<DeviceDefinition>> DevicesProvider { get; set; } = static () => [];
 
@@ -119,13 +137,79 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             {
                 logWriter.Dispose();
             }
+
+            OnProcessExited(running, process);
         };
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
         running.Process = process;
         running.Stopping = false;
+        running.StartedAt = Environment.TickCount64;
+        running.Problem = null;
+        running.Status = $"Runs in its own process (pid {process.Id})" + (running.Restarts > 0 ? $", restarted {running.Restarts}×" : string.Empty);
         _log("Info", $"Started Stream Deck plugin {manifest.Name} ({(isNode ? "Node.js" : Path.GetFileName(programPath))}).");
+    }
+
+    /// <summary>
+    /// A plugin's process ended. Unless DeckHost stopped it, it's started again after a moment: the
+    /// messages meant for the old process are dropped, and once the new one registers it's told again
+    /// what's on the devices (willAppear), so its keys come back.
+    /// </summary>
+    private void OnProcessExited(RunningPlugin running, Process process)
+    {
+        if (running.Stopping || !ReferenceEquals(running.Process, process) || !_plugins.TryGetValue(running.Manifest.Uuid, out var current) || !ReferenceEquals(current, running))
+        {
+            return;
+        }
+
+        running.Connection = null;
+        running.Pending.Clear();
+        running.Reappear = true;
+        if (Environment.TickCount64 - running.StartedAt >= StableRunTime.TotalMilliseconds)
+        {
+            running.Restarts = 0;
+        }
+
+        ScheduleRestart(running);
+    }
+
+    private void ScheduleRestart(RunningPlugin running)
+    {
+        var name = running.Manifest.Name;
+        if (running.Restarts >= RestartDelays.Count)
+        {
+            running.Problem = $"{name} stopped {running.Restarts + 1} times in a row, so DeckHost stopped restarting it. Disable and enable it to try again; its log is in the plugin logs folder.";
+            running.Status = "Stopped";
+            _log("Error", running.Problem);
+            StatusChanged?.Invoke(running.Manifest.Uuid);
+            return;
+        }
+
+        var delay = RestartDelays[running.Restarts++];
+        running.Status = $"Stopped unexpectedly; restarting ({running.Restarts} of {RestartDelays.Count})…";
+        _log("Warning", $"Restarting Stream Deck plugin {name} in {delay.TotalSeconds:0.#} s.");
+        StatusChanged?.Invoke(running.Manifest.Uuid);
+        _ = Task.Delay(delay).ContinueWith(_ => Restart(running), TaskScheduler.Default);
+    }
+
+    private void Restart(RunningPlugin running)
+    {
+        if (running.Stopping || !_plugins.TryGetValue(running.Manifest.Uuid, out var current) || !ReferenceEquals(current, running))
+        {
+            return;
+        }
+
+        try
+        {
+            Start(running.Manifest);
+            StatusChanged?.Invoke(running.Manifest.Uuid);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log("Error", $"Could not restart Stream Deck plugin {running.Manifest.Name}: {ex.Message}");
+            ScheduleRestart(running);
+        }
     }
 
     /// <summary>Runs an HTML plugin in the app's hidden browser, the way the Stream Deck app does.</summary>
@@ -155,6 +239,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             """;
         running.Html = host.Start(manifest.Uuid, page, script, _log);
         running.Stopping = false;
+        running.Status = "Runs in DeckHost's browser (its own browser process)";
         _log("Info", $"Started Stream Deck plugin {manifest.Name} (HTML, in DeckHost's browser).");
     }
 
@@ -413,6 +498,17 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                     while (running.Pending.TryDequeue(out var pending))
                     {
                         await connection.SendAsync(pending).ConfigureAwait(false);
+                    }
+
+                    if (running.Reappear)
+                    {
+                        // A restarted plugin starts from nothing: what it had on the devices appears again.
+                        running.Reappear = false;
+                        foreach (var instance in _instances.Values.Where(instance => instance.Visible && string.Equals(instance.PluginUuid, uuid, StringComparison.OrdinalIgnoreCase)).ToList())
+                        {
+                            await connection.SendAsync(Envelope("willAppear", instance)).ConfigureAwait(false);
+                            instance.RequestRender();
+                        }
                     }
 
                     continue;
@@ -913,6 +1009,18 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         public bool Stopping { get; set; }
 
         public ConcurrentQueue<JsonObject> Pending { get; } = new();
+
+        /// <summary>Restarts since the process last ran long enough (<see cref="StableRunTime"/>).</summary>
+        public int Restarts { get; set; }
+
+        public long StartedAt { get; set; }
+
+        /// <summary>Send willAppear for the visible instances when the (restarted) plugin registers.</summary>
+        public bool Reappear { get; set; }
+
+        public string? Status { get; set; }
+
+        public string? Problem { get; set; }
     }
 
     private sealed class InstanceState(string context, string pluginUuid, string actionUuid, string deviceId, string controlId, string controller, int row, int column)
