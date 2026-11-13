@@ -59,7 +59,7 @@ public class ControlItemViewModel : ViewModelBase
 
     public bool ShowDetails => !IsCompact && !IsKnob;
 
-    /// <summary>A knob shows one line (its action, or its name); keys and zones their name on top.</summary>
+    /// <summary>Keys and zones show their name until the first frame arrives; a knob shows no text (its tooltip names it), like a key.</summary>
     public bool ShowName => !IsKnob;
 
     public string InputsLabel { get; }
@@ -113,8 +113,8 @@ public class ControlItemViewModel : ViewModelBase
 
     public bool HasPreview => PreviewBitmap is not null;
 
-    /// <summary>Text card for controls without a display (knobs, swipe bar) or before the first frame.</summary>
-    public bool ShowTextPreview => !HasPreview && (ShowDetails || IsKnob);
+    /// <summary>Text card for a control before its first frame (not on knobs: they show only their LED ring).</summary>
+    public bool ShowTextPreview => !HasPreview && ShowDetails;
 
     /// <summary>True while the control is held down on the device (or double-clicked in the editor).</summary>
     public bool IsPressed
