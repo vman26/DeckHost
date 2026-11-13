@@ -47,6 +47,20 @@
 						<TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource C.FCA5A5}" TextWrapping="Wrap" />
 						<TextBlock Text="{Binding PermissionsText}" IsVisible="{Binding HasPermissionsText}" FontSize="12" Foreground="{DynamicResource C.FDE68A}" TextWrapping="Wrap" />
 						<TextBlock Text="{Binding WarningsText}" IsVisible="{Binding HasWarnings}" FontSize="12" Foreground="{DynamicResource C.FCD34D}" TextWrapping="Wrap" />
+						<StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding CanChooseProcess}">
+							<CheckBox Content="Run in its own process" IsChecked="{Binding RunsInOwnProcess}" IsEnabled="{Binding IsIdle}"
+									  ToolTip.Tip="Recommended: a plugin that crashes or hangs then can't take DeckHost and your devices with it, and DeckHost restarts it." />
+							<TextBlock Text="{Binding ProcessStatus}" IsVisible="{Binding HasProcessStatus}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Center" TextWrapping="Wrap" />
+						</StackPanel>
+						<Border IsVisible="{Binding ConfirmingInProcess}" Padding="10" CornerRadius="8" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.7F1D1D}" BorderThickness="1">
+							<StackPanel Spacing="8">
+								<TextBlock Text="{Binding InProcessWarning}" TextWrapping="Wrap" Foreground="{DynamicResource C.FECACA}" />
+								<StackPanel Orientation="Horizontal" Spacing="8">
+									<Button Content="Run it inside DeckHost" Command="{Binding ConfirmInProcessCommand}" />
+									<Button Content="Keep its own process" Classes="accent" Command="{Binding CancelInProcessCommand}" />
+								</StackPanel>
+							</StackPanel>
+						</Border>
 							<TextBlock Text="{Binding Id}" FontSize="11" Foreground="{DynamicResource C.475569}" />
 							<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsBusy}">
 								<ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" />

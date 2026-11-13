@@ -123,6 +123,25 @@ public partial class PluginManagerViewModel : ViewModelBase
     internal static string PermissionNote(PluginEntry entry) =>
         entry.Source == PluginCatalog.DeckHostSource && entry.Permissions is { Count: > 0 } ? " " + PluginPermissions.Describe(entry.Permissions) : string.Empty;
 
+    internal async Task SetRunInOwnProcessAsync(PluginEntryViewModel plugin, bool ownProcess)
+    {
+        var ok = await RunBusyAsync<object?>(
+            ownProcess ? $"Moving {plugin.Name} to its own process…" : $"Moving {plugin.Name} inside DeckHost…",
+            progress =>
+            {
+                _catalog.SetRunInOwnProcess(plugin.Id, ownProcess, progress);
+                return null;
+            },
+            _ => ownProcess
+                ? $"{plugin.Name} runs in its own process again."
+                : $"{plugin.Name} runs inside DeckHost now. Move it back if DeckHost becomes slow or unstable.",
+            plugin);
+        if (!ok)
+        {
+            Refresh();
+        }
+    }
+
     internal async Task RollBackAsync(PluginEntryViewModel plugin)
     {
         await RunBusyAsync(
@@ -287,6 +306,7 @@ public partial class PluginEntryViewModel : ViewModelBase
         _owner = owner;
         Entry = entry;
         _isEnabled = entry.IsEnabled;
+        _runsInOwnProcess = entry.RunsInOwnProcess ?? false;
     }
 
     public PluginEntry Entry { get; }
@@ -394,6 +414,73 @@ public partial class PluginEntryViewModel : ViewModelBase
     public bool HasWarnings => Entry.Warnings is { Count: > 0 };
 
     public bool CanRollBack => Entry.PreviousVersion is not null;
+
+    // ---------------------------------------------------------------- own process
+
+    private bool _runsInOwnProcess;
+    private bool _confirmingInProcess;
+
+    /// <summary>A DeckHost plugin package: it can run in its own process or inside DeckHost.</summary>
+    public bool CanChooseProcess => Entry.RunsInOwnProcess is not null && IsEnabled;
+
+    /// <summary>
+    /// Run in its own process (the default). Turning it off asks first (<see cref="ConfirmingInProcess"/>):
+    /// inside DeckHost a plugin that crashes or hangs takes DeckHost and the devices with it.
+    /// </summary>
+    public bool RunsInOwnProcess
+    {
+        get => _runsInOwnProcess;
+        set
+        {
+            if (value == _runsInOwnProcess)
+            {
+                return;
+            }
+
+            if (value)
+            {
+                ConfirmingInProcess = false;
+                _runsInOwnProcess = true;
+                OnPropertyChanged();
+                _ = _owner.SetRunInOwnProcessAsync(this, ownProcess: true);
+                return;
+            }
+
+            // Not yet: show the warning, keep the box ticked until confirmed.
+            ConfirmingInProcess = true;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool ConfirmingInProcess
+    {
+        get => _confirmingInProcess;
+        private set => SetProperty(ref _confirmingInProcess, value);
+    }
+
+    public string InProcessWarning =>
+        $"Inside DeckHost, {Name} starts and draws a little faster, but if it crashes or hangs it takes DeckHost and your devices with it, " +
+        "and it can do everything DeckHost can. Only do this for a plugin you trust, or when its author asks you to.";
+
+    public string ProcessStatus => Entry.ProcessStatus ?? string.Empty;
+
+    public bool HasProcessStatus => ProcessStatus.Length > 0;
+
+    [RelayCommand]
+    private void ConfirmInProcess()
+    {
+        ConfirmingInProcess = false;
+        _runsInOwnProcess = false;
+        OnPropertyChanged(nameof(RunsInOwnProcess));
+        _ = _owner.SetRunInOwnProcessAsync(this, ownProcess: false);
+    }
+
+    [RelayCommand]
+    private void CancelInProcess()
+    {
+        ConfirmingInProcess = false;
+        OnPropertyChanged(nameof(RunsInOwnProcess));
+    }
 
     public string RollBackLabel => $"Back to v{Entry.PreviousVersion}";
 

@@ -41,6 +41,10 @@ namespace DeckHost.Core.State
             return false;
         }
 
+        /// <summary>The keys starting with <paramref name="prefix"/> and their values (for a plugin in its own process).</summary>
+        public IReadOnlyList<KeyValuePair<string, object?>> Snapshot(string prefix) =>
+            [.. _variables.Where(pair => pair.Key.StartsWith(prefix, StringComparison.Ordinal)).Select(static pair => new KeyValuePair<string, object?>(pair.Key, pair.Value.Value))];
+
         public void Dispose()
         {
             foreach (var variable in _variables.Values)

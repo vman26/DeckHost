@@ -38,6 +38,13 @@ sealed class Program
             return ok ? 0 : 1;
         }
 
+        // "DeckHost --plugin-host <port> <token> <folder>": a DeckHost plugin running in its own process.
+        // No window, no single-instance check: it connects back to DeckHost and ends with it.
+        if (args.Length > 0 && string.Equals(args[0], "--plugin-host", StringComparison.OrdinalIgnoreCase))
+        {
+            return Core.Plugins.Isolation.PluginProcessServer.Run(args[1..]);
+        }
+
         // "DeckHost --check-plugin <package.zip|folder>": checks a DeckHost plugin for its author and
         // loads it in a scratch folder (nothing is installed). Exit code 1 on errors.
         var check = Array.FindIndex(args, static arg => string.Equals(arg, "--check-plugin", StringComparison.OrdinalIgnoreCase));

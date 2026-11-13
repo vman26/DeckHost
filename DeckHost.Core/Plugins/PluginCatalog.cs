@@ -4,6 +4,8 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Text.Json;
 
+using DeckHost.Core.Plugins.Isolation;
+
 namespace DeckHost.Core.Plugins;
 
 public enum PluginKind
@@ -35,7 +37,9 @@ public sealed record PluginEntry(
     string? IconPath = null,
     IReadOnlyList<string>? Permissions = null,
     string? PreviousVersion = null,
-    IReadOnlyList<string>? Warnings = null);
+    IReadOnlyList<string>? Warnings = null,
+    bool? RunsInOwnProcess = null,
+    string? ProcessStatus = null);
 
 /// <summary>
 /// Keeps track of all plugins:
@@ -62,6 +66,9 @@ public sealed class PluginCatalog : IDisposable
     private readonly List<Slot> _slots = [];
     private readonly HashSet<string> _disabled = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _pendingRemoval = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>DeckHost plugins the user chose to run inside DeckHost (all others run in their own process).</summary>
+    private readonly HashSet<string> _inProcess = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _origins = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _sync = new();
     private IProgress<string>? _progress;
@@ -87,6 +94,44 @@ public sealed class PluginCatalog : IDisposable
     }
 
     public event EventHandler? Changed;
+
+    /// <summary>
+    /// Starts plugin processes. With one, DeckHost plugins run in their own process unless the user
+    /// chose otherwise (docs ADR 0007); without one (tests, tools), every plugin loads in this process.
+    /// Set before <see cref="Load"/>.
+    /// </summary>
+    public IPluginProcessLauncher? ProcessLauncher { get; set; }
+
+    /// <summary>Where plugin processes' messages go (level, text).</summary>
+    public Action<string, string> PluginLog { get; set; } = static (_, _) => { };
+
+    /// <summary>
+    /// Runs a DeckHost plugin in its own process (the default) or inside DeckHost. Reloads it.
+    /// </summary>
+    public void SetRunInOwnProcess(string id, bool ownProcess, IProgress<string>? progress = null) => Run(progress, () =>
+    {
+        var slot = FindSlot(id);
+        if (slot.Kind != SlotKind.Package)
+        {
+            throw new PluginException($"{slot.DisplayName} isn't a DeckHost plugin package: it can't be moved.");
+        }
+
+        if (ownProcess ? !_inProcess.Remove(slot.Id) : !_inProcess.Add(slot.Id))
+        {
+            return;
+        }
+
+        if (!_disabled.Contains(slot.Id))
+        {
+            Unload(slot);
+            LoadInstance(slot);
+        }
+
+        SaveState();
+        OnChanged();
+    });
+
+    private void OnProcessStatusChanged(object? sender, EventArgs e) => Changed?.Invoke(this, EventArgs.Empty);
 
     public static string DefaultRootDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create),
@@ -619,7 +664,7 @@ public sealed class PluginCatalog : IDisposable
         }
     }
 
-    private static void LoadInstance(Slot slot)
+    private void LoadInstance(Slot slot)
     {
         if (slot.Instance is not null || slot.Directory is null || slot.Manifest is null)
         {
@@ -627,37 +672,73 @@ public sealed class PluginCatalog : IDisposable
         }
 
         slot.Error = null;
-        var context = new PluginLoadContext(slot.Directory, slot.Id);
-        try
+        if (ProcessLauncher is { } launcher && !_inProcess.Contains(slot.Id))
         {
-            var assemblyPath = Path.Combine(slot.Directory, slot.Manifest.Assembly);
-            if (!File.Exists(assemblyPath))
+            // Its own process: a crash or a hang there can't take DeckHost down.
+            var process = new PluginProcessHost(slot.Manifest, slot.Directory, launcher, PluginLog);
+            try
             {
-                throw new PluginException($"The package does not contain {slot.Manifest.Assembly}.");
+                Report($"Starting {slot.Manifest.Name}…");
+                slot.Instance = process.Start();
+                slot.Process = process;
+                process.StatusChanged += OnProcessStatusChanged;
+            }
+            catch (PluginException ex)
+            {
+                process.Dispose();
+                slot.Error = ex.Message;
+                throw;
             }
 
-            var assembly = context.LoadPluginAssembly(slot.Manifest.Assembly);
+            return;
+        }
+
+        try
+        {
+            var (instance, context) = LoadInProcess(slot.Directory, slot.Manifest);
+            slot.Instance = instance;
+            slot.Context = context;
+        }
+        catch (PluginException ex)
+        {
+            slot.Error = ex.Message;
+            throw;
+        }
+    }
+
+    /// <summary>Loads a plugin package into this process (its own collectible context).</summary>
+    internal static (IApplicationPlugin Instance, PluginLoadContext Context) LoadInProcess(string directory, PluginManifest manifest)
+    {
+        var context = new PluginLoadContext(directory, manifest.Id);
+        try
+        {
+            var assemblyPath = Path.Combine(directory, manifest.Assembly);
+            if (!File.Exists(assemblyPath))
+            {
+                throw new PluginException($"The package does not contain {manifest.Assembly}.");
+            }
+
+            var assembly = context.LoadPluginAssembly(manifest.Assembly);
             var pluginType = GetLoadableTypes(assembly)
                 .FirstOrDefault(type => type is { IsAbstract: false, IsInterface: false } &&
                                         typeof(IApplicationPlugin).IsAssignableFrom(type) &&
                                         type.GetConstructor(Type.EmptyTypes) is not null)
-                ?? throw new PluginException($"{slot.Manifest.Assembly} contains no public IApplicationPlugin with a parameterless constructor (built against this DeckHost.Contracts?).");
+                ?? throw new PluginException($"{manifest.Assembly} contains no public IApplicationPlugin with a parameterless constructor (built against this DeckHost.Contracts?).");
 
             var instance = (IApplicationPlugin)Activator.CreateInstance(pluginType)!;
-            if (!string.Equals(instance.Id, slot.Manifest.Id, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(instance.Id, manifest.Id, StringComparison.OrdinalIgnoreCase))
             {
                 (instance as IDisposable)?.Dispose();
-                throw new PluginException($"The plugin reports id '{instance.Id}' but its manifest says '{slot.Manifest.Id}'.");
+                throw new PluginException($"The plugin reports id '{instance.Id}' but its manifest says '{manifest.Id}'.");
             }
 
-            slot.Instance = instance;
-            slot.Context = context;
+            return (instance, context);
         }
         catch (Exception ex)
         {
             context.Unload();
-            slot.Error = ex is PluginException ? ex.Message : $"Failed to load: {ex.GetBaseException().Message}";
-            throw ex as PluginException ?? new PluginException(slot.Error, ex);
+            var message = ex is PluginException ? ex.Message : $"Failed to load: {ex.GetBaseException().Message}";
+            throw ex as PluginException ?? new PluginException(message, ex);
         }
     }
 
@@ -684,6 +765,16 @@ public sealed class PluginCatalog : IDisposable
                 _streamDeck?.Stop(slot.Id);
                 slot.Instance = null;
                 return;
+        }
+
+        if (slot.Process is { } process)
+        {
+            Report($"Stopping {slot.DisplayName}…");
+            process.StatusChanged -= OnProcessStatusChanged;
+            process.Dispose();
+            slot.Process = null;
+            slot.Instance = null;
+            return;
         }
 
         try
@@ -732,7 +823,9 @@ public sealed class PluginCatalog : IDisposable
             PreviousVersionOf(slot),
             slot.Kind == SlotKind.Package && slot.Directory is { } directory && slot.Error is null
                 ? [.. PluginDiagnostics.CheckFolder(directory).Select(static problem => problem.Message)]
-                : null);
+                : null,
+            slot.Kind == SlotKind.Package && ProcessLauncher is not null ? !_inProcess.Contains(slot.Id) : null,
+            slot.Process is { } process ? process.Problem ?? process.Status : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost" : null);
     }
 
     /// <summary>Where the version before the last update of a plugin is kept (for a roll back).</summary>
@@ -790,6 +883,7 @@ public sealed class PluginCatalog : IDisposable
             var state = JsonSerializer.Deserialize<CatalogState>(File.ReadAllText(path));
             _disabled.UnionWith(state?.Disabled ?? []);
             _pendingRemoval.UnionWith(state?.PendingRemoval ?? []);
+            _inProcess.UnionWith(state?.InProcess ?? []);
             foreach (var (id, origin) in state?.Origins ?? [])
             {
                 _origins[id] = origin;
@@ -806,7 +900,7 @@ public sealed class PluginCatalog : IDisposable
         try
         {
             Directory.CreateDirectory(_rootDirectory);
-            var state = new CatalogState([.. _disabled.Order()], [.. _pendingRemoval.Order()], new Dictionary<string, string>(_origins));
+            var state = new CatalogState([.. _disabled.Order()], [.. _pendingRemoval.Order()], new Dictionary<string, string>(_origins), [.. _inProcess.Order()]);
             File.WriteAllText(Path.Combine(_rootDirectory, StateFileName), JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -839,7 +933,7 @@ public sealed class PluginCatalog : IDisposable
         StreamDeck,
     }
 
-    private sealed record CatalogState(string[] Disabled, string[] PendingRemoval, Dictionary<string, string>? Origins = null);
+    private sealed record CatalogState(string[] Disabled, string[] PendingRemoval, Dictionary<string, string>? Origins = null, string[]? InProcess = null);
 
     private sealed record Slot(string Id, SlotKind Kind, bool IsRequired, string? Directory)
     {
@@ -850,6 +944,9 @@ public sealed class PluginCatalog : IDisposable
         public IApplicationPlugin? Instance { get; set; }
 
         public PluginLoadContext? Context { get; set; }
+
+        /// <summary>The process the plugin runs in, when it runs in its own.</summary>
+        public PluginProcessHost? Process { get; set; }
 
         public string? Error { get; set; }
 
