@@ -1,0 +1,12 @@
+# DeckHost's "Report a problem" opens a blank issue with the details filled in, so blank issues stay on.
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://vman26.github.io/DeckHost/
+    about: How to set up devices, profiles, workflows and plugins, and what to do when something doesn't work.
+  - name: List a plugin in the DeckHost store
+    url: https://github.com/vman26/deckhost-plugins
+    about: Plugins are listed through a pull request in the deckhost-plugins repository.
+  - name: Report a security problem
+    url: https://github.com/vman26/DeckHost/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue.

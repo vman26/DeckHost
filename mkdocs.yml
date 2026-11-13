@@ -1,5 +1,8 @@
 site_name: DeckHost
-site_description: One platform. Unlimited control. A host for the MiraBox N4 Pro, Elgato Stream Decks and a Web Deck.
+site_description: One platform. Unlimited control. A free, open-source host for the MiraBox N4 Pro, Elgato Stream Decks, a Web Deck and USB devices.
+repo_url: https://github.com/vman26/DeckHost
+repo_name: vman26/DeckHost
+copyright: DeckHost is free software under the GNU GPL v3.0 or later
 docs_dir: docs
 site_dir: site
 strict: true
@@ -35,12 +38,18 @@ nav:
       - Workflows: workflows.md
       - Lights: lights.md
       - Plugins and the store: plugins.md
+  - Reference:
+      - Built-in actions: reference/actions.md
+      - Plugin API: reference/api.md
   - Updates: updates.md
   - Troubleshooting: troubleshooting.md
   - Privacy: privacy.md
   - For maintainers:
       - Releasing and signing: maintainers/releasing.md
       - Writing plugins: maintainers/plugins.md
+      - Device plugins: maintainers/device-plugins.md
+      - The plugin catalog: maintainers/plugin-store.md
+      - Going public: maintainers/going-public.md
       - Architecture: maintainers/architecture.md
       - Decisions:
           - maintainers/adr/index.md
@@ -53,3 +62,4 @@ nav:
           - "0007 Plugins in their own process": maintainers/adr/0007-in-process-plugins.md
           - "0008 Generic USB devices": maintainers/adr/0008-generic-usb-devices.md
           - "0009 Firmware updates": maintainers/adr/0009-firmware-updates.md
+          - "0010 License": maintainers/adr/0010-license.md

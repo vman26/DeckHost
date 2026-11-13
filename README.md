@@ -2,13 +2,23 @@
 
 # DeckHost
 
-[![Downloads](https://img.shields.io/github/downloads/vman26/DeckHost-releases/total?label=downloads)](https://github.com/vman26/DeckHost-releases/releases)
-[![Latest release](https://img.shields.io/github/v/release/vman26/DeckHost-releases?include_prereleases&label=release)](https://github.com/vman26/DeckHost-releases/releases)
+[![Downloads](https://img.shields.io/github/downloads/vman26/DeckHost/total?label=downloads)](https://github.com/vman26/DeckHost/releases)
+[![Latest release](https://img.shields.io/github/v/release/vman26/DeckHost?include_prereleases&label=release)](https://github.com/vman26/DeckHost/releases)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-vman26.github.io%2FDeckHost-0f172a)](https://vman26.github.io/DeckHost/)
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-Vman26-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/Vman26)
 
-DeckHost is a modular host for physical control surfaces (macro pads, rotary consoles, touch strips). It separates the hardware from the actions: device plugins drive the hardware, application plugins provide the actions, and the designer lets you map one onto the other.
+DeckHost is a free, open-source host for physical control surfaces (macro pads, rotary consoles, touch strips) on Windows, Linux and macOS. It separates the hardware from the actions: device plugins drive the hardware, application plugins provide the actions, and the editor lets you map one onto the other.
 
-The first supported device is the **MiraBox / StreamDock N4 Pro**: 10 LCD keys, a touch strip with 4 zones and swipe, 4 knobs and 4 RGB LEDs.
+- **Devices:** the **MiraBox / StreamDock N4 Pro** (10 LCD keys, a touch strip with 4 zones and swipe, 4 knobs with RGB rings), **Elgato Stream Decks** (MK.2, XL, Neo, +, Pedal, Mini, the first edition; preview), a **Web Deck** on your phone or tablet, and **other USB devices** you teach it in the device creator.
+- **Actions:** media, volume, apps, hotkeys, profiles, pages and folders; Multi Action, Key Logic and visual **workflows**; DeckHost plugins and thousands of **Stream Deck and OpenAction plugins**.
+- **Documentation:** [vman26.github.io/DeckHost](https://vman26.github.io/DeckHost/).
+
+## How DeckHost is made
+
+DeckHost is built by me, Marco, with a lot of help from **Claude**, an AI coding assistant (that's why many commits and pull requests say "Co-Authored-By: Claude" or "Generated with Claude Code"). I decide what DeckHost does and how it's designed, review the changes, and test them, on real hardware where I have it. The safety nets are public: 600+ automated tests, CI on Windows, Linux and macOS for every change, and the [design decisions](docs/maintainers/adr/index.md) written down.
+
+I'm saying this up front because you should know how the software you run is made. If something is wrong, it's mine to fix: [report it](https://github.com/vman26/DeckHost/issues/new/choose). Contributions, AI-assisted or not, are welcome under the same rules ([CONTRIBUTING](CONTRIBUTING.md)).
 
 ## Core architecture
 - **Hardware decoupled:** the core only talks to `IDevicePlugin` / `IDeviceOutput`. Everything device-specific (SDK ids, image sizes, LEDs, native calls) lives in the device plugin.
@@ -20,7 +30,7 @@ The first supported device is the **MiraBox / StreamDock N4 Pro**: 10 LCD keys, 
 
 ## Download and install
 
-Releases are on the repository's **Releases** page, one package per platform:
+Releases are on the [**Releases** page](https://github.com/vman26/DeckHost/releases), one package per platform:
 
 | Platform | Package | Install |
 |---|---|---|
@@ -112,7 +122,7 @@ git push origin v1.4.0
 
 The tag is the version. The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.4.0-rc.1`, `v1.3.1-beta.1`) becomes a pre-release; use the label of the branch you tag on (`rc` on `release/*`, `beta` on `hotfix/*`), so the builds after it count on from it. Run the workflow by hand to get the packages as build artifacts without releasing.
 
-**Updates in the app** come from these releases: DeckHost asks GitHub's public API for the releases of the repository it was built for (`api.github.com/repos/<owner>/<repo>/releases`, no sign-in), takes the newest one whose tag is a higher version than its own, and downloads that release's package for the system (see [DeckHost settings and the tray](#deckhost-settings-and-the-tray)). That only works for a **public** repository: a private one answers 404 without a sign-in, and a sign-in token can't be shipped inside the app. With a private source repository, publish the releases to a separate public repository that holds nothing but releases:
+**Updates in the app** come from these releases: DeckHost asks GitHub's public API for the releases of the repository it was built for (`api.github.com/repos/<owner>/<repo>/releases`, no sign-in), takes the newest one whose tag is a higher version than its own, and downloads that release's package for the system (see [DeckHost settings and the tray](#deckhost-settings-and-the-tray)). That only works for a **public** repository. A fork kept private can publish its releases to a separate public repository that holds nothing but releases:
 
 1. Create a public repository, for example `vman26/DeckHost-releases`, with one commit (a README is enough; GitHub needs a commit to put the release tags on).
 2. Create a fine-grained token with **Contents: Read and write** on that repository only, and add it to the source repository as the Actions secret `RELEASES_TOKEN`.
@@ -232,7 +242,7 @@ Text, image and text style set on a knob are used there too. Actions that show a
 
 **☰ → Open Plugin Manager** (or **Plugins…** next to the action search) → **Store** shows one list, which you can filter by source, category, status and search text:
 
-- **DeckHost**: plugins from the sources under **Store → Sources**, one per line. A source is a catalog URL, a local catalog file, or a local folder such as `E:\Projects\DeckHost\plugins`. Folders are searched for packages (`.zip`, `.dhplugin`, `.streamDeckPlugin`) and built plugin folders (a `plugin.json` next to its assembly, e.g. a project's `bin` output), so plugins you are developing show up without packaging them. A catalog is a JSON object keyed by plugin id (or an array) with `name`, `author`, `description`, `version`, `category`, `download_url`, `repository` and `icon`. There is no official DeckHost catalog yet. The list is saved in `%AppData%/DeckHost/store.json`.
+- **DeckHost**: the [DeckHost plugin catalog](https://github.com/vman26/deckhost-plugins) (one file per plugin, added by pull request; see [the catalog guide](docs/maintainers/plugin-store.md)), plus the sources under **Store → Sources**, one per line. A source is a catalog URL, a local catalog file, or a local folder such as `E:\Projects\DeckHost\plugins`. Folders are searched for packages (`.zip`, `.dhplugin`, `.streamDeckPlugin`) and built plugin folders (a `plugin.json` next to its assembly, e.g. a project's `bin` output), so plugins you are developing show up without packaging them. A catalog is a JSON object keyed by plugin id (or an array) with `name`, `author`, `description`, `version`, `category`, `download_url`, `repository` and `icon`. Entries can also carry `sha256` (a download that doesn't match is refused), `permissions` (shown in the store), and for paid plugins `purchase_url` and `price` (the store shows **Buy**). The list is saved in `%AppData%/DeckHost/store.json`.
 - **OpenAction**: the open-source Stream Deck plugin catalog (`openactionapi.github.io/plugins`). Packages come from the plugin's download link or its latest GitHub release.
 - **Elgato (community archive)**: an archive of Elgato Marketplace plugins (`plugins.amankhanna.me`). Elgato has no public store API.
 
@@ -340,5 +350,12 @@ When you update the submodule and the patch no longer applies, regenerate it aga
 
 The SDK numbers the N4 Pro's keys from the bottom-left, so the top row is SDK keys 11–15 and the bottom row 6–10. If an image appears on the wrong key on your unit, assign the **Key ID (Diagnostic)** action to the keys and adjust `KeyHardwareIds` in `DeckHost.Device.MiraBox/N4ProLayout.cs`.
 
+## Contributing
+
+Bug reports, ideas, device support, plugins and fixes are welcome: see [CONTRIBUTING](CONTRIBUTING.md). Plugins are listed in the [DeckHost plugin catalog](https://github.com/vman26/deckhost-plugins). Security problems: [SECURITY](SECURITY.md).
+
 ## License
-MIT License. See `LICENSE` for details.
+
+DeckHost is free software under the **GNU General Public License v3.0 or later** ([`LICENSE`](LICENSE)): you may use, study, share and change it; changed versions you share must stay under the GPL too.
+
+The **plugin API** (`DeckHost.Contracts`) and the plugin template are **MIT**, and an additional permission lets plugins of any license, free or paid, run with DeckHost: see [`NOTICE.md`](NOTICE.md).
