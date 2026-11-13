@@ -7,6 +7,10 @@
 - **Linux:** run `./install.sh` from the download once (it installs the device rule), then unplug the device and plug it in again.
 - Run DeckHost with `--check-native` to see whether the N4 Pro support loads and which devices it finds.
 
+## Is the device talking to DeckHost?
+
+**☰ → Help and support → Devices** shows, per device, whether it's connected, how many inputs DeckHost received (and when the last one came), how many images it sent and the last error. Press a key and click **Refresh**: if the inputs don't go up, the device isn't reaching DeckHost (another program has it, the Linux device rule is missing, or the cable or hub). The same lines go into a support bundle.
+
 ## An action doesn't work
 
 The key shows the reason in small red text when an action fails. On Linux, actions use common tools: media keys need `playerctl`, volume `wpctl`, `pactl` or `amixer`, hotkeys and typing `xdotool` (X11) or `wtype` (Wayland). Install the one the key names.

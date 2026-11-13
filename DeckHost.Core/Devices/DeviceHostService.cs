@@ -160,6 +160,14 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     public IReadOnlyCollection<DeviceConnectionStatus> ConnectionStatuses => _connectionStatuses.Values.ToArray();
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DeviceStatistics> _statistics = new(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyList<DeviceStatistics> DeviceStatistics => [.. _statistics.Values.OrderBy(static statistics => statistics.DeviceId, StringComparer.Ordinal)];
+
+    /// <summary>Updates a device's statistics (on the worker; readers get immutable snapshots).</summary>
+    private void Count(string deviceId, Func<DeviceStatistics, DeviceStatistics> change) =>
+        _statistics.AddOrUpdate(deviceId, id => change(new DeviceStatistics(id, 0, null, 0, 0, 0, null, null)), (_, current) => change(current));
+
     public void SetProfiles(IEnumerable<DeviceProfile> profiles)
     {
         ArgumentNullException.ThrowIfNull(profiles);
@@ -499,6 +507,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     {
         // Reported for every press (also unbound controls) so the editor can show it live.
         SafeInvoke(() => InputReceived?.Invoke(inputEvent));
+        Count(inputEvent.DeviceId, static statistics => statistics with { Inputs = statistics.Inputs + 1, LastInput = DateTimeOffset.Now });
 
         var activeProfile = GetActiveProfile(inputEvent.DeviceId);
         if (activeProfile is null)
@@ -1145,11 +1154,13 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 {
                     _lastFrames.Remove(key);
                     Log("Warning", $"Could not update '{deviceId}/{control.Id}': {error}");
+                    Count(deviceId, statistics => statistics with { FrameFailures = statistics.FrameFailures + 1, LastError = error, LastErrorTime = DateTimeOffset.Now });
                     RaiseFrame(deviceId, control.Id, renderer.Width, renderer.Height, pixels);
                     continue;
                 }
 
                 pushed++;
+                Count(deviceId, static statistics => statistics with { FramesSent = statistics.FramesSent + 1 });
             }
 
             if (lastFrame is null || lastFrame.Length != pixels.Length)
@@ -1422,6 +1433,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             if (!batch.TrySetLights(deviceId, changed, out var batchError))
             {
                 Log("Warning", $"Could not set the lights of '{deviceId}': {batchError}");
+                Count(deviceId, statistics => statistics with { LightFailures = statistics.LightFailures + 1, LastError = batchError, LastErrorTime = DateTimeOffset.Now });
             }
 
             return;
@@ -1432,6 +1444,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             if (!entry.Plugin.Output.TrySetLight(deviceId, light.ControlId, light.Red, light.Green, light.Blue, out var error))
             {
                 Log("Warning", $"Could not set the light of '{deviceId}/{light.ControlId}': {error}");
+                Count(deviceId, statistics => statistics with { LightFailures = statistics.LightFailures + 1, LastError = error, LastErrorTime = DateTimeOffset.Now });
             }
         }
     }

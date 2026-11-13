@@ -1265,6 +1265,15 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         {
             layouts = Core.Profiles.ProfileBundle.Import(path, SelectedDevice!.Id, ImportedAssetsDirectory);
             summary = $"{layouts.Sum(static layout => layout.Bindings.Count)} control(s) imported.";
+            var controls = SelectedDevice.Controls;
+            if (layouts.SelectMany(static layout => layout.Bindings).Any(binding => !controls.Any(control => SameId(control.Id, binding.ControlId))))
+            {
+                // Made for another device: put the keys where they fit, the rest on added pages.
+                var first = layouts[0];
+                var mapped = Core.Profiles.LayoutMapper.Map(layouts, controls, sourceColumns: null, page => $"{first.Id}.more{page}");
+                layouts = mapped.Layouts;
+                summary = $"made for another device: {mapped.Summary}.";
+            }
         }
 
         var root = AddLayouts(layouts);
@@ -1272,6 +1281,67 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         NotifyProfilesEdited();
         StatusMessage = $"Imported {root.Name}: {summary}";
         return StatusMessage;
+    }
+
+    /// <summary>Devices other than the edited one, to copy a profile to.</summary>
+    public IReadOnlyList<DeviceChoiceViewModel> OtherDevices =>
+        [.. _deviceHostService.Devices.Where(device => SelectedDevice is null || !SameId(device.Id, SelectedDevice.Id)).Select(static device => new DeviceChoiceViewModel(device))];
+
+    /// <summary>
+    /// Copies a profile (with its pages and folders) to another device: keys keep their row and column
+    /// where they fit, the rest go on added pages; dials and touch zones the device lacks are left out.
+    /// </summary>
+    public string CopyProfileToDevice(ProfileItemViewModel profile, string deviceId)
+    {
+        if (SelectedDevice is not { } from || _deviceHostService.Devices.FirstOrDefault(device => SameId(device.Id, deviceId)) is not { } target)
+        {
+            return StatusMessage = "That device isn't known any more.";
+        }
+
+        var root = profile.RootProfile;
+        var copies = Core.Profiles.ProfileBundle.Copy([.. root.ToModels()], target.Id);
+        var mapped = Core.Profiles.LayoutMapper.Map(copies, target.Controls, Core.Profiles.LayoutMapper.ColumnsOf(from.Controls), page => $"{copies[0].Id}.more{page}");
+        var existingNames = _otherDeviceProfiles.Where(other => SameId(other.DeviceId, target.Id)).Select(static other => other.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var name = root.Name;
+        for (var number = 2; existingNames.Contains(name); number++)
+        {
+            name = $"{root.Name} {number}";
+        }
+
+        ProfileItemViewModel? copy = null;
+        foreach (var layout in mapped.Layouts)
+        {
+            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? name : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background)
+            {
+                ParentId = layout.IsRoot ? null : layout.ParentId,
+                Kind = layout.IsRoot ? null : layout.Kind,
+                Owner = layout.IsRoot ? null : copy,
+            };
+            foreach (var binding in layout.Bindings)
+            {
+                if (Resolve(binding) is { } resolved)
+                {
+                    item.SetBinding(resolved);
+                }
+                else
+                {
+                    item.AddUnresolvedBinding(binding);
+                }
+            }
+
+            if (layout.IsRoot && copy is null)
+            {
+                copy = item;
+                _otherDeviceProfiles.Add(item);
+            }
+            else
+            {
+                copy?.Layouts.Add(item);
+            }
+        }
+
+        NotifyProfilesEdited();
+        return StatusMessage = $"Copied {root.Name} to {DeviceChoiceViewModel.LabelOf(target)} as {name}: {mapped.Summary}. Pick that device in the header to see it.";
     }
 
     /// <summary>Saves a backup of all profiles now (also done once a day automatically).</summary>

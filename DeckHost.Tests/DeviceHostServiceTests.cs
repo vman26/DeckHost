@@ -25,6 +25,25 @@ public class DeviceHostServiceTests
     }
 
     [Fact]
+    public async Task The_host_counts_inputs_and_images_per_device()
+    {
+        var (host, plugin, _, store) = Create();
+        await using var _ = host;
+        using var __ = store;
+
+        await host.StartAsync(CancellationToken.None);
+        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1);
+        await host.WhenIdleAsync();
+
+        var statistics = Assert.Single(host.DeviceStatistics);
+        Assert.Equal(FakeDevicePlugin.DeviceId, statistics.DeviceId);
+        Assert.Equal(1, statistics.Inputs);
+        Assert.NotNull(statistics.LastInput);
+        Assert.True(statistics.FramesSent >= 2);
+        Assert.Equal(0, statistics.FrameFailures);
+    }
+
+    [Fact]
     public async Task Start_pushes_every_control_with_an_image_once()
     {
         var (host, plugin, _, store) = Create();

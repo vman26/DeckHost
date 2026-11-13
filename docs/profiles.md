@@ -12,6 +12,10 @@ Give a profile one or more apps (Profiles page): it turns on by itself while one
 
 A profile can have a background color and an image or animated GIF that spans all keys. **Default background for all profiles** applies to every profile without one of its own.
 
+## Another device
+
+**Profiles → Copy to** (shown when DeckHost knows more than one device) makes a copy of the selected profile, with its pages and folders, for another device. Keys keep their row and column where the other device has them; keys that don't fit go, in order, onto pages added to the copy; dials and touch zones the other device lacks are left out. Importing a profile made for another device places it the same way.
+
 ## Export, import and backups
 
 - **Export…** saves a profile with its pages, folders and images as a `.deckhostprofile` file. **Import…** adds one as a new profile.

@@ -162,7 +162,7 @@ public sealed partial class SupportViewModel : ViewModelBase
         text.AppendLine($"Update repository: {AppInfo.UpdateRepository}");
         text.AppendLine();
         text.AppendLine("Devices:");
-        foreach (var line in DeviceLines())
+        foreach (var line in DeviceDiagnostics)
         {
             text.AppendLine("  " + line);
         }
@@ -179,6 +179,37 @@ public sealed partial class SupportViewModel : ViewModelBase
 
     private IEnumerable<string> DeviceLines() =>
         (_host?.Devices ?? []).Select(static device => $"{device.Name} ({(device.IsConnected ? "connected" : "not connected")})");
+
+    /// <summary>
+    /// Each device as the host sees it: connected or not, inputs received, images sent, failures and
+    /// the last error since DeckHost started. "No inputs" while pressing keys points at the connection.
+    /// </summary>
+    public IReadOnlyList<string> DeviceDiagnostics => [.. (_host?.Devices ?? []).Select(device =>
+    {
+        var statistics = _host!.DeviceStatistics.FirstOrDefault(entry => string.Equals(entry.DeviceId, device.Id, StringComparison.OrdinalIgnoreCase));
+        var status = _host.ConnectionStatuses.FirstOrDefault(entry => entry.DeviceId == device.Id)?.Message;
+        var parts = new List<string> { device.IsConnected ? "connected" : "not connected" };
+        if (statistics is not null)
+        {
+            parts.Add($"{statistics.Inputs} input(s){(statistics.LastInput is { } last ? $", last {last.ToLocalTime():T}" : string.Empty)}");
+            parts.Add($"{statistics.FramesSent} image(s) sent");
+            if (statistics.FrameFailures + statistics.LightFailures > 0)
+            {
+                parts.Add($"{statistics.FrameFailures + statistics.LightFailures} failed, last: {statistics.LastError} ({statistics.LastErrorTime?.ToLocalTime():T})");
+            }
+        }
+        else
+        {
+            parts.Add("nothing received or sent yet");
+        }
+
+        return $"{device.Name}: {string.Join(" · ", parts)}{(string.IsNullOrWhiteSpace(status) ? string.Empty : $" · {status}")}";
+    })];
+
+    public bool HasDeviceDiagnostics => DeviceDiagnostics.Count > 0;
+
+    [RelayCommand]
+    private void RefreshDiagnostics() => OnPropertyChanged(nameof(DeviceDiagnostics));
 
     internal void OpenFile(string path) => Open(path);
 
