@@ -8,11 +8,11 @@ using DeckHost.App.ViewModels;
 
 namespace DeckHost.App.Views;
 
-public partial class ControlCustomizationWindow : Window
+public partial class ControlCustomizationView : UserControl
 {
     private HotkeySettingField? _recordingField;
 
-    public ControlCustomizationWindow()
+    public ControlCustomizationView()
     {
         InitializeComponent();
 
@@ -36,14 +36,126 @@ public partial class ControlCustomizationWindow : Window
             SettingsBrowserError.IsVisible = true;
         });
 
-        DataContextChanged += (_, _) =>
+        // Two columns when there is room, else one.
+        Columns.SizeChanged += (_, e) => Arrange(e.NewSize.Width);
+
+        StepsDropZone.AddHandler(DragDrop.DragOverEvent, Steps_OnDragOver);
+        StepsDropZone.AddHandler(DragDrop.DragLeaveEvent, Steps_OnDragLeave);
+        StepsDropZone.AddHandler(DragDrop.DropEvent, Steps_OnDrop);
+    }
+
+    /// <summary>Below this width the cards go in one column.</summary>
+    private const double TwoColumnWidth = 820;
+
+    private bool? _twoColumns;
+
+    private void Arrange(double width)
+    {
+        var two = width >= TwoColumnWidth;
+        if (_twoColumns == two)
         {
-            if (DataContext is ControlCustomizationViewModel { ShowSettingsPage: true } && WebView2Host.IsSupported)
+            return;
+        }
+
+        _twoColumns = two;
+        Columns.ColumnDefinitions = new ColumnDefinitions(two ? "*,*" : "*");
+        Columns.RowDefinitions = new RowDefinitions(two ? "Auto" : "Auto,Auto");
+        Grid.SetColumn(SecondaryColumn, two ? 1 : 0);
+        Grid.SetRow(SecondaryColumn, two ? 0 : 1);
+        SecondaryColumn.Margin = two ? default : new Avalonia.Thickness(0, 14, 0, 0);
+    }
+
+    // ---------------------------------------------------------------- Multi Action steps: drag and drop
+
+    private async void StepHandle_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control { DataContext: MultiActionStepEditorViewModel step } ||
+            DataContext is not ControlCustomizationViewModel vm ||
+            !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        var data = new DataTransfer();
+        data.Add(DataTransferItem.Create(DragFormats.Step, vm.Steps.IndexOf(step).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        DragGhost.Show(this, step.Action.Name, step.Action.Action);
+        try
+        {
+            await DragDrop.DoDragDropAsync(e, data, DragDropEffects.Move);
+        }
+        finally
+        {
+            DragGhost.Hide(this);
+            vm.DropIndex = null;
+        }
+    }
+
+    private void Steps_OnDragOver(object? sender, DragEventArgs e)
+    {
+        if (DataContext is not ControlCustomizationViewModel vm)
+        {
+            return;
+        }
+
+        var isStep = e.DataTransfer.TryGetValue(DragFormats.Step) is not null;
+        var action = e.DataTransfer.TryGetValue(DragFormats.Action);
+        if (!isStep && (action is null || e.DataTransfer.TryGetValue(DragFormats.Control) is not null || !vm.CanInsertStep(action)))
+        {
+            return; // Not for the steps: the main window decides.
+        }
+
+        e.Handled = true;
+        e.DragEffects = isStep ? DragDropEffects.Move : DragDropEffects.Copy;
+        vm.DropIndex = DropIndexAt(e);
+        DragGhost.Move(this, e);
+    }
+
+    private void Steps_OnDragLeave(object? sender, DragEventArgs e)
+    {
+        if (DataContext is ControlCustomizationViewModel vm)
+        {
+            vm.DropIndex = null;
+        }
+    }
+
+    private void Steps_OnDrop(object? sender, DragEventArgs e)
+    {
+        if (DataContext is not ControlCustomizationViewModel vm)
+        {
+            return;
+        }
+
+        var index = DropIndexAt(e);
+        vm.DropIndex = null;
+        if (e.DataTransfer.TryGetValue(DragFormats.Step) is { } from &&
+            int.TryParse(from, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var fromIndex))
+        {
+            e.Handled = true;
+            vm.MoveStepTo(fromIndex, index);
+        }
+        else if (e.DataTransfer.TryGetValue(DragFormats.Control) is null &&
+                 e.DataTransfer.TryGetValue(DragFormats.Action) is { } action && vm.CanInsertStep(action))
+        {
+            e.Handled = true;
+            vm.InsertStep(action, index);
+        }
+    }
+
+    /// <summary>The step the pointer is above (by the middle of each step), or the end.</summary>
+    private int DropIndexAt(DragEventArgs e)
+    {
+        var count = StepsList.ItemCount;
+        for (var index = 0; index < count; index++)
+        {
+            if (StepsList.ContainerFromIndex(index) is { } container &&
+                e.GetPosition(container).Y < container.Bounds.Height / 2)
             {
-                // Room for the plugin's settings page next to the editor.
-                Width = 1120;
+                return index;
             }
-        };
+        }
+
+        return count;
     }
 
     private void HotkeyRecord_OnIsCheckedChanged(object? sender, RoutedEventArgs e)
@@ -150,7 +262,12 @@ public partial class ControlCustomizationWindow : Window
 
         var iconify = CommunityToolkit.Mvvm.DependencyInjection.Ioc.Default.GetService(typeof(DeckHost.Core.Icons.IconifyClient)) as DeckHost.Core.Icons.IconifyClient;
         var picker = new IconPickerWindow { DataContext = new IconPickerViewModel(library, iconify) };
-        if (await picker.ShowDialog<IconChoice?>(this) is { } choice)
+        if (TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        if (await picker.ShowDialog<IconChoice?>(owner) is { } choice)
         {
             if (choice.AsPicture)
             {
@@ -165,7 +282,7 @@ public partial class ControlCustomizationWindow : Window
 
     private async void BrowseImage_OnClick(object? sender, RoutedEventArgs e)
     {
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Select control image",
             AllowMultiple = false,
@@ -185,7 +302,7 @@ public partial class ControlCustomizationWindow : Window
             return;
         }
 
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = $"Select {field.Label.ToLowerInvariant()}",
             AllowMultiple = false,
@@ -217,7 +334,4 @@ public partial class ControlCustomizationWindow : Window
         FontBox.IsDropDownOpen = true;
     }
 
-    private void Save_OnClick(object? sender, RoutedEventArgs e) => Close(true);
-
-    private void Cancel_OnClick(object? sender, RoutedEventArgs e) => Close(false);
 }

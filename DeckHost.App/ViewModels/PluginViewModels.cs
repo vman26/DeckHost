@@ -14,17 +14,23 @@ namespace DeckHost.App.ViewModels;
 
 public class PluginActionGroupViewModel : ViewModelBase
 {
-    private bool _isExpanded = true;
+    private bool _isExpanded;
 
-    public PluginActionGroupViewModel(string pluginId, string pluginName, IEnumerable<ActionItemViewModel> actions)
+    public PluginActionGroupViewModel(string pluginId, string pluginName, IEnumerable<ActionItemViewModel> actions, string? icon = null, bool isExpanded = false)
     {
         PluginId = pluginId;
         PluginName = pluginName;
+        _isExpanded = isExpanded;
         foreach (var action in actions)
         {
             Actions.Add(action);
         }
+
+        Icon = icon is null && Actions.Count > 0 ? Actions[0].Icon : ListIcon.From(icon, 0xFFE2E8F0, Contracts.Icons.Apps);
     }
+
+    /// <summary>The plugin's icon (its own, else its first action's).</summary>
+    public ListIcon Icon { get; }
 
     public string PluginId { get; }
 

@@ -9,9 +9,8 @@ public class ControlItemViewModel : ViewModelBase
 {
     private const double CompactHeight = 60;
 
-    private static readonly IBrush SelectedBrush = new SolidColorBrush(Color.Parse("#2563EB"));
-    private static readonly IBrush AssignedBrush = new SolidColorBrush(Color.Parse("#0F766E"));
-    private static readonly IBrush DefaultBrush = new SolidColorBrush(Color.Parse("#27272A"));
+    private static readonly IBrush SelectedBrush = new SolidColorBrush(Color.Parse("#3B82F6"));
+    private static readonly IBrush DefaultBrush = new SolidColorBrush(Color.Parse("#141A26"));
 
     private ControlBindingViewModel? _assignedBinding;
     private bool _isSelected;
@@ -244,13 +243,15 @@ public class ControlItemViewModel : ViewModelBase
 
     public bool ShowPreviewLabel => SupportsAppearance;
 
-    public IBrush SurfaceBrush => IsSelected ? SelectedBrush : AssignedBinding is null ? DefaultBrush : AssignedBrush;
+    /// <summary>Every control is the same dark surface (keys, the touch strip and knobs alike); the image shows its content.</summary>
+    public IBrush SurfaceBrush => DefaultBrush;
 
-    private static readonly IBrush OutlineDefaultBrush = new SolidColorBrush(Color.Parse("#334155"));
+    private static readonly IBrush OutlineDefaultBrush = new SolidColorBrush(Color.Parse("#2A3446"));
 
-    public IBrush OutlineBrush => IsSelected ? SelectedBrush : AssignedBinding is null ? OutlineDefaultBrush : AssignedBrush;
+    /// <summary>A thin rim; the selected control a blue one.</summary>
+    public IBrush OutlineBrush => IsSelected ? SelectedBrush : OutlineDefaultBrush;
 
-    public Avalonia.Thickness OutlineThickness => new(IsSelected ? 3 : 1.5);
+    public Avalonia.Thickness OutlineThickness => new(IsSelected ? 2.5 : 1.5);
 
     public string ToolTipText => AssignedBinding is null
         ? $"{DisplayName}: drop an action here. Double-click to customize."
@@ -261,20 +262,7 @@ public class ControlItemViewModel : ViewModelBase
 
     public bool IsKnob => Type == ControlType.Encoder;
 
-    /// <summary>A knob's face: dark brushed metal, lit a little from the top left.</summary>
-    public IBrush KnobFaceBrush { get; } = new RadialGradientBrush
-    {
-        GradientOrigin = new Avalonia.RelativePoint(0.35, 0.3, Avalonia.RelativeUnit.Relative),
-        Center = new Avalonia.RelativePoint(0.5, 0.5, Avalonia.RelativeUnit.Relative),
-        GradientStops =
-        {
-            new GradientStop(Color.Parse("#52525B"), 0),
-            new GradientStop(Color.Parse("#27272A"), 0.7),
-            new GradientStop(Color.Parse("#18181B"), 1),
-        },
-    };
-
-    private static readonly IBrush LightOffBrush = new SolidColorBrush(Color.Parse("#3F3F46"));
+    private static readonly IBrush LightOffBrush = new SolidColorBrush(Color.Parse("#2A3446"));
     private IBrush _lightBrush = LightOffBrush;
     private bool _isLightOn;
 

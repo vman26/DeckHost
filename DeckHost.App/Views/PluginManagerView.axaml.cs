@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -6,17 +7,17 @@ using System;
 
 namespace DeckHost.App.Views;
 
-public partial class PluginManagerWindow : Window
+public partial class PluginManagerView : UserControl
 {
-    public PluginManagerWindow()
+    public PluginManagerView()
     {
         InitializeComponent();
     }
 
-    protected override void OnClosed(EventArgs e)
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         (DataContext as PluginManagerViewModel)?.Detach();
-        base.OnClosed(e);
+        base.OnDetachedFromVisualTree(e);
     }
 
     private async void Tabs_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -34,7 +35,7 @@ public partial class PluginManagerWindow : Window
             && DataContext is PluginManagerViewModel vm
             && vm.CreateDeviceSettings(device) is { } settings)
         {
-            new DeviceSettingsWindow { DataContext = settings }.Show(this);
+            Pages.Open(this, $"{device.Name} settings", new DeviceSettingsView { DataContext = settings });
         }
     }
 
@@ -45,7 +46,7 @@ public partial class PluginManagerWindow : Window
             return;
         }
 
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Install a DeckHost plugin package",
             AllowMultiple = false,

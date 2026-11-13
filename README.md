@@ -119,11 +119,22 @@ DeckHost ships with three **system plugins**. You can switch them off in the Plu
 | Media Controls | Play / Pause, Next, Previous, Stop, Volume Up / Down, Mute, Volume Knob, Track Swipe |
 | System Controls | Launch App, Open Website or File, Hotkey, Type Text, Lock Computer, System Info (CPU, memory, disk, uptime) |
 
-On the device the actions are drawn as an icon in the action's color on the profile background, with a short caption only where the icon needs one (the app to launch, the site, the hotkey). In Customize a control can get the action's colored tile (like a Stream Deck key) or a color of its own instead; your own text becomes the caption and your own image or icon replaces the action's icon. Stream Deck plugin images lose their black background (black that touches the edge of the picture), so the backgrounds show around them; black inside a picture stays. On the touch strip, readouts (volume, CPU, a counter, Stream Deck dials) are laid out like a Stream Deck +: the name small at the top left, the icon on the left, the value on the right with a thin level bar under it.
+On the device the actions are drawn as an icon in the action's color on the profile background, with a short caption only where the icon needs one (the app to launch, the site, the hotkey). In the editor a control can get the action's colored tile (like a Stream Deck key) or a color of its own instead; your own text becomes the caption and your own image or icon replaces the action's icon. Stream Deck plugin images lose their black background (black that touches the edge of the picture), so the backgrounds show around them; black inside a picture stays. On the touch strip, readouts (volume, CPU, a counter, Stream Deck dials) are laid out like a Stream Deck +: the name small at the top left, the icon on the left, the value on the right with a thin level bar under it.
 
 Media keys, hotkeys, typing and locking use Windows `SendInput`, the tools listed under "What works where" on Linux, and system key events on macOS.
 
-Actions with settings (the app to launch, a hotkey, a scene name, ...) are set up with **double-click** or **right-click → Customize**. Multi Action steps are added, removed, reordered and configured there too, or added by dropping more actions onto the control. For a Hotkey, click **Record** and press the combination.
+### The main window
+
+The window is laid out like the Stream Deck app:
+
+- **Header:** the ☰ menu, the device with its connection state, the **profile picker** (and **Manage…**), an update notice when there is one, and buttons for **Test** mode, Profiles, Plugins and store, Device settings and DeckHost settings.
+- **The device** on top, at a fixed size, so it doesn't move when you open plugin groups or the editor (drag the divider below it for more or less room).
+- **The editor** below the device for the control you select: click a control and set it up right there (what used to be the Customize window). Changes show on the device right away; **Revert** puts the control back as it was when you selected it, **Remove** clears it.
+- **Actions** on the right, grouped by plugin like the Stream Deck app: each plugin and action with its icon, groups folded until you open them (a search opens every match). Drag an action onto a control; while you drag, its icon and name follow the pointer.
+- Settings, plugins, profiles, device settings and the update notes open as pages inside the window; **Back** (or Esc) returns.
+- **DeckHost settings → Show the debug panel** adds a panel with the selected control's inputs and outputs, the runtime connection and the runtime log.
+
+Actions with settings (the app to launch, a hotkey, a scene name, ...) are set up in the editor. A **Multi Action** shows its steps there: drop actions from the list onto the steps to add them exactly where you drop them, drag **⠿** to change the order, or use **Or choose an action** / **Add step**. Dropping an action onto the control itself adds it as the last step. For a Hotkey, click **Record** and press the combination.
 
 Drag a mapped control onto another control to move it (the two swap if the target is taken), hold **Ctrl** to copy it, or drop it on an empty area to remove it.
 
@@ -137,7 +148,7 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 
 ### Customizing a control
 
-**Customize** (double-click a control) sets:
+**The editor** (select a control) sets:
 
 - **Run when** (for actions that normally run on a press): only the inputs the control has, so a key offers press, release and long press, a knob also turned left/right, and the swipe bar swiped left/right.
 - **Per input** (actions that support it, such as Switch Profile): on a control with more than one input, a group of settings for each input: **When pressed**, **When held down**, **When turned left/right**, **When swiped left/right**. For example a knob that goes to a specific profile when pressed and steps back and forth through the profiles when turned. "Do nothing" leaves an input unused.
@@ -150,7 +161,7 @@ Duplicating a profile copies everything: bindings, action settings, Stream Deck 
 
 ### Icons
 
-The icon picker (Customize → Icon → **Choose…**) searches two places:
+The icon picker (editor → Icon → **Choose…**) searches two places:
 
 - **My packs**: icon packs you installed with **Install icon pack…**: a Stream Deck icon pack (`.streamDeckIconPack`, as made for Elgato's Stream Deck app, from the Elgato Marketplace or e.g. GitHub), or a zip or folder of images. Packs are listed with their author, version and license, and can be removed.
 - **Online (Iconify)**: [Iconify](https://iconify.design)'s free, open-source icon sets (Material Design, Lucide, Tabler, brand logos, ...), shown with each set's name and license. A picked icon is saved into a local "Downloaded icons" pack, with its set's license in its `license.txt`, so profiles keep working offline.
@@ -165,7 +176,7 @@ The N4 Pro has an LED ring around each knob. **Device Settings → Knob lights**
 - **Custom** is an effect composer: a list of steps, each a color with how long to fade to it and how long to hold it, played in order and then from the start. Start from a preset (Police, Sunset, Ocean, Traffic light, Fire, Alert) or add your own steps, and reorder them with the arrows.
 - **One cycle takes** sets the speed, and **Each LED runs ahead by** spreads an effect over the knobs (0 % lights them all the same).
 
-Effects run at about 30 frames a second, and fades follow a gamma curve so they look even to the eye. Steady lights (Off included) are sent again every few seconds and after the device applies its settings, so the device's own lighting can't come back. A knob can have its own light instead (Customize → Light, the same editor), and lights up in its "when used" color for a moment when it's turned or pressed. The editor shows each knob with its LED ring in the color the device shows right now, effects included, also while the device is unplugged.
+Effects run at about 30 frames a second, and fades follow a gamma curve so they look even to the eye. Steady lights are sent again every few seconds and after the device applies its settings. **Off** dims the LEDs (brightness 0) instead of sending black: the N4 Pro's firmware shows its own rainbow when every LED is set to black. A knob can have its own light instead (the control editor → Light, the same light editor), and lights up in its "when used" color for a moment when it's turned or pressed. The editor shows each knob with its LED ring in the color the device shows right now, effects included, also while the device is unplugged.
 
 ### Knobs on the touch strip
 
@@ -173,7 +184,7 @@ The N4 Pro's knobs have no screen of their own, so like on a Stream Deck +, each
 
 - **Touch zone empty:** the knob's action fills the zone, for example the Volume Knob shows the volume and a level bar. Tapping the zone then works like pressing the knob.
 - **Touch zone has its own action, text or image:** the zone keeps it, and the knob gets a one-line strip along its bottom edge. A tap stays with the zone. A background color alone doesn't count: the knob then fills the zone on that color.
-- **Show this on Touch N** (Customize, on the knob) turns this off for a knob, leaving the zone to its own action.
+- **Show this on Touch N** (the knob's editor) turns this off for a knob, leaving the zone to its own action.
 
 Text, image and text style set on a knob are used there too. Actions that show a value (Volume Knob, Clock, Counter, System Info, and Stream Deck dial actions through `setFeedback`) draw it as a compact one-liner in the strip.
 
@@ -197,7 +208,7 @@ Stream Deck plugins run through DeckHost's Stream Deck compatibility layer:
 - N4 Pro keys act as Stream Deck keys and the knobs as Stream Deck+ dials.
 - `setTitle`, `setImage` (PNG, JPG and SVG), `setState`, settings and global settings work. Dial actions' `setFeedback` (title, value and indicator bar) is shown on the knob's touch zone.
 - HTML-based plugins (whose code is a web page) run in a hidden built-in browser page, as in the Stream Deck app. Their console output goes to the DeckHost log.
-- A plugin's own settings page (property inspector) opens inside the Customize window through the built-in browser (Microsoft Edge WebView2, which Windows 10/11 include). **Open in browser** is there as a fallback.
+- A plugin's own settings page (property inspector) opens inside the editor through the built-in browser (Microsoft Edge WebView2, which Windows 10/11 include). **Open in browser** is there as a fallback.
 
 Limits:
 
@@ -219,7 +230,7 @@ You can also install a `.streamDeckPlugin` file with **Install plugin…**.
 - **Closing the window keeps DeckHost running in the tray**: use **Exit** in the tray menu to quit.
 - **Updates**: **Check for updates automatically** (on by default: 15 seconds after start and every 6 hours) asks GitHub for a newer release; **Include pre-releases** (on by default when you run one) also offers alpha, beta and rc builds; **Check now** checks right away. A new release shows a notice at the top of the main window (and an item in the tray menu): **What's new** lists the release notes of every release since yours, then **Install and restart** downloads the package for your system, checks it against the release's `SHA256SUMS.txt`, closes DeckHost, installs and starts the new version (Windows: the setup, silently when DeckHost was installed with it; Linux and macOS: the install folder or `DeckHost.app` is replaced). Where DeckHost can't replace itself (a folder you can't write, or a development build), the button is **Download** and the file is shown so you can install it like the first time. **Skip this version** stops the notice until a newer release; **✕** / **Later** hides it until the next start.
 
-The settings window also shows DeckHost's version.
+The settings page also shows DeckHost's version.
 
 Only one DeckHost runs at a time: starting it again shows the running one. (Two instances would both read the device and run every action twice.)
 
@@ -240,7 +251,7 @@ The Plugin Manager shows these paths and has **Plugins folder** and **Logs folde
 
 ### Backgrounds, live preview and test mode
 
-- **Backgrounds:** a profile can have a background color and an image or animated GIF that spans all keys (Profile Manager). Each control can have its own background color, and its image can be an animated GIF (Customize). GIFs play at about 10 frames per second. The profile's background color also fills the screen between the keys, as a temporary background that covers the device's idle screen while DeckHost runs; the idle screen comes back when DeckHost exits. A background *image* is drawn on the keys and zones only.
+- **Backgrounds:** a profile can have a background color and an image or animated GIF that spans all keys (Profile Manager). Each control can have its own background color, and its image can be an animated GIF (the control editor). GIFs play at about 10 frames per second. The profile's background color also fills the screen between the keys, as a temporary background that covers the device's idle screen while DeckHost runs; the idle screen comes back when DeckHost exits. A background *image* is drawn on the keys and zones only.
 - **Live preview:** the canvas shows the exact images that are on the device, even when it's unplugged, and lights up controls as you press them.
 - **Test mode** (canvas header): click controls to press them, use the mouse wheel to turn knobs, and click the left or right half of the swipe bar to swipe. The real actions run.
 

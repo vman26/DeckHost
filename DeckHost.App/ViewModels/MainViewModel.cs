@@ -131,6 +131,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
                 }
 
                 SyncSelectedAppearanceEditors();
+                RebuildEditor();
                 OnPropertyChanged(nameof(SelectedControlName));
                 OnPropertyChanged(nameof(SelectedControlType));
                 OnPropertyChanged(nameof(SelectedControlInputs));
@@ -302,7 +303,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
             updated = new ControlBinding(control.Id, ProfileActionKind.MultiAction, actionItem.ToActionReference(), appearance, steps);
             StatusMessage = existing is null
-                ? $"Created a Multi Action on {control.DisplayName}. Add steps by dropping actions on it or in Customize."
+                ? $"Created a Multi Action on {control.DisplayName}. Drop actions on it, or into its steps below."
                 : $"Converted {control.DisplayName} into a Multi Action.";
         }
         else if (existing?.IsMultiAction == true)
@@ -321,7 +322,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         {
             updated = new ControlBinding(control.Id, ProfileActionKind.Single, actionItem.ToActionReference(actionItem.DefaultSettings), appearance, []);
             StatusMessage = actionItem.HasSettings
-                ? $"Assigned {actionItem.Name} to {control.DisplayName}. Right-click it and choose Customize to set it up."
+                ? $"Assigned {actionItem.Name} to {control.DisplayName}. Set it up below."
                 : $"Assigned {actionItem.Name} to {control.DisplayName}.";
         }
 
@@ -435,6 +436,113 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         SyncProfilesToHost();
+        if (!_applyingFromEditor && string.Equals(SelectedControl?.Id, controlId, StringComparison.OrdinalIgnoreCase))
+        {
+            // Changed by a drop, a move or a revert: show the new binding in the editor.
+            RebuildEditor();
+        }
+    }
+
+    // ---------------------------------------------------------------- inline editor
+
+    private ControlCustomizationViewModel? _editor;
+    private bool _applyingFromEditor;
+    private bool _showDebugPanel;
+
+    /// <summary>
+    /// The editor below the device for the selected control (what the Customize window was). Edits
+    /// apply right away; Revert puts back the binding the control had when it was selected.
+    /// </summary>
+    public ControlCustomizationViewModel? Editor
+    {
+        get => _editor;
+        private set
+        {
+            if (SetProperty(ref _editor, value))
+            {
+                OnPropertyChanged(nameof(HasEditor));
+            }
+        }
+    }
+
+    public bool HasEditor => _editor is not null;
+
+    /// <summary>The debug panel (the selected control's capabilities, the runtime connection and log): DeckHost settings → Show debug panel.</summary>
+    public bool ShowDebugPanel
+    {
+        get => _showDebugPanel;
+        set => SetProperty(ref _showDebugPanel, value);
+    }
+
+    private void RebuildEditor()
+    {
+        if (_editor is { } old)
+        {
+            old.Changed -= OnEditorChanged;
+            old.RevertRequested -= OnEditorRevert;
+            old.RemoveRequested -= OnEditorRemove;
+        }
+
+        if (SelectedControl is null || SelectedProfile is null)
+        {
+            Editor = null;
+            return;
+        }
+
+        var editor = CreateCustomizationViewModel(SelectedControl.Id);
+        editor.Changed += OnEditorChanged;
+        editor.RevertRequested += OnEditorRevert;
+        editor.RemoveRequested += OnEditorRemove;
+        Editor = editor;
+        if (editor.HasSettingsPage && SelectedDevice is { } device)
+        {
+            _ = LoadSettingsPageAsync(editor, device.Id);
+        }
+    }
+
+    /// <summary>A plugin's own settings page (Stream Deck property inspector) for the editor.</summary>
+    private async System.Threading.Tasks.Task LoadSettingsPageAsync(ControlCustomizationViewModel editor, string deviceId)
+    {
+        var uri = await _deviceHostService.GetActionSettingsPageAsync(deviceId, editor.ControlId);
+        if (ReferenceEquals(Editor, editor))
+        {
+            editor.SettingsPageUri = uri;
+        }
+    }
+
+    private void OnEditorChanged(object? sender, EventArgs e)
+    {
+        if (sender is not ControlCustomizationViewModel editor || !ReferenceEquals(editor, Editor))
+        {
+            return;
+        }
+
+        _applyingFromEditor = true;
+        try
+        {
+            ApplyBinding(editor.ControlId, editor.BuildBinding());
+        }
+        finally
+        {
+            _applyingFromEditor = false;
+        }
+    }
+
+    private void OnEditorRevert(object? sender, EventArgs e)
+    {
+        if (sender is ControlCustomizationViewModel editor)
+        {
+            ApplyBinding(editor.ControlId, editor.OriginalBinding);
+            StatusMessage = $"Put {editor.DisplayName} back as it was.";
+        }
+    }
+
+    private void OnEditorRemove(object? sender, EventArgs e)
+    {
+        if (sender is ControlCustomizationViewModel editor)
+        {
+            RemoveAssignment(editor.ControlId);
+        }
     }
 
     // ---------------------------------------------------------------- customization
@@ -1060,12 +1168,35 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             .ThenBy(static action => action.Name)
             .ToList();
 
+        foreach (var existing in ActionGroups)
+        {
+            _expandedGroups[existing.PluginId] = existing.IsExpanded;
+        }
+
         ActionGroups.Clear();
+        var searching = !string.IsNullOrWhiteSpace(SearchText);
         foreach (var group in filteredActions.GroupBy(static action => new { action.PluginId, action.PluginName }))
         {
-            ActionGroups.Add(new PluginActionGroupViewModel(group.Key.PluginId, group.Key.PluginName, group));
+            // Collapsed like the Stream Deck app, unless opened before; a search opens every match.
+            ActionGroups.Add(new PluginActionGroupViewModel(
+                group.Key.PluginId,
+                group.Key.PluginName,
+                group,
+                PluginIcon(group.Key.PluginId),
+                searching || _expandedGroups.GetValueOrDefault(group.Key.PluginId)));
         }
     }
+
+    private readonly Dictionary<string, bool> _expandedGroups = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A plugin's icon: its own (installed plugins), else one for DeckHost's system plugins.</summary>
+    private string? PluginIcon(string pluginId) => pluginId switch
+    {
+        SystemPlugins.SystemPluginSet.BuiltInPluginId => Contracts.Icons.Apps,
+        SystemPlugins.SystemPluginSet.MediaPluginId => Contracts.Icons.PlayPause,
+        SystemPlugins.SystemPluginSet.SystemControlsPluginId => Contracts.Icons.Keyboard,
+        _ => _pluginCatalog.Entries.FirstOrDefault(entry => string.Equals(entry.Id, pluginId, StringComparison.OrdinalIgnoreCase))?.IconPath,
+    };
 
     private void ApplyProfileBindings()
     {
@@ -1076,6 +1207,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         SyncSelectedAppearanceEditors();
         RaiseSelectedAssignmentChanged();
+        RebuildEditor();
         OnPropertyChanged(nameof(CurrentPageName));
         OnPropertyChanged(nameof(SelectedProfileSummary));
         OnPropertyChanged(nameof(CanvasBackground));
@@ -1156,6 +1288,9 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         ApplyBinding(SelectedControl.Id, existing.Model with { Appearance = appearance });
     }
+
+    /// <summary>The action list's entry for an action (its name and icon), or null.</summary>
+    public ActionItemViewModel? FindActionItem(IDeckAction action) => TryGetActionItem(action, out var item) ? item : null;
 
     private bool TryGetActionItem(IDeckAction action, out ActionItemViewModel actionItem)
     {
