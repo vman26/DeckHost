@@ -961,6 +961,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceBackground), binding.Appearance.BackgroundColor ?? string.Empty);
             _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceIcon), binding.Appearance.IconPath ?? string.Empty);
             _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceTile), binding.Appearance.ShowTile ? "true" : string.Empty);
+            _variableStore.Publish(VariableKeys.For(profile.DeviceId, binding.ControlId, VariableKeys.AppearanceTileStyle), binding.Appearance.Tile ?? new TileStyle());
         }
     }
 

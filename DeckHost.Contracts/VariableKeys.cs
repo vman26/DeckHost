@@ -17,6 +17,7 @@ public static class VariableKeys
     public const string AppearanceBackground = "appearance.background";
     public const string AppearanceIcon = "appearance.icon";
     public const string AppearanceTile = "appearance.tile";
+    public const string AppearanceTileStyle = "appearance.tileStyle";
     public const string HardwareId = "hardwareId";
     public const string LastError = "lastError";
     public const string Status = "status";
