@@ -1,0 +1,45 @@
+# Troubleshooting
+
+## My device isn't found
+
+- Close other programs that drive it: the Elgato Stream Deck app, the MiraBox app. Only one program can use a device at a time.
+- Plug it in directly, not through a hub in a monitor.
+- **Linux:** run `./install.sh` from the download once (it installs the device rule), then unplug the device and plug it in again.
+- Run DeckHost with `--check-native` to see whether the N4 Pro support loads and which devices it finds.
+
+## An action doesn't work
+
+The key shows the reason in small red text when an action fails. On Linux, actions use common tools: media keys need `playerctl`, volume `wpctl`, `pactl` or `amixer`, hotkeys and typing `xdotool` (X11) or `wtype` (Wayland). Install the one the key names.
+
+## Windows says "Windows protected your PC"
+
+The installer isn't signed yet. Choose **More info → Run anyway**.
+
+## macOS says DeckHost can't be opened
+
+Right-click DeckHost.app → **Open**, or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`. Hotkeys, typing text and locking need **System Settings → Privacy & Security → Accessibility** for DeckHost.
+
+## Reporting a problem
+
+**☰ → Help and support**:
+
+- **Report a problem** opens a GitHub issue with DeckHost's version, your system and your devices filled in. Describe what happened.
+- **Save support bundle…** makes a zip with the logs of the last days, crash reports, settings and the plugin list (your home folder and user name are replaced). Profiles are only included when you tick the box: actions keep passwords in them. Look inside before you share it.
+- **Open log folder** shows the logs: one file per day, kept 14 days.
+
+## After a crash
+
+DeckHost writes a crash report on your computer. On the next start, **Help and support** opens and offers to report it; nothing is sent unless you do. You can turn this offer off there.
+
+## Where DeckHost keeps its files
+
+`%AppData%` is `~/.config` on Linux and `~/Library/Application Support` on macOS.
+
+| What | Where |
+|---|---|
+| Profiles (and daily backups) | `%AppData%/DeckHost/profiles.json`, `backups/` |
+| Settings | `%AppData%/DeckHost/settings.json`, `devices/` |
+| Logs | `%AppData%/DeckHost/logs` (plugins: `logs/plugins`) |
+| Crash reports | `%AppData%/DeckHost/crashes` |
+| Plugins | `%AppData%/DeckHost/plugins` |
+| Icon packs | `%AppData%/DeckHost/icons` |
