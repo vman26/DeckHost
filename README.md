@@ -115,7 +115,7 @@ DeckHost ships with three **system plugins**. You can switch them off in the Plu
 
 | Plugin | Actions |
 |---|---|
-| DeckHost Built-ins (always on) | Multi Action, Pages, Folder, Back, Switch Profile, Clock, Counter, Key ID (Diagnostic) |
+| DeckHost Built-ins (always on) | Multi Action, Multi Action Switch, Key Logic, Pages, Folder, Back, Switch Profile, Clock, Counter, Key ID (Diagnostic) |
 | Media Controls | Play / Pause, Next, Previous, Stop, Volume Up / Down, Mute, Volume Knob, Track Swipe |
 | System Controls | Launch App, Open Website or File, Hotkey, Type Text, Lock Computer, System Info (CPU, memory, disk, uptime) |
 
@@ -139,6 +139,12 @@ The window is laid out like the Stream Deck app:
 - **Pages:** a profile can have several pages of keys. **+** under the device adds one; the numbers switch between them (right-click one to remove it). On the device, the **Pages** action goes to the next, the previous or a specific page (on a knob: turn to flip through them), and swiping a touch strip that has no action of its own flips pages like a phone (swipe left for the next page).
 - **Folders:** drop the **Folder** action on a key and it gets a layout of its own, with a **Back** key in its first key. Press it on the device, double-click it, or use **Open folder** in its editor to fill it; **Back** under the device (or the Back key) returns. Folders can hold folders. Removing the Folder key removes its folder.
 - Profile switching (Switch Profile, apps) always lands on a profile's first page; pages and folders use the profile's background unless they get their own.
+
+**Key logic**, also like the Stream Deck app:
+
+- **Multi Action Switch:** two sets of steps; the first press runs the first set, the next press the second, and so on (mute, then unmute). Each step's **Runs on** picks its set; the key shows which set comes next (with your own title per set if you like).
+- **Key Logic:** up to three things on one key: **Press**, **Double press** and **Hold**. With double-press steps, a single press waits 0.3 s to see whether a second one follows; without them it runs at once.
+- **Wait before:** every step of a Multi Action, a switch or Key Logic can wait first (in milliseconds). The device keeps working while a step waits.
 
 **Testing in the editor:** double-click a control to press it (it runs the real action, as the device would), and scroll over a knob to turn it. Double-clicking the left or right half of the swipe bar swipes it.
 

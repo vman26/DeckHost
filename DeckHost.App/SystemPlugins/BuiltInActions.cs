@@ -24,6 +24,60 @@ internal sealed class MultiActionAction() : DeckActionBase(
 }
 
 /// <summary>
+/// Two sets of steps; each press runs the next set (a toggle: on, then off). Shows which set the
+/// next press runs: its own title per set, else 1 or 2.
+/// </summary>
+internal sealed class MultiActionSwitchAction() : DeckActionBase(
+    "builtin.multi-action-switch",
+    "Multi Action Switch",
+    InputCapabilities.None,
+    OutputCapabilities.None,
+    "Two sets of actions: the first press runs the first set, the next press the second, and so on. For toggles such as mute and unmute.")
+{
+    private const string FirstTitleKey = "title1";
+    private const string SecondTitleKey = "title2";
+
+    public override bool CanBeMultiActionStep => false;
+
+    protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
+    [
+        new(FirstTitleKey, "Title before the first press", ActionSettingKind.Text, Placeholder: "1"),
+        new(SecondTitleKey, "Title before the second press", ActionSettingKind.Text, Placeholder: "2"),
+    ];
+
+    protected override string Title(IRenderContext context)
+    {
+        var next = context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.SwitchState), out var state) && state == StepGroups.Second
+            ? (SecondTitleKey, "2")
+            : (FirstTitleKey, "1");
+        return context.Settings.Get(next.Item1) is { Length: > 0 } title ? title : next.Item2;
+    }
+
+    protected override string? Subtitle(IRenderContext context) => null;
+
+    protected override string? Icon(IRenderContext context) => Icons.Toggle;
+
+    protected override (uint From, uint To) TileColors => Palette.Multi;
+
+    protected override string? Caption(IRenderContext context) => Title(context);
+}
+
+/// <summary>Different steps for a press, a double press and holding the key down.</summary>
+internal sealed class KeyLogicAction() : DeckActionBase(
+    "builtin.key-logic",
+    "Key Logic",
+    InputCapabilities.None,
+    OutputCapabilities.None,
+    "Up to three things on one key: one for a press, one for a double press and one for holding it down.")
+{
+    public override bool CanBeMultiActionStep => false;
+
+    protected override string? Icon(IRenderContext context) => Icons.KeyLogic;
+
+    protected override (uint From, uint To) TileColors => Palette.Multi;
+}
+
+/// <summary>
 /// Used internally when a control only shows text or an image. Not in the action list: setting
 /// the appearance of an empty control creates it automatically.
 /// </summary>

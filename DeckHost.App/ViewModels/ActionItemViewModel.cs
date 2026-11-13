@@ -57,7 +57,16 @@ public class ActionItemViewModel : ViewModelBase
 
     public bool ShowInPalette => Action.ShowInPalette;
 
-    public bool IsMultiActionScaffold => PluginId == EditorActionIds.BuiltInPluginId && Id == EditorActionIds.MultiAction;
+    /// <summary>The kind of binding this action makes (Multi Action, Multi Action Switch, Key Logic), or null for a plain action.</summary>
+    public ProfileActionKind? ScaffoldKind => PluginId != EditorActionIds.BuiltInPluginId ? null : Id switch
+    {
+        EditorActionIds.MultiAction => ProfileActionKind.MultiAction,
+        "builtin.multi-action-switch" => ProfileActionKind.MultiActionSwitch,
+        "builtin.key-logic" => ProfileActionKind.KeyLogic,
+        _ => null,
+    };
+
+    public bool IsMultiActionScaffold => ScaffoldKind is not null;
 
     public bool IsDisplayContentAction => PluginId == EditorActionIds.BuiltInPluginId && Id == EditorActionIds.DisplayContent;
 

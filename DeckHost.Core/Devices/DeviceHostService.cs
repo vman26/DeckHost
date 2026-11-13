@@ -108,6 +108,17 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         _variableStore = variableStore;
         _devicePlugins = devicePlugins.ToList();
         _actionRouter = actionRouter;
+        if (_actionRouter is ActionRouter router)
+        {
+            // Steps with a wait continue later on this worker.
+            router.Scheduler = (deviceId, delay, work) => _ = Task.Delay(delay).ContinueWith(
+                _ => Enqueue(() =>
+                {
+                    work();
+                    _dirtyDevices.Add(deviceId);
+                }),
+                TaskScheduler.Default);
+        }
         _actionHost = new ActionHostServices(this);
 
         foreach (var duplicate in _actionRouter.DuplicateActionKeys)
@@ -435,6 +446,16 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             return;
         }
 
+        // Key Logic keys run a press, a double press or a hold, which needs timing.
+        if (activeProfile.Bindings.FirstOrDefault(binding => binding.ActionKind == ProfileActionKind.KeyLogic &&
+                string.Equals(binding.ControlId, inputEvent.ControlId, StringComparison.OrdinalIgnoreCase)) is { } keyLogic &&
+            _actionRouter is ActionRouter keyLogicRouter)
+        {
+            HandleKeyLogic(keyLogicRouter, activeProfile, keyLogic, inputEvent);
+            _dirtyDevices.Add(inputEvent.DeviceId);
+            return;
+        }
+
         var target = FindTapTarget(activeProfile, inputEvent);
         bool dispatched;
         if (target is null)
@@ -466,6 +487,82 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
         // Actions can change any variable a renderer reads; unchanged controls are skipped at push time.
         _dirtyDevices.Add(inputEvent.DeviceId);
+    }
+
+    /// <summary>How long Key Logic waits for a second press before it runs the single press.</summary>
+    public static readonly TimeSpan DoublePressWindow = TimeSpan.FromMilliseconds(300);
+
+    private readonly Dictionary<(string DeviceId, string ControlId), KeyLogicState> _keyLogic = [];
+
+    private sealed class KeyLogicState
+    {
+        public bool Held { get; set; }
+
+        public bool Pending { get; set; }
+
+        public int Version { get; set; }
+    }
+
+    /// <summary>
+    /// Key Logic: holding runs the hold steps (on the device's long press); a release runs the press
+    /// steps, unless a second press follows within <see cref="DoublePressWindow"/>, which runs the
+    /// double-press steps. Without double-press steps a press runs at once.
+    /// </summary>
+    private void HandleKeyLogic(ActionRouter router, DeviceProfile profile, ControlBinding binding, DeviceInputEvent inputEvent)
+    {
+        var key = (inputEvent.DeviceId, inputEvent.ControlId);
+        if (!_keyLogic.TryGetValue(key, out var state))
+        {
+            state = new KeyLogicState();
+            _keyLogic[key] = state;
+        }
+
+        void Run(string group)
+        {
+            if (router.DispatchGroup(profile, binding, group, inputEvent.DeviceId, _actionHost))
+            {
+                HandleLightFeedback(profile, inputEvent.ControlId);
+            }
+
+            Log("Info", $"Key Logic on '{inputEvent.ControlId}': {group}.");
+        }
+
+        switch (inputEvent.EventType)
+        {
+            case InputCapabilities.Press:
+                state.Held = false;
+                break;
+            case InputCapabilities.LongPress when ActionRouter.HasGroup(binding, StepGroups.Hold):
+                state.Held = true;
+                state.Pending = false;
+                Run(StepGroups.Hold);
+                break;
+            case InputCapabilities.Release when state.Held:
+                state.Held = false;
+                break;
+            case InputCapabilities.Release when state.Pending:
+                state.Pending = false;
+                Run(StepGroups.DoublePress);
+                break;
+            case InputCapabilities.Release when !ActionRouter.HasGroup(binding, StepGroups.DoublePress):
+                Run(StepGroups.Press);
+                break;
+            case InputCapabilities.Release:
+                state.Pending = true;
+                var version = ++state.Version;
+                _ = Task.Delay(DoublePressWindow).ContinueWith(
+                    _ => Enqueue(() =>
+                    {
+                        if (state.Pending && state.Version == version)
+                        {
+                            state.Pending = false;
+                            Run(StepGroups.Press);
+                            _dirtyDevices.Add(inputEvent.DeviceId);
+                        }
+                    }),
+                    TaskScheduler.Default);
+                break;
+        }
     }
 
     private void ApplyProfiles(IReadOnlyList<DeviceProfile> profiles)
@@ -805,7 +902,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
             foreach (var binding in profile.Bindings)
             {
-                var references = binding.ActionKind == ProfileActionKind.MultiAction
+                var references = binding.ActionKind != ProfileActionKind.Single
                     ? binding.Steps.OrderBy(static step => step.Order).Select(static step => step.Action)
                     : [binding.Action];
                 var index = 0;

@@ -512,14 +512,15 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         if (actionItem.IsMultiActionScaffold)
         {
+            var kind = actionItem.ScaffoldKind!.Value;
             IReadOnlyList<MultiActionStep> steps = existing switch
             {
                 { IsMultiAction: true } => existing.Model.Steps,
-                { PrimaryAction.CanBeMultiActionStep: true } => [new MultiActionStep(0, existing.Model.Action)],
+                { PrimaryAction.CanBeMultiActionStep: true } => [new MultiActionStep(0, existing.Model.Action) { Group = StepGroups.For(kind).FirstOrDefault() }],
                 _ => [],
             };
 
-            updated = new ControlBinding(control.Id, ProfileActionKind.MultiAction, actionItem.ToActionReference(), appearance, steps);
+            updated = new ControlBinding(control.Id, kind, actionItem.ToActionReference(), appearance, steps);
             StatusMessage = existing is null
                 ? $"Created a Multi Action on {control.DisplayName}. Drop actions on it, or into its steps below."
                 : $"Converted {control.DisplayName} into a Multi Action.";
@@ -532,7 +533,10 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
                 return;
             }
 
-            var step = new MultiActionStep(existing.Model.Steps.Count, actionItem.ToActionReference(actionItem.DefaultSettings));
+            var step = new MultiActionStep(existing.Model.Steps.Count, actionItem.ToActionReference(actionItem.DefaultSettings))
+            {
+                Group = StepGroups.For(existing.Model.ActionKind).FirstOrDefault(),
+            };
             updated = existing.Model with { Steps = [.. existing.Model.Steps, step] };
             StatusMessage = $"Added {actionItem.Name} as step {updated.Steps.Count} on {control.DisplayName}.";
         }

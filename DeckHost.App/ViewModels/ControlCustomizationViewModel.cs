@@ -85,11 +85,14 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         }
 
         IsMultiAction = binding?.IsMultiAction == true;
+        _kind = binding?.Model.ActionKind ?? ProfileActionKind.Single;
+        StepGroupOptions = [.. StepGroups.For(_kind).Select(group => new ActionSettingOption(group, GroupLabel(group)))];
         if (IsMultiAction)
         {
-            foreach (var step in binding!.Steps)
+            // The step view models are in the order of the model's steps.
+            foreach (var (step, model) in binding!.Steps.Zip(binding.Model.Steps.OrderBy(static step => step.Order)))
             {
-                Steps.Add(CreateStep(step.Action, step.Settings));
+                Steps.Add(CreateStep(step.Action, step.Settings, StepGroups.Of(model, _kind), model.DelayMs));
             }
 
             AvailableStepActions = [.. availableActions
@@ -338,7 +341,10 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             return false;
         }
 
-        Steps.Insert(Math.Clamp(index, 0, Steps.Count), CreateStep(item, item.DefaultSettings));
+        // A dropped step joins the set of the step it lands next to.
+        var at = Math.Clamp(index, 0, Steps.Count);
+        var group = (at > 0 ? Steps[at - 1] : Steps.FirstOrDefault())?.Group?.Value ?? StepGroupOptions.FirstOrDefault()?.Value;
+        Steps.Insert(at, CreateStep(item, item.DefaultSettings, group, 0));
         OnStepsChanged();
         return true;
     }
@@ -403,7 +409,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             return;
         }
 
-        Steps.Add(CreateStep(SelectedStepAction, SelectedStepAction.DefaultSettings));
+        Steps.Add(CreateStep(SelectedStepAction, SelectedStepAction.DefaultSettings, StepGroupOptions.FirstOrDefault()?.Value, 0));
         OnStepsChanged();
     }
 
@@ -741,7 +747,11 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             : _primaryAction.ToActionReference(ActionSettings.ToSettings());
 
         IReadOnlyList<MultiActionStep> steps = IsMultiAction
-            ? [.. Steps.Select((step, index) => new MultiActionStep(index, step.Action.ToActionReference(step.Settings?.ToSettings())))]
+            ? [.. Steps.Select((step, index) => new MultiActionStep(index, step.Action.ToActionReference(step.Settings?.ToSettings()))
+            {
+                Group = step.Group?.Value,
+                DelayMs = step.DelayMilliseconds,
+            })]
             : _original.Steps;
 
         return _original with { Action = action, Appearance = appearance, Steps = steps };
@@ -784,9 +794,38 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         };
     }
 
-    private MultiActionStepEditorViewModel CreateStep(ActionItemViewModel action, ActionSettings settings)
+    private readonly ProfileActionKind _kind;
+
+    /// <summary>The sets a step can be in: First/Second press (Multi Action Switch), Press/Double press/Hold (Key Logic).</summary>
+    public IReadOnlyList<ActionSettingOption> StepGroupOptions { get; }
+
+    public bool HasStepGroups => StepGroupOptions.Count > 0;
+
+    /// <summary>What the steps card is called for this kind of binding.</summary>
+    public string StepsTitle => _kind switch
     {
-        var step = new MultiActionStepEditorViewModel(this, action, settings);
+        ProfileActionKind.MultiActionSwitch => "STEPS (EACH PRESS RUNS THE NEXT SET)",
+        ProfileActionKind.KeyLogic => "STEPS (FOR A PRESS, A DOUBLE PRESS OR HOLDING)",
+        _ => "STEPS (RUN IN THIS ORDER)",
+    };
+
+    private static string GroupLabel(string group) => group switch
+    {
+        StepGroups.First => "First press",
+        StepGroups.Second => "Second press",
+        StepGroups.Press => "Press",
+        StepGroups.DoublePress => "Double press",
+        StepGroups.Hold => "Hold",
+        _ => group,
+    };
+
+    private MultiActionStepEditorViewModel CreateStep(ActionItemViewModel action, ActionSettings settings, string? group, int delayMs)
+    {
+        var step = new MultiActionStepEditorViewModel(this, action, settings)
+        {
+            Group = StepGroupOptions.FirstOrDefault(option => option.Value == group) ?? StepGroupOptions.FirstOrDefault(),
+            DelayMilliseconds = delayMs,
+        };
         step.Changed += (_, _) => RaiseChanged();
         return step;
     }
@@ -845,6 +884,47 @@ public partial class MultiActionStepEditorViewModel : ViewModelBase
     }
 
     public event EventHandler? Changed;
+
+    private ActionSettingOption? _group;
+    private int _delayMilliseconds;
+
+    /// <summary>The set the step is in (Multi Action Switch, Key Logic); null for a Multi Action.</summary>
+    public ActionSettingOption? Group
+    {
+        get => _group;
+        set
+        {
+            if (value is not null && SetProperty(ref _group, value))
+            {
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    public IReadOnlyList<ActionSettingOption> GroupOptions => _owner.StepGroupOptions;
+
+    public bool HasGroup => _owner.HasStepGroups;
+
+    /// <summary>How long to wait before this step, in milliseconds.</summary>
+    public int DelayMilliseconds
+    {
+        get => _delayMilliseconds;
+        set
+        {
+            if (SetProperty(ref _delayMilliseconds, Math.Clamp(value, 0, StepGroups.MaxDelayMs)))
+            {
+                OnPropertyChanged(nameof(Delay));
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>The wait for the number box (decimal, as NumericUpDown wants).</summary>
+    public decimal? Delay
+    {
+        get => _delayMilliseconds;
+        set => DelayMilliseconds = (int)Math.Round(value ?? 0);
+    }
 
     public ActionItemViewModel Action { get; }
 
