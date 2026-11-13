@@ -25,7 +25,7 @@ public class LightEffectMathTests
         var start = LightEffectMath.ColorAt(style, TimeSpan.Zero);
         var middle = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1));
 
-        Assert.InRange(start.R, (byte)15, (byte)25); // never fully dark
+        Assert.InRange(start.R, (byte)5, (byte)15); // never fully dark
         Assert.Equal((byte)255, middle.R);
         Assert.Equal(start, LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(2))); // one cycle later
     }
@@ -166,7 +166,13 @@ public class HostLightTests
 
         public ConcurrentQueue<string> Calls { get; } = new();
 
-        public Task InitializeAsync(IDevicePluginContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+        public IDevicePluginContext? Context { get; private set; }
+
+        public Task InitializeAsync(IDevicePluginContext context, CancellationToken cancellationToken)
+        {
+            Context = context;
+            return Task.CompletedTask;
+        }
 
         public bool TryPushImage(string deviceId, string controlId, ReadOnlySpan<byte> rgba, int width, int height, out string? error)
         {

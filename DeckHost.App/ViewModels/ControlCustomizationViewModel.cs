@@ -24,14 +24,11 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     private string _iconPath;
     private string _backgroundColor;
     private string _backgroundMode;
-    private string _idleEffect = LightEffects.Solid;
-    private double _effectPeriod = LightStyle.DefaultPeriodSeconds;
     private string _tileFrom;
     private string _tileTo;
     private double _tileCorner;
     private bool _lightEnabled;
     private string _activeColor;
-    private string _idleColor;
     private string _activeDurationText;
     private bool _pulseOnActive;
     private ActionItemViewModel? _selectedStepAction;
@@ -109,12 +106,19 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         _lightEnabled = feedback is not null;
         feedback ??= new RgbFeedback();
         _activeColor = "#" + feedback.ActiveColor.TrimStart('#');
-        _idleColor = "#" + feedback.IdleColor.TrimStart('#');
         _activeDurationText = feedback.ActiveDuration.ToString(CultureInfo.InvariantCulture);
         _pulseOnActive = feedback.PulseOnActive;
-        _idleEffect = feedback.IdleEffect ?? LightEffects.Solid;
-        _effectPeriod = feedback.EffectPeriodSeconds ?? LightStyle.DefaultPeriodSeconds;
+        IdleLight = new LightStyleEditorViewModel(feedback.IdleStyle);
+        IdleLight.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(LightError));
+            OnPropertyChanged(nameof(HasLightError));
+            RaiseChanged();
+        };
     }
+
+    /// <summary>The control's light while idle: effect, colors, custom steps.</summary>
+    public LightStyleEditorViewModel IdleLight { get; }
 
     /// <summary>Raised on every edit, for the live preview on the device.</summary>
     public event EventHandler? Changed;
@@ -554,8 +558,8 @@ public partial class ControlCustomizationViewModel : ViewModelBase
 
     public string IdleColor
     {
-        get => _idleColor;
-        set => SetLightField(ref _idleColor, value);
+        get => IdleLight.Color;
+        set => IdleLight.Color = value;
     }
 
     public string ActiveDurationText
@@ -565,47 +569,20 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     }
 
     /// <summary>The idle effects for this control's own light.</summary>
-    public IReadOnlyList<ActionSettingOption> IdleEffects { get; } =
-    [
-        new(LightEffects.Solid, "Steady color"),
-        new(LightEffects.Breathe, "Breathing"),
-        new(LightEffects.Rainbow, "Rainbow"),
-        new(LightEffects.Off, "Off"),
-    ];
+    public IReadOnlyList<ActionSettingOption> IdleEffects => IdleLight.Effects;
 
     public ActionSettingOption SelectedIdleEffect
     {
-        get => IdleEffects.FirstOrDefault(option => option.Value == _idleEffect) ?? IdleEffects[0];
-        set
-        {
-            if (value is not null && value.Value != _idleEffect)
-            {
-                _idleEffect = value.Value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(ShowEffectSpeed));
-                RaiseChanged();
-            }
-        }
+        get => IdleLight.SelectedEffect;
+        set => IdleLight.SelectedEffect = value;
     }
-
-    public bool ShowEffectSpeed => LightEffects.IsAnimated(_idleEffect);
 
     /// <summary>Seconds per cycle of the idle effect.</summary>
     public double EffectPeriod
     {
-        get => _effectPeriod;
-        set
-        {
-            var clamped = Math.Round(Math.Clamp(value, LightStyle.MinPeriodSeconds, 10), 1);
-            if (SetProperty(ref _effectPeriod, clamped))
-            {
-                OnPropertyChanged(nameof(EffectPeriodText));
-                RaiseChanged();
-            }
-        }
+        get => IdleLight.PeriodSeconds;
+        set => IdleLight.PeriodSeconds = value;
     }
-
-    public string EffectPeriodText => $"{_effectPeriod:0.#} s";
 
     public bool PulseOnActive
     {
@@ -620,7 +597,7 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     }
 
     public string? LightError =>
-        !IsHexColor(ActiveColor) || !IsHexColor(IdleColor) ? "Colors must look like #RRGGBB, for example #00FF00."
+        !IsHexColor(ActiveColor) || (IdleLight.ShowColor && !IsHexColor(IdleColor)) ? "Colors must look like #RRGGBB, for example #00FF00."
         : !TryParseDuration(out _) ? "Duration must be a whole number of milliseconds from 0 to 10000."
         : null;
 
@@ -699,10 +676,14 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             return null;
         }
 
-        return new RgbFeedback(NormalizeColor(ActiveColor), NormalizeColor(IdleColor), duration, PulseOnActive)
+        // The simple fields stay filled, for older DeckHost versions; IdleLight carries everything.
+        var idle = IdleLight.ToStyle() ?? new LightStyle(Effect: LightEffects.Off);
+        var simple = idle.Colors is null && idle.Steps is null && idle.Spread is null;
+        return new RgbFeedback(NormalizeColor(ActiveColor), idle.Color, duration, PulseOnActive)
         {
-            IdleEffect = _idleEffect == LightEffects.Solid ? null : _idleEffect,
-            EffectPeriodSeconds = LightEffects.IsAnimated(_idleEffect) ? _effectPeriod : null,
+            IdleEffect = idle.Effect == LightEffects.Solid ? null : idle.Effect,
+            EffectPeriodSeconds = LightEffects.IsAnimated(idle.Effect) ? idle.PeriodSeconds : null,
+            IdleLight = simple ? null : idle,
         };
     }
 
