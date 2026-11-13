@@ -23,6 +23,12 @@ public interface IRenderContext
     /// </summary>
     bool IsCompact => false;
 
+    /// <summary>
+    /// The binding's text style (Customize → Text style), so an action can draw more than the label
+    /// in it: DeckHost's actions draw their icon in its color. Null when none is set.
+    /// </summary>
+    Models.TextStyle? TextStyle => null;
+
     /// <summary>Draws an encoded image (PNG, JPG, GIF, WebP bytes) scaled to cover the control.</summary>
     bool DrawEncodedImage(byte[] encodedImage);
 

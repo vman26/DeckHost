@@ -230,6 +230,9 @@ internal abstract class DeckActionBase(
             iconColor = TileColors == NeutralTile ? 0xFFFFFFFF : TileColors.From;
         }
 
+        // A text color of the user's colors the icon too, whatever the background.
+        iconColor = context.TextColorOr(iconColor);
+
         if (error is not null && !wide)
         {
             context.DrawTile(icon, from, to, null, iconColor);

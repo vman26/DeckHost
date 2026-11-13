@@ -129,6 +129,30 @@ public class ControlBackgroundTests
         }
     }
 
+    [Theory]
+    [InlineData(null, 0xFFF472B6u)] // the action's own color (media: pink)
+    [InlineData("#00FF00", 0xFF00FF00u)] // the text style's color
+    public async Task The_icon_follows_the_text_color(string? textColor, uint expected)
+    {
+        var plugins = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
+        using var store = new VariableStore();
+        await using var host = new DeckHost.Core.Devices.DeviceHostService([new KeyDevicePlugin()], plugins, store);
+        var frames = new System.Collections.Concurrent.ConcurrentDictionary<string, DeckHost.Core.Models.ControlFrame>();
+        host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
+        var reference = new DeckHost.Contracts.Models.ActionReference(DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId, "Media", "media.playpause", "Play",
+            DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
+        var style = textColor is null ? null : new DeckHost.Contracts.Models.TextStyle(Color: textColor);
+        host.SetProfiles([new DeckHost.Contracts.Models.DeviceProfile("p", "P", KeyDevicePlugin.DeviceId,
+            [new DeckHost.Contracts.Models.ControlBinding("key.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference,
+                new DeckHost.Contracts.Models.ControlAppearance(TextStyle: style), [])])]);
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+
+        var frame = frames["key.0"];
+        var offset = ((56 * frame.Width) + 43) * 4; // inside the play triangle
+        Assert.Equal(expected, 0xFF000000u | ((uint)frame.Rgba[offset] << 16) | ((uint)frame.Rgba[offset + 1] << 8) | frame.Rgba[offset + 2]);
+    }
+
     private sealed class KeyDevicePlugin : DeckHost.Contracts.Interfaces.IDevicePlugin, DeckHost.Contracts.Interfaces.IDeviceOutput
     {
         public const string DeviceId = "key.device";
