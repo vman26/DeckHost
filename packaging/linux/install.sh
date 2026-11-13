@@ -51,6 +51,9 @@ fi
 
 # Read the list once: "ldconfig -p | grep -q" fails under pipefail when grep stops reading early.
 libraries="$(ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null || true)"
+if [[ "$libraries" != *"libwebkit2gtk-4.1"* ]]; then
+    echo "Optional: install WebKitGTK (libwebkit2gtk-4.1) to see plugin settings pages inside DeckHost; without it they open in your browser."
+fi
 for library in libgif.so.7 libudev.so.1; do
     if [[ "$libraries" != *"$library"* ]]; then
         echo "Note: $library is missing; install giflib / libudev from your distribution for device support."
