@@ -31,6 +31,7 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Markdig" Version="1.6.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
     <!-- PrivateAssets: the tests reference this project; WebView2 (and its WPF wrapper) stays here. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" PrivateAssets="all" />

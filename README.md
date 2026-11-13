@@ -173,6 +173,8 @@ Text, image and text style set on a knob are used there too. Actions that show a
 
 The catalogs have no categories, so DeckHost derives one from each plugin's name and description (a category from the catalog or the plugin's manifest wins). **Page** opens the plugin's page: the repository for OpenAction plugins, the Elgato Marketplace for Elgato plugins. Stream Deck plugins from both sources install into the same Stream Deck folder, since they are the same kind of plugin.
 
+Each plugin shows its icon (OpenAction's icons, the archive's copies of the Elgato icons, a catalog's `icon`, or an installed plugin's own icon). **More ▾** expands a plugin in the list and shows its README from its GitHub repository, rendered with its images, badges, tables and links (links open in your browser). Plugins without a GitHub repository show their description, and **Page** still opens the plugin's page. Icons and README images are cached in `%LocalAppData%/DeckHost/cache/store`.
+
 Installing, uninstalling and enabling run in the background; the Plugin Manager shows each step (downloading with a percentage, unpacking, starting, stopping, removing files). The Installed tab shows where each plugin came from.
 
 Stream Deck plugins run through DeckHost's Stream Deck compatibility layer:
@@ -239,9 +241,12 @@ Other plugins are installed from a package with **☰ → Open Plugin Manager �
   "author": "DeckHost",
   "description": "…",
   "assembly": "DeckHost.Plugin.Obs.dll",
-  "hostApiVersion": 1
+  "hostApiVersion": 1,
+  "icon": "icon.png"
 }
 ```
+
+`icon` is optional: an image in the package (PNG, JPG or SVG) that the Plugin Manager and the store show.
 
 The assembly must contain a public `IApplicationPlugin` with a parameterless constructor whose `Id` matches the manifest. It must not ship its own copy of `DeckHost.Contracts`. Installed plugins live in `%AppData%/DeckHost/plugins/functional/<id>`. Plugins run with your user's rights, so only install packages you trust.
 

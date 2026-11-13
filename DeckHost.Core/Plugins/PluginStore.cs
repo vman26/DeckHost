@@ -45,6 +45,9 @@ public sealed class PluginStore(HttpClient http)
 
     private const string OpenActionCatalogUrl = "https://openactionapi.github.io/plugins/catalogue.json";
     private const string OpenActionIconUrl = "https://openactionapi.github.io/plugins/icons/{0}.png";
+
+    /// <summary>The archive keeps each plugin's icon; the catalog's own icon links (appstore.elgato.com) no longer resolve.</summary>
+    private const string ElgatoIconUrl = "https://plugins.amankhanna.me/icons/{0}.png";
     private const string ElgatoCatalogUrl = "https://plugins.amankhanna.me/catalogue.json";
     private const string ElgatoDownloadUrl = "https://plugins.amankhanna.me/rezipped/{0}.zip";
     private const string ElgatoMarketplaceSearchUrl = "https://marketplace.elgato.com/stream-deck/plugins?search={0}";
@@ -167,7 +170,7 @@ public sealed class PluginStore(HttpClient http)
                 Text(plugin, "description"),
                 ElgatoArchiveSource,
                 Text(plugin, "version"),
-                Text(plugin, "icon"),
+                string.Format(System.Globalization.CultureInfo.InvariantCulture, ElgatoIconUrl, Uri.EscapeDataString(id)),
                 Text(plugin, "link"),
                 // The catalog's own "download" field is sometimes truncated; the re-zipped copy is complete.
                 string.Format(System.Globalization.CultureInfo.InvariantCulture, ElgatoDownloadUrl, Uri.EscapeDataString(id)),
