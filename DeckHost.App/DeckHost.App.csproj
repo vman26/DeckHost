@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\deckhost.ico</ApplicationIcon>
     <!-- LibraryImport (Platform/MacNative) generates unsafe marshalling code. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsWindows>$([MSBuild]::IsOsPlatform('Windows'))</IsWindows>

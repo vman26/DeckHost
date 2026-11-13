@@ -1,4 +1,10 @@
+<p align="center"><img src="docs/deckhost-logo.png" width="96" alt="DeckHost logo"></p>
+
 # DeckHost
+
+[![Downloads](https://img.shields.io/github/downloads/vman26/DeckHost-releases/total?label=downloads)](https://github.com/vman26/DeckHost-releases/releases)
+[![Latest release](https://img.shields.io/github/v/release/vman26/DeckHost-releases?include_prereleases&label=release)](https://github.com/vman26/DeckHost-releases/releases)
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-Vman26-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/Vman26)
 
 DeckHost is a modular host for physical control surfaces (macro pads, rotary consoles, touch strips). It separates the hardware from the actions: device plugins drive the hardware, application plugins provide the actions, and the designer lets you map one onto the other.
 
@@ -102,6 +108,8 @@ The tag is the version. The **release** workflow then tests and publishes DeckHo
 3. Add the Actions variable `RELEASES_REPO` = `vman26/DeckHost-releases` to the source repository.
 
 From then on the release workflow creates each release in the source repository and in the releases repository (same files and notes), and the apps it builds check the releases repository (the build property `DeckHostUpdateRepository`, default `vman26/DeckHost`). The release notes link to pull requests in the private repository, which only you can open.
+
+**Download counts:** GitHub counts every download of a release file. `scripts/downloads.sh` lists them per release and file, with the total (`scripts/downloads.sh vman26/DeckHost-releases`; a private repository needs `GITHUB_TOKEN`). The README's downloads badge shows the total of the releases repository.
 
 The usual flow (git-flow):
 
@@ -243,6 +251,7 @@ You can also install a `.streamDeckPlugin` file with **Install plugin…**.
 - **Start DeckHost when I sign in**: Windows: the `HKCU\…\Run` key; Linux: `~/.config/autostart/deckhost.desktop`; macOS: a LaunchAgent (`~/Library/LaunchAgents/app.deckhost.DeckHost.plist`). No admin rights needed.
 - **Start in the tray when started at sign-in**: the device works without the window.
 - **Closing the window keeps DeckHost running in the tray**: use **Exit** in the tray menu to quit.
+- **Support DeckHost**: a **Buy me a coffee** button (and its QR code for your phone) for buymeacoffee.com/Vman26.
 - **Updates**: **Check for updates automatically** (on by default: 15 seconds after start and every 6 hours) asks GitHub for a newer release; **Include pre-releases** (on by default when you run one) also offers alpha, beta and rc builds; **Check now** checks right away. A new release shows a notice at the top of the main window (and an item in the tray menu): **What's new** lists the release notes of every release since yours, then **Install and restart** downloads the package for your system, checks it against the release's `SHA256SUMS.txt`, closes DeckHost, installs and starts the new version (Windows: the setup, silently when DeckHost was installed with it; Linux and macOS: the install folder or `DeckHost.app` is replaced). Where DeckHost can't replace itself (a folder you can't write, or a development build), the button is **Download** and the file is shown so you can install it like the first time. **Skip this version** stops the notice until a newer release; **✕** / **Later** hides it until the next start.
 
 The settings page also shows DeckHost's version.
