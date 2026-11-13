@@ -3,7 +3,7 @@
 #   ~/.local/share/deckhost        the app
 #   ~/.local/bin/deckhost          a launcher
 #   ~/.local/share/applications    the menu entry
-# and, with sudo, the udev rule that lets you use the N4 Pro without root.
+# and, with sudo, the udev rule that lets you use the N4 Pro and Stream Decks without root.
 #   ./install.sh            install or update
 #   ./install.sh --uninstall
 set -euo pipefail
@@ -36,7 +36,7 @@ sed "s|@EXEC@|$target/DeckHost.App|" "$here/deckhost.desktop" > "$data/applicati
 command -v update-desktop-database >/dev/null && update-desktop-database "$data/applications" >/dev/null 2>&1 || true
 
 if [[ ! -f "$rule" ]] || ! cmp -s "$here/70-deckhost-mirabox.rules" "$rule"; then
-    echo "Installing the udev rule for the N4 Pro (needs sudo)..."
+    echo "Installing the udev rule for the N4 Pro and Stream Decks (needs sudo)..."
     if sudo install -m 0644 "$here/70-deckhost-mirabox.rules" "$rule"; then
         if sudo udevadm control --reload-rules && sudo udevadm trigger; then
             echo "Unplug and replug the N4 Pro once."

@@ -54,7 +54,9 @@
   <ItemGroup>
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
     <ProjectReference Include="..\DeckHost.Core\DeckHost.Core.csproj" />
+    <ProjectReference Include="..\DeckHost.Device.Elgato\DeckHost.Device.Elgato.csproj" />
     <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
+    <ProjectReference Include="..\DeckHost.Device.Web\DeckHost.Device.Web.csproj" />
   </ItemGroup>
 
   <!-- Only WebView2's Core API is used (Views/WebView2Host); drop its WPF and WinForms wrappers. -->

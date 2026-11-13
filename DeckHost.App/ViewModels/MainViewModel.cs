@@ -29,6 +29,10 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     private bool _suppressAppearanceSync;
     private bool _suppressHostSync;
     private DeviceDefinition? _selectedDevice;
+    private bool _devicePickedByUser;
+
+    /// <summary>The profiles (with their pages and folders) of the devices the editor doesn't show right now.</summary>
+    private readonly List<ProfileItemViewModel> _otherDeviceProfiles = new();
     private string _searchText = string.Empty;
     private ControlItemViewModel? _selectedControl;
     private ProfileItemViewModel? _selectedProfile;
@@ -54,14 +58,9 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         _saveTimer = new DispatcherTimer { Interval = SaveDelay };
         _saveTimer.Tick += (_, _) => FlushPendingSave();
 
-        SelectedDevice = _deviceHostService.Devices.FirstOrDefault()
-            ?? throw new InvalidOperationException("No device plugin provided a device definition.");
-
-        foreach (var control in SelectedDevice.Controls.Select(static control => new ControlItemViewModel(control)))
-        {
-            ControlItems.Add(control);
-            _controlsById[control.Id] = control;
-        }
+        UseDevice(_deviceHostService.Devices.FirstOrDefault()
+            ?? throw new InvalidOperationException("No device plugin provided a device definition."));
+        RefreshDeviceList();
 
         // The host raises these on its worker thread; the UI may only be touched on the UI thread.
         _deviceHostService.RuntimeLogReceived += entry => Dispatcher.UIThread.Post(() => OnRuntimeLogReceived(entry));
@@ -102,9 +101,34 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             if (SetProperty(ref _selectedDevice, value))
             {
                 OnPropertyChanged(nameof(DeviceName));
+                OnPropertyChanged(nameof(PickedDevice));
             }
         }
     }
+
+    /// <summary>The devices to choose from in the header (each with its own profiles).</summary>
+    public ObservableCollection<DeviceChoiceViewModel> DeviceChoices { get; } = new();
+
+    public bool HasSeveralDevices => DeviceChoices.Count > 1;
+
+    /// <summary>The header's device picker.</summary>
+    public DeviceChoiceViewModel? PickedDevice
+    {
+        get => DeviceChoices.FirstOrDefault(choice => SelectedDevice is not null && SameId(choice.Id, SelectedDevice.Id));
+        set
+        {
+            if (value is not null && _deviceHostService.Devices.FirstOrDefault(device => SameId(device.Id, value.Id)) is { } device)
+            {
+                _devicePickedByUser = true;
+                SwitchDevice(device);
+            }
+        }
+    }
+
+    /// <summary>Every layout of every device: what the host gets and what is saved.</summary>
+    private IEnumerable<ProfileItemViewModel> EveryLayout => AllLayouts.Concat(_otherDeviceProfiles.SelectMany(static profile => profile.AllLayouts));
+
+    private static bool SameId(string left, string right) => string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
     public string SearchText
     {
@@ -824,7 +848,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             _profileStore.Save(new ProfileDocument(
                 ProfileDocument.CurrentVersion,
                 _manualProfileId ?? SelectedProfile?.Id,
-                Profiles.SelectMany(static profile => profile.ToModels()).ToList(),
+                Profiles.Concat(_otherDeviceProfiles).SelectMany(static profile => profile.ToModels()).ToList(),
                 AutoSwitchEnabled,
                 DefaultBackground,
                 _deviceLights.Count == 0 ? null : new Dictionary<string, LightStyle>(_deviceLights, StringComparer.OrdinalIgnoreCase)));
@@ -1252,7 +1276,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         RebuildActions();
 
         // Bindings to a disabled plugin become "unavailable" (kept); re-enabled ones come back.
-        foreach (var profile in AllLayouts.ToList())
+        foreach (var profile in EveryLayout.ToList())
         {
             foreach (var model in profile.TakeAllBindings())
             {
@@ -1299,6 +1323,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             {
                 // A restored backup replaces everything.
                 Profiles.Clear();
+                _otherDeviceProfiles.Clear();
                 _selectedProfile = null;
             }
 
@@ -1344,6 +1369,26 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
                 }
             }
 
+            // The editor opens on the device of the profile chosen last; the other devices' profiles wait aside.
+            if (replacement is null &&
+                Profiles.Concat(children).FirstOrDefault(profile => profile.Id == document?.SelectedProfileId) is { } last &&
+                !SameId(last.DeviceId, SelectedDevice!.Id) &&
+                _deviceHostService.Devices.FirstOrDefault(device => SameId(device.Id, last.DeviceId)) is { } lastDevice)
+            {
+                UseDevice(lastDevice);
+            }
+
+            foreach (var other in Profiles.Where(profile => !SameId(profile.DeviceId, SelectedDevice!.Id)).ToList())
+            {
+                Profiles.Remove(other);
+                _otherDeviceProfiles.Add(other);
+            }
+
+            if (Profiles.Count == 0 && _otherDeviceProfiles.Count > 0)
+            {
+                Profiles.Add(new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], "Default", SelectedDevice!.Id));
+            }
+
             if (Profiles.Count == 0)
             {
                 Profiles.Add(new ProfileItemViewModel("profile.default", "Default", SelectedDevice!.Id));
@@ -1372,7 +1417,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
-        _deviceHostService.SetProfiles(AllLayouts.Select(ToHostModel).ToList());
+        _deviceHostService.SetProfiles(EveryLayout.Select(ToHostModel).ToList());
         if (SelectedProfile is not null)
         {
             _deviceHostService.SetActiveProfile(SelectedProfile.Id);
@@ -1453,7 +1498,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private void SyncProfilesToHost()
     {
-        _deviceHostService.SetProfiles(AllLayouts.Select(ToHostModel).ToList());
+        _deviceHostService.SetProfiles(EveryLayout.Select(ToHostModel).ToList());
 
         if (SelectedProfile is not null)
         {
@@ -1542,19 +1587,122 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private void OnDevicesChanged()
     {
+        RefreshDeviceList();
         if (SelectedDevice is null)
         {
             return;
         }
 
-        var updated = _deviceHostService.Devices.FirstOrDefault(device => string.Equals(device.Id, SelectedDevice.Id, StringComparison.OrdinalIgnoreCase));
-        if (updated is not null)
+        var updated = _deviceHostService.Devices.FirstOrDefault(device => SameId(device.Id, SelectedDevice.Id));
+        if (!_devicePickedByUser && SelectedDevice.IsConnected is false && updated is not { IsConnected: true } &&
+            _deviceHostService.Devices.FirstOrDefault(static device => device.IsConnected && !device.Id.StartsWith("web.", StringComparison.Ordinal)) is { } plugged)
         {
-            SelectedDevice = updated;
+            // Nothing picked by hand and the shown device isn't there: show the one that is plugged in.
+            SwitchDevice(plugged);
+        }
+        else if (updated is not null)
+        {
+            var layoutChanged = !updated.Controls.Select(static control => (control.Id, control.Bounds)).SequenceEqual(SelectedDevice.Controls.Select(static control => (control.Id, control.Bounds)));
+            if (layoutChanged)
+            {
+                // The device's controls changed (the web deck's grid): rebuild the canvas.
+                var controlId = SelectedControl?.Id;
+                UseDevice(updated);
+                ApplyProfileBindings();
+                SelectControl((_controlsById.GetValueOrDefault(controlId ?? string.Empty) ?? ControlItems[0]).Control);
+                _deviceHostService.Redraw(updated.Id);
+            }
+            else
+            {
+                SelectedDevice = updated;
+            }
+
             OnPropertyChanged(nameof(DeviceName));
         }
 
         RefreshConnectionStatus();
+    }
+
+    private void RefreshDeviceList()
+    {
+        var devices = _deviceHostService.Devices.ToList();
+        if (DeviceChoices.Select(static choice => (choice.Id, choice.Label)).SequenceEqual(devices.Select(static device => (device.Id, DeviceChoiceViewModel.LabelOf(device)))))
+        {
+            return;
+        }
+
+        DeviceChoices.Clear();
+        foreach (var device in devices)
+        {
+            DeviceChoices.Add(new DeviceChoiceViewModel(device));
+        }
+
+        OnPropertyChanged(nameof(HasSeveralDevices));
+        OnPropertyChanged(nameof(PickedDevice));
+    }
+
+    /// <summary>Shows <paramref name="device"/>'s controls on the canvas (no profile change).</summary>
+    private void UseDevice(DeviceDefinition device)
+    {
+        SelectedDevice = device;
+        ControlItems.Clear();
+        _controlsById.Clear();
+        foreach (var control in device.Controls.Select(static control => new ControlItemViewModel(control)))
+        {
+            ControlItems.Add(control);
+            _controlsById[control.Id] = control;
+        }
+
+        OnPropertyChanged(nameof(CanvasWidth));
+        OnPropertyChanged(nameof(CanvasHeight));
+    }
+
+    /// <summary>
+    /// Edits another device: its controls on the canvas and its profiles in the pickers. The
+    /// profiles of the device left behind stay active on it.
+    /// </summary>
+    public void SwitchDevice(DeviceDefinition device)
+    {
+        if (SelectedDevice is not null && SameId(device.Id, SelectedDevice.Id))
+        {
+            return;
+        }
+
+        FlushPendingSave();
+        _suppressHostSync = true;
+        try
+        {
+            _otherDeviceProfiles.AddRange(Profiles);
+            Profiles.Clear();
+            foreach (var mine in _otherDeviceProfiles.Where(profile => SameId(profile.DeviceId, device.Id)).ToList())
+            {
+                _otherDeviceProfiles.Remove(mine);
+                Profiles.Add(mine);
+            }
+
+            if (Profiles.Count == 0)
+            {
+                Profiles.Add(new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], "Default", device.Id));
+            }
+
+            UseDevice(device);
+            _selectedProfile = null;
+            SelectedProfile = Profiles[0];
+        }
+        finally
+        {
+            _suppressHostSync = false;
+        }
+
+        // The host keeps each device's active profile; only a new profile list goes out.
+        _deviceHostService.SetProfiles(EveryLayout.Select(ToHostModel).ToList());
+        _deviceHostService.SetActiveProfile(SelectedProfile!.Id);
+        SelectControl(ControlItems[0].Control);
+        _deviceHostService.Redraw(device.Id);
+        RefreshConnectionStatus();
+        OnPropertyChanged(nameof(DeviceName));
+        OnPropertyChanged(nameof(CanvasBackground));
+        ScheduleSave();
     }
 
     // ---------------------------------------------------------------- editor helpers
@@ -1709,6 +1857,20 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 }
 
 /// <summary>A page button under the device.</summary>
+/// <summary>A device in the header's device picker.</summary>
+public sealed class DeviceChoiceViewModel(DeviceDefinition device)
+{
+    public string Id { get; } = device.Id;
+
+    public string Label { get; } = LabelOf(device);
+
+    public static string LabelOf(DeviceDefinition device) => device.IsConnected ? device.Name
+        : device.Id.StartsWith("web.", StringComparison.Ordinal) ? $"{device.Name} (off)"
+        : $"{device.Name} (offline)";
+
+    public override string ToString() => Label;
+}
+
 public sealed class PageTabViewModel(MainViewModel owner, ProfileItemViewModel page, int number, bool isCurrent)
 {
     public ProfileItemViewModel Page { get; } = page;

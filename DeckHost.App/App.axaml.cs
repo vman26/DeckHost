@@ -226,6 +226,10 @@ public partial class App : Application
         // Devices
         services.AddSingleton<MiraBoxDevicePlugin>();
         services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<MiraBoxDevicePlugin>());
+        services.AddSingleton<DeckHost.Device.Elgato.ElgatoDevicePlugin>();
+        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Elgato.ElgatoDevicePlugin>());
+        services.AddSingleton<DeckHost.Device.Web.WebDeckPlugin>();
+        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Web.WebDeckPlugin>());
 
         // Runtime
         services.AddSingleton<VariableStore>();
