@@ -24,6 +24,8 @@ public partial class ControlCustomizationViewModel : ViewModelBase
     private string _iconPath;
     private string _backgroundColor;
     private string _backgroundMode;
+    private string _idleEffect = LightEffects.Solid;
+    private double _effectPeriod = LightStyle.DefaultPeriodSeconds;
     private string _tileFrom;
     private string _tileTo;
     private double _tileCorner;
@@ -110,6 +112,8 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         _idleColor = "#" + feedback.IdleColor.TrimStart('#');
         _activeDurationText = feedback.ActiveDuration.ToString(CultureInfo.InvariantCulture);
         _pulseOnActive = feedback.PulseOnActive;
+        _idleEffect = feedback.IdleEffect ?? LightEffects.Solid;
+        _effectPeriod = feedback.EffectPeriodSeconds ?? LightStyle.DefaultPeriodSeconds;
     }
 
     /// <summary>Raised on every edit, for the live preview on the device.</summary>
@@ -560,6 +564,49 @@ public partial class ControlCustomizationViewModel : ViewModelBase
         set => SetLightField(ref _activeDurationText, value);
     }
 
+    /// <summary>The idle effects for this control's own light.</summary>
+    public IReadOnlyList<ActionSettingOption> IdleEffects { get; } =
+    [
+        new(LightEffects.Solid, "Steady color"),
+        new(LightEffects.Breathe, "Breathing"),
+        new(LightEffects.Rainbow, "Rainbow"),
+        new(LightEffects.Off, "Off"),
+    ];
+
+    public ActionSettingOption SelectedIdleEffect
+    {
+        get => IdleEffects.FirstOrDefault(option => option.Value == _idleEffect) ?? IdleEffects[0];
+        set
+        {
+            if (value is not null && value.Value != _idleEffect)
+            {
+                _idleEffect = value.Value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowEffectSpeed));
+                RaiseChanged();
+            }
+        }
+    }
+
+    public bool ShowEffectSpeed => LightEffects.IsAnimated(_idleEffect);
+
+    /// <summary>Seconds per cycle of the idle effect.</summary>
+    public double EffectPeriod
+    {
+        get => _effectPeriod;
+        set
+        {
+            var clamped = Math.Round(Math.Clamp(value, LightStyle.MinPeriodSeconds, 10), 1);
+            if (SetProperty(ref _effectPeriod, clamped))
+            {
+                OnPropertyChanged(nameof(EffectPeriodText));
+                RaiseChanged();
+            }
+        }
+    }
+
+    public string EffectPeriodText => $"{_effectPeriod:0.#} s";
+
     public bool PulseOnActive
     {
         get => _pulseOnActive;
@@ -652,7 +699,11 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             return null;
         }
 
-        return new RgbFeedback(NormalizeColor(ActiveColor), NormalizeColor(IdleColor), duration, PulseOnActive);
+        return new RgbFeedback(NormalizeColor(ActiveColor), NormalizeColor(IdleColor), duration, PulseOnActive)
+        {
+            IdleEffect = _idleEffect == LightEffects.Solid ? null : _idleEffect,
+            EffectPeriodSeconds = LightEffects.IsAnimated(_idleEffect) ? _effectPeriod : null,
+        };
     }
 
     private MultiActionStepEditorViewModel CreateStep(ActionItemViewModel action, ActionSettings settings)

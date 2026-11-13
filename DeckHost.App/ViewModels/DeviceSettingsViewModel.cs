@@ -9,14 +9,16 @@ using DeckHost.Contracts.Models;
 namespace DeckHost.App.ViewModels;
 
 /// <summary>Finds the device plugin that owns a device and offers its settings (vibration, brightness, idle screen, ...).</summary>
-public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins)
+public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins, Func<IDeviceLightSettings>? lights = null)
 {
     private readonly IReadOnlyList<IDevicePlugin> _plugins = plugins.ToList();
 
     public bool HasSettings(string deviceId) => FindPlugin(deviceId) is not null;
 
     public DeviceSettingsViewModel? Create(DeviceDefinition device) =>
-        FindPlugin(device.Id) is { } plugin ? new DeviceSettingsViewModel(plugin, device) : null;
+        FindPlugin(device.Id) is { } plugin
+            ? new DeviceSettingsViewModel(plugin, device, device.Controls.Any(static control => control.HasLight) && lights is not null ? new KnobLightsViewModel(lights(), device.Id) : null)
+            : null;
 
     private IConfigurableDevicePlugin? FindPlugin(string deviceId) =>
         _plugins.FirstOrDefault(plugin => plugin is IConfigurableDevicePlugin
@@ -32,12 +34,18 @@ public sealed partial class DeviceSettingsViewModel : ViewModelBase
     private bool _statusIsError;
     private bool _isSaving;
 
-    public DeviceSettingsViewModel(IConfigurableDevicePlugin plugin, DeviceDefinition device)
+    public DeviceSettingsViewModel(IConfigurableDevicePlugin plugin, DeviceDefinition device, KnobLightsViewModel? lights = null)
     {
         _plugin = plugin;
         _device = device;
         Editor = new SettingsEditorViewModel(plugin.GetDeviceSettingDefinitions(device.Id), plugin.GetDeviceSettings(device.Id));
+        Lights = lights;
     }
+
+    /// <summary>The default light of the device's LEDs (DeckHost draws it, effects included); null without LEDs.</summary>
+    public KnobLightsViewModel? Lights { get; }
+
+    public bool HasLights => Lights is not null;
 
     public string DeviceName => _device.Name;
 
@@ -113,5 +121,110 @@ public sealed partial class DeviceSettingsViewModel : ViewModelBase
         {
             IsSaving = false;
         }
+    }
+}
+
+
+/// <summary>Where the default lights of devices are kept (the main view model: they're saved with the profiles).</summary>
+public interface IDeviceLightSettings
+{
+    LightStyle? GetDeviceLight(string deviceId);
+
+    void SetDeviceLight(string deviceId, LightStyle? style);
+}
+
+/// <summary>
+/// The Knob lights card: the color and effect every LED of the device shows while idle, in all
+/// profiles, unless a control has a light of its own (Customize → Light). Applies right away.
+/// </summary>
+public sealed partial class KnobLightsViewModel : ViewModelBase
+{
+    public const string Off = "default-off";
+
+    private readonly IDeviceLightSettings _settings;
+    private readonly string _deviceId;
+    private string _effect;
+    private string _color;
+    private double _periodSeconds;
+
+    public KnobLightsViewModel(IDeviceLightSettings settings, string deviceId)
+    {
+        _settings = settings;
+        _deviceId = deviceId;
+        var style = settings.GetDeviceLight(deviceId);
+        _effect = style?.Effect is { } effect && effect != LightEffects.Off ? effect : Off;
+        _color = "#" + (style?.Color ?? "0000FF").TrimStart('#');
+        _periodSeconds = style?.PeriodSeconds ?? LightStyle.DefaultPeriodSeconds;
+    }
+
+    /// <summary>The idle effects a light can have, for the light editors.</summary>
+    public static IReadOnlyList<ActionSettingOption> EffectOptions { get; } =
+    [
+        new(Off, "Off"),
+        new(LightEffects.Solid, "Steady color"),
+        new(LightEffects.Breathe, "Breathing"),
+        new(LightEffects.Rainbow, "Rainbow"),
+    ];
+
+    public IReadOnlyList<ActionSettingOption> Effects => EffectOptions;
+
+    public ActionSettingOption SelectedEffect
+    {
+        get => EffectOptions.First(option => option.Value == _effect);
+        set
+        {
+            if (value is not null && value.Value != _effect)
+            {
+                _effect = value.Value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowColor));
+                OnPropertyChanged(nameof(ShowSpeed));
+                Apply();
+            }
+        }
+    }
+
+    public bool ShowColor => _effect is LightEffects.Solid or LightEffects.Breathe;
+
+    public bool ShowSpeed => LightEffects.IsAnimated(_effect);
+
+    public string Color
+    {
+        get => _color;
+        set
+        {
+            if (SetProperty(ref _color, value ?? string.Empty))
+            {
+                Apply();
+            }
+        }
+    }
+
+    /// <summary>Seconds per cycle of the effect.</summary>
+    public double PeriodSeconds
+    {
+        get => _periodSeconds;
+        set
+        {
+            var clamped = Math.Round(Math.Clamp(value, LightStyle.MinPeriodSeconds, 10), 1);
+            if (SetProperty(ref _periodSeconds, clamped))
+            {
+                OnPropertyChanged(nameof(PeriodText));
+                Apply();
+            }
+        }
+    }
+
+    public string PeriodText => $"{_periodSeconds:0.#} s";
+
+    private void Apply()
+    {
+        var hex = _color.Trim().TrimStart('#');
+        if (_effect != Off && !System.Text.RegularExpressions.Regex.IsMatch(hex, "^[0-9A-Fa-f]{6}$"))
+        {
+            return;
+        }
+
+        _settings.SetDeviceLight(_deviceId, _effect == Off ? null : new LightStyle(hex.ToUpperInvariant(), _effect, _periodSeconds));
     }
 }

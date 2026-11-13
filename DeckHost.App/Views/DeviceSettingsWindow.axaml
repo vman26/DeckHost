@@ -99,6 +99,26 @@
 				<Border Classes="card">
 					<ContentControl Content="{Binding Editor}" />
 				</Border>
+				<!-- DeckHost's own default for the LEDs (applies right away, saved with the profiles). -->
+				<Border Classes="card" IsVisible="{Binding HasLights}">
+					<StackPanel Spacing="10" DataContext="{Binding Lights}" x:DataType="vm:KnobLightsViewModel">
+						<TextBlock Text="Knob lights" FontWeight="SemiBold" FontSize="15" Foreground="#F1F5F9" />
+						<TextBlock Classes="hint" Text="What the LEDs show while idle, in every profile. A knob can have a light of its own in Customize → Light. Changes show right away." />
+						<TextBlock Classes="label" Text="Effect" />
+						<ComboBox ItemsSource="{Binding Effects}" SelectedItem="{Binding SelectedEffect, Mode=TwoWay}" DisplayMemberBinding="{Binding Label}" HorizontalAlignment="Stretch" />
+						<StackPanel Spacing="4" IsVisible="{Binding ShowColor}">
+							<TextBlock Classes="label" Text="Color" />
+							<local:ColorField Hex="{Binding Color, Mode=TwoWay}" DefaultHex="#0000FF" />
+						</StackPanel>
+						<StackPanel Spacing="4" IsVisible="{Binding ShowSpeed}">
+							<TextBlock Classes="label" Text="One cycle takes" />
+							<Grid ColumnDefinitions="*,56" ColumnSpacing="8">
+								<Slider Minimum="0.5" Maximum="10" SmallChange="0.5" LargeChange="1" Value="{Binding PeriodSeconds, Mode=TwoWay}" VerticalAlignment="Center" />
+								<TextBlock Grid.Column="1" Text="{Binding PeriodText}" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="#E2E8F0" />
+							</Grid>
+						</StackPanel>
+					</StackPanel>
+				</Border>
 				<TextBlock Classes="hint"
 						   Text="&quot;Device default&quot; leaves a setting as the device has it. The idle screen is what the device shows when DeckHost isn't running; choose Black to remove an old image that is stuck on the display." />
 			</StackPanel>

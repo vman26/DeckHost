@@ -12,7 +12,8 @@ public sealed record ProfileDocument(
     string? SelectedProfileId,
     IReadOnlyList<DeviceProfile> Profiles,
     bool AutoSwitchEnabled = true,
-    ProfileBackground? DefaultBackground = null)
+    ProfileBackground? DefaultBackground = null,
+    IReadOnlyDictionary<string, LightStyle>? DeviceLights = null)
 {
     public const int CurrentVersion = 1;
 }
