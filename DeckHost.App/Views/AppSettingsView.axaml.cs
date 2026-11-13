@@ -10,4 +10,16 @@ public partial class AppSettingsView : UserControl
         InitializeComponent();
     }
 
+    private void OpenSupport_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this) is MainWindow main)
+        {
+            main.OpenSupport();
+        }
+        else
+        {
+            Pages.Open(this, "Help and support", new SupportView { DataContext = new ViewModels.SupportViewModel() });
+        }
+    }
+
 }

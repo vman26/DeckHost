@@ -15,6 +15,9 @@ namespace DeckHost.App.Platform;
 /// <param name="IncludePrereleases">Offer pre-releases too; by default only to someone running one.</param>
 /// <param name="SkippedVersion">A release the user chose to skip: not announced again (a newer one is).</param>
 /// <param name="ShowDebugPanel">Show the debug panel next to the editor (control capabilities, runtime connection and log).</param>
+/// <param name="CrashesSeenUntil">Crash reports up to this time were shown to the user (newer ones are offered on start).</param>
+/// <param name="OfferCrashReports">After a crash, offer to report it on the next start (nothing is ever sent without asking).</param>
+/// <param name="WelcomeShown">The welcome tour was shown (it opens by itself on the first start only).</param>
 public sealed record AppSettingsData(
     bool StartMinimized = true,
     bool? CloseToTray = null,
@@ -22,7 +25,10 @@ public sealed record AppSettingsData(
     bool? IncludePrereleases = null,
     string? SkippedVersion = null,
     DateTimeOffset? LastUpdateCheck = null,
-    bool ShowDebugPanel = false)
+    bool ShowDebugPanel = false,
+    DateTimeOffset? CrashesSeenUntil = null,
+    bool OfferCrashReports = true,
+    bool WelcomeShown = false)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
 }

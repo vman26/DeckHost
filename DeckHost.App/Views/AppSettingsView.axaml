@@ -63,6 +63,14 @@
 			</StackPanel>
 		</Border>
 
+		<Border Classes="card">
+			<StackPanel Spacing="8">
+				<TextBlock Text="Help" FontWeight="SemiBold" Foreground="#E2E8F0" />
+				<TextBlock Classes="hint" Margin="0" Text="The documentation, reporting a problem, a support bundle for a bug report, and crash reports. Also in the ☰ menu." />
+				<Button Content="Help and support" Click="OpenSupport_OnClick" HorizontalAlignment="Left" />
+			</StackPanel>
+		</Border>
+
 		<!-- Support: a link and the QR code for phones. -->
 		<Border Classes="card">
 			<Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">

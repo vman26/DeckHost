@@ -122,6 +122,17 @@ public partial class App : Application
                 desktop.MainWindow = mainWindow;
             }
 
+            // After a crash: Help and support; on the very first start: the welcome tour.
+            var startPagesShown = false;
+            mainWindow.Opened += (_, _) =>
+            {
+                if (!startPagesShown)
+                {
+                    startPagesShown = true;
+                    mainWindow.ShowStartPages();
+                }
+            };
+
             logger.LogInformation("DeckHost {Version} started on {OS}.", AppInfo.Version, System.Runtime.InteropServices.RuntimeInformation.OSDescription);
             _ = deviceHostService.StartAsync(CancellationToken.None);
 

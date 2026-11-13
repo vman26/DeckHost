@@ -1988,6 +1988,60 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     }
 
     /// <summary>The action list's entry for an action (its name and icon), or null.</summary>
+    /// <summary>The actions the welcome tour's starter layout puts on empty keys, in reading order.</summary>
+    internal static readonly string[] StarterKeyActions =
+    [
+        "deckhost.plugin.media:media.playpause",
+        "deckhost.plugin.media:media.previous",
+        "deckhost.plugin.media:media.next",
+        "deckhost.plugin.media:media.mute",
+        "deckhost.plugin.media:media.volumedown",
+        "deckhost.plugin.media:media.volumeup",
+        "deckhost.plugin.builtin:builtin.clock",
+        "deckhost.plugin.system:system.info",
+        "deckhost.plugin.system:system.lock",
+        "deckhost.plugin.builtin:builtin.switch-profile",
+    ];
+
+    /// <summary>
+    /// Fills the edited layout's empty controls with everyday actions (media keys, clock, system info,
+    /// lock; the first knob sets the volume, a swipe skips tracks). Returns how many it filled.
+    /// </summary>
+    public int ApplyStarterLayout()
+    {
+        if (SelectedProfile is null)
+        {
+            return 0;
+        }
+
+        var filled = 0;
+        var keyActions = new Queue<string>(StarterKeyActions);
+        foreach (var item in ControlItems.ToList())
+        {
+            if (SelectedProfile.GetBinding(item.Id) is not null)
+            {
+                continue;
+            }
+
+            var key = item.Control.Type switch
+            {
+                Contracts.Models.ControlType.Key when keyActions.Count > 0 => keyActions.Dequeue(),
+                Contracts.Models.ControlType.Encoder when !ControlItems.Any(other => other.Control.Type == Contracts.Models.ControlType.Encoder && other.Id.CompareTo(item.Id) < 0) => "deckhost.plugin.media:media.volume-knob",
+                _ when item.Id == "touch.swipe" => "deckhost.plugin.media:media.track-swipe",
+                _ => null,
+            };
+            if (key is not null && _actionsByKey.TryGetValue(key, out var action) && action.FitsControl(item.Control))
+            {
+                AssignActionToControl(item.Control, action.Action);
+                filled++;
+            }
+        }
+
+        SelectControl(ControlItems[0].Control);
+        StatusMessage = filled == 0 ? "Every control already had an action." : $"Put {filled} everyday actions on the empty controls. Drag others from the list on the right.";
+        return filled;
+    }
+
     public ActionItemViewModel? FindActionItem(IDeckAction action) => TryGetActionItem(action, out var item) ? item : null;
 
     private bool TryGetActionItem(IDeckAction action, out ActionItemViewModel actionItem)
