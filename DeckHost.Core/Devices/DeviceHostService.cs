@@ -50,6 +50,9 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private readonly Dictionary<string, (byte Red, byte Green, byte Blue)> _lastBackdrops = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(int Width, int Height), SurfaceRenderer> _renderers = [];
     private readonly Dictionary<(string DeviceId, string ControlId), int> _lightVersions = [];
+    private readonly Dictionary<(string DeviceId, string ControlId), (byte R, byte G, byte B)> _lightsShown = [];
+    private readonly Dictionary<(string DeviceId, string ControlId), long> _lightHeldUntil = [];
+    private readonly Dictionary<string, LightStyle> _deviceLights = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<TaskCompletionSource> _idleWaiters = [];
     private readonly SkiaDrawingResources _drawingResources = new();
     private bool _pluginsInitialized;
@@ -74,6 +77,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     public event Action? DevicesChanged;
     public event Action<string, string>? ActiveProfileChanged;
     public event Action<ControlFrame>? ControlFrameRendered;
+
+    public event Action<LightState>? LightChanged;
     public event Action<DeviceInputEvent>? InputReceived;
 
     public DeviceHostService(
@@ -147,6 +152,20 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         ArgumentNullException.ThrowIfNull(inputEvent);
         Enqueue(() => HandleInput(inputEvent));
     }
+
+    public void SetDeviceLight(string deviceId, LightStyle? style) => Enqueue(() =>
+    {
+        if (style is null)
+        {
+            _deviceLights.Remove(deviceId);
+        }
+        else
+        {
+            _deviceLights[deviceId] = style;
+        }
+
+        ApplyIdleLights(deviceId);
+    });
 
     public void SimulateInput(DeviceInputEvent inputEvent) => ReportInput(inputEvent);
 
@@ -597,6 +616,11 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private void ForgetFrames(string deviceId)
     {
         _lastBackdrops.Remove(deviceId);
+        foreach (var key in _lightsShown.Keys.Where(key => string.Equals(key.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            _lightsShown.Remove(key);
+        }
+
         ForgetControlFrames(deviceId);
     }
 
@@ -874,7 +898,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         var binding = profile.Bindings.FirstOrDefault(candidate =>
             string.Equals(candidate.ControlId, controlId, StringComparison.OrdinalIgnoreCase));
         var feedback = binding?.Appearance.RgbFeedback;
-        if (feedback is null || !TryGetLightControl(profile.DeviceId, controlId, out var entry))
+        if (feedback is null || !TryGetLightControl(profile.DeviceId, controlId, out _))
         {
             return;
         }
@@ -883,56 +907,113 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         var version = _lightVersions.GetValueOrDefault(key) + 1;
         _lightVersions[key] = version;
 
-        SetLight(entry, profile.DeviceId, controlId, feedback.GetActiveRgb());
+        // The active color holds the light: an idle effect waits until it's over.
+        _lightHeldUntil[key] = feedback.ActiveDuration <= 0 ? long.MaxValue : _clock.ElapsedMilliseconds + feedback.ActiveDuration;
+        ShowLights(profile.DeviceId, [(controlId, feedback.GetActiveRgb())]);
 
         if (feedback.ActiveDuration <= 0)
         {
             return;
         }
 
-        // Pulse: blink active/idle a few times within the active duration, then settle on idle.
+        // Pulse: blink active/idle a few times within the active duration, then back to the idle light.
         var steps = feedback.PulseOnActive ? 4 : 1;
         var stepDuration = Math.Max(30, feedback.ActiveDuration / steps);
         for (var step = 1; step <= steps; step++)
         {
-            var color = step == steps || step % 2 == 1 ? feedback.GetIdleRgb() : feedback.GetActiveRgb();
+            var last = step == steps;
+            var blinkOff = !last && step % 2 == 1;
             _ = Task.Delay(stepDuration * step).ContinueWith(
                 _ => Enqueue(() =>
                 {
                     // A newer press restarted the feedback: let that one finish instead.
-                    if (_lightVersions.GetValueOrDefault(key) == version && TryGetLightControl(key.DeviceId, key.controlId, out var current))
+                    if (_lightVersions.GetValueOrDefault(key) != version || !TryGetLightControl(key.DeviceId, key.controlId, out var unused))
                     {
-                        SetLight(current, key.DeviceId, key.controlId, color);
+                        return;
                     }
+
+                    if (last)
+                    {
+                        _lightHeldUntil.Remove(key);
+                    }
+
+                    var color = last || blinkOff ? IdleLightColor(key.DeviceId, key.controlId) : feedback.GetActiveRgb();
+                    ShowLights(key.DeviceId, [(key.controlId, color)]);
                 }),
                 TaskScheduler.Default);
         }
     }
 
+    /// <summary>
+    /// Every LED of the device back to its idle light: the binding's own (Customize → Light), else
+    /// the device's default (<see cref="SetDeviceLight"/>), else dark. Also while the device is
+    /// unplugged, so the editor shows the lights.
+    /// </summary>
     private void ApplyIdleLights(string deviceId)
     {
-        if (!_pluginsInitialized || !_devicesById.TryGetValue(deviceId, out var entry) || !entry.Device.IsConnected)
+        if (!_pluginsInitialized || !_devicesById.TryGetValue(deviceId, out var entry))
         {
             return;
         }
 
-        var profile = GetActiveProfile(deviceId);
+        var lights = new List<(string, (byte, byte, byte))>();
         foreach (var control in entry.Device.Controls.Where(static control => control.HasLight))
         {
             var key = (deviceId, control.Id);
             _lightVersions[key] = _lightVersions.GetValueOrDefault(key) + 1;
-
-            var feedback = profile?.Bindings.FirstOrDefault(candidate =>
-                string.Equals(candidate.ControlId, control.Id, StringComparison.OrdinalIgnoreCase))?.Appearance.RgbFeedback;
-            SetLight(entry, deviceId, control.Id, feedback?.GetIdleRgb() ?? ((byte)0, (byte)0, (byte)0));
+            _lightHeldUntil.Remove(key);
+            lights.Add((control.Id, IdleLightColor(deviceId, control.Id)));
         }
+
+        ShowLights(deviceId, lights);
+    }
+
+    /// <summary>Moves animated idle lights (breathing, rainbow) on; called on the animation tick.</summary>
+    private void AnimateLights()
+    {
+        var now = _clock.ElapsedMilliseconds;
+        foreach (var (deviceId, entry) in _devicesById)
+        {
+            List<(string, (byte, byte, byte))>? lights = null;
+            foreach (var control in entry.Device.Controls)
+            {
+                if (!control.HasLight || !LightEffects.IsAnimated(IdleLightStyle(deviceId, control.Id)?.Effect) ||
+                    _lightHeldUntil.GetValueOrDefault((deviceId, control.Id)) > now)
+                {
+                    continue;
+                }
+
+                (lights ??= []).Add((control.Id, IdleLightColor(deviceId, control.Id)));
+            }
+
+            if (lights is not null)
+            {
+                ShowLights(deviceId, lights);
+            }
+        }
+    }
+
+    private LightStyle? IdleLightStyle(string deviceId, string controlId) =>
+        GetActiveProfile(deviceId)?.Bindings.FirstOrDefault(candidate =>
+            string.Equals(candidate.ControlId, controlId, StringComparison.OrdinalIgnoreCase))?.Appearance.RgbFeedback?.IdleStyle
+        ?? _deviceLights.GetValueOrDefault(deviceId);
+
+    private (byte R, byte G, byte B) IdleLightColor(string deviceId, string controlId)
+    {
+        if (IdleLightStyle(deviceId, controlId) is not { } style || !_devicesById.TryGetValue(deviceId, out var entry))
+        {
+            return (0, 0, 0);
+        }
+
+        // Each LED a little further along a rainbow, in the order of the device's lights.
+        var phase = entry.Device.Controls.Where(static control => control.HasLight).TakeWhile(control => !string.Equals(control.Id, controlId, StringComparison.OrdinalIgnoreCase)).Count();
+        return LightEffectMath.ColorAt(style, _clock.Elapsed, phase);
     }
 
     private bool TryGetLightControl(string deviceId, string controlId, out DeviceEntry entry)
     {
         if (_pluginsInitialized &&
             _devicesById.TryGetValue(deviceId, out entry!) &&
-            entry.Device.IsConnected &&
             entry.Device.FindControl(controlId)?.HasLight == true)
         {
             return true;
@@ -942,11 +1023,56 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         return false;
     }
 
-    private void SetLight(DeviceEntry entry, string deviceId, string controlId, (byte R, byte G, byte B) color)
+    /// <summary>
+    /// Shows LED colors: tells the editor (<see cref="LightChanged"/>) and, when the device is
+    /// connected, sends the ones that changed, in one go where the device can (<see cref="IDeviceLightBatchOutput"/>).
+    /// </summary>
+    private void ShowLights(string deviceId, IReadOnlyList<(string ControlId, (byte R, byte G, byte B) Color)> lights)
     {
-        if (!entry.Plugin.Output.TrySetLight(deviceId, controlId, color.R, color.G, color.B, out var error))
+        if (!_devicesById.TryGetValue(deviceId, out var entry))
         {
-            Log("Warning", $"Could not set the light of '{deviceId}/{controlId}': {error}");
+            return;
+        }
+
+        var changed = new List<LightColor>();
+        foreach (var (controlId, color) in lights)
+        {
+            var key = (deviceId, controlId);
+            if (_lightsShown.TryGetValue(key, out var shown) && shown == color)
+            {
+                continue;
+            }
+
+            _lightsShown[key] = color;
+            changed.Add(new LightColor(controlId, color.R, color.G, color.B));
+            if (LightChanged is { } handler)
+            {
+                var state = new LightState(deviceId, controlId, color.R, color.G, color.B);
+                SafeInvoke(() => handler(state));
+            }
+        }
+
+        if (changed.Count == 0 || !entry.Device.IsConnected)
+        {
+            return;
+        }
+
+        if (entry.Plugin.Output is IDeviceLightBatchOutput batch && changed.Count > 1)
+        {
+            if (!batch.TrySetLights(deviceId, changed, out var batchError))
+            {
+                Log("Warning", $"Could not set the lights of '{deviceId}': {batchError}");
+            }
+
+            return;
+        }
+
+        foreach (var light in changed)
+        {
+            if (!entry.Plugin.Output.TrySetLight(deviceId, light.ControlId, light.Red, light.Green, light.Blue, out var error))
+            {
+                Log("Warning", $"Could not set the light of '{deviceId}/{light.ControlId}': {error}");
+            }
         }
     }
 
@@ -1024,6 +1150,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
                 Enqueue(MarkDueLiveControlsDirty);
+                Enqueue(AnimateLights);
             }
         }
         catch (OperationCanceledException)
