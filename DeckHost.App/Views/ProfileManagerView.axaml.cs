@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -6,17 +7,17 @@ using System;
 
 namespace DeckHost.App.Views;
 
-public partial class ProfileManagerWindow : Window
+public partial class ProfileManagerView : UserControl
 {
-    public ProfileManagerWindow()
+    public ProfileManagerView()
     {
         InitializeComponent();
     }
 
-    protected override void OnClosed(EventArgs e)
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         (DataContext as ProfileManagerViewModel)?.Detach();
-        base.OnClosed(e);
+        base.OnDetachedFromVisualTree(e);
     }
 
     private async void BrowseBackground_OnClick(object? sender, RoutedEventArgs e)
@@ -26,7 +27,7 @@ public partial class ProfileManagerWindow : Window
             return;
         }
 
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Select a profile background",
             AllowMultiple = false,
@@ -46,7 +47,7 @@ public partial class ProfileManagerWindow : Window
             return;
         }
 
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "Select the default background for all profiles",
             AllowMultiple = false,

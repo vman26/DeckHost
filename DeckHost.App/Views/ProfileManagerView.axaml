@@ -1,19 +1,12 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl
+		xmlns="https://github.com/avaloniaui"
 		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		xmlns:vm="using:DeckHost.App.ViewModels"
 		xmlns:local="using:DeckHost.App.Views"
-		x:Class="DeckHost.App.Views.ProfileManagerWindow"
-		x:DataType="vm:ProfileManagerViewModel"
-		Width="900"
-		Height="680"
-		MinWidth="720"
-		MinHeight="480"
-		Background="#111827"
-		RequestedThemeVariant="Dark"
-		Icon="/Assets/avalonia-logo.ico"
-		Title="Profile Manager">
+		x:Class="DeckHost.App.Views.ProfileManagerView"
+		x:DataType="vm:ProfileManagerViewModel">
 
-	<Window.Styles>
+	<UserControl.Styles>
 		<Style Selector="TextBlock.section">
 			<Setter Property="FontSize" Value="13" />
 			<Setter Property="FontWeight" Value="SemiBold" />
@@ -31,7 +24,7 @@
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="14" />
 		</Style>
-	</Window.Styles>
+	</UserControl.Styles>
 
 	<Grid RowDefinitions="Auto,*">
 		<Border Padding="20,16" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
@@ -150,7 +143,7 @@
 														Padding="6,0"
 														Background="Transparent"
 														ToolTip.Tip="Remove"
-														Command="{Binding $parent[Window].((vm:ProfileManagerViewModel)DataContext).RemoveAppCommand}"
+														Command="{Binding $parent[UserControl].((vm:ProfileManagerViewModel)DataContext).RemoveAppCommand}"
 														CommandParameter="{Binding}" />
 											</StackPanel>
 										</Border>
@@ -177,4 +170,4 @@
 			</ScrollViewer>
 		</Grid>
 	</Grid>
-</Window>
+</UserControl>

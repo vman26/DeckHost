@@ -141,6 +141,8 @@ internal sealed class ClockAction() : DeckActionBase(
     OutputCapabilities.Text,
     "Shows the current time and date.")
 {
+    protected override string? PaletteIcon => Icons.Clock;
+
     private const string FormatKey = "format";
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
@@ -181,6 +183,8 @@ internal sealed class CounterAction() : DeckActionBase(
     OutputCapabilities.Text,
     "Counts presses (or knob steps). Long-press a key to reset it to zero.")
 {
+    protected override string? PaletteIcon => Icons.Counter;
+
     private const string StepKey = "step";
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
@@ -221,6 +225,8 @@ internal sealed class KeyIdDiagnosticAction() : DeckActionBase(
     OutputCapabilities.Text,
     "Shows which control and SDK id this is, to check the key layout.")
 {
+    protected override string? PaletteIcon => Icons.Chip;
+
     public override bool CanBeMultiActionStep => false;
 
     public override void Render(IRenderContext context)

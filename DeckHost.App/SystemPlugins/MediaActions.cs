@@ -130,6 +130,8 @@ internal sealed class TrackSwipeAction() : DeckActionBase(
     OutputCapabilities.None,
     "Swipe left for the previous track, right for the next.")
 {
+    protected override string? PaletteIcon => Icons.Swipe;
+
     public override bool CanBeMultiActionStep => false;
 
     protected override void Run(ActionContext context) =>

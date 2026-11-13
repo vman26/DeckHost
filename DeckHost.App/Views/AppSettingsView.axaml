@@ -1,18 +1,11 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl
+		xmlns="https://github.com/avaloniaui"
 		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		xmlns:vm="using:DeckHost.App.ViewModels"
-		x:Class="DeckHost.App.Views.AppSettingsWindow"
-		x:DataType="vm:AppSettingsViewModel"
-		Width="520"
-		SizeToContent="Height"
-		CanResize="False"
-		Background="#111827"
-		RequestedThemeVariant="Dark"
-		Icon="/Assets/avalonia-logo.ico"
-		WindowStartupLocation="CenterOwner"
-		Title="DeckHost Settings">
+		x:Class="DeckHost.App.Views.AppSettingsView"
+		x:DataType="vm:AppSettingsViewModel">
 
-	<Window.Styles>
+	<UserControl.Styles>
 		<Style Selector="TextBlock.hint">
 			<Setter Property="FontSize" Value="12" />
 			<Setter Property="Foreground" Value="#94A3B8" />
@@ -26,10 +19,10 @@
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="14" />
 		</Style>
-	</Window.Styles>
+	</UserControl.Styles>
 
+	<ScrollViewer HorizontalScrollBarVisibility="Disabled">
 	<StackPanel Margin="20" Spacing="14">
-		<TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold" Foreground="#F8FAFC" />
 
 		<Border Classes="card">
 			<StackPanel Spacing="10">
@@ -64,6 +57,13 @@
 		</Border>
 
 		<Border Classes="card">
+			<StackPanel Spacing="10">
+				<CheckBox Content="Show the debug panel" IsChecked="{Binding ShowDebugPanel}" />
+				<TextBlock Classes="hint" Text="Next to the editor: the selected control's inputs and outputs, the runtime connection and the runtime log." />
+			</StackPanel>
+		</Border>
+
+		<Border Classes="card">
 			<StackPanel Spacing="8">
 				<SelectableTextBlock Text="{Binding VersionText}" Foreground="#94A3B8" FontSize="12" TextWrapping="Wrap" />
 				<TextBlock Text="Data" FontWeight="SemiBold" Foreground="#E2E8F0" />
@@ -75,9 +75,7 @@
 			</StackPanel>
 		</Border>
 
-		<Grid ColumnDefinitions="*,Auto">
-			<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" Foreground="#93C5FD" VerticalAlignment="Center" TextWrapping="Wrap" />
-			<Button Grid.Column="1" Content="Close" Click="Close_OnClick" />
-		</Grid>
+		<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" Foreground="#93C5FD" TextWrapping="Wrap" />
 	</StackPanel>
-</Window>
+	</ScrollViewer>
+</UserControl>

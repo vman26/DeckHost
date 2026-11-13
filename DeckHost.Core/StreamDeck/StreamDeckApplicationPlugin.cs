@@ -30,6 +30,9 @@ public sealed class StreamDeckApplicationPlugin : IApplicationPlugin
 
 internal sealed class StreamDeckAction(StreamDeckRuntime runtime, StreamDeckManifest manifest, StreamDeckActionManifest action) : IDeckAction
 {
+    /// <summary>The action's icon from its manifest (Icon, without extension, @2x preferred).</summary>
+    public string? ListIcon => manifest.ResolveImage(action.Icon);
+
     public string Id => action.Uuid;
 
     public string Name => action.Name;

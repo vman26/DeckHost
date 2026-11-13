@@ -1,19 +1,12 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl
+		xmlns="https://github.com/avaloniaui"
 		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 		xmlns:vm="using:DeckHost.App.ViewModels"
 		xmlns:local="using:DeckHost.App.Views"
-		x:Class="DeckHost.App.Views.ControlCustomizationWindow"
-		x:DataType="vm:ControlCustomizationViewModel"
-		Width="560"
-		Height="720"
-		MinWidth="460"
-		MinHeight="420"
-		Background="#111827"
-		RequestedThemeVariant="Dark"
-		Icon="/Assets/avalonia-logo.ico"
-		Title="Customize Control">
+		x:Class="DeckHost.App.Views.ControlCustomizationView"
+		x:DataType="vm:ControlCustomizationViewModel">
 
-	<Window.Styles>
+	<UserControl.Styles>
 		<Style Selector="TextBlock.section">
 			<Setter Property="FontSize" Value="13" />
 			<Setter Property="FontWeight" Value="SemiBold" />
@@ -40,9 +33,9 @@
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="14" />
 		</Style>
-	</Window.Styles>
+	</UserControl.Styles>
 
-	<Window.DataTemplates>
+	<UserControl.DataTemplates>
 		<!-- One editor per setting kind; the fields come from the action's setting definitions. -->
 		<DataTemplate DataType="vm:TextSettingField">
 			<StackPanel Spacing="4">
@@ -134,32 +127,25 @@
 				</ItemsControl.ItemTemplate>
 			</ItemsControl>
 		</DataTemplate>
-	</Window.DataTemplates>
+	</UserControl.DataTemplates>
 
-	<Grid RowDefinitions="Auto,*,Auto">
-		<Border Padding="20,16" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
-			<StackPanel Spacing="2">
-				<TextBlock Text="{Binding DisplayName}" FontSize="22" FontWeight="SemiBold" Foreground="#F8FAFC" />
-				<TextBlock Text="{Binding ControlType}" Foreground="#94A3B8" />
-				<TextBlock Text="Changes show on the device right away. Cancel puts everything back." Classes="hint" Margin="0,6,0,0" />
+	<Grid RowDefinitions="Auto,*">
+		<!-- Which control is being edited; edits apply right away. -->
+		<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Margin="20,14,20,6">
+			<StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+				<TextBlock Text="{Binding DisplayName}" FontSize="18" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" />
+				<TextBlock Text="{Binding ControlType}" Foreground="#64748B" VerticalAlignment="Center" />
 			</StackPanel>
-		</Border>
+			<TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center" Text="Changes show on the device right away." />
+			<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+				<Button Content="Revert" ToolTip.Tip="Put back how this control was when you selected it" Command="{Binding RevertCommand}" />
+				<Button Content="Remove" ToolTip.Tip="Remove the action from this control" Command="{Binding RemoveCommand}" IsVisible="{Binding HasAssignment}" />
+			</StackPanel>
+		</Grid>
 
-		<Grid Grid.Row="1" ColumnDefinitions="*,Auto">
-		<!-- The plugin's own settings page (Stream Deck property inspector), shown in the built-in browser. -->
-		<Border Grid.Column="1" Width="560" IsVisible="{Binding ShowSettingsPage}" Background="#2D2D2D" BorderBrush="#1E293B" BorderThickness="1,0,0,0">
-			<Grid RowDefinitions="Auto,*">
-				<DockPanel Margin="12,8">
-					<Button DockPanel.Dock="Right" Content="Open in browser" Padding="10,2" FontSize="12" Command="{Binding OpenSettingsPageInBrowserCommand}" />
-					<TextBlock Text="Plugin settings" FontWeight="SemiBold" Foreground="#E2E8F0" VerticalAlignment="Center" />
-				</DockPanel>
-				<local:WebView2Host Grid.Row="1" Name="SettingsBrowser" Source="{Binding SettingsPageUri}" />
-				<TextBlock Grid.Row="1" Name="SettingsBrowserError" IsVisible="False" Margin="12" Foreground="#FCA5A5" TextWrapping="Wrap" />
-			</Grid>
-		</Border>
-		<ScrollViewer HorizontalScrollBarVisibility="Disabled">
-			<StackPanel Margin="20" Spacing="14">
-
+		<!-- Two columns side by side when there is room (code-behind switches to one). -->
+		<Grid Grid.Row="1" Name="Columns" ColumnDefinitions="*,*" ColumnSpacing="14" Margin="20,8,20,20">
+			<StackPanel Name="PrimaryColumn" Spacing="14">
 				<!-- Action and its settings -->
 				<Border Classes="card" IsVisible="{Binding HasAction}">
 					<StackPanel Spacing="12">
@@ -175,44 +161,51 @@
 					</StackPanel>
 				</Border>
 
-				<!-- Multi Action steps -->
+				<!-- Multi Action steps: drop actions from the list to add them at a place, drag ⠿ to reorder. -->
 				<Border Classes="card" IsVisible="{Binding IsMultiAction}">
-					<StackPanel Spacing="12">
+					<StackPanel Spacing="10">
 						<TextBlock Classes="section" Text="STEPS (RUN IN THIS ORDER)" />
-						<TextBlock Classes="hint" IsVisible="{Binding HasNoSteps}"
-								   Text="No steps yet. Pick an action below and choose Add step." />
-						<ItemsControl ItemsSource="{Binding Steps}">
-							<ItemsControl.ItemsPanel>
-								<ItemsPanelTemplate>
-									<StackPanel Spacing="8" />
-								</ItemsPanelTemplate>
-							</ItemsControl.ItemsPanel>
-							<ItemsControl.ItemTemplate>
-								<DataTemplate x:DataType="vm:MultiActionStepEditorViewModel">
-									<Border Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="12">
-										<StackPanel Spacing="10">
-											<Grid ColumnDefinitions="*,Auto">
-												<StackPanel Spacing="2">
-													<TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F8FAFC" />
-													<TextBlock Text="{Binding PluginName}" Classes="hint" />
-												</StackPanel>
-												<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
-													<Button Content="↑" ToolTip.Tip="Move up" Command="{Binding MoveUpCommand}" IsEnabled="{Binding CanMoveUp}" />
-													<Button Content="↓" ToolTip.Tip="Move down" Command="{Binding MoveDownCommand}" IsEnabled="{Binding CanMoveDown}" />
-													<Button Content="Remove" Command="{Binding RemoveCommand}" />
-												</StackPanel>
-											</Grid>
-											<ContentControl Content="{Binding Settings}" IsVisible="{Binding HasSettings}" />
-										</StackPanel>
-									</Border>
-								</DataTemplate>
-							</ItemsControl.ItemTemplate>
-						</ItemsControl>
+						<TextBlock Classes="hint" Text="Drag actions from the list onto the steps to add them where you drop them; drag ⠿ to change the order." />
+						<Border Name="StepsDropZone" Background="#0B1120" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="8" MinHeight="64"
+								DragDrop.AllowDrop="True">
+							<StackPanel Spacing="0">
+								<TextBlock Classes="hint" IsVisible="{Binding HasNoSteps}" Margin="8,14" HorizontalAlignment="Center"
+										   Text="No steps yet: drop an action here." />
+								<ItemsControl Name="StepsList" ItemsSource="{Binding Steps}">
+									<ItemsControl.ItemTemplate>
+										<DataTemplate x:DataType="vm:MultiActionStepEditorViewModel">
+											<StackPanel>
+												<!-- Where a dragged action or step lands. -->
+												<Border Height="3" Margin="4,2" CornerRadius="2" Background="#3B82F6" IsVisible="{Binding IsDropBefore}" />
+												<Border Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="10" Margin="0,3">
+													<StackPanel Spacing="10">
+														<Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10">
+															<TextBlock Text="⠿" FontSize="18" Foreground="#64748B" VerticalAlignment="Center" Cursor="SizeAll"
+																	   Background="Transparent" ToolTip.Tip="Drag to reorder" PointerPressed="StepHandle_OnPointerPressed" />
+															<Border Grid.Column="1" Width="28" Height="28" CornerRadius="7" Background="#1E293B">
+																<TextBlock Text="{Binding Position}" FontWeight="SemiBold" Foreground="#93C5FD" HorizontalAlignment="Center" VerticalAlignment="Center" />
+															</Border>
+															<StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center">
+																<TextBlock Text="{Binding Action.Name}" FontWeight="SemiBold" Foreground="#F8FAFC" />
+																<TextBlock Text="{Binding PluginName}" Classes="hint" />
+															</StackPanel>
+															<Button Grid.Column="3" Content="Remove" Command="{Binding RemoveCommand}" VerticalAlignment="Center" />
+														</Grid>
+														<ContentControl Content="{Binding Settings}" IsVisible="{Binding HasSettings}" />
+													</StackPanel>
+												</Border>
+											</StackPanel>
+										</DataTemplate>
+									</ItemsControl.ItemTemplate>
+								</ItemsControl>
+								<Border Height="3" Margin="4,2" CornerRadius="2" Background="#3B82F6" IsVisible="{Binding IsDropAtEnd}" />
+							</StackPanel>
+						</Border>
 						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
 							<ComboBox ItemsSource="{Binding AvailableStepActions}"
 									  SelectedItem="{Binding SelectedStepAction, Mode=TwoWay}"
 									  HorizontalAlignment="Stretch"
-									  PlaceholderText="Choose an action">
+									  PlaceholderText="Or choose an action">
 								<ComboBox.ItemTemplate>
 									<DataTemplate x:DataType="vm:ActionItemViewModel">
 										<TextBlock>
@@ -228,6 +221,21 @@
 					</StackPanel>
 				</Border>
 
+				<!-- The plugin's own settings page (Stream Deck property inspector), shown in the built-in browser. -->
+		<Border Height="460" IsVisible="{Binding ShowSettingsPage}" Background="#2D2D2D" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
+			<Grid RowDefinitions="Auto,*">
+				<DockPanel Margin="12,8">
+					<Button DockPanel.Dock="Right" Content="Open in browser" Padding="10,2" FontSize="12" Command="{Binding OpenSettingsPageInBrowserCommand}" />
+					<TextBlock Text="Plugin settings" FontWeight="SemiBold" Foreground="#E2E8F0" VerticalAlignment="Center" />
+				</DockPanel>
+				<local:WebView2Host Grid.Row="1" Name="SettingsBrowser" Source="{Binding SettingsPageUri}" />
+				<TextBlock Grid.Row="1" Name="SettingsBrowserError" IsVisible="False" Margin="12" Foreground="#FCA5A5" TextWrapping="Wrap" />
+			</Grid>
+		</Border>
+				<TextBlock Classes="hint" IsVisible="{Binding ShowNothingToCustomize}"
+						   Text="This control has no display, settings or light to customize." />
+			</StackPanel>
+			<StackPanel Name="SecondaryColumn" Grid.Column="1" Spacing="14">
 				<!-- Text and image -->
 				<Border Classes="card" IsVisible="{Binding SupportsAppearance}">
 					<StackPanel Spacing="10">
@@ -340,17 +348,7 @@
 					</StackPanel>
 				</Border>
 
-				<TextBlock Classes="hint" IsVisible="{Binding ShowNothingToCustomize}"
-						   Text="This control has no display, settings or light to customize." />
 			</StackPanel>
-		</ScrollViewer>
 		</Grid>
-
-		<Border Grid.Row="2" Padding="20,12" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
-			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
-				<Button Content="Cancel" Click="Cancel_OnClick" />
-				<Button Content="Save" Classes="accent" Click="Save_OnClick" />
-			</StackPanel>
-		</Border>
 	</Grid>
-</Window>
+</UserControl>

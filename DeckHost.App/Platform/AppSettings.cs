@@ -14,13 +14,15 @@ namespace DeckHost.App.Platform;
 /// <param name="CheckForUpdates">Check GitHub for a new DeckHost release now and then.</param>
 /// <param name="IncludePrereleases">Offer pre-releases too; by default only to someone running one.</param>
 /// <param name="SkippedVersion">A release the user chose to skip: not announced again (a newer one is).</param>
+/// <param name="ShowDebugPanel">Show the debug panel next to the editor (control capabilities, runtime connection and log).</param>
 public sealed record AppSettingsData(
     bool StartMinimized = true,
     bool? CloseToTray = null,
     bool CheckForUpdates = true,
     bool? IncludePrereleases = null,
     string? SkippedVersion = null,
-    DateTimeOffset? LastUpdateCheck = null)
+    DateTimeOffset? LastUpdateCheck = null,
+    bool ShowDebugPanel = false)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
 }

@@ -69,6 +69,26 @@ public class ActionItemViewModel : ViewModelBase
 
     public string Summary => Description ?? $"{InputsLabel} / {OutputsLabel}";
 
+    private ListIcon? _icon;
+
+    /// <summary>The icon in the action list and on the drag ghost (made when first shown).</summary>
+    public ListIcon Icon => _icon ??= ListIcon.From(
+        SafeListIcon(Action),
+        Action is DeckActionBase deckHostAction ? deckHostAction.ListIconColor : 0xFFE2E8F0,
+        Contracts.Icons.Apps);
+
+    private static string? SafeListIcon(IDeckAction action)
+    {
+        try
+        {
+            return action.ListIcon;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     public ActionSettings DefaultSettings => new(SettingDefinitions
         .Where(static definition => !string.IsNullOrEmpty(definition.DefaultValue))
         .Select(static definition => new KeyValuePair<string, string>(definition.Key, definition.DefaultValue)));
