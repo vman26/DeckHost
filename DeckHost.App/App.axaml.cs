@@ -293,12 +293,31 @@ public partial class App : Application
             return runtime;
         });
         services.AddSingleton<IPluginStateTransfer>(provider => provider.GetRequiredService<StreamDeckRuntime>());
-        services.AddSingleton(provider => new PluginCatalog(
-            PluginCatalog.DefaultRootDirectory,
-            provider.GetServices<IDevicePlugin>(),
-            SystemPluginSet.Create(),
-            SystemPluginSet.RequiredPluginIds,
-            provider.GetRequiredService<StreamDeckRuntime>()));
+        services.AddSingleton(provider =>
+        {
+            var catalog = new PluginCatalog(
+                PluginCatalog.DefaultRootDirectory,
+                provider.GetServices<IDevicePlugin>(),
+                SystemPluginSet.Create(),
+                SystemPluginSet.RequiredPluginIds,
+                provider.GetRequiredService<StreamDeckRuntime>());
+
+            // DeckHost plugins run in their own process (this program with --plugin-host), unless
+            // the user moved one inside DeckHost on the Plugins page.
+            if (Environment.ProcessPath is { } executable && !executable.EndsWith("dotnet", StringComparison.OrdinalIgnoreCase) && !executable.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                catalog.ProcessLauncher = new DeckHost.Core.Plugins.Isolation.SelfPluginLauncher(executable);
+            }
+
+            var pluginLogger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Plugins");
+            catalog.PluginLog = (level, message) => pluginLogger.Log(level switch
+            {
+                "Error" => LogLevel.Error,
+                "Warning" => LogLevel.Warning,
+                _ => LogLevel.Information,
+            }, "{Message}", message);
+            return catalog;
+        });
 
         // Icons: installed packs, and Iconify for searching open-source icon sets online.
         services.AddSingleton(_ => new IconLibrary(IconLibrary.DefaultRootDirectory));

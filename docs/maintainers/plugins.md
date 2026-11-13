@@ -22,6 +22,15 @@ A DeckHost plugin is a .NET assembly with a public `IApplicationPlugin` (from `D
 - Each action is an `IDeckAction`: its `Settings` become the fields in the editor, `Execute` runs on input, `Render` draws on the control. Both run on DeckHost's worker and must return quickly: start slow work on a background task and call `RequestRender` when it's done.
 - `plugins/DeckHost.Plugin.Obs` in the source is a complete example (obs-websocket 5).
 
+## Your plugin runs in its own process
+
+By default DeckHost runs your plugin in a process of its own ([decision 0007](adr/0007-in-process-plugins.md)); you don't need to do anything for it, but know:
+
+- `Render` is recorded and replayed in DeckHost. Draw only through the `IRenderContext` you get (as always), and don't keep it. The picture is asked for again when the settings, the size or the control's variables change, when you call `RequestRender`, and at your `RefreshInterval`.
+- Variables you publish reach DeckHost when they're strings, numbers, booleans or `DateTimeOffset`s; other objects stay in your process.
+- Calls arrive one at a time, as before. A crash or an unhandled exception on a background thread ends your process: DeckHost restarts it and calls `OnAppear` again for what's on the devices, so don't rely on state that only `Execute` built.
+- Console output goes to DeckHost's log.
+
 ## Check a package
 
 ```

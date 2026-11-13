@@ -18,6 +18,12 @@ DeckHost runs Stream Deck plugins in their own processes and speaks their protoc
 
 **Install plugin…** takes a DeckHost plugin package (`.zip`, `.dhplugin`) or a `.streamDeckPlugin`. Icon packs are installed from the icon picker. Plugins run with your user's rights: only install what you trust. A DeckHost plugin says what it may do (use the network, start programs, …); that is shown when it's installed and on the Plugins page.
 
+## Plugins in their own process
+
+DeckHost plugins run in their own process: if one crashes or hangs, DeckHost and your devices keep working, and DeckHost restarts it (up to three times; then the Plugins page says it stopped). The Plugins page shows this as **Run in its own process**, with the process it runs in.
+
+You can turn it off for a plugin, after a warning: it then runs inside DeckHost, which is a little faster but means a crash or hang takes DeckHost and your devices with it. Only do that for a plugin you trust, or when its author asks you to. Stream Deck plugins always run on their own; the plugins that come with DeckHost always run inside it.
+
 ## Going back to an earlier version
 
 When a plugin is updated, DeckHost keeps the version before it. If the new one misbehaves, **Back to v…** on the Plugins page brings the earlier one back (and keeps the newer one, so you can switch again).
