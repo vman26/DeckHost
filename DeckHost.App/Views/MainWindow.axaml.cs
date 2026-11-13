@@ -170,6 +170,28 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         {
             e.Handled = true;
             PageBack_OnClick(sender, e);
+            return;
+        }
+
+        // Ctrl+Z / Ctrl+Y (Cmd on macOS) undo and redo on the device, unless a text box or a page
+        // (the workflow editor has its own history) takes them.
+        var command = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+        if (e.Handled || _pages.Count > 0 || !e.KeyModifiers.HasFlag(command) || DataContext is not ViewModels.MainViewModel main ||
+            TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox)
+        {
+            return;
+        }
+
+        var redo = e.Key == Key.Y || (e.Key == Key.Z && e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+        if (redo)
+        {
+            e.Handled = true;
+            main.Redo();
+        }
+        else if (e.Key == Key.Z)
+        {
+            e.Handled = true;
+            main.Undo();
         }
     }
 

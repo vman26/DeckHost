@@ -16,7 +16,7 @@ using System.Text.Json;
 
 namespace DeckHost.App.ViewModels;
 
-public class MainViewModel : ViewModelBase, IDeviceLightSettings
+public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 {
     private const int MaxVisibleLogEntries = 200;
     private static readonly TimeSpan SaveDelay = TimeSpan.FromMilliseconds(400);
@@ -651,7 +651,10 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     /// Moves a binding (with its settings, appearance and steps) to another control. When the
     /// target is taken the two swap places; with <paramref name="copy"/> the source keeps its binding.
     /// </summary>
-    public void MoveBinding(string sourceControlId, string targetControlId, bool copy)
+    public void MoveBinding(string sourceControlId, string targetControlId, bool copy) =>
+        Grouped(copy ? "the copy" : "the move", () => MoveBindingCore(sourceControlId, targetControlId, copy));
+
+    private void MoveBindingCore(string sourceControlId, string targetControlId, bool copy)
     {
         if (SelectedProfile is null ||
             SelectedProfile.GetBinding(sourceControlId) is not { } source ||
@@ -713,6 +716,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             return;
         }
 
+        RecordBindingChange(SelectedProfile, controlId, model);
         if (model is null)
         {
             SelectedProfile.RemoveBinding(controlId);
@@ -924,6 +928,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
             return true;
         }
 
+        RecordBindingChange(layout, controlId, model);
         if (Resolve(model) is { } resolved)
         {
             layout.SetBinding(resolved);
@@ -1448,6 +1453,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private void LoadProfiles(ProfileDocument? replacement = null)
     {
+        ClearUndo();
         _suppressHostSync = true;
         try
         {
@@ -1820,6 +1826,7 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         FlushPendingSave();
+        ClearUndo();
         _suppressHostSync = true;
         try
         {
@@ -2018,6 +2025,13 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     /// lock; the first knob sets the volume, a swipe skips tracks). Returns how many it filled.
     /// </summary>
     public int ApplyStarterLayout()
+    {
+        var filled = 0;
+        Grouped("the starter layout", () => filled = ApplyStarterLayoutCore());
+        return filled;
+    }
+
+    private int ApplyStarterLayoutCore()
     {
         if (SelectedProfile is null)
         {

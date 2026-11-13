@@ -13,6 +13,8 @@ The main window is laid out like the Stream Deck app: the device at the top, the
 
 Click a control. Its editor opens below the device, and every change shows on the device right away; **Revert** puts back how the control was when you selected it.
 
+**Undo and redo** (the arrows in the header, or Ctrl+Z and Ctrl+Y; ⌘ on macOS) step back and forth through what you did to controls: drops, moves and swaps, removes and edits. Typing in a field counts as one step. Undo covers the controls of the device you're editing; profiles and pages are changed on their own pages.
+
 - **Action**: its settings. Some Stream Deck plugins bring their own settings page, shown next to the editor.
 - **Display**: text (font, size, color, alignment), an icon (from your icon packs or Iconify's free sets), an image or animated GIF, and the background: transparent, the action's colored tile, or a color.
 - **Light** (controls with an LED): its color when pressed, and its idle effect.

@@ -187,6 +187,12 @@
 					</Border>
 
 					<StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+						<Button Classes="tool" ToolTip.Tip="{Binding UndoTip}" IsEnabled="{Binding CanUndo}" Command="{Binding UndoCommand}">
+							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M9 4 3 10l6 6v-4.5h5a4.5 4.5 0 0 1 0 9h-3V23h3a7 7 0 0 0 0-14H9Z" /></Canvas></Viewbox>
+						</Button>
+						<Button Classes="tool" ToolTip.Tip="{Binding RedoTip}" IsEnabled="{Binding CanRedo}" Command="{Binding RedoCommand}">
+							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M15 4l6 6-6 6v-4.5h-5a4.5 4.5 0 0 0 0 9h3V23h-3a7 7 0 0 1 0-14h5Z" /></Canvas></Viewbox>
+						</Button>
 						<Button Classes="tool" ToolTip.Tip="Profiles" Click="OpenProfileManager_OnClick">
 							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M4 4h7v7H4Z M13 4h7v7h-7Z M4 13h7v7H4Z M13 13h7v7h-7Z" /></Canvas></Viewbox>
 						</Button>
