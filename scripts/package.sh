@@ -42,6 +42,7 @@ Check device support without opening the app: ./DeckHost/DeckHost.App --check-na
 
 Needs giflib (libgif.so.7) and libudev (libudev.so.1), present on most desktops.
 Optional, for the system actions: playerctl, wpctl or pactl, xdotool (X11) or wtype (Wayland), xprop.
+Optional, for Stream Deck plugin settings pages inside DeckHost: WebKitGTK (libwebkit2gtk-4.1).
 TEXT
         tar -C "$stage" -czf "$output/${name}.tar.gz" "deckhost-${version}"
         echo "$output/${name}.tar.gz"

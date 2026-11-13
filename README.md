@@ -42,7 +42,8 @@ Releases are on the repository's **Releases** page, one package per platform:
 | Automatic profile switching | ✓ | X11 / XWayland apps, needs xprop | ✓ |
 | Start at sign-in, tray | ✓ | XDG autostart; tray needs a StatusNotifier host (KDE, most desktops; GNOME with the AppIndicator extension) | ✓ (LaunchAgent) |
 | Stream Deck plugins (native and Node.js) | ✓ | ✓ when the plugin ships a Linux build | ✓ when the plugin ships a macOS build |
-| Stream Deck HTML plugins, settings pages inside DeckHost | ✓ (WebView2) | settings pages open in your browser; HTML plugins don't run | same as Linux |
+| Stream Deck plugin settings pages inside DeckHost | ✓ (WebView2) | ✓ (WebKitGTK, `libwebkit2gtk-4.1`; else in your browser) | ✓ (WKWebView) |
+| Stream Deck HTML plugins (plugins that run in a web page) | ✓ (WebView2) | don't run | don't run |
 
 On Linux, "close to tray" starts off, since not every desktop shows a tray icon; turn it on in DeckHost settings if yours does. The Linux tools above are optional: an action whose tool is missing shows which one to install.
 
@@ -237,7 +238,7 @@ Stream Deck plugins run through DeckHost's Stream Deck compatibility layer:
 - N4 Pro keys act as Stream Deck keys and the knobs as Stream Deck+ dials.
 - `setTitle`, `setImage` (PNG, JPG and SVG), `setState`, settings and global settings work. Dial actions' `setFeedback` (title, value and indicator bar) is shown on the knob's touch zone.
 - HTML-based plugins (whose code is a web page) run in a hidden built-in browser page, as in the Stream Deck app. Their console output goes to the DeckHost log.
-- A plugin's own settings page (property inspector) opens inside the editor through the built-in browser (Microsoft Edge WebView2, which Windows 10/11 include). **Open in browser** is there as a fallback.
+- A plugin's own settings page (property inspector) opens inside the editor through the system's web view: WebView2 on Windows (Windows 10/11 include it), WKWebView on macOS, WebKitGTK on Linux (`libwebkit2gtk-4.1`, on most desktops). **Open in browser** is there as a fallback, and the editor offers it when no web view starts.
 
 Limits:
 
