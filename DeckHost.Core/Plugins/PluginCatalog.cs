@@ -31,7 +31,8 @@ public sealed record PluginEntry(
     string Source = PluginCatalog.DeckHostSource,
     string? Origin = null,
     string? Category = null,
-    string? InstallDirectory = null);
+    string? InstallDirectory = null,
+    string? IconPath = null);
 
 /// <summary>
 /// Keeps track of all plugins:
@@ -658,7 +659,25 @@ public sealed class PluginCatalog : IDisposable
             slot.Kind == SlotKind.StreamDeck ? StreamDeckSource : DeckHostSource,
             slot.Kind == SlotKind.System ? "Built into DeckHost" : _origins.GetValueOrDefault(slot.Id, "File"),
             slot.StreamDeckManifest?.Category,
-            slot.Directory);
+            slot.Directory,
+            IconPathOf(slot));
+    }
+
+    /// <summary>The plugin's icon file: the Stream Deck manifest's Icon, or plugin.json's icon.</summary>
+    private static string? IconPathOf(Slot slot)
+    {
+        if (slot.StreamDeckManifest is { } sd)
+        {
+            return sd.ResolveImage(sd.Icon);
+        }
+
+        if (slot.Manifest?.Icon is { Length: > 0 } icon && slot.Directory is { } directory)
+        {
+            var path = Path.GetFullPath(Path.Combine(directory, icon));
+            return path.StartsWith(Path.GetFullPath(directory), StringComparison.OrdinalIgnoreCase) && File.Exists(path) ? path : null;
+        }
+
+        return null;
     }
 
     private void LoadState()
