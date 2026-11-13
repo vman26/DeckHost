@@ -1,0 +1,6 @@
+# DeckHost's "Report a problem" opens a blank issue with the details filled in, so blank issues stay on.
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://vman26.github.io/DeckHost-releases/
+    about: How to set up devices, profiles, workflows and plugins, and what to do when something doesn't work.

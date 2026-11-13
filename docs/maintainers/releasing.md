@@ -16,6 +16,24 @@ The updater reads releases without signing in, so they must be public. With a pr
 
 Each release then goes to both repositories, and the apps check the releases repository. The **docs** workflow publishes this documentation to the releases repository's `gh-pages` branch: turn on **Settings → Pages → Deploy from a branch → gh-pages** there once. The documentation is then at `https://vman26.github.io/DeckHost-releases/`, which is where DeckHost's **Help** links.
 
+## Problem reports
+
+DeckHost's **Report a problem** (and the offer after a crash) opens a new issue, filled in by the app, in the repository it checks for updates: the public releases repository when `RELEASES_REPO` is set, else this one. The user reads it and sends it themselves; nothing is sent automatically.
+
+With a private source repository, the **sync issues** workflow links the two (every hour, and right away on comments here):
+
+- every new public issue gets a copy here, labeled `public-report`, with a link back; the public one gets the label `tracked`;
+- comments on the public issue are copied to the copy;
+- a comment here that starts with `/public` is posted to the public issue (without the `/public`), so you answer from here;
+- closing the copy as **completed** thanks the reporter and closes the public issue; when the reporter closes it, the copy says so.
+
+Nothing else from this repository reaches the public one. Setup, once:
+
+1. Turn on **Issues** in the releases repository (Settings → General → Features).
+2. Give the `RELEASES_TOKEN` token **Issues: Read and write** on the releases repository, next to Contents.
+3. Copy `packaging/releases-repo/` (README and `.github/ISSUE_TEMPLATE/`) into the releases repository: issue forms for problems and ideas, with a link to the documentation.
+4. Run **sync issues** by hand once (Actions → sync issues → Run workflow, with **dry run** to see what it would do).
+
 ## Code signing
 
 Without signing the packages still work: Windows SmartScreen warns, and macOS asks to allow the app once. Add secrets to sign them; nothing else changes. A trusted certificate always means a check of who you are by a certificate authority, so no script can get one by itself. What can be automated is everything around it, and that's what's here.
