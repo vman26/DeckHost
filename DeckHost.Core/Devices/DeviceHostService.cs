@@ -1215,10 +1215,20 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
     }
 
-    private LightStyle? IdleLightStyle(string deviceId, string controlId) =>
-        GetActiveProfile(deviceId)?.Bindings.FirstOrDefault(candidate =>
-            string.Equals(candidate.ControlId, controlId, StringComparison.OrdinalIgnoreCase))?.Appearance.RgbFeedback?.IdleStyle
-        ?? _deviceLights.GetValueOrDefault(deviceId);
+    private LightStyle? IdleLightStyle(string deviceId, string controlId)
+    {
+        if (GetActiveProfile(deviceId)?.Bindings.FirstOrDefault(candidate =>
+                string.Equals(candidate.ControlId, controlId, StringComparison.OrdinalIgnoreCase))?.Appearance.RgbFeedback?.IdleStyle is { } own)
+        {
+            return own;
+        }
+
+        // The device's light, or this LED's own part of it (Knob lights → each knob its own effect).
+        return _deviceLights.GetValueOrDefault(deviceId) is { } device && _devicesById.TryGetValue(deviceId, out var entry)
+            ? device.ForLed(entry.Device.Controls.Where(static control => control.HasLight).ToList()
+                .FindIndex(control => string.Equals(control.Id, controlId, StringComparison.OrdinalIgnoreCase)))
+            : _deviceLights.GetValueOrDefault(deviceId);
+    }
 
     private (byte R, byte G, byte B) IdleLightColor(string deviceId, string controlId)
     {

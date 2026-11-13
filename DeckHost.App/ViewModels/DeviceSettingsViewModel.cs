@@ -17,7 +17,7 @@ public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins, Fu
 
     public DeviceSettingsViewModel? Create(DeviceDefinition device) =>
         FindPlugin(device.Id) is { } plugin
-            ? new DeviceSettingsViewModel(plugin, device, device.Controls.Any(static control => control.HasLight) && lights is not null ? new KnobLightsViewModel(lights(), device.Id) : null)
+            ? new DeviceSettingsViewModel(plugin, device, device.Controls.Any(static control => control.HasLight) && lights is not null ? new KnobLightsViewModel(lights(), device.Id, [.. device.Controls.Where(static control => control.HasLight).Select(static control => control.DisplayName)]) : null)
             : null;
 
     private IConfigurableDevicePlugin? FindPlugin(string deviceId) =>
@@ -145,15 +145,65 @@ public sealed partial class KnobLightsViewModel : ViewModelBase
     private readonly IDeviceLightSettings _settings;
     private readonly string _deviceId;
 
-    public KnobLightsViewModel(IDeviceLightSettings settings, string deviceId)
+    public KnobLightsViewModel(IDeviceLightSettings settings, string deviceId, IReadOnlyList<string>? ledNames = null)
     {
         _settings = settings;
         _deviceId = deviceId;
-        Editor = new LightStyleEditorViewModel(settings.GetDeviceLight(deviceId), Off);
-        Editor.Changed += (_, _) => _settings.SetDeviceLight(_deviceId, Editor.ToStyle());
+        var style = settings.GetDeviceLight(deviceId);
+        Editor = new LightStyleEditorViewModel(style, Off);
+        Editor.Changed += (_, _) => Apply();
+
+        // Each LED its own light: one editor per LED (Off there is dark, not "the device's light").
+        _eachLedOwn = style?.Leds is { Count: > 0 };
+        var index = 0;
+        foreach (var name in ledNames ?? [])
+        {
+            var led = new LedLightViewModel(name, new LightStyleEditorViewModel(style?.ForLed(index) is { } own && own != style ? own : style));
+            led.Editor.Changed += (_, _) => Apply();
+            Leds.Add(led);
+            index++;
+        }
     }
 
     public LightStyleEditorViewModel Editor { get; }
+
+    /// <summary>One light editor per LED (when <see cref="EachLedOwn"/> is on).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<LedLightViewModel> Leds { get; } = [];
+
+    public bool CanEachLedOwn => Leds.Count > 1;
+
+    private bool _eachLedOwn;
+
+    /// <summary>Each LED its own effect (a composer per LED) instead of one light for all.</summary>
+    public bool EachLedOwn
+    {
+        get => _eachLedOwn;
+        set
+        {
+            if (SetProperty(ref _eachLedOwn, value))
+            {
+                OnPropertyChanged(nameof(ShowSharedEditor));
+                Apply();
+            }
+        }
+    }
+
+    public bool ShowSharedEditor => !_eachLedOwn;
+
+    private void Apply()
+    {
+        var shared = Editor.ToStyle();
+        if (!_eachLedOwn || Leds.Count == 0)
+        {
+            _settings.SetDeviceLight(_deviceId, shared);
+            return;
+        }
+
+        _settings.SetDeviceLight(_deviceId, (shared ?? new LightStyle(Effect: LightEffects.Off)) with
+        {
+            Leds = [.. Leds.Select(static led => led.Editor.ToStyle() ?? new LightStyle(Effect: LightEffects.Off))],
+        });
+    }
 
     public bool ShowColor => Editor.ShowColor;
 
@@ -179,4 +229,12 @@ public sealed partial class KnobLightsViewModel : ViewModelBase
         get => Editor.PeriodSeconds;
         set => Editor.PeriodSeconds = value;
     }
+}
+
+/// <summary>One LED's light in the per-LED composer.</summary>
+public sealed class LedLightViewModel(string name, LightStyleEditorViewModel editor)
+{
+    public string Name { get; } = name;
+
+    public LightStyleEditorViewModel Editor { get; } = editor;
 }
