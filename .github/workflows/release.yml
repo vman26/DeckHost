@@ -100,8 +100,9 @@ jobs:
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             args+=("-p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4")
           fi
+          # The updater looks for releases where they are published (see the release job).
           dotnet publish DeckHost.App/DeckHost.App.csproj -c Release -r ${{ matrix.rid }} --self-contained \
-            -o publish/DeckHost $VERSION_ARGS "${args[@]}"
+            -o publish/DeckHost $VERSION_ARGS "-p:DeckHostUpdateRepository=${{ vars.RELEASES_REPO || github.repository }}" "${args[@]}"
 
       # The published app must load its native bridge on a clean machine.
       - name: Check the native bridge
@@ -162,4 +163,28 @@ jobs:
           if [[ "$TAG" == *-* ]]; then
             prerelease=(--prerelease)
           fi
-          gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "DeckHost ${TAG#v}" --generate-notes "${prerelease[@]}"
+          # The notes (merged pull requests since the previous release) come from this repository;
+          # the public releases repository below gets the same notes.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body > notes.md
+          gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "DeckHost ${TAG#v}" --notes-file notes.md "${prerelease[@]}"
+
+      # A private source repository can't serve updates (its releases need a sign-in). With the
+      # RELEASES_REPO variable (owner/name of a public repository, which needs at least one commit)
+      # and a RELEASES_TOKEN secret (a token that may create releases there), the release is also
+      # published there, and the apps built above check that repository for updates.
+      - name: Publish to the public releases repository
+        if: vars.RELEASES_REPO != '' && vars.RELEASES_REPO != github.repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::RELEASES_REPO is set but the RELEASES_TOKEN secret is missing."
+            exit 1
+          fi
+          prerelease=()
+          if [[ "$TAG" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$TAG" artifacts/* --repo "$RELEASES_REPO" --title "DeckHost ${TAG#v}" --notes-file notes.md "${prerelease[@]}"

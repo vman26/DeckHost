@@ -91,6 +91,11 @@ public sealed class UpdateChecker
                 throw new UpdateException("GitHub's limit for update checks from this network is reached; try again in an hour.");
             }
 
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                throw new UpdateException($"GitHub has no public releases at {_repository} (a private repository's releases can't be checked without signing in).");
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 throw new UpdateException($"GitHub answered {(int)response.StatusCode} {response.ReasonPhrase}.");
