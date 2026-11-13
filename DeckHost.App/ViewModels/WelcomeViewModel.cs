@@ -37,6 +37,12 @@ public sealed partial class WelcomeViewModel : ViewModelBase
     /// <summary>Raised when the tour is finished or skipped (the page closes).</summary>
     public event EventHandler? Finished;
 
+    /// <summary>Raised for Add a USB device: the main window opens the device creator.</summary>
+    public event EventHandler? DeviceCreatorRequested;
+
+    [RelayCommand]
+    private void AddUsbDevice() => DeviceCreatorRequested?.Invoke(this, EventArgs.Empty);
+
     public int Step
     {
         get => _step;
@@ -161,6 +167,26 @@ public sealed partial class WelcomeViewModel : ViewModelBase
                 AppSettings.Save(AppSettings.Load() with { CheckForUpdates = value });
             }
 
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>The look, as in DeckHost settings (applies at once).</summary>
+    public IReadOnlyList<string> Themes { get; } = ["Dark", "Light", "Same as the system"];
+
+    public string Theme
+    {
+        get => AppSettings.Load().Theme switch
+        {
+            AppTheme.Light => Themes[1],
+            AppTheme.System => Themes[2],
+            _ => Themes[0],
+        };
+        set
+        {
+            var theme = value == Themes[1] ? AppTheme.Light : value == Themes[2] ? AppTheme.System : AppTheme.Dark;
+            AppSettings.Save(AppSettings.Load() with { Theme = theme });
+            App.ApplyTheme(theme);
             OnPropertyChanged();
         }
     }

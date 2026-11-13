@@ -243,9 +243,13 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     /// <summary>The welcome tour (by itself on the first start).</summary>
     public void OpenWelcome() =>
-        OpenSingle("Welcome", () => new WelcomeView
+        OpenSingle("Welcome", () =>
         {
-            DataContext = new WelcomeViewModel(DataContext as MainViewModel, TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>(), TryResolve<UpdateViewModel>()),
+            var welcome = new WelcomeViewModel(DataContext as MainViewModel, TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>(), TryResolve<UpdateViewModel>());
+
+            // On top of the tour: Back returns to it.
+            welcome.DeviceCreatorRequested += (_, _) => OpenDeviceCreator();
+            return new WelcomeView { DataContext = welcome };
         });
 
     /// <summary>On start: a crash since last time opens Help and support; the first start opens the welcome tour.</summary>
