@@ -448,6 +448,15 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             dispatched |= _actionRouter.Dispatch(activeProfile, new DeviceInputEvent(inputEvent.DeviceId, target, InputCapabilities.Release, 0), _actionHost);
         }
 
+        // A swipe over a touch strip without an action of its own flips through the profile's pages.
+        if (!dispatched && target is null && inputEvent.EventType == InputCapabilities.Swipe && inputEvent.Value != 0 &&
+            !activeProfile.Bindings.Any(binding => string.Equals(binding.ControlId, inputEvent.ControlId, StringComparison.OrdinalIgnoreCase)))
+        {
+            // Like a phone: swiping left brings the next page in from the right.
+            ActivateRelativePage(inputEvent.DeviceId, inputEvent.Value < 0 ? 1 : -1);
+            dispatched = true;
+        }
+
         Log("Info", $"Input {inputEvent.EventType} ({inputEvent.Value}) on '{inputEvent.ControlId}'{(target is null ? string.Empty : $" (as a press of '{target}')")} {(dispatched ? "dispatched" : "had no matching action")}.");
 
         if (dispatched)
@@ -507,10 +516,12 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     private void ActivateProfileByIdOrName(string deviceId, string profileIdOrName)
     {
+        // By name only profiles (not their pages or folders, which may share a name).
         var profile = _profilesById.Values.FirstOrDefault(candidate =>
                 string.Equals(candidate.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(candidate.Id, profileIdOrName, StringComparison.OrdinalIgnoreCase))
             ?? _profilesById.Values.FirstOrDefault(candidate =>
+                candidate.IsRoot &&
                 string.Equals(candidate.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(candidate.Name.Trim(), profileIdOrName.Trim(), StringComparison.OrdinalIgnoreCase));
 
@@ -525,17 +536,95 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     private void ActivateRelativeProfile(string deviceId, int offset)
     {
-        // Same order the UI shows: the order the profiles were given in.
-        var profiles = _profilesSnapshot.Where(profile => string.Equals(profile.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase)).ToList();
+        // Same order the UI shows: the order the profiles were given in. Pages and folders belong
+        // to their profile and aren't stepped through here.
+        var profiles = _profilesSnapshot.Where(profile => profile.IsRoot && string.Equals(profile.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase)).ToList();
         if (profiles.Count < 2)
         {
             return;
         }
 
-        var current = GetActiveProfile(deviceId);
+        var current = GetActiveProfile(deviceId) is { } active ? RootOf(active) : null;
         var index = current is null ? 0 : profiles.FindIndex(profile => profile.Id == current.Id);
         var next = ((index + offset) % profiles.Count + profiles.Count) % profiles.Count;
         ActivateProfile(profiles[next].Id);
+    }
+
+    // ---------------------------------------------------------------- pages and folders
+
+    /// <summary>The profile a page or folder belongs to (a profile is its own).</summary>
+    private DeviceProfile RootOf(DeviceProfile layout)
+    {
+        var current = layout;
+        for (var depth = 0; depth < 64 && !current.IsRoot && current.ParentId is { } parentId && _profilesById.TryGetValue(parentId, out var parent); depth++)
+        {
+            current = parent;
+        }
+
+        return current;
+    }
+
+    /// <summary>The page a layout is on: itself for a page or profile, else the page its folders hang from.</summary>
+    private DeviceProfile PageOf(DeviceProfile layout)
+    {
+        var current = layout;
+        for (var depth = 0; depth < 64 && current.Kind == ProfileKinds.Folder && current.ParentId is { } parentId && _profilesById.TryGetValue(parentId, out var parent); depth++)
+        {
+            current = parent;
+        }
+
+        return current;
+    }
+
+    /// <summary>A profile's pages in order: the profile itself, then its pages in the order they were given.</summary>
+    private List<DeviceProfile> PagesOf(DeviceProfile root) =>
+        [root, .. _profilesSnapshot.Where(profile => profile.Kind == ProfileKinds.Page && string.Equals(profile.ParentId, root.Id, StringComparison.OrdinalIgnoreCase))];
+
+    private void ActivateRelativePage(string deviceId, int offset)
+    {
+        if (GetActiveProfile(deviceId) is not { } active)
+        {
+            return;
+        }
+
+        var pages = PagesOf(RootOf(active));
+        if (pages.Count < 2)
+        {
+            return;
+        }
+
+        var index = Math.Max(0, pages.FindIndex(page => page.Id == PageOf(active).Id));
+        ActivateProfile(pages[((index + offset) % pages.Count + pages.Count) % pages.Count].Id);
+    }
+
+    private void ActivatePageNumber(string deviceId, int number)
+    {
+        if (GetActiveProfile(deviceId) is { } active && PagesOf(RootOf(active)) is { } pages && number >= 1 && number <= pages.Count)
+        {
+            ActivateProfile(pages[number - 1].Id);
+        }
+    }
+
+    private void OpenFolder(string deviceId, string folderId)
+    {
+        if (_profilesById.TryGetValue(folderId, out var folder) &&
+            folder.Kind == ProfileKinds.Folder &&
+            string.Equals(folder.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
+        {
+            ActivateProfile(folder.Id);
+        }
+        else
+        {
+            Log("Warning", $"The folder '{folderId}' doesn't exist (anymore).");
+        }
+    }
+
+    private void CloseFolder(string deviceId)
+    {
+        if (GetActiveProfile(deviceId) is { Kind: ProfileKinds.Folder, ParentId: { } parentId } && _profilesById.ContainsKey(parentId))
+        {
+            ActivateProfile(parentId);
+        }
     }
 
     private void OnActiveProfilesChanged()
@@ -561,8 +650,9 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             return activeProfile;
         }
 
-        var fallback = _profilesById.Values.FirstOrDefault(profile =>
-            string.Equals(profile.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+        var fallback = _profilesSnapshot.FirstOrDefault(profile =>
+                profile.IsRoot && string.Equals(profile.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
+            ?? _profilesById.Values.FirstOrDefault(profile => string.Equals(profile.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
         if (fallback is not null)
         {
             _activeProfilesByDeviceId[deviceId] = fallback.Id;
@@ -1273,6 +1363,18 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
         public void ActivateRelativeProfile(string deviceId, int offset) =>
             host.Enqueue(() => host.ActivateRelativeProfile(deviceId, offset));
+
+        public void ActivateRelativePage(string deviceId, int offset) =>
+            host.Enqueue(() => host.ActivateRelativePage(deviceId, offset));
+
+        public void ActivatePage(string deviceId, int number) =>
+            host.Enqueue(() => host.ActivatePageNumber(deviceId, number));
+
+        public void OpenFolder(string deviceId, string folderId) =>
+            host.Enqueue(() => host.OpenFolder(deviceId, folderId));
+
+        public void CloseFolder(string deviceId) =>
+            host.Enqueue(() => host.CloseFolder(deviceId));
     }
 
     private sealed record DeviceEntry(DeviceDefinition Device, IDevicePlugin Plugin);

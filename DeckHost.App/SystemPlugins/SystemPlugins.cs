@@ -22,8 +22,11 @@ public static class SystemPluginSet
         new SystemPlugin(
             BuiltInPluginId,
             "DeckHost Built-ins",
-            "Multi Action, profile switching, clock, counter and diagnostics.",
+            "Multi Action, pages, folders, profile switching, clock, counter and diagnostics.",
             new MultiActionAction(),
+            new PageAction(),
+            new FolderAction(),
+            new FolderBackAction(),
             new SwitchProfileAction(),
             new ClockAction(),
             new CounterAction(),

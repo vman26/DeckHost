@@ -21,6 +21,10 @@ public sealed class SettingsEditorViewModel : ViewModelBase
         var inputs = ControlInputs.Of(controlInputs);
         var splitByInput = inputs.Count > 1 && definitions.Any(static definition => definition.PerInput);
 
+        // Values no field shows (a Folder key's folder id, values a plugin stored) are kept as they are.
+        _preserved = [.. current.Where(pair => !definitions.Any(definition =>
+            pair.Key == definition.Key || pair.Key.StartsWith(definition.Key + "@", StringComparison.Ordinal)))];
+
         // Settings shared by all inputs first, then a group per input.
         foreach (var definition in definitions.Where(definition => !splitByInput || !definition.PerInput))
         {
@@ -94,8 +98,10 @@ public sealed class SettingsEditorViewModel : ViewModelBase
     public bool HasErrors => Fields.Any(static settingField => settingField.Error is not null);
 
     public ActionSettings ToSettings() =>
-        new(Fields.Where(static field => field.Error is null && !string.IsNullOrEmpty(field.Value))
-            .Select(static field => new KeyValuePair<string, string>(field.Definition.Key, field.Value)));
+        new(_preserved.Concat(Fields.Where(static field => field.Error is null && !string.IsNullOrEmpty(field.Value))
+            .Select(static field => new KeyValuePair<string, string>(field.Definition.Key, field.Value))));
+
+    private readonly IReadOnlyList<KeyValuePair<string, string>> _preserved;
 }
 
 public abstract class SettingFieldViewModel(ActionSettingDefinition definition, string value) : ViewModelBase

@@ -156,6 +156,8 @@
 							<TextBlock Text="{Binding ActionDescription}" Classes="hint" IsVisible="{Binding HasActionDescription}" />
 						</StackPanel>
 						<ContentControl Content="{Binding ActionSettings}" IsVisible="{Binding HasActionSettings}" />
+						<Button Content="Open folder" Classes="accent" Command="{Binding OpenFolderCommand}" IsVisible="{Binding IsFolder}" HorizontalAlignment="Left"
+								ToolTip.Tip="Show the folder's keys here (and on the device); Back under the device returns" />
 						<TextBlock Classes="hint" IsVisible="{Binding ShowSettingsPage}"
 								   Text="This plugin has its own settings, shown on the right. They are saved straight to the plugin." />
 					</StackPanel>

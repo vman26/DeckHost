@@ -23,6 +23,18 @@ public static class Icons
     public const string SwitchProfile = "M3 6.5h12v2H3Z M14 3.5L21 7.5L14 11.5Z M9 15.5h12v2H9Z M10 12.5L3 16.5L10 20.5Z";
     public const string Stack = "M4 4h16v4H4Z M4 10h16v4H4Z M4 16h16v4H4Z";
     public const string Chip = "M7 7h10v10H7Z M9.5 9.5h5v5h-5Z M9 3h2v3H9Z M13 3h2v3h-2Z M9 18h2v3H9Z M13 18h2v3h-2Z M3 9h3v2H3Z M3 13h3v2H3Z M18 9h3v2h-3Z M18 13h3v2h-3Z";
+    /// <summary>A folder.</summary>
+    public const string Folder = "M3 5h7l2 2h9v12H3Z M5 9v8h14V9Z";
+
+    /// <summary>An arrow back (out of a folder).</summary>
+    public const string Back = "M10.5 5L12 6.5L7.5 11H20v2H7.5l4.5 4.5L10.5 19L3.5 12Z";
+
+    /// <summary>Pages with an arrow to the next one.</summary>
+    public const string PageNext = "M3 4h11v16H3Z M5 6v12h7V6Z M16 8.5L19.5 12L16 15.5Z M20 6h1.5v12H20Z";
+
+    /// <summary>Pages with an arrow to the previous one.</summary>
+    public const string PagePrevious = "M10 4h11v16H10Z M12 6v12h7V6Z M8 8.5L4.5 12L8 15.5Z M2.5 6H4v12H2.5Z";
+
     /// <summary>A clock face with hands.</summary>
     public const string Clock = "M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20Z M12 4.2a7.8 7.8 0 1 1 0 15.6a7.8 7.8 0 1 1 0-15.6Z M11 6.5h2v5h4v2h-6Z";
 

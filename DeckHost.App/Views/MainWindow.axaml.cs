@@ -111,6 +111,9 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     private void ShowTopPage()
     {
+        // The workspace is hidden under a page: a plugin's settings page is a native web view,
+        // which would otherwise stay on top of the page (native windows draw above Avalonia).
+        Workspace.IsVisible = _pages.Count == 0;
         if (_pages.Count == 0)
         {
             PageContent.Content = null;
@@ -183,6 +186,12 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         }
     }
 
+    // ---------------------------------------------------------------- pages and folders
+
+    private void AddPage_OnClick(object? sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.AddPage();
+
+    private void CloseFolder_OnClick(object? sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.CloseFolder();
+
     // ---------------------------------------------------------------- drag ghost
 
     public void ShowGhost(string text, IDeckAction? action)
@@ -247,14 +256,15 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
         e.Handled = true;
 
-        if (vm.IsTestMode)
+        // Selecting a control opens its editor below the device; a double-click presses it
+        // (it runs the real action, as the device would).
+        vm.SelectControl(controlItem.Control);
+        if (e.ClickCount >= 2)
         {
+            _pendingControlDrag = null;
             SimulatePress(vm, controlItem, control, e);
             return;
         }
-
-        // Selecting a control opens its editor below the device.
-        vm.SelectControl(controlItem.Control);
 
         // Only start dragging once the pointer actually moves, so clicks still select.
         _pendingControlDrag = controlItem.AssignedBinding is null ? null : (controlItem, e.GetPosition(control), e);
@@ -314,7 +324,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     private void ControlCard_OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
-        if (DataContext is not MainViewModel { IsTestMode: true } vm ||
+        if (DataContext is not MainViewModel vm ||
             sender is not Control { DataContext: ControlItemViewModel controlItem } ||
             !controlItem.Control.Inputs.HasFlag(InputCapabilities.Rotate) ||
             e.Delta.Y == 0)
@@ -326,7 +336,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         vm.Simulate(controlItem, InputCapabilities.Rotate, e.Delta.Y > 0 ? 1 : -1);
     }
 
-    /// <summary>Test mode: turns a click into the input the hardware would send for this control.</summary>
+    /// <summary>A double-click: the input the hardware would send for this control.</summary>
     private void SimulatePress(MainViewModel vm, ControlItemViewModel controlItem, Control control, PointerPressedEventArgs e)
     {
         var inputs = controlItem.Control.Inputs;

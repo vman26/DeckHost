@@ -116,7 +116,7 @@ public class ControlItemViewModel : ViewModelBase
     /// <summary>Text card for controls without a display (knobs, swipe bar) or before the first frame.</summary>
     public bool ShowTextPreview => !HasPreview && (ShowDetails || IsKnob);
 
-    /// <summary>True while the control is held down on the device (or in test mode).</summary>
+    /// <summary>True while the control is held down on the device (or double-clicked in the editor).</summary>
     public bool IsPressed
     {
         get => _isPressed;
@@ -254,8 +254,8 @@ public class ControlItemViewModel : ViewModelBase
     public Avalonia.Thickness OutlineThickness => new(IsSelected ? 2.5 : 1.5);
 
     public string ToolTipText => AssignedBinding is null
-        ? $"{DisplayName}: drop an action here. Double-click to customize."
-        : $"{DisplayName}: {AssignedBinding.DisplayName}. Double-click to customize, drag to move, Ctrl+drag to copy.";
+        ? $"{DisplayName}: drop an action here."
+        : $"{DisplayName}: {AssignedBinding.DisplayName}. Double-click to press it{(IsKnob ? ", scroll to turn it" : string.Empty)}; drag to move, Ctrl+drag to copy.";
 
     /// <summary>Knobs are round, keys and zones rounded rectangles (a CornerRadius, so the binding takes it).</summary>
     public Avalonia.CornerRadius CornerRadius => new(IsKnob ? Width / 2d : Math.Min(14d, Height / 3d));
