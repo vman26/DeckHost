@@ -20,6 +20,54 @@ public partial class ProfileManagerView : UserControl
         base.OnDetachedFromVisualTree(e);
     }
 
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        (DataContext as ProfileManagerViewModel)?.RefreshBackups();
+    }
+
+    private async void ImportProfile_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ProfileManagerViewModel vm)
+        {
+            return;
+        }
+
+        var files = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import a profile",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Profiles (DeckHost, Stream Deck)") { Patterns = ["*.deckhostprofile", "*.streamDeckProfile"] },
+            ],
+        });
+        if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
+        {
+            vm.Import(path);
+        }
+    }
+
+    private async void ExportProfile_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ProfileManagerViewModel { EditingProfile: { } profile } vm)
+        {
+            return;
+        }
+
+        var file = await TopLevel.GetTopLevel(this)!.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export the profile",
+            SuggestedFileName = profile.Name + Core.Profiles.ProfileBundle.Extension,
+            DefaultExtension = Core.Profiles.ProfileBundle.Extension,
+            FileTypeChoices = [new FilePickerFileType("DeckHost profile") { Patterns = ["*.deckhostprofile"] }],
+        });
+        if (file?.TryGetLocalPath() is { } path)
+        {
+            vm.Export(path);
+        }
+    }
+
     private async void BrowseBackground_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not ProfileManagerViewModel vm)

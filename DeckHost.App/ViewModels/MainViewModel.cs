@@ -1068,6 +1068,112 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
     }
 
     /// <summary>Call after renaming a profile or changing its app list.</summary>
+    // ---------------------------------------------------------------- export, import, backups
+
+    /// <summary>Daily backups of all profiles (newest first); empty without a profile store.</summary>
+    public IReadOnlyList<FileInfo> ProfileBackups => _profileStore?.ListBackups() ?? [];
+
+    /// <summary>Where imported profiles keep their images.</summary>
+    public static string ImportedAssetsDirectory { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost", "assets");
+
+    /// <summary>Writes a profile with its pages, folders and images to a <c>.deckhostprofile</c> file.</summary>
+    public void ExportProfile(ProfileItemViewModel profile, string path)
+    {
+        Core.Profiles.ProfileBundle.Export([.. profile.RootProfile.ToModels()], path);
+        StatusMessage = $"Exported {profile.RootProfile.Name} to {Path.GetFileName(path)}.";
+    }
+
+    /// <summary>
+    /// Imports a DeckHost profile (<c>.deckhostprofile</c>) or a Stream Deck profile
+    /// (<c>.streamDeckProfile</c>) as a new profile and shows it. Returns what happened.
+    /// </summary>
+    public string ImportProfile(string path)
+    {
+        string summary;
+        IReadOnlyList<DeviceProfile> layouts;
+        if (path.EndsWith(DeckHost.App.Profiles.StreamDeckProfileImporter.Extension, StringComparison.OrdinalIgnoreCase))
+        {
+            var result = DeckHost.App.Profiles.StreamDeckProfileImporter.Import(path, SelectedDevice!.Id, [.. ControlItems.Select(static item => item.Control)], [.. _actionsByKey.Values], ImportedAssetsDirectory);
+            layouts = result.Layouts;
+            summary = $"{result.Imported} key(s) and dial(s) imported"
+                + (result.NotPlaced > 0 ? $", {result.NotPlaced} had no place on this device" : string.Empty)
+                + (result.Unavailable.Count > 0 ? $"; not in DeckHost (kept their look): {string.Join(", ", result.Unavailable.Take(6))}{(result.Unavailable.Count > 6 ? ", …" : string.Empty)}" : string.Empty)
+                + ". Stream Deck plugin actions need their settings again.";
+        }
+        else
+        {
+            layouts = Core.Profiles.ProfileBundle.Import(path, SelectedDevice!.Id, ImportedAssetsDirectory);
+            summary = $"{layouts.Sum(static layout => layout.Bindings.Count)} control(s) imported.";
+        }
+
+        var root = AddLayouts(layouts);
+        SelectedProfile = root;
+        NotifyProfilesEdited();
+        StatusMessage = $"Imported {root.Name}: {summary}";
+        return StatusMessage;
+    }
+
+    /// <summary>Saves a backup of all profiles now (also done once a day automatically).</summary>
+    public void BackUpProfiles()
+    {
+        FlushPendingSave();
+        _profileStore?.BackUp(force: true);
+        OnPropertyChanged(nameof(ProfileBackups));
+        StatusMessage = "Backed up all profiles.";
+    }
+
+    /// <summary>Replaces all profiles with a backup (today's state is backed up first).</summary>
+    public void RestoreBackup(string path)
+    {
+        var document = Core.Profiles.ProfileStore.LoadFrom(path) ?? throw new IOException("The backup is empty.");
+        BackUpProfiles();
+        LoadProfiles(document);
+        ApplyProfileBindings();
+        RefreshPageTabs();
+        OnPropertyChanged(nameof(SelectedRootProfile));
+        SyncProfilesToHost();
+        StatusMessage = $"Restored the profiles from {Path.GetFileNameWithoutExtension(path)}.";
+    }
+
+    /// <summary>Adds a profile with its pages and folders (models from an import).</summary>
+    private ProfileItemViewModel AddLayouts(IReadOnlyList<DeviceProfile> layouts)
+    {
+        ProfileItemViewModel? root = null;
+        foreach (var layout in layouts)
+        {
+            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? UniqueProfileName(layout.Name) : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background)
+            {
+                ParentId = layout.IsRoot ? null : layout.ParentId,
+                Kind = layout.IsRoot ? null : layout.Kind,
+                Owner = layout.IsRoot ? null : root,
+            };
+            foreach (var binding in layout.Bindings)
+            {
+                if (Resolve(binding) is { } resolved)
+                {
+                    item.SetBinding(resolved);
+                }
+                else
+                {
+                    item.AddUnresolvedBinding(binding);
+                }
+            }
+
+            if (layout.IsRoot && root is null)
+            {
+                root = item;
+                Profiles.Add(item);
+            }
+            else if (root is not null)
+            {
+                root.Layouts.Add(item);
+            }
+        }
+
+        return root ?? throw new IOException("The file has no profile.");
+    }
+
     public void NotifyProfilesEdited()
     {
         SyncProfilesToHost();
@@ -1182,13 +1288,19 @@ public class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     // ---------------------------------------------------------------- profiles
 
-    private void LoadProfiles()
+    private void LoadProfiles(ProfileDocument? replacement = null)
     {
         _suppressHostSync = true;
         try
         {
-            var document = TryLoadDocument();
+            var document = replacement ?? TryLoadDocument();
             var unresolved = 0;
+            if (replacement is not null)
+            {
+                // A restored backup replaces everything.
+                Profiles.Clear();
+                _selectedProfile = null;
+            }
 
             var children = new List<ProfileItemViewModel>();
             foreach (var profile in document?.Profiles ?? [])
