@@ -58,6 +58,65 @@ public sealed class ProfileStore
         return JsonSerializer.Deserialize<ProfileDocument>(stream, SerializerOptions);
     }
 
+    /// <summary>How many daily backups are kept.</summary>
+    public const int BackupsKept = 14;
+
+    /// <summary>Where the daily backups go: <c>backups/</c> next to the profiles file.</summary>
+    public string BackupDirectory => Path.Combine(Path.GetDirectoryName(FilePath) ?? ".", "backups");
+
+    /// <summary>The backups, newest first.</summary>
+    public IReadOnlyList<FileInfo> ListBackups()
+    {
+        try
+        {
+            return Directory.Exists(BackupDirectory)
+                ? [.. new DirectoryInfo(BackupDirectory).GetFiles("profiles-*.json").OrderByDescending(static file => file.Name, StringComparer.Ordinal)]
+                : [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Reads a backup (or any profiles file). Throws <see cref="JsonException"/> for a corrupt file.</summary>
+    public static ProfileDocument? LoadFrom(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return JsonSerializer.Deserialize<ProfileDocument>(stream, SerializerOptions);
+    }
+
+    /// <summary>
+    /// Copies the current file to today's backup (once a day, before the first change of the day),
+    /// keeping the last <see cref="BackupsKept"/> days. A backup that can't be written doesn't stop the save.
+    /// </summary>
+    public void BackUp(bool force = false)
+    {
+        try
+        {
+            if (!File.Exists(FilePath))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(BackupDirectory);
+            var today = Path.Combine(BackupDirectory, $"profiles-{DateTime.Now:yyyy-MM-dd}.json");
+            if (File.Exists(today) && !force)
+            {
+                return;
+            }
+
+            File.Copy(FilePath, today, overwrite: true);
+            foreach (var old in ListBackups().Skip(BackupsKept))
+            {
+                old.Delete();
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
     public void Save(ProfileDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -67,6 +126,8 @@ public sealed class ProfileStore
         {
             Directory.CreateDirectory(directory);
         }
+
+        BackUp();
 
         var tempPath = FilePath + ".tmp";
         using (var stream = File.Create(tempPath))

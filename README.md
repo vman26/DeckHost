@@ -148,6 +148,12 @@ The window is laid out like the Stream Deck app:
 - **Folders:** drop the **Folder** action on a key and it gets a layout of its own, with a **Back** key in its first key. Press it on the device, double-click it, or use **Open folder** in its editor to fill it; **Back** under the device (or the Back key) returns. Folders can hold folders. Removing the Folder key removes its folder.
 - Profile switching (Switch Profile, apps) always lands on a profile's first page; pages and folders use the profile's background unless they get their own.
 
+**Sharing and backups** (Profiles page):
+
+- **Export…** writes the profile with its pages, folders and images to a `.deckhostprofile` file; **Import…** adds one as a new profile (it never replaces one you have).
+- **Import…** also takes an Elgato **`.streamDeckProfile`**. Keys and dials keep their place (as far as the device has room), their title and image; pages and folders come along. Elgato's own actions become DeckHost's (hotkey, website, open, text, multimedia, pages, folders, Multi Action, Multi Action Switch), installed Stream Deck plugins keep their actions (set their options again), and anything DeckHost doesn't have keeps its look, listed after the import. Hotkeys come in as Hotkey actions without their keys.
+- **Backups:** all profiles are backed up once a day (14 days kept) in `backups/` next to `profiles.json`; **Back up now** and **Restore** are on the Profiles page.
+
 **Key logic**, also like the Stream Deck app:
 
 - **Multi Action Switch:** two sets of steps; the first press runs the first set, the next press the second, and so on (mute, then unmute). Each step's **Runs on** picks its set; the key shows which set comes next (with your own title per set if you like).
