@@ -434,3 +434,4 @@ DeckHost.App/Plugins/device/
 
 # Built plugin packages
 artifacts/
+site/
