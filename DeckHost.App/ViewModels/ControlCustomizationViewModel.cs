@@ -370,6 +370,25 @@ public partial class ControlCustomizationViewModel : ViewModelBase
 
     public bool HasAssignment => _original is not null;
 
+    /// <summary>The folder a Folder key opens (null for other actions).</summary>
+    public string? FolderId =>
+        _original?.Action.ActionId == SystemPlugins.FolderAction.ActionId &&
+        _original.Action.Settings.TryGetValue(SystemPlugins.FolderAction.FolderIdKey, out var id) ? id : null;
+
+    public bool IsFolder => FolderId is not null;
+
+    /// <summary>Show the folder in the editor (its keys can then be set up).</summary>
+    public event EventHandler<string>? OpenFolderRequested;
+
+    [RelayCommand]
+    private void OpenFolder()
+    {
+        if (FolderId is { } id)
+        {
+            OpenFolderRequested?.Invoke(this, id);
+        }
+    }
+
     [RelayCommand]
     private void Revert() => RevertRequested?.Invoke(this, EventArgs.Empty);
 

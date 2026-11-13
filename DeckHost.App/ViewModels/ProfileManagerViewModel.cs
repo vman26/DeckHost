@@ -25,7 +25,7 @@ public partial class ProfileManagerViewModel : ViewModelBase
     {
         _main = main;
         _main.PropertyChanged += OnMainPropertyChanged;
-        _editingProfile = main.SelectedProfile ?? main.Profiles.FirstOrDefault();
+        _editingProfile = main.SelectedRootProfile ?? main.Profiles.FirstOrDefault();
         RefreshRunningApps();
     }
 
@@ -170,7 +170,7 @@ public partial class ProfileManagerViewModel : ViewModelBase
         EditingBackgroundImage = string.Empty;
     }
 
-    public bool IsEditingActiveProfile => EditingProfile is not null && EditingProfile == _main.SelectedProfile;
+    public bool IsEditingActiveProfile => EditingProfile is not null && EditingProfile == _main.SelectedRootProfile;
 
     public bool CanDelete => EditingProfile is not null && Profiles.Count > 1;
 

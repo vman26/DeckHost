@@ -31,6 +31,49 @@ public class ProfileItemViewModel : ViewModelBase
 
     public string Id { get; }
 
+    /// <summary>For a page or folder: the layout it belongs to (see <see cref="DeviceProfile.ParentId"/>).</summary>
+    public string? ParentId { get; init; }
+
+    /// <summary>Null for a profile, else <see cref="ProfileKinds.Page"/> or <see cref="ProfileKinds.Folder"/>.</summary>
+    public string? Kind { get; init; }
+
+    public bool IsRoot => Kind is null;
+
+    public bool IsFolder => Kind == ProfileKinds.Folder;
+
+    /// <summary>The profile a page or folder belongs to; set when it's added to that profile's <see cref="Layouts"/>.</summary>
+    public ProfileItemViewModel? Owner { get; set; }
+
+    /// <summary>The profile this layout belongs to (a profile is its own).</summary>
+    public ProfileItemViewModel RootProfile => Owner ?? this;
+
+    /// <summary>A profile's other pages and its folders (nested folders too), in order.</summary>
+    public ObservableCollection<ProfileItemViewModel> Layouts { get; } = [];
+
+    /// <summary>The profile's pages: itself first, then its other pages.</summary>
+    public IReadOnlyList<ProfileItemViewModel> PageLayouts => [RootProfile, .. RootProfile.Layouts.Where(static layout => layout.Kind == ProfileKinds.Page)];
+
+    /// <summary>Every layout of the profile: itself, its pages and its folders.</summary>
+    public IEnumerable<ProfileItemViewModel> AllLayouts => [RootProfile, .. RootProfile.Layouts];
+
+    /// <summary>The layout this one belongs to, or null for a profile.</summary>
+    public ProfileItemViewModel? ParentLayout => ParentId is null ? null : AllLayouts.FirstOrDefault(layout => layout.Id == ParentId);
+
+    /// <summary>The page this layout is on (a folder's page is the page its outermost folder hangs from).</summary>
+    public ProfileItemViewModel PageLayout
+    {
+        get
+        {
+            var current = this;
+            for (var depth = 0; depth < 64 && current.IsFolder && current.ParentLayout is { } parent; depth++)
+            {
+                current = parent;
+            }
+
+            return current;
+        }
+    }
+
     public string Name
     {
         get => _name;
@@ -118,7 +161,14 @@ public class ProfileItemViewModel : ViewModelBase
         AutoSwitchApps.Count == 0 ? null : [.. AutoSwitchApps],
         string.IsNullOrWhiteSpace(BackgroundColor) && string.IsNullOrWhiteSpace(BackgroundImagePath)
             ? null
-            : new ProfileBackground(NullIfEmpty(BackgroundColor), NullIfEmpty(BackgroundImagePath)));
+            : new ProfileBackground(NullIfEmpty(BackgroundColor), NullIfEmpty(BackgroundImagePath)))
+    {
+        ParentId = ParentId,
+        Kind = Kind,
+    };
+
+    /// <summary>The profile and all its pages and folders, as saved and as the host gets them.</summary>
+    public IEnumerable<DeviceProfile> ToModels() => AllLayouts.Select(static layout => layout.ToModel());
 
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
