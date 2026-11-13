@@ -1,0 +1,129 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:vm="using:DeckHost.App.ViewModels"
+			 xmlns:local="using:DeckHost.App.Views"
+			 x:Class="DeckHost.App.Views.LightStyleEditor"
+			 x:DataType="vm:LightStyleEditorViewModel">
+	<UserControl.Styles>
+		<Style Selector="TextBlock.label">
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="#E2E8F0" />
+		</Style>
+		<Style Selector="TextBlock.value">
+			<Setter Property="Foreground" Value="#E2E8F0" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+			<Setter Property="HorizontalAlignment" Value="Right" />
+		</Style>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+	</UserControl.Styles>
+
+	<StackPanel Spacing="10">
+		<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+			<ComboBox ItemsSource="{Binding Effects}" SelectedItem="{Binding SelectedEffect, Mode=TwoWay}" DisplayMemberBinding="{Binding Label}" HorizontalAlignment="Stretch" />
+			<!-- Live preview of the LEDs, drawn here with the same math the device uses. -->
+			<ItemsControl Grid.Column="1" Name="Preview" VerticalAlignment="Center" ToolTip.Tip="Preview">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<StackPanel Orientation="Horizontal" Spacing="6" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="IBrush">
+						<Ellipse Width="18" Height="18" Fill="{Binding}" Stroke="#334155" StrokeThickness="1" />
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+		</Grid>
+
+		<StackPanel Spacing="4" IsVisible="{Binding ShowColor}">
+			<TextBlock Classes="label" Text="Color" />
+			<local:ColorField Hex="{Binding Color, Mode=TwoWay}" DefaultHex="#0000FF" />
+		</StackPanel>
+
+		<!-- Color cycle: the colors it fades through. -->
+		<StackPanel Spacing="6" IsVisible="{Binding ShowColors}">
+			<TextBlock Classes="label" Text="Colors" />
+			<ItemsControl ItemsSource="{Binding Colors}">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<StackPanel Spacing="6" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="vm:LightColorEntryViewModel">
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+							<local:ColorField Hex="{Binding Color, Mode=TwoWay}" DefaultHex="#FFFFFF" />
+							<Button Grid.Column="1" Content="Remove" ToolTip.Tip="Remove this color" Command="{Binding RemoveCommand}" />
+						</Grid>
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+			<Button Content="+ Add color" Command="{Binding AddColorCommand}" HorizontalAlignment="Left" />
+		</StackPanel>
+
+		<!-- Custom: the composer. -->
+		<StackPanel Spacing="8" IsVisible="{Binding ShowSteps}">
+			<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+				<TextBlock Classes="label" Text="Steps (played in order, then from the start)" VerticalAlignment="Center" />
+				<ComboBox Grid.Column="1" ItemsSource="{x:Static vm:LightStyleEditorViewModel.Presets}" SelectedItem="{Binding SelectedPreset, Mode=TwoWay}"
+						  PlaceholderText="Start from a preset" MinWidth="170" />
+			</Grid>
+			<ItemsControl ItemsSource="{Binding Steps}">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<StackPanel Spacing="6" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="vm:LightStepViewModel">
+						<Border Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="10">
+							<Grid RowDefinitions="Auto,Auto" RowSpacing="6">
+								<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+									<TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#F8FAFC" VerticalAlignment="Center" MinWidth="48" />
+									<local:ColorField Grid.Column="1" Hex="{Binding Color, Mode=TwoWay}" DefaultHex="#FFFFFF" />
+									<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+										<Button Content="↑" ToolTip.Tip="Earlier" Command="{Binding MoveUpCommand}" IsEnabled="{Binding CanMoveUp}" />
+										<Button Content="↓" ToolTip.Tip="Later" Command="{Binding MoveDownCommand}" IsEnabled="{Binding CanMoveDown}" />
+										<Button Content="Remove" ToolTip.Tip="Remove this step" Command="{Binding RemoveCommand}" />
+									</StackPanel>
+								</Grid>
+								<Grid Grid.Row="1" ColumnDefinitions="Auto,*,52,Auto,*,52" ColumnSpacing="8">
+									<TextBlock Text="Fade" Foreground="#CBD5E1" VerticalAlignment="Center" />
+									<Slider Grid.Column="1" Minimum="0" Maximum="5" SmallChange="0.05" LargeChange="0.5" Value="{Binding FadeSeconds, Mode=TwoWay}" VerticalAlignment="Center" />
+									<TextBlock Grid.Column="2" Classes="value" Text="{Binding FadeText}" />
+									<TextBlock Grid.Column="3" Text="Hold" Foreground="#CBD5E1" VerticalAlignment="Center" Margin="8,0,0,0" />
+									<Slider Grid.Column="4" Minimum="0" Maximum="5" SmallChange="0.05" LargeChange="0.5" Value="{Binding HoldSeconds, Mode=TwoWay}" VerticalAlignment="Center" />
+									<TextBlock Grid.Column="5" Classes="value" Text="{Binding HoldText}" />
+								</Grid>
+							</Grid>
+						</Border>
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+			<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+				<Button Content="+ Add step" Command="{Binding AddStepCommand}" />
+				<TextBlock Grid.Column="1" Classes="hint" Text="{Binding CustomLengthText}" VerticalAlignment="Center" />
+			</Grid>
+		</StackPanel>
+
+		<StackPanel Spacing="4" IsVisible="{Binding ShowSpeed}">
+			<TextBlock Classes="label" Text="One cycle takes" />
+			<Grid ColumnDefinitions="*,56" ColumnSpacing="8">
+				<Slider Minimum="0.2" Maximum="10" SmallChange="0.1" LargeChange="1" Value="{Binding PeriodSeconds, Mode=TwoWay}" VerticalAlignment="Center" />
+				<TextBlock Grid.Column="1" Classes="value" Text="{Binding PeriodText}" />
+			</Grid>
+		</StackPanel>
+
+		<StackPanel Spacing="4" IsVisible="{Binding ShowSpread}">
+			<TextBlock Classes="label" Text="Each LED runs ahead by" />
+			<Grid ColumnDefinitions="*,72" ColumnSpacing="8">
+				<Slider Minimum="0" Maximum="50" SmallChange="1" LargeChange="5" Value="{Binding SpreadPercent, Mode=TwoWay}" VerticalAlignment="Center" />
+				<TextBlock Grid.Column="1" Classes="value" Text="{Binding SpreadText}" />
+			</Grid>
+		</StackPanel>
+	</StackPanel>
+</UserControl>

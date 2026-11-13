@@ -1,0 +1,142 @@
+using DeckHost.App.ViewModels;
+using DeckHost.Contracts.Models;
+using DeckHost.Core.Devices;
+using DeckHost.Core.State;
+using DeckHost.Tests;
+
+namespace DeckHost.Tests;
+
+public class LightEffectTests
+{
+    [Theory]
+    [InlineData(LightEffects.Pulse)]
+    [InlineData(LightEffects.Blink)]
+    [InlineData(LightEffects.ColorCycle)]
+    [InlineData(LightEffects.Wave)]
+    [InlineData(LightEffects.Chase)]
+    [InlineData(LightEffects.Candle)]
+    [InlineData(LightEffects.Sparkle)]
+    public void Every_effect_moves_and_repeats_exactly(string effect)
+    {
+        var style = new LightStyle("FF8000", effect, 2);
+        var samples = Enumerable.Range(0, 60).Select(i => LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(i * 0.07), phase: 1)).ToList();
+
+        Assert.True(samples.Distinct().Count() > 3, $"{effect} should change over time");
+        Assert.True(LightEffects.IsAnimated(effect));
+        Assert.Equal(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.3), 2), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.3), 2));
+    }
+
+    [Fact]
+    public void Fades_are_smooth_steps_of_brightness()
+    {
+        // Sampled at 30 frames a second, breathing never jumps more than a small step.
+        var style = new LightStyle("FFFFFF", LightEffects.Breathe, 3);
+        var previous = LightEffectMath.ColorAt(style, TimeSpan.Zero).R;
+        for (var frame = 1; frame < 90; frame++)
+        {
+            var current = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(frame / 30d)).R;
+            Assert.InRange(Math.Abs(current - previous), 0, 16);
+            previous = current;
+        }
+    }
+
+    [Fact]
+    public void Color_cycle_fades_through_its_colors()
+    {
+        var style = new LightStyle("000000", LightEffects.ColorCycle, 3) { Colors = ["FF0000", "00FF00", "0000FF"], Spread = 0 };
+
+        Assert.Equal(((byte)255, (byte)0, (byte)0), LightEffectMath.ColorAt(style, TimeSpan.Zero));
+        Assert.Equal(((byte)0, (byte)255, (byte)0), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1)));
+        var halfway = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(0.5));
+        Assert.True(halfway.R is > 50 and < 205 && halfway.G is > 50 and < 205, $"between red and green: {halfway}");
+    }
+
+    [Fact]
+    public void A_custom_effect_plays_its_steps()
+    {
+        var style = new LightStyle("000000", LightEffects.Custom)
+        {
+            Steps = [new LightStep("FF0000", FadeSeconds: 0, HoldSeconds: 1), new LightStep("0000FF", FadeSeconds: 1, HoldSeconds: 1)],
+        };
+
+        Assert.Equal(3, LightEffectMath.CustomLength(style));
+        Assert.Equal(((byte)255, (byte)0, (byte)0), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(0.5)));
+        var fading = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.5));
+        Assert.True(fading.R is > 50 and < 205 && fading.B is > 50 and < 205, $"fading red to blue: {fading}");
+        Assert.Equal(((byte)0, (byte)0, (byte)255), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(2.5)));
+        Assert.Equal(((byte)255, (byte)0, (byte)0), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(3.5))); // from the start
+    }
+
+    [Fact]
+    public void Chase_lights_one_led_at_a_time()
+    {
+        var style = new LightStyle("FFFFFF", LightEffects.Chase, 4);
+
+        // A quarter into the cycle the head is on the second of four LEDs.
+        var leds = Enumerable.Range(0, 4).Select(i => LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.1), i, 4).Item1).ToList();
+        Assert.Equal(1, leds.IndexOf(leds.Max()));
+    }
+
+    [Fact]
+    public void Styles_with_the_same_lists_are_equal_and_saved_with_them()
+    {
+        var a = new LightStyle("FF0000", LightEffects.Custom) { Steps = [new LightStep("00FF00")], Spread = 0.1 };
+        var b = new LightStyle("FF0000", LightEffects.Custom) { Steps = [new LightStep("00FF00")], Spread = 0.1 };
+        Assert.Equal(a, b);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(new RgbFeedback { IdleLight = a });
+        Assert.Equal(a, System.Text.Json.JsonSerializer.Deserialize<RgbFeedback>(json)!.IdleStyle);
+    }
+
+    [Fact]
+    public void The_editor_composes_a_custom_effect()
+    {
+        var editor = new LightStyleEditorViewModel(null);
+        var changes = 0;
+        editor.Changed += (_, _) => changes++;
+
+        editor.SelectedEffect = editor.Effects.First(option => option.Value == LightEffects.Custom);
+        Assert.True(editor.ShowSteps);
+        Assert.NotEmpty(editor.Steps); // starts from a preset
+
+        editor.SelectedPreset = LightStyleEditorViewModel.Presets.First(preset => preset.Name == "Traffic light");
+        editor.Steps[0].HoldSeconds = 1;
+        editor.AddStepCommand.Execute(null);
+        editor.Steps[^1].Color = "#123456";
+        editor.Steps[^1].MoveUpCommand.Execute(null);
+
+        var style = editor.ToStyle()!;
+        Assert.Equal(LightEffects.Custom, style.Effect);
+        Assert.Equal(["FF0000", "FFA500", "123456", "00FF00"], style.Steps!.Select(step => step.Color));
+        Assert.Equal(1, style.Steps![0].HoldSeconds);
+        Assert.True(changes >= 4);
+    }
+
+    [Fact]
+    public void Off_in_device_settings_means_no_light_and_off_on_a_knob_means_dark()
+    {
+        Assert.Null(new LightStyleEditorViewModel(null, KnobLightsViewModel.Off).ToStyle());
+        Assert.Equal(LightEffects.Off, new LightStyleEditorViewModel(new LightStyle(Effect: LightEffects.Off)).ToStyle()!.Effect);
+    }
+
+    [Fact]
+    public async Task Off_is_sent_again_after_the_device_resets_its_lights()
+    {
+        var device = new HostLightTests.LightDevice();
+        var store = new VariableStore();
+        await using var host = new DeviceHostService([device], [], store);
+        host.SetProfiles([new DeviceProfile("profile", "Profile", HostLightTests.LightDevice.DeviceId, [])]);
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+        host.SetDeviceLight(HostLightTests.LightDevice.DeviceId, null);
+        await host.WhenIdleAsync();
+        device.Calls.Clear();
+
+        // The device plugin wrote its configuration, which put its own lighting back on.
+        device.Context!.RequestRedraw(HostLightTests.LightDevice.DeviceId);
+        await host.WhenIdleAsync();
+
+        Assert.Contains(device.Calls, call => call == "batch:encoder.0:0,0,0 encoder.1:0,0,0");
+        store.Dispose();
+    }
+}

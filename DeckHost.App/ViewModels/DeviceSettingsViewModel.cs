@@ -134,8 +134,9 @@ public interface IDeviceLightSettings
 }
 
 /// <summary>
-/// The Knob lights card: the color and effect every LED of the device shows while idle, in all
-/// profiles, unless a control has a light of its own (Customize → Light). Applies right away.
+/// The Knob lights card: the light every LED of the device shows while idle, in all profiles,
+/// unless a control has a light of its own (Customize → Light). Applies right away. The editing
+/// is <see cref="LightStyleEditorViewModel"/>; Off here means no light at all.
 /// </summary>
 public sealed partial class KnobLightsViewModel : ViewModelBase
 {
@@ -143,88 +144,39 @@ public sealed partial class KnobLightsViewModel : ViewModelBase
 
     private readonly IDeviceLightSettings _settings;
     private readonly string _deviceId;
-    private string _effect;
-    private string _color;
-    private double _periodSeconds;
 
     public KnobLightsViewModel(IDeviceLightSettings settings, string deviceId)
     {
         _settings = settings;
         _deviceId = deviceId;
-        var style = settings.GetDeviceLight(deviceId);
-        _effect = style?.Effect is { } effect && effect != LightEffects.Off ? effect : Off;
-        _color = "#" + (style?.Color ?? "0000FF").TrimStart('#');
-        _periodSeconds = style?.PeriodSeconds ?? LightStyle.DefaultPeriodSeconds;
+        Editor = new LightStyleEditorViewModel(settings.GetDeviceLight(deviceId), Off);
+        Editor.Changed += (_, _) => _settings.SetDeviceLight(_deviceId, Editor.ToStyle());
     }
 
-    /// <summary>The idle effects a light can have, for the light editors.</summary>
-    public static IReadOnlyList<ActionSettingOption> EffectOptions { get; } =
-    [
-        new(Off, "Off"),
-        new(LightEffects.Solid, "Steady color"),
-        new(LightEffects.Breathe, "Breathing"),
-        new(LightEffects.Rainbow, "Rainbow"),
-    ];
+    public LightStyleEditorViewModel Editor { get; }
 
-    public IReadOnlyList<ActionSettingOption> Effects => EffectOptions;
+    public bool ShowColor => Editor.ShowColor;
+
+    public bool ShowSpeed => Editor.ShowSpeed;
+
+    public IReadOnlyList<ActionSettingOption> Effects => Editor.Effects;
 
     public ActionSettingOption SelectedEffect
     {
-        get => EffectOptions.First(option => option.Value == _effect);
-        set
-        {
-            if (value is not null && value.Value != _effect)
-            {
-                _effect = value.Value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(ShowColor));
-                OnPropertyChanged(nameof(ShowSpeed));
-                Apply();
-            }
-        }
+        get => Editor.SelectedEffect;
+        set => Editor.SelectedEffect = value;
     }
-
-    public bool ShowColor => _effect is LightEffects.Solid or LightEffects.Breathe;
-
-    public bool ShowSpeed => LightEffects.IsAnimated(_effect);
 
     public string Color
     {
-        get => _color;
-        set
-        {
-            if (SetProperty(ref _color, value ?? string.Empty))
-            {
-                Apply();
-            }
-        }
+        get => Editor.Color;
+        set => Editor.Color = value;
     }
 
     /// <summary>Seconds per cycle of the effect.</summary>
     public double PeriodSeconds
     {
-        get => _periodSeconds;
-        set
-        {
-            var clamped = Math.Round(Math.Clamp(value, LightStyle.MinPeriodSeconds, 10), 1);
-            if (SetProperty(ref _periodSeconds, clamped))
-            {
-                OnPropertyChanged(nameof(PeriodText));
-                Apply();
-            }
-        }
-    }
-
-    public string PeriodText => $"{_periodSeconds:0.#} s";
-
-    private void Apply()
-    {
-        var hex = _color.Trim().TrimStart('#');
-        if (_effect != Off && !System.Text.RegularExpressions.Regex.IsMatch(hex, "^[0-9A-Fa-f]{6}$"))
-        {
-            return;
-        }
-
-        _settings.SetDeviceLight(_deviceId, _effect == Off ? null : new LightStyle(hex.ToUpperInvariant(), _effect, _periodSeconds));
+        get => Editor.PeriodSeconds;
+        set => Editor.PeriodSeconds = value;
     }
 }

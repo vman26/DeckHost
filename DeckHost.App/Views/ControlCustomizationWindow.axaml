@@ -324,22 +324,15 @@
 								   Text="Assign an action to this control first; the light reacts when the action runs." />
 						<StackPanel Spacing="10" IsVisible="{Binding ShowLightEditor}">
 							<CheckBox Content="Its own light (instead of the Knob lights in Device Settings)" IsChecked="{Binding LightEnabled}" />
-							<Grid ColumnDefinitions="*,*" ColumnSpacing="10" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="4" IsEnabled="{Binding LightEnabled}">
+							<StackPanel Spacing="6" IsEnabled="{Binding LightEnabled}">
 								<TextBlock Classes="label" Text="While idle" />
-								<TextBlock Classes="label" Grid.Column="1" Text="Idle color" />
-								<ComboBox Grid.Row="1" ItemsSource="{Binding IdleEffects}" SelectedItem="{Binding SelectedIdleEffect, Mode=TwoWay}" DisplayMemberBinding="{Binding Label}" HorizontalAlignment="Stretch" />
-								<local:ColorField Grid.Row="1" Grid.Column="1" Hex="{Binding IdleColor, Mode=TwoWay}" DefaultHex="#0000FF" />
-								<StackPanel Grid.Row="2" Grid.ColumnSpan="2" Spacing="4" IsVisible="{Binding ShowEffectSpeed}" Margin="0,6,0,0">
-									<TextBlock Classes="label" Text="One cycle takes" />
-									<Grid ColumnDefinitions="*,56" ColumnSpacing="8">
-										<Slider Minimum="0.5" Maximum="10" SmallChange="0.5" LargeChange="1" Value="{Binding EffectPeriod, Mode=TwoWay}" VerticalAlignment="Center" />
-										<TextBlock Grid.Column="1" Text="{Binding EffectPeriodText}" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="#E2E8F0" />
-									</Grid>
-								</StackPanel>
-								<TextBlock Classes="label" Grid.Row="3" Text="When used" Margin="0,6,0,0" />
-								<TextBlock Classes="label" Grid.Row="3" Grid.Column="1" Text="for (ms)" Margin="0,6,0,0" />
-								<local:ColorField Grid.Row="4" Hex="{Binding ActiveColor, Mode=TwoWay}" DefaultHex="#00FF00" />
-								<TextBox Grid.Row="4" Grid.Column="1" Text="{Binding ActiveDurationText, Mode=TwoWay}" PlaceholderText="200" />
+								<local:LightStyleEditor DataContext="{Binding IdleLight}" />
+							</StackPanel>
+							<Grid ColumnDefinitions="*,*" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="4" IsEnabled="{Binding LightEnabled}" Margin="0,6,0,0">
+								<TextBlock Classes="label" Text="When used" />
+								<TextBlock Classes="label" Grid.Column="1" Text="for (ms)" />
+								<local:ColorField Grid.Row="1" Hex="{Binding ActiveColor, Mode=TwoWay}" DefaultHex="#00FF00" />
+								<TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ActiveDurationText, Mode=TwoWay}" PlaceholderText="200" />
 							</Grid>
 							<CheckBox Content="Blink instead of a steady color" IsEnabled="{Binding LightEnabled}" IsChecked="{Binding PulseOnActive}" />
 							<TextBlock Classes="error" Text="{Binding LightError}" IsVisible="{Binding HasLightError}" />
