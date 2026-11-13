@@ -114,6 +114,22 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
 
     public string LogDirectory => Logging.LogDirectory;
 
+    /// <summary>The developer's Buy Me a Coffee page.</summary>
+    public const string DonateUrl = "https://buymeacoffee.com/Vman26";
+
+    [RelayCommand]
+    private void OpenDonate()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(DonateUrl) { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Status = $"Couldn't open the browser; the page is {DonateUrl}.";
+        }
+    }
+
     [RelayCommand]
     private void OpenDataFolder() => Open(DataDirectory);
 

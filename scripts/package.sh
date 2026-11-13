@@ -28,9 +28,7 @@ case "$rid" in
         cp "$root/packaging/linux/install.sh" "$root/packaging/linux/deckhost.desktop" "$root/packaging/linux/70-deckhost-mirabox.rules" "$folder/"
         cp "$root/LICENSE" "$folder/LICENSE.txt"
         chmod +x "$folder/install.sh" "$folder/DeckHost/DeckHost.App"
-        if command -v convert >/dev/null; then
-            convert "$root/DeckHost.App/Assets/avalonia-logo.ico[0]" -resize 256x256 "$folder/deckhost.png" 2>/dev/null || true
-        fi
+        cp "$root/DeckHost.App/Assets/deckhost-256.png" "$folder/deckhost.png"
         cat > "$folder/README.txt" <<TEXT
 DeckHost ${display} for Linux (${rid})
 
