@@ -197,6 +197,37 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         }
     }
 
+    private void OpenSupport_OnClick(object? sender, RoutedEventArgs e) => OpenSupport();
+
+    /// <summary>Help and support: documentation, reporting a problem, the support bundle, crash reports.</summary>
+    public void OpenSupport() =>
+        OpenSingle("Help and support", () => new SupportView
+        {
+            DataContext = new SupportViewModel(TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>(), TryResolve<DeckHost.Core.Plugins.PluginCatalog>()),
+        });
+
+    private void OpenWelcome_OnClick(object? sender, RoutedEventArgs e) => OpenWelcome();
+
+    /// <summary>The welcome tour (by itself on the first start).</summary>
+    public void OpenWelcome() =>
+        OpenSingle("Welcome", () => new WelcomeView
+        {
+            DataContext = new WelcomeViewModel(DataContext as MainViewModel, TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>(), TryResolve<UpdateViewModel>()),
+        });
+
+    /// <summary>On start: a crash since last time opens Help and support; the first start opens the welcome tour.</summary>
+    public void ShowStartPages()
+    {
+        if (SupportViewModel.HasUnseenCrashes())
+        {
+            OpenSupport();
+        }
+        else if (WelcomeViewModel.ShouldShow())
+        {
+            OpenWelcome();
+        }
+    }
+
     private void OpenPluginManager_OnClick(object? sender, RoutedEventArgs e)
     {
         if (TryResolve<PluginManagerViewModel>() is { } plugins)

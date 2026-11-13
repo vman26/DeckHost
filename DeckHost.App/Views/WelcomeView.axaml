@@ -1,0 +1,140 @@
+<UserControl
+		xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		x:Class="DeckHost.App.Views.WelcomeView"
+		x:DataType="vm:WelcomeViewModel">
+
+	<UserControl.Styles>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="13" />
+			<Setter Property="Foreground" Value="#94A3B8" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+		<Style Selector="TextBlock.heading">
+			<Setter Property="FontSize" Value="22" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="#F8FAFC" />
+		</Style>
+		<Style Selector="Border.card">
+			<Setter Property="Background" Value="#0F172A" />
+			<Setter Property="BorderBrush" Value="#1E293B" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="12" />
+			<Setter Property="Padding" Value="16" />
+		</Style>
+		<Style Selector="Border.tip">
+			<Setter Property="Background" Value="#111827" />
+			<Setter Property="CornerRadius" Value="10" />
+			<Setter Property="Padding" Value="12,10" />
+		</Style>
+	</UserControl.Styles>
+
+	<Grid RowDefinitions="*,Auto" MaxWidth="760" Margin="20">
+		<ScrollViewer HorizontalScrollBarVisibility="Disabled">
+			<StackPanel Spacing="16">
+				<!-- 1: welcome and devices -->
+				<StackPanel Spacing="16" IsVisible="{Binding IsDevicesStep}">
+					<StackPanel Orientation="Horizontal" Spacing="14">
+						<Image Source="/Assets/deckhost-64.png" Width="56" Height="56" />
+						<StackPanel VerticalAlignment="Center" Spacing="2">
+							<TextBlock Classes="heading" Text="Welcome to DeckHost" />
+							<TextBlock Classes="hint" Text="One platform. Unlimited control." />
+						</StackPanel>
+					</StackPanel>
+					<TextBlock Classes="hint" Text="DeckHost drives your control surfaces: the MiraBox N4 Pro, Elgato Stream Decks, and a Web Deck on your phone or tablet. Each key, knob and touch zone runs what you put on it." />
+					<Border Classes="card">
+						<StackPanel Spacing="10">
+							<Grid ColumnDefinitions="*,Auto">
+								<TextBlock Text="Your devices" FontWeight="SemiBold" Foreground="#E2E8F0" VerticalAlignment="Center" />
+								<Button Grid.Column="1" Content="Look again" Command="{Binding RefreshDevicesCommand}" />
+							</Grid>
+							<ItemsControl ItemsSource="{Binding Devices}">
+								<ItemsControl.ItemsPanel>
+									<ItemsPanelTemplate><StackPanel Spacing="6" /></ItemsPanelTemplate>
+								</ItemsControl.ItemsPanel>
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="vm:WelcomeDevice">
+										<StackPanel Orientation="Horizontal" Spacing="10">
+											<TextBlock Text="{Binding Dot}" Foreground="{Binding DotColor}" VerticalAlignment="Center" />
+											<TextBlock Text="{Binding Name}" Foreground="#E2E8F0" VerticalAlignment="Center" />
+											<TextBlock Text="{Binding State}" Foreground="#64748B" VerticalAlignment="Center" />
+										</StackPanel>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+							<Border Classes="tip" IsVisible="{Binding ShowNoDeviceHelp}">
+								<StackPanel Spacing="6">
+									<TextBlock Text="No device connected yet" FontWeight="SemiBold" Foreground="#FDE68A" />
+									<TextBlock Classes="hint" Text="{Binding DeviceHelp}" />
+									<TextBlock Classes="hint" Text="No device at all? Use the Web Deck: choose it in the device picker at the top, open Device settings and turn on sharing. Its link opens a deck on your phone." />
+									<TextBlock Classes="hint" Text="You can set everything up without a device; it shows up as soon as you plug it in." />
+								</StackPanel>
+							</Border>
+						</StackPanel>
+					</Border>
+				</StackPanel>
+
+				<!-- 2: a starting point -->
+				<StackPanel Spacing="16" IsVisible="{Binding IsStartStep}">
+					<TextBlock Classes="heading" Text="Start with something useful" />
+					<TextBlock Classes="hint" Text="Fill the empty keys of this profile with everyday actions, or start empty and drag actions from the list on the right yourself." />
+					<Border Classes="card">
+						<StackPanel Spacing="10">
+							<TextBlock Text="Starter layout" FontWeight="SemiBold" Foreground="#E2E8F0" />
+							<TextBlock Classes="hint" Text="Play / pause, previous and next track, mute, volume down and up, a clock, system info, lock, and switch profile. On a knob: the volume; on the touch strip: swipe to skip tracks. Controls that already have an action keep it." />
+							<Button Content="Put these on my device" Classes="accent" Command="{Binding ApplyStarterCommand}" IsEnabled="{Binding CanApplyStarter}" HorizontalAlignment="Left" />
+							<TextBlock Text="{Binding StarterStatus}" Foreground="#93C5FD" TextWrapping="Wrap" />
+						</StackPanel>
+					</Border>
+					<Border Classes="card">
+						<StackPanel Spacing="6">
+							<TextBlock Text="Coming from the Stream Deck app?" FontWeight="SemiBold" Foreground="#E2E8F0" />
+							<TextBlock Classes="hint" Text="Import your .streamDeckProfile files on the Profiles page (the grid icon at the top right), and install your Stream Deck plugins from Plugins → Store." />
+						</StackPanel>
+					</Border>
+				</StackPanel>
+
+				<!-- 3: preferences -->
+				<StackPanel Spacing="16" IsVisible="{Binding IsPreferencesStep}">
+					<TextBlock Classes="heading" Text="A few preferences" />
+					<Border Classes="card">
+						<StackPanel Spacing="12">
+							<StackPanel Spacing="2">
+								<CheckBox Content="Start DeckHost when I sign in" IsChecked="{Binding StartAtLogin}" IsEnabled="{Binding CanStartAtLogin}" />
+								<TextBlock Classes="hint" Margin="28,0,0,0" Text="Your device works right after sign-in; DeckHost waits in the tray." />
+							</StackPanel>
+							<StackPanel Spacing="2">
+								<CheckBox Content="Check for DeckHost updates" IsChecked="{Binding CheckForUpdates}" />
+								<TextBlock Classes="hint" Margin="28,0,0,0" Text="Asks GitHub for new releases now and then. Updates are only installed when you choose to." />
+							</StackPanel>
+							<StackPanel Spacing="2">
+								<CheckBox Content="After a crash, offer to report it" IsChecked="{Binding OfferCrashReports}" />
+								<TextBlock Classes="hint" Margin="28,0,0,0" Text="A crash report is kept on this computer. On the next start DeckHost asks whether you want to report it; nothing is ever sent by itself." />
+							</StackPanel>
+						</StackPanel>
+					</Border>
+				</StackPanel>
+
+				<!-- 4: how it works -->
+				<StackPanel Spacing="12" IsVisible="{Binding IsTipsStep}">
+					<TextBlock Classes="heading" Text="How DeckHost works" />
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Drag an action from the list on the right onto a key, knob or touch zone. Drag it off again to remove it." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Click a control to set it up below the device: the action's settings, text, icon, background and light. Double-click it to try it." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Multi Action runs several actions in a row; Key Logic does something else on a double press or a hold; Workflow links triggers, conditions, waits and loops on a canvas." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Profiles switch the whole device, pages flip with a swipe, and folders open a set of keys. A profile can turn on by itself when an app comes to the front." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="More actions: Plugins → Store has DeckHost, OpenAction and Stream Deck plugins. Help and support (☰ menu) has the documentation and a way to report problems." /></Border>
+				</StackPanel>
+			</StackPanel>
+		</ScrollViewer>
+
+		<Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,16,0,0">
+			<Button Content="Skip the tour" Command="{Binding FinishCommand}" />
+			<TextBlock Grid.Column="1" Text="{Binding StepText}" Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center" />
+			<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+				<Button Content="Back" Command="{Binding BackCommand}" IsVisible="{Binding CanGoBack}" />
+				<Button Content="{Binding NextLabel}" Classes="accent" Command="{Binding NextCommand}" />
+			</StackPanel>
+		</Grid>
+	</Grid>
+</UserControl>

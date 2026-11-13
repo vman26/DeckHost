@@ -46,6 +46,9 @@ sealed class Program
             return 0;
         }
 
+        // A crash leaves a report that the next start offers to send (nothing is sent by itself).
+        Platform.CrashReporter.Install();
+
         StartedAtLogin = Array.Exists(args, static arg => string.Equals(arg, Platform.AppSettings.StartupArgument, StringComparison.OrdinalIgnoreCase));
 
         // Windows: a named event. Elsewhere named events don't exist; a named pipe (a Unix socket) sets a local one.
