@@ -36,12 +36,27 @@ public sealed record ControlAppearance(
     /// the profile background shows, unless the user picks the tile or a <see cref="BackgroundColor"/>.
     /// </summary>
     public bool ShowTile { get; init; }
+
+    /// <summary>How the tile looks when <see cref="ShowTile"/> is on; null for the action's own colors and corners.</summary>
+    public TileStyle? Tile { get; init; }
 }
 
 /// <summary>
 /// A background for a whole profile. The image spans the device layout, so every control shows
 /// its own slice of it (one picture across all keys). GIFs animate.
 /// </summary>
+/// <summary>
+/// The look of an action's tile: its colors (a gradient from <paramref name="From"/> to
+/// <paramref name="To"/>, top left to bottom right, or one color without <paramref name="To"/>) and
+/// how round its corners are (<paramref name="CornerPercent"/> of the key's width: 0 is square, 50 a circle).
+/// Each part left null keeps the action's own.
+/// </summary>
+public sealed record TileStyle(string? From = null, string? To = null, double? CornerPercent = null)
+{
+    /// <summary>The corner rounding of the action's own tile.</summary>
+    public const double DefaultCornerPercent = 16;
+}
+
 public sealed record ProfileBackground(string? Color = null, string? ImagePath = null)
 {
     public bool IsEmpty => string.IsNullOrWhiteSpace(Color) && string.IsNullOrWhiteSpace(ImagePath);

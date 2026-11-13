@@ -178,7 +178,7 @@ public class ProfileStoreTests
         try
         {
             var store = new ProfileStore(path);
-            var appearance = new ControlAppearance(BackgroundColor: "#80112233") { IconPath = "/icons/mic.svg", ShowTile = true };
+            var appearance = new ControlAppearance(BackgroundColor: "#80112233") { IconPath = "/icons/mic.svg", ShowTile = true, Tile = new TileStyle("#FF0000", "#0000FF", 30) };
             var binding = new ControlBinding("key.0", ProfileActionKind.Single, Bindings.Reference("p", "a"), appearance, []);
             store.Save(new ProfileDocument(ProfileDocument.CurrentVersion, "profile", [new DeviceProfile("profile", "Profile", "dev", [binding])],
                 DefaultBackground: new ProfileBackground("#0F766E", "/images/wall.png")));

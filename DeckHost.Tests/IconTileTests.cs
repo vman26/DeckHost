@@ -153,6 +153,39 @@ public class ControlBackgroundTests
         Assert.Equal(expected, 0xFF000000u | ((uint)frame.Rgba[offset] << 16) | ((uint)frame.Rgba[offset + 1] << 8) | frame.Rgba[offset + 2]);
     }
 
+    [Fact]
+    public async Task The_tile_takes_the_users_color_and_corners()
+    {
+        var round = await RenderKey(new DeckHost.Contracts.Models.ControlAppearance { ShowTile = true, Tile = new DeckHost.Contracts.Models.TileStyle("#FF0000", null, 50) });
+        var square = await RenderKey(new DeckHost.Contracts.Models.ControlAppearance { ShowTile = true });
+
+        Assert.Equal((255, 0, 0), Pixel(round, 18, 56)); // one color, no gradient
+        Assert.NotEqual((255, 0, 0), Pixel(round, 12, 12)); // outside the round tile
+        Assert.True(Pixel(square, 12, 12).B > 100, "the action's own tile reaches into the corner"); // media gradient, 16 % corners
+    }
+
+    private static (int R, int G, int B) Pixel(DeckHost.Core.Models.ControlFrame frame, int x, int y)
+    {
+        var offset = ((y * frame.Width) + x) * 4;
+        return (frame.Rgba[offset], frame.Rgba[offset + 1], frame.Rgba[offset + 2]);
+    }
+
+    private static async Task<DeckHost.Core.Models.ControlFrame> RenderKey(DeckHost.Contracts.Models.ControlAppearance appearance)
+    {
+        var plugins = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
+        using var store = new VariableStore();
+        await using var host = new DeckHost.Core.Devices.DeviceHostService([new KeyDevicePlugin()], plugins, store);
+        var frames = new System.Collections.Concurrent.ConcurrentDictionary<string, DeckHost.Core.Models.ControlFrame>();
+        host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
+        var reference = new DeckHost.Contracts.Models.ActionReference(DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId, "Media", "media.playpause", "Play",
+            DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
+        host.SetProfiles([new DeckHost.Contracts.Models.DeviceProfile("p", "P", KeyDevicePlugin.DeviceId,
+            [new DeckHost.Contracts.Models.ControlBinding("key.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference, appearance, [])])]);
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+        return frames["key.0"];
+    }
+
     private sealed class KeyDevicePlugin : DeckHost.Contracts.Interfaces.IDevicePlugin, DeckHost.Contracts.Interfaces.IDeviceOutput
     {
         public const string DeviceId = "key.device";

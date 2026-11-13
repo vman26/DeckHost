@@ -179,8 +179,28 @@ internal abstract class DeckActionBase(
             }
         }
 
+        FillTile(context, colors);
+    }
+
+    /// <summary>The tile on a key: the user's colors and corners (Customize → Background → the action's tile) over the action's own.</summary>
+    private static void FillTile(IRenderContext context, (uint From, uint To) actionColors)
+    {
+        var style = context.Variables.TryGetValue<TileStyle>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceTileStyle), out var tile) ? tile : null;
+        var from = ParseColor(style?.From) ?? actionColors.From;
+        var to = ParseColor(style?.To) ?? (ParseColor(style?.From) is { } single ? single : actionColors.To);
+        var corner = Math.Clamp(style?.CornerPercent ?? TileStyle.DefaultCornerPercent, 0, 50) / 100d;
         var inset = Math.Max(2d, context.Width * 0.035d);
-        context.FillGradientRect(inset, inset, context.Width - (2 * inset), context.Height - (2 * inset), context.Width * 0.16d, colors.From, colors.To);
+        var size = context.Width - (2 * inset);
+        context.FillGradientRect(inset, inset, size, context.Height - (2 * inset), size * corner, from, to);
+    }
+
+    private static uint? ParseColor(string? text)
+    {
+        var hex = text?.Trim().TrimStart('#');
+        return hex is { Length: 6 or 8 } &&
+               uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? hex.Length == 6 ? 0xFF000000 | value : value
+            : null;
     }
 
     private void RenderTile(IRenderContext context, string icon)
@@ -222,7 +242,8 @@ internal abstract class DeckActionBase(
         }
         else if (!wide && WantsTile(context))
         {
-            (from, to) = TileColors;
+            // The tile is drawn here with the user's colors and corners; DrawTile only adds the icon.
+            FillTile(context, TileColors);
             iconColor = 0xFFFFFFFF;
         }
         else
