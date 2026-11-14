@@ -212,7 +212,8 @@ public sealed class PluginProcessTests : IDisposable
         launcher.Started.Last().Kill();
 
         Assert.True(await Until(() => catalog.Entries.Single(entry => entry.Id == "deckhost.plugin.obs").ProcessStatus?.Contains("restarted 1", StringComparison.Ordinal) == true));
-        Assert.True(changes >= 2);
+        // The status is read live; the Changed events for it arrive a moment later.
+        Assert.True(await Until(() => Volatile.Read(ref changes) >= 2));
         while (host.Renders.CurrentCount > 0)
         {
             host.Renders.Wait();
