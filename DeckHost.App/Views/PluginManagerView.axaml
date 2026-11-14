@@ -30,8 +30,18 @@
 	<UserControl.DataTemplates>
 		<DataTemplate DataType="vm:PluginEntryViewModel">
 			<Border Classes="card">
-				<Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-					<StackPanel Spacing="4">
+				<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+					<!-- The plugin's picture, as in the store. -->
+					<Border Width="44" Height="44" CornerRadius="10" Background="{DynamicResource C.1E293B}" VerticalAlignment="Top" ClipToBounds="True">
+						<Panel>
+							<TextBlock Text="{Binding Initials}" IsVisible="{Binding !HasIcon}" FontWeight="SemiBold" Foreground="{DynamicResource C.CBD5E1}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+							<Viewbox Width="24" Height="24" IsVisible="{Binding Icon.HasGeometry, FallbackValue=False}">
+								<Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas>
+							</Viewbox>
+							<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage, FallbackValue=False}" Stretch="Uniform" />
+						</Panel>
+					</Border>
+					<StackPanel Grid.Column="1" Spacing="4">
 						<StackPanel Orientation="Horizontal" Spacing="8">
 							<TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
 							<TextBlock Text="{Binding Version}" Foreground="{DynamicResource C.64748B}" VerticalAlignment="Center" />
@@ -68,7 +78,7 @@
 								<TextBlock Text="{Binding BusyText}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" />
 							</StackPanel>
 						</StackPanel>
-					<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
+					<StackPanel Grid.Column="2" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
 						<ToggleSwitch IsChecked="{Binding IsEnabled}"
 									  IsVisible="{Binding CanToggle}"
 									  IsEnabled="{Binding IsIdle}"
@@ -217,7 +227,7 @@
 						<Expander Header="Sources" HorizontalAlignment="Stretch">
 							<StackPanel Spacing="8">
 								<TextBlock Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap"
-										   Text="DeckHost plugins come from the sources below, one per line: a catalog URL, a local catalog file, or a local folder (for example your plugin projects). Folders are searched for packages (.zip, .dhplugin, .streamDeckPlugin) and built plugin folders (plugin.json next to the plugin's .dll). A catalog is a JSON object keyed by plugin id, or an array, with name, author, description, version, category, download_url, repository and icon. There is no official DeckHost catalog yet, so this list starts empty." />
+										   Text="DeckHost plugins come from the sources below, one per line: a catalog URL, a local catalog file, or a local folder (for example your plugin projects). Folders are searched for packages (.zip, .dhplugin, .streamDeckPlugin) and built plugin folders (plugin.json next to the plugin's .dll). A catalog is a JSON object keyed by plugin id, or an array, with name, author, description, version, category, download_url, repository and icon. The official DeckHost catalog is always included; add your own here." />
 								<TextBox Text="{Binding CatalogUrlsText, Mode=TwoWay}" AcceptsReturn="True" MinHeight="70" TextWrapping="NoWrap"
 										 PlaceholderText="https://example.com/deckhost-catalog.json or E:\Projects\MyPlugins" />
 								<Button Content="Save and reload" Command="{Binding SaveCatalogUrlsCommand}" HorizontalAlignment="Left" />
