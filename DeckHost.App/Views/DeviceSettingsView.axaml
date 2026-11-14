@@ -38,6 +38,22 @@
 				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
 			</StackPanel>
 		</DataTemplate>
+		<!-- Every field kind needs a template here, or the page shows "Not found" for it. -->
+		<DataTemplate DataType="vm:SecretSettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<TextBox Text="{Binding Value, Mode=TwoWay}" PasswordChar="•" RevealPassword="{Binding #Reveal.IsChecked}" PlaceholderText="{Binding Placeholder}" />
+				<CheckBox x:Name="Reveal" Content="Show" FontSize="12" />
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
+		<DataTemplate DataType="vm:HotkeySettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<TextBox Text="{Binding Value, Mode=TwoWay}" PlaceholderText="{Binding Placeholder}" />
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
 		<DataTemplate DataType="vm:NumberSettingField">
 			<local:NumberSettingEditor />
 		</DataTemplate>
