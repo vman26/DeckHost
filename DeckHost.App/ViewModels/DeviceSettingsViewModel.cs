@@ -77,7 +77,7 @@ public sealed partial class DeviceSettingsViewModel : ViewModelBase
         Status = text;
     }
 
-    internal string DeviceId => _device.Id;
+    public string DeviceId => _device.Id;
 
     /// <summary>The device's firmware (version, updates); null when its plugin doesn't report it.</summary>
     public FirmwareViewModel? Firmware { get; }
