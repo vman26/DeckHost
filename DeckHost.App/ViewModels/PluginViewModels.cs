@@ -57,6 +57,11 @@ public partial class PluginManagerViewModel : ViewModelBase
 
     private readonly DeviceSettingsService? _deviceSettings;
 
+    /// <summary>The list icon of a loaded plugin's first action that has one.</summary>
+    internal string? FirstActionIcon(string pluginId) =>
+        _catalog.EnabledApplicationPlugins.FirstOrDefault(plugin => string.Equals(plugin.Id, pluginId, StringComparison.OrdinalIgnoreCase))?
+            .Actions.Select(static action => action.ListIcon).FirstOrDefault(static icon => !string.IsNullOrWhiteSpace(icon));
+
     public PluginManagerViewModel(PluginCatalog catalog, IDeviceHostService host, DeviceSettingsService? deviceSettings = null)
     {
         _catalog = catalog;
@@ -312,6 +317,26 @@ public partial class PluginEntryViewModel : ViewModelBase
     public PluginEntry Entry { get; }
 
     public string Id => Entry.Id;
+
+    /// <summary>
+    /// The plugin's picture, as in the store: its own icon (Stream Deck manifest, plugin.json), the
+    /// icon of a DeckHost system plugin or of its first action; null shows <see cref="Initials"/>.
+    /// </summary>
+    public ListIcon? Icon => _icon ??= IconSource() is { } source ? ListIcon.From(source, 0xFFE2E8F0, Contracts.Icons.Apps) : null;
+
+    private ListIcon? _icon;
+
+    public bool HasIcon => Icon is not null;
+
+    public string Initials => string.Concat(Entry.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(static word => char.ToUpperInvariant(word[0])));
+
+    private string? IconSource() => Entry.IconPath ?? (Entry.Kind == PluginKind.Device ? Contracts.Icons.Chip : Entry.Id switch
+    {
+        SystemPlugins.SystemPluginSet.BuiltInPluginId => Contracts.Icons.Apps,
+        SystemPlugins.SystemPluginSet.MediaPluginId => Contracts.Icons.PlayPause,
+        SystemPlugins.SystemPluginSet.SystemControlsPluginId => Contracts.Icons.Keyboard,
+        _ => _owner.FirstActionIcon(Entry.Id),
+    });
 
     public string Name => Entry.Name;
 
