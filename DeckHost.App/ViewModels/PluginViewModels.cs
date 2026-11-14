@@ -296,7 +296,9 @@ public partial class PluginManagerViewModel : ViewModelBase
             Devices.Add(new DeviceInfoViewModel(
                 device,
                 _host.ConnectionStatuses.FirstOrDefault(status => status.DeviceId == device.Id)?.Message,
-                _deviceSettings?.HasSettings(device.Id) == true));
+                _deviceSettings?.HasSettings(device.Id) == true,
+                _deviceSettings?.HasFirmware(device.Id) == true,
+                _deviceSettings?.FirmwareInfo(device.Id)));
         }
     }
 }
@@ -516,7 +518,7 @@ public partial class PluginEntryViewModel : ViewModelBase
     private Task RollBack() => _owner.RollBackAsync(this);
 }
 
-public sealed class DeviceInfoViewModel(DeviceDefinition device, string? status, bool hasSettings = false)
+public sealed class DeviceInfoViewModel(DeviceDefinition device, string? status, bool hasSettings = false, bool hasFirmware = false, DeviceFirmwareInfo? firmware = null)
 {
     public DeviceDefinition Device => device;
 
@@ -531,5 +533,17 @@ public sealed class DeviceInfoViewModel(DeviceDefinition device, string? status,
 
     public bool IsConnected => device.IsConnected;
 
-    public string Detail => device.Detail ?? status ?? "Plug in the device to read its serial number and firmware version.";
+    public string Detail => device.Detail ?? status ?? (hasFirmware
+        ? "Plug in the device to read its serial number and firmware version."
+        : device.IsConnected ? "Connected." : "Not connected.");
+
+    /// <summary>
+    /// What the device's own plugin says about its firmware (the version, and why it can't be
+    /// updated here, or that Settings… can); empty for devices without firmware, like the Web Deck.
+    /// </summary>
+    public string FirmwareText => firmware is null
+        ? string.Empty
+        : $"Firmware {firmware.Version}. " + (firmware.CanUpdate ? "Updates: Settings… → Firmware." : firmware.Detail ?? "DeckHost can't update it.");
+
+    public bool HasFirmwareText => FirmwareText.Length > 0;
 }
