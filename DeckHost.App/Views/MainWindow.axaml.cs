@@ -212,10 +212,32 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     private void OpenDeviceSettings_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel { SelectedDevice: { } device } &&
-            TryResolve<DeviceSettingsService>()?.Create(device) is { } settings)
+        if (DataContext is not MainViewModel { SelectedDevice: { } device })
         {
-            OpenSingle($"{device.Name} settings", () => new DeviceSettingsView { DataContext = settings });
+            return;
+        }
+
+        // One settings page per device: an open page of another device (the N4 Pro's, say) is
+        // closed rather than shown again for this one.
+        var index = _pages.FindIndex(entry => entry.Page is DeviceSettingsView);
+        if (index >= 0 && _pages[index].Page.DataContext is DeviceSettingsViewModel open && string.Equals(open.DeviceId, device.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            OpenSingle($"{device.Name} settings", () => new DeviceSettingsView());
+            return;
+        }
+
+        if (index >= 0)
+        {
+            _pages.RemoveAt(index);
+        }
+
+        if (TryResolve<DeviceSettingsService>()?.Create(device) is { } settings)
+        {
+            OpenPage($"{device.Name} settings", new DeviceSettingsView { DataContext = settings });
+        }
+        else
+        {
+            ShowTopPage();
         }
     }
 
