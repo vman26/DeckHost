@@ -165,10 +165,10 @@
 									<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
 										<TextBlock Text="{Binding Detail}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" VerticalAlignment="Center" />
 										<Button Grid.Column="1" Content="Settings…" IsVisible="{Binding HasSettings}" Click="DeviceSettings_OnClick"
-												ToolTip.Tip="Vibration, brightness, LEDs and the idle screen" />
+												ToolTip.Tip="This device's settings (what it offers: brightness, lights, idle screen, pairing, firmware, …)" />
 									</Grid>
 									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
-											   Text="Firmware updates: the StreamDock SDK can read the firmware version but has no update function, so DeckHost can't check for or install firmware. Use MiraBox's own Stream Dock software to update, then reconnect the device here." />
+											   Text="{Binding FirmwareText}" IsVisible="{Binding HasFirmwareText}" />
 								</StackPanel>
 							</Border>
 						</DataTemplate>

@@ -16,6 +16,12 @@ public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins, Fu
     /// <summary>Whether the device has a settings page: settings of its own, or firmware to show.</summary>
     public bool HasSettings(string deviceId) => FindPlugin(deviceId) is not null || firmware?.Supports(deviceId) == true;
 
+    /// <summary>Whether the device's plugin reports firmware at all (the Web Deck doesn't).</summary>
+    public bool HasFirmware(string deviceId) => firmware?.Supports(deviceId) == true;
+
+    /// <summary>The firmware the device reports now; null when unplugged or without firmware.</summary>
+    public DeviceFirmwareInfo? FirmwareInfo(string deviceId) => firmware?.GetInfo(deviceId);
+
     public DeviceSettingsViewModel? Create(DeviceDefinition device) =>
         HasSettings(device.Id)
             ? new DeviceSettingsViewModel(
