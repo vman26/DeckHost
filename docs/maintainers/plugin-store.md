@@ -19,15 +19,29 @@ plugin author ──pull request──▶ deckhost-plugins/plugins/<id>.json
    [`packaging/plugins-repo/`](https://github.com/vman26/DeckHost/tree/main/packaging/plugins-repo)
    in the DeckHost repository into it (README, `plugins/`, `tools/`, `.github/`).
 2. **Pages:** Settings → Pages → Source: **GitHub Actions**.
-3. **Protect `main`:** Settings → Rules → a ruleset for `main` that requires a pull request and the
+3. **Workflows that open pull requests** (submit, discover): Settings → Actions → General →
+   *Allow GitHub Actions to create and approve pull requests*, and create the label `add-plugin`.
+4. **Protect `main`:** Settings → Rules → a ruleset for `main` that requires a pull request and the
    **check** workflow to pass. Then nothing reaches the store without your review.
-4. **Fill in the OBS entry** after DeckHost's first release (the release includes
+5. **Fill in the OBS entry** after DeckHost's first release (the release includes
    `deckhost.plugin.obs.zip`): set `download_url` to that release's file and `sha256` to its line in
    the release's `SHA256SUMS.txt`. Merge it; the **publish** workflow builds the catalog, and
    DeckHost's store shows the plugin.
 
 DeckHost already reads `https://vman26.github.io/deckhost-plugins/catalog.json`
 (`PluginStore.OfficialCatalogUrl`); until the repository exists the source is simply empty.
+
+## Getting submissions
+
+- **Add a plugin** issues: the author gives a GitHub repository; the **submit** workflow reads the
+  newest release's package, computes its SHA-256 and opens a pull request (it comments the link on
+  the issue). You can run it by hand too (Actions → submit), or locally:
+  `python3 tools/catalog.py from-release https://github.com/owner/repository`.
+- **Found on GitHub:** every Monday the **discover** workflow searches repositories with the topics
+  `deckhost-plugin`, `streamdeck-plugin`, `stream-deck-plugin` and `openaction-plugin` that have a
+  plugin file in a release, and opens one pull request with the new ones.
+
+Either way nothing is listed until you merge.
 
 ## Reviewing a submission
 
@@ -52,8 +66,10 @@ until they uninstall it.
 
 1. Write and check the plugin ([guide](plugins.md)): `DeckHost --check-plugin your.plugin.zip`.
 2. Release the zip (a GitHub release of your repository is best) and note its SHA-256.
-3. Open a pull request adding `plugins/<your plugin id>.json` to
-   [`vman26/deckhost-plugins`](https://github.com/vman26/deckhost-plugins), following its README.
+3. Open an **Add a plugin** issue in [`vman26/deckhost-plugins`](https://github.com/vman26/deckhost-plugins)
+   with your repository's address (a pull request with the entry is made for you), or add
+   `plugins/<your plugin id>.json` in a pull request yourself, following its README. The template
+   (`dotnet new deckhost-plugin`) releases the package with its checksum on every tag.
 
 | Field | |
 |---|---|
