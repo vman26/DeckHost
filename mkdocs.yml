@@ -19,7 +19,10 @@ theme:
     - navigation.top
     - search.highlight
     - content.code.copy
+extra_javascript:
+  - javascripts/download.js
 markdown_extensions:
+  - md_in_html
   - admonition
   - attr_list
   - tables
@@ -29,6 +32,7 @@ markdown_extensions:
   - pymdownx.superfences
 nav:
   - Home: index.md
+  - Download: download.md
   - Getting started: getting-started.md
   - Devices: devices.md
   - Using DeckHost:

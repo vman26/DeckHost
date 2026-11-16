@@ -4,6 +4,8 @@
 
 DeckHost drives your control surfaces from one app: the MiraBox / StreamDock **N4 Pro**, **Elgato Stream Decks** (preview), a **Web Deck** on your phone, tablet or a browser window, and **USB button boxes, pedals and jog wheels** you teach it. It runs on Windows, Linux and macOS, and it runs Stream Deck and OpenAction plugins.
 
+[Download DeckHost](download.md){ .md-button .md-button--primary } [Getting started](getting-started.md){ .md-button }
+
 - **Every control does what you put on it.** Drag an action onto a key, knob or touch zone. Give it text, an icon, a background and a light.
 - **Profiles, pages and folders**, switched by hand, by a key, or by the app in front.
 - **Multi Action, Key Logic and Workflows**: from a sequence of actions to a canvas of triggers, conditions, waits and loops.

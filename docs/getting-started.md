@@ -2,7 +2,7 @@
 
 ## Install
 
-Download the package for your system from the [Releases](https://github.com/vman26/DeckHost/releases) page on GitHub. `SHA256SUMS.txt` lists the checksums.
+Download the package for your system from the [Download](download.md) page (the latest release on GitHub). `SHA256SUMS.txt` lists the checksums.
 
 | System | Package | Install |
 |---|---|---|

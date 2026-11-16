@@ -30,7 +30,7 @@ I'm saying this up front because you should know how the software you run is mad
 
 ## Download and install
 
-Releases are on the [**Releases** page](https://github.com/vman26/DeckHost/releases), one package per platform:
+**[Download DeckHost](https://vman26.github.io/DeckHost/download/)** picks the package for your system. All releases are on the [**Releases** page](https://github.com/vman26/DeckHost/releases), one package per platform:
 
 | Platform | Package | Install |
 |---|---|---|
