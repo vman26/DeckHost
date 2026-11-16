@@ -18,6 +18,14 @@ DeckHost runs Stream Deck plugins in their own processes and speaks their protoc
 - HTML plugins (that run in a web page) run on Windows.
 - Settings pages need WebView2 (Windows, built in), WKWebView (macOS) or WebKitGTK (Linux, `libwebkit2gtk-4.1`; else they open in your browser).
 
+## A plugin's documentation
+
+Right-click an action or a plugin in the action list, or a control that has an action, and choose
+**Plugin documentation**; on the Plugins page every plugin has a **Documentation** button. The page
+shows what the plugin is, its actions with what they do, its links (website, source code, folder;
+DeckHost's own plugins link to this documentation) and its README: the one in the plugin's folder,
+else the one in its GitHub repository.
+
 ## Installing a package
 
 **Install plugin…** takes a DeckHost plugin package (`.zip`, `.dhplugin`) or a `.streamDeckPlugin`. Icon packs are installed from the icon picker. Plugins run with your user's rights: only install what you trust. A DeckHost plugin says what it may do (use the network, start programs, …); that is shown when it's installed and on the Plugins page.

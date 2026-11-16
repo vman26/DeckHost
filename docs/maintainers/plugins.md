@@ -48,7 +48,9 @@ after every build.
   "assembly": "You.Plugin.Example.dll",
   "hostApiVersion": 1,
   "icon": "icon.png",
-  "permissions": ["network"]
+  "permissions": ["network"],
+  "url": "https://example.com/docs",
+  "repository": "https://github.com/you/plugin"
 }
 ```
 
@@ -59,6 +61,7 @@ after every build.
 | `assembly` | The `.dll` at the package root with your `IApplicationPlugin`. |
 | `hostApiVersion` | The plugin API version you built against (now 1). |
 | `icon` | Optional image in the package, shown in the Plugins page and the store. |
+| `url`, `repository` | Optional: your website or documentation, and your source code. They're on the plugin's documentation page in DeckHost, which also shows a `README.md` from your package (pictures in the package work) or else the README of a GitHub `repository`. |
 | `permissions` | What the plugin does beyond drawing and reacting to input: `network`, `processes` (starts programs), `files`, `input` (presses keys, moves the mouse), `system` (volume, power, displays), `clipboard`. Shown to the user; not a sandbox. |
 
 ## The plugin and its actions

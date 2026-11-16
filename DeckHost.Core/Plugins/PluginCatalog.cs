@@ -39,7 +39,16 @@ public sealed record PluginEntry(
     string? PreviousVersion = null,
     IReadOnlyList<string>? Warnings = null,
     bool? RunsInOwnProcess = null,
-    string? ProcessStatus = null);
+    string? ProcessStatus = null,
+    string? Url = null,
+    string? Repository = null)
+{
+    /// <summary>The plugin's README file in its folder (README.md, any case), or null.</summary>
+    public string? ReadmePath => InstallDirectory is { } directory && Directory.Exists(directory)
+        ? Directory.EnumerateFiles(directory).FirstOrDefault(static path =>
+            Path.GetFileName(path).Equals("README.md", StringComparison.OrdinalIgnoreCase))
+        : null;
+}
 
 /// <summary>
 /// Keeps track of all plugins:
@@ -838,7 +847,9 @@ public sealed class PluginCatalog : IDisposable
             slot.Kind == SlotKind.Package && ProcessLauncher is not null ? !_inProcess.Contains(slot.Id) : null,
             slot.Process is { } process ? process.Problem ?? process.Status
                 : slot.Kind == SlotKind.StreamDeck && _streamDeck is not null && !_disabled.Contains(slot.Id) ? _streamDeck.ProblemOf(slot.Id) ?? _streamDeck.StatusOf(slot.Id)
-                : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost" : null);
+                : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost" : null,
+            slot.Manifest?.Url ?? slot.StreamDeckManifest?.Url,
+            slot.Manifest?.Repository);
     }
 
     /// <summary>Where the version before the last update of a plugin is kept (for a roll back).</summary>

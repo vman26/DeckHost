@@ -29,6 +29,15 @@ public partial class PluginManagerView : UserControl
         }
     }
 
+    private void Documentation_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: PluginEntryViewModel entry } &&
+            CommunityToolkit.Mvvm.DependencyInjection.Ioc.Default.GetService<PluginDocsService>()?.Create(entry.Id) is { } docs)
+        {
+            Pages.Open(this, entry.Name, new PluginDocsView { DataContext = docs });
+        }
+    }
+
     private void DeviceSettings_OnClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { DataContext: DeviceInfoViewModel device }

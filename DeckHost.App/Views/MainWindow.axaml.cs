@@ -577,6 +577,39 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         }
     }
 
+    private void ControlDocs_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TryGetMenuControl(sender, out var controlItem) && controlItem.AssignedBinding?.Model.Action.PluginId is { } pluginId)
+        {
+            OpenPluginDocs(pluginId);
+        }
+    }
+
+    private void GroupDocs_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: PluginActionGroupViewModel group })
+        {
+            OpenPluginDocs(group.PluginId);
+        }
+    }
+
+    private void ActionDocs_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: ActionItemViewModel action })
+        {
+            OpenPluginDocs(action.PluginId);
+        }
+    }
+
+    /// <summary>The documentation page of a plugin (right-click on a control, an action or a plugin in the list).</summary>
+    public void OpenPluginDocs(string pluginId)
+    {
+        if (TryResolve<PluginDocsService>()?.Create(pluginId) is { } docs)
+        {
+            OpenPage(docs.Name, new PluginDocsView { DataContext = docs });
+        }
+    }
+
     private void ControlRemove_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel vm || !TryGetMenuControl(sender, out var controlItem))

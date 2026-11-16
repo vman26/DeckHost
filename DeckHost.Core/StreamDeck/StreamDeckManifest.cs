@@ -21,6 +21,7 @@ public sealed class StreamDeckManifest
         Description = Get(json, "Description");
         Category = Get(json, "Category");
         Icon = Get(json, "Icon");
+        Url = Get(json, "URL");
         PropertyInspectorPath = Get(json, "PropertyInspectorPath");
         CodePath = SelectCodePath(json, out var unsupported);
         UnsupportedReason = unsupported;
@@ -58,6 +59,9 @@ public sealed class StreamDeckManifest
     public string? Category { get; }
 
     public string? Icon { get; }
+
+    /// <summary>The plugin's website (the manifest's <c>URL</c>).</summary>
+    public string? Url { get; }
 
     public string? PropertyInspectorPath { get; }
 

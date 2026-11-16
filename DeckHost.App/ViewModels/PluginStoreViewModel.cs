@@ -37,7 +37,10 @@ public partial class PluginStoreViewModel : ViewModelBase
 
     private readonly PluginCatalog _catalog;
     private readonly PluginStore _store = new(Http);
-    private readonly StoreMedia _media = new(MediaHttp);
+    /// <summary>Icons and READMEs, shared with the plugin documentation pages (one cache).</summary>
+    internal static StoreMedia SharedMedia { get; } = new(MediaHttp);
+
+    private readonly StoreMedia _media = SharedMedia;
     private readonly List<StoreItemViewModel> _all = [];
     private string _searchText = string.Empty;
     private string _selectedSource = AllSources;

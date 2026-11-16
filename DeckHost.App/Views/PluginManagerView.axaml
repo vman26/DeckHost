@@ -98,6 +98,10 @@
 						<Border Classes="badge" Background="{DynamicResource C.1E293B}" IsVisible="{Binding IsLocked}" HorizontalAlignment="Right">
 							<TextBlock Text="{Binding LockedReason}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
 						</Border>
+						<Button Content="Documentation"
+								HorizontalAlignment="Right"
+								ToolTip.Tip="What the plugin does, its actions, links and README"
+								Click="Documentation_OnClick" />
 						<Button Content="Open folder"
 								IsVisible="{Binding HasInstallDirectory}"
 								HorizontalAlignment="Right"

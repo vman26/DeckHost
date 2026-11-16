@@ -258,6 +258,10 @@
 														<MenuItem Header="Remove Assignment"
 																  IsEnabled="{Binding HasAssignment}"
 																  Click="ControlRemove_OnClick" />
+														<Separator />
+														<MenuItem Header="Plugin documentation"
+																  IsEnabled="{Binding HasAssignment}"
+																  Click="ControlDocs_OnClick" />
 													</ContextMenu>
 												</Border.ContextMenu>
 												<Border.RenderTransform>
@@ -440,6 +444,11 @@
 									<DataTemplate x:DataType="vm:PluginActionGroupViewModel">
 										<StackPanel>
 											<ToggleButton Classes="groupHeader" IsChecked="{Binding IsExpanded, Mode=TwoWay}">
+												<ToggleButton.ContextMenu>
+													<ContextMenu>
+														<MenuItem Header="Plugin documentation" Click="GroupDocs_OnClick" />
+													</ContextMenu>
+												</ToggleButton.ContextMenu>
 												<Grid ColumnDefinitions="14,26,*,Auto" ColumnSpacing="8">
 													<TextBlock Text="›" FontSize="16" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}" />
 													<TextBlock Text="⌄" FontSize="14" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Top" IsVisible="{Binding IsExpanded}" />
@@ -462,6 +471,11 @@
 																Cursor="Hand"
 																ToolTip.Tip="{Binding Summary}"
 																PointerPressed="ActionCard_OnPointerPressed">
+															<Border.ContextMenu>
+																<ContextMenu>
+																	<MenuItem Header="Plugin documentation" Click="ActionDocs_OnClick" />
+																</ContextMenu>
+															</Border.ContextMenu>
 															<Grid ColumnDefinitions="22,*" ColumnSpacing="10">
 																<Panel Width="22" Height="22">
 																	<Viewbox IsVisible="{Binding Icon.HasGeometry}">
