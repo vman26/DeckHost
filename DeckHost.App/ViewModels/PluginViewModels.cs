@@ -76,8 +76,13 @@ public partial class PluginManagerViewModel : ViewModelBase
 
     public PluginStoreViewModel Store { get; }
 
+    /// <summary>Plugins that connect hardware (and the Web Deck): what DeckHost can talk to.</summary>
+    public ObservableCollection<PluginEntryViewModel> DevicePlugins { get; } = [];
+
+    /// <summary>Action plugins that ship with DeckHost.</summary>
     public ObservableCollection<PluginEntryViewModel> SystemPlugins { get; } = [];
 
+    /// <summary>Action plugins the user installed (DeckHost, Stream Deck and OpenAction plugins).</summary>
     public ObservableCollection<PluginEntryViewModel> InstalledPlugins { get; } = [];
 
     public ObservableCollection<DeviceInfoViewModel> Devices { get; } = [];
@@ -276,11 +281,12 @@ public partial class PluginManagerViewModel : ViewModelBase
 
     private void Refresh()
     {
+        DevicePlugins.Clear();
         SystemPlugins.Clear();
         InstalledPlugins.Clear();
         foreach (var entry in _catalog.Entries)
         {
-            (entry.IsSystem ? SystemPlugins : InstalledPlugins).Add(new PluginEntryViewModel(this, entry));
+            (entry.Kind == PluginKind.Device ? DevicePlugins : entry.IsSystem ? SystemPlugins : InstalledPlugins).Add(new PluginEntryViewModel(this, entry));
         }
 
         OnPropertyChanged(nameof(HasInstalledPlugins));
@@ -343,6 +349,11 @@ public partial class PluginEntryViewModel : ViewModelBase
     public string Name => Entry.Name;
 
     public string Version => $"v{Entry.Version}";
+
+    /// <summary>Connects devices (a device plugin) rather than adding actions.</summary>
+    public bool IsDevicePlugin => Entry.Kind == PluginKind.Device;
+
+    public string KindLabel => IsDevicePlugin ? "Devices" : "Actions";
 
     public string Details => string.Join(" · ", new[]
     {

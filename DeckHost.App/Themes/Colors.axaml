@@ -17,6 +17,10 @@
                 <SolidColorBrush x:Key="C.111827" Color="#111827" />
                 <SolidColorBrush x:Key="C.13161C" Color="#13161C" />
                 <SolidColorBrush x:Key="C.14532D" Color="#14532D" />
+                <SolidColorBrush x:Key="C.134E4A" Color="#134E4A" />
+                <SolidColorBrush x:Key="C.312E81" Color="#312E81" />
+                <SolidColorBrush x:Key="C.99F6E4" Color="#99F6E4" />
+                <SolidColorBrush x:Key="C.C7D2FE" Color="#C7D2FE" />
                 <SolidColorBrush x:Key="C.16181E" Color="#16181E" />
                 <SolidColorBrush x:Key="C.161A22" Color="#161A22" />
                 <SolidColorBrush x:Key="C.172554" Color="#172554" />
@@ -59,6 +63,10 @@
                 <SolidColorBrush x:Key="C.111827" Color="#F8FAFC" />
                 <SolidColorBrush x:Key="C.13161C" Color="#F8FAFC" />
                 <SolidColorBrush x:Key="C.14532D" Color="#DCFCE7" />
+                <SolidColorBrush x:Key="C.134E4A" Color="#CCFBF1" />
+                <SolidColorBrush x:Key="C.312E81" Color="#E0E7FF" />
+                <SolidColorBrush x:Key="C.99F6E4" Color="#0F766E" />
+                <SolidColorBrush x:Key="C.C7D2FE" Color="#3730A3" />
                 <SolidColorBrush x:Key="C.16181E" Color="#FFFFFF" />
                 <SolidColorBrush x:Key="C.161A22" Color="#FFFFFF" />
                 <SolidColorBrush x:Key="C.172554" Color="#DBEAFE" />
