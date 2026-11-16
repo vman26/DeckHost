@@ -257,7 +257,9 @@ jobs:
       # repository and the dotnet new template; attached to the release, pushed to NuGet below.
       - name: NuGet packages
         if: runner.os == 'Linux'
-        run: dotnet pack DeckHost.Contracts/DeckHost.Contracts.csproj -c Release $VERSION_ARGS -o artifacts/release
+        run: |
+          dotnet pack DeckHost.Contracts/DeckHost.Contracts.csproj -c Release $VERSION_ARGS -o artifacts/release
+          dotnet pack templates/DeckHost.Templates.csproj -c Release $VERSION_ARGS -o artifacts/release
 
       - uses: actions/upload-artifact@v4
         with:

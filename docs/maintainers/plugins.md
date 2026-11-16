@@ -10,31 +10,27 @@ OpenAction plugins (`.sdPlugin`) also run in DeckHost as they are; this guide is
 
 ## Start from the template
 
-`plugins/DeckHost.Plugin.Obs` in the DeckHost repository is a complete plugin (OBS Studio over
-obs-websocket). Copy it and rename. The project file is what matters:
-
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <EnableDynamicLoading>true</EnableDynamicLoading>
-  </PropertyGroup>
-  <ItemGroup>
-    <!-- DeckHost.Contracts comes from DeckHost at run time: never ship a copy. -->
-    <ProjectReference Include="..\..\DeckHost.Contracts\DeckHost.Contracts.csproj">
-      <Private>false</Private>
-      <ExcludeAssets>runtime</ExcludeAssets>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="plugin.json" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-</Project>
+```
+dotnet new install DeckHost.Templates
+dotnet new deckhost-plugin -n MyPlugin --pluginId you.plugin.myplugin --authorName "You"
+cd MyPlugin
+dotnet build
 ```
 
-The template's `PackPluginPackage` target zips the build output into `artifacts/plugins/<id>.zip`
-after every build.
+That's a working plugin with one action, its `plugin.json`, a README and a GitHub workflow that
+builds it, prints its SHA-256 and releases it on a tag. `dotnet build` also writes the installable
+package, `bin/plugin/<id>.zip`. The project references the plugin API from NuGet, without copying it
+into the package (DeckHost supplies it):
+
+```xml
+<PackageReference Include="DeckHost.Contracts" Version="0.2.0" ExcludeAssets="runtime" PrivateAssets="all" />
+```
+
+Pin the version you test with: it's the oldest DeckHost your plugin needs. `--contractsVersion`
+sets it when you create the project (the template takes the newest by default).
+
+`plugins/DeckHost.Plugin.Obs` in the DeckHost repository is a larger example (OBS Studio over
+obs-websocket); inside the repository it references the Contracts project instead of the package.
 
 ## plugin.json
 

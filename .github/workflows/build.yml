@@ -80,3 +80,33 @@ jobs:
       - name: Check the native bridge
         timeout-minutes: 2
         run: dotnet DeckHost.App/bin/Release/net10.0/DeckHost.App.dll --check-native
+
+  # The plugin SDK as a plugin author gets it: the DeckHost.Contracts package and the dotnet new
+  # template, packed here, then a new plugin made from the template is built and checked.
+  plugin-template:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Pack the Contracts package and the template
+        run: |
+          dotnet pack DeckHost.Contracts/DeckHost.Contracts.csproj -c Release -o "$RUNNER_TEMP/feed"
+          dotnet pack templates/DeckHost.Templates.csproj -c Release -o "$RUNNER_TEMP/feed"
+      - name: Make and build a plugin from the template
+        run: |
+          dotnet new install "$RUNNER_TEMP"/feed/DeckHost.Templates.*.nupkg
+          cd "$RUNNER_TEMP"
+          dotnet new deckhost-plugin -n SamplePlugin --pluginId ci.plugin.sample --authorName CI
+          cd SamplePlugin
+          dotnet new nugetconfig
+          dotnet nuget add source "$RUNNER_TEMP/feed" --name local --configfile nuget.config
+          dotnet build -c Release -warnaserror
+          unzip -l bin/plugin/ci.plugin.sample.zip
+      - name: Check the plugin with DeckHost's checker
+        run: |
+          dotnet run --project DeckHost.App -c Release -p:EnableMiraBoxNativeBuild=false -- --check-plugin "$RUNNER_TEMP/SamplePlugin/bin/plugin/ci.plugin.sample.zip"
