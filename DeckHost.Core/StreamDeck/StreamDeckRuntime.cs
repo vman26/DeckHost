@@ -222,7 +222,9 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
         if (HtmlPluginHost is not { } host)
         {
-            throw new InvalidOperationException("HTML-based plugins need the Microsoft Edge WebView2 runtime, which isn't available here.");
+            throw new InvalidOperationException(OperatingSystem.IsWindows()
+                ? "HTML-based plugins need the Microsoft Edge WebView2 runtime, which isn't available here."
+                : "This plugin is a web page (an HTML plugin); DeckHost runs those only on Windows for now.");
         }
 
         var page = new Uri($"http://127.0.0.1:{Port}/plugins/{Uri.EscapeDataString(manifest.Uuid)}/{manifest.CodePath!.Replace(Path.DirectorySeparatorChar, '/').TrimStart('/')}");

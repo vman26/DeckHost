@@ -15,6 +15,18 @@
 
 The key shows the reason in small red text when an action fails. On Linux, actions use common tools: media keys need `playerctl`, volume `wpctl`, `pactl` or `amixer`, hotkeys and typing `xdotool` (X11) or `wtype` (Wayland). Install the one the key names.
 
+## A Stream Deck plugin's picture doesn't change
+
+Plugins that redraw by themselves (a clock, a timer, a counter from a website) send a new picture
+every second or so.
+
+- **Plugins page:** is the plugin running? Its status says so, or why not (Node.js missing, made for
+  another system, stopped after crashing).
+- **Its log:** `logs/plugins/<plugin id>.log` (Help and support → Open logs) shows what the plugin
+  printed. HTML plugins (whose program is a web page) run in DeckHost's built-in browser on Windows;
+  they need the Microsoft Edge WebView2 runtime, which Windows 10 and 11 normally have.
+- **Linux and macOS:** HTML plugins don't run there yet; the Plugins page says so.
+
 ## Windows says "Windows protected your PC"
 
 The installer isn't signed yet. Choose **More info → Run anyway**.
