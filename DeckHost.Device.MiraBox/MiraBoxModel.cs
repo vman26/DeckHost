@@ -29,6 +29,8 @@ internal sealed record MiraBoxControl(string Id, string Name, ControlType Type, 
 
     public ControlShape Shape { get; init; }
 
+    public DeviceSide Side { get; init; }
+
     public IReadOnlyList<MiraBoxInput> Events { get; init; } = [];
 
     /// <summary>The SDK ids, for the Key ID diagnostic action and the logs.</summary>
@@ -153,6 +155,7 @@ internal sealed class MiraBoxModel
                     _ => null,
                 },
                 Shape = control.Shape,
+                Side = control.Side,
             };
         }).ToList();
 

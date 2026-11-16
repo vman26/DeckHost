@@ -31,8 +31,9 @@ internal static class MiraBoxModels
     private const double KeyGap = 16;
     private const double KnobSize = 80;
     private const double ButtonHeight = 40;
+    private const double SideWheelWidth = 36;
 
-    /// <summary>The vertical middle of the XL's four key rows, where its side switches are centered.</summary>
+    /// <summary>The vertical middle of the XL's four key rows, where its side wheels are centered.</summary>
     private const double XlGridMiddle = Margin + (((4 * (KeySize + KeyGap)) - KeyGap) / 2);
 
     private const InputCapabilities KeyInputs = InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.LongPress;
@@ -138,13 +139,18 @@ internal static class MiraBoxModels
         Notes = ["Its 24 RGB LEDs aren't driven by DeckHost yet."],
     };
 
-    /// <summary>The XL: 32 keys (1–32 from the bottom-left) and two switches on its right side (left/right/press: 33/34/37 and 35/36/38).</summary>
+    /// <summary>
+    /// The XL: 32 keys (1–32 from the bottom-left) and a wheel on each side of the device, turned
+    /// and pressed (the SDK's "DIP switches": left side 33/34 + press 37, right side 35/36 + press
+    /// 38). Which way each wheel turns follows the OpenDeck XL plugin (mean-ui-thread/opendeck-stream-dock-xl),
+    /// written on the hardware: on the left wheel the SDK's "left" turns clockwise, on the right one
+    /// counterclockwise.
+    /// </summary>
     public static MiraBoxModel XL { get; } = new(Origin.XL, "xl", "XL", "StreamDock XL",
         [
-            .. Keys(8, 4, BottomLeftRows(8, 4, 1), Margin, Margin),
-            // On the right side of the keys, upright: switch 1 (the SDK's left switch) above switch 2.
-            Switch(0, Margin + (8 * (KeySize + KeyGap)), XlGridMiddle - (KeyGap / 2) - KeySize, left: 33, right: 34, press: 37, upright: true),
-            Switch(1, Margin + (8 * (KeySize + KeyGap)), XlGridMiddle + (KeyGap / 2), left: 35, right: 36, press: 38, upright: true),
+            SideWheel(0, DeviceSide.Left, Margin, XlGridMiddle - (KeySize / 2), left: 33, right: 34, press: 37, leftIsClockwise: true),
+            .. Keys(8, 4, BottomLeftRows(8, 4, 1), Margin + SideWheelWidth + KeyGap, Margin),
+            SideWheel(1, DeviceSide.Right, Margin + SideWheelWidth + KeyGap + (8 * (KeySize + KeyGap)), XlGridMiddle - (KeySize / 2), left: 35, right: 36, press: 38, leftIsClockwise: false),
         ])
     {
         ScreenWidth = 1024,
@@ -152,7 +158,7 @@ internal static class MiraBoxModels
         RotationDegrees = 180,
         KeySize = 80,
         Capabilities = DeviceCapabilities.Images | DeviceCapabilities.Brightness | DeviceCapabilities.Firmware | DeviceCapabilities.Settings,
-        Notes = ["The side switches act as knobs: pushed left or right they turn, pushed in they press.", "Its 6 RGB LEDs aren't driven by DeckHost yet."],
+        Notes = ["A wheel on each side: turn it, or press it in.", "Its side LEDs aren't driven by DeckHost yet."],
     };
 
     /// <summary>The M3: 15 keys (1–15 from the bottom-left) and three knobs in a column (bottom to top: 16/17 + 22, 18/19 + 23, 20/21 + 24).</summary>
@@ -373,15 +379,32 @@ internal static class MiraBoxModels
         };
 
     /// <summary>A side switch (XL, Mini): pushed left or right it turns like a knob, pushed in it presses.</summary>
-    /// <param name="upright">On the side of the device: drawn tall instead of wide.</param>
-    private static MiraBoxControl Switch(int index, double x, double y, int left, int right, int press, bool upright = false) =>
-        new($"{EncoderPrefix}{index}", $"Switch {index + 1}", ControlType.Encoder, upright ? new Rect(x, y, ButtonHeight + 20, KeySize) : new Rect(x, y, KeySize, ButtonHeight + 20), KnobInputs)
+    private static MiraBoxControl Switch(int index, double x, double y, int left, int right, int press) =>
+        new($"{EncoderPrefix}{index}", $"Switch {index + 1}", ControlType.Encoder, new Rect(x, y, KeySize, ButtonHeight + 20), KnobInputs)
         {
             HardwareId = string.Create(CultureInfo.InvariantCulture, $"{left}/{right}/{press}"),
             Events =
             [
                 new(MiraBoxEventType.DipLeft, left, InputCapabilities.Rotate, -1),
                 new(MiraBoxEventType.DipRight, right, InputCapabilities.Rotate, 1),
+                new(MiraBoxEventType.DipPress, press, InputCapabilities.Press, 1),
+                new(MiraBoxEventType.DipRelease, press, InputCapabilities.Release, 0),
+            ],
+        };
+
+    /// <summary>
+    /// A wheel on a side of the device (the XL's "DIP switches"): turned and pressed in. The SDK
+    /// reports its turns as DIP left/right; <paramref name="leftIsClockwise"/> says which is which.
+    /// </summary>
+    private static MiraBoxControl SideWheel(int index, DeviceSide side, double x, double y, int left, int right, int press, bool leftIsClockwise) =>
+        new($"{EncoderPrefix}{index}", $"{side} wheel", ControlType.Encoder, new Rect(x, y, SideWheelWidth, KeySize), KnobInputs)
+        {
+            Side = side,
+            HardwareId = string.Create(CultureInfo.InvariantCulture, $"{left}/{right}/{press}"),
+            Events =
+            [
+                new(MiraBoxEventType.DipLeft, left, InputCapabilities.Rotate, leftIsClockwise ? 1 : -1),
+                new(MiraBoxEventType.DipRight, right, InputCapabilities.Rotate, leftIsClockwise ? -1 : 1),
                 new(MiraBoxEventType.DipPress, press, InputCapabilities.Press, 1),
                 new(MiraBoxEventType.DipRelease, press, InputCapabilities.Release, 0),
             ],

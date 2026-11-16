@@ -21,14 +21,14 @@ DeckHost knows every model in MiraBox's SDK. Their layouts come from that SDK an
 | 293 (V2, V3) | 15 keys |
 | 293s | 15 keys and 3 small displays (pictures only) |
 | M18 | 15 keys and 3 buttons |
-| XL | 32 keys and 2 switches on its right side |
+| XL | 32 keys and a wheel on each side (turn and press) |
 | M3 | 15 keys and 3 knobs |
 | N3 | 6 keys, 3 buttons and 3 knobs |
 | N1 | 15 keys, 3 small displays (two are buttons, one shows the knob) and a knob |
 | K1 Pro | the keyboard's 6 display keys and 3 knobs |
 | Mini | 6 keys and 2 side switches |
 
-- **Side switches** (XL, Mini) act like knobs: push one left or right to turn, push it in to press.
+- **Side wheels** (XL) and **switches** (Mini) act like knobs: turn (or push left/right) to turn, push in to press.
 - **Device settings** has the screen brightness and the idle screen for every model. The LEDs of the M18, XL and Mini aren't driven yet.
 - A model you've plugged in once stays in the device picker, so you can set it up unplugged.
 

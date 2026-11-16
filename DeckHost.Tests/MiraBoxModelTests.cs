@@ -176,7 +176,10 @@ public class MiraBoxModelTests
 
     [TestCase(MiraBoxModels.Origin.XL, (int)MiraBoxEventType.KeyPress, 25, "key.0", InputCapabilities.Press, 1)]
     [TestCase(MiraBoxModels.Origin.XL, (int)MiraBoxEventType.KeyRelease, 8, "key.31", InputCapabilities.Release, 0)]
+    [TestCase(MiraBoxModels.Origin.XL, (int)MiraBoxEventType.DipLeft, 33, "encoder.0", InputCapabilities.Rotate, 1)]
+    [TestCase(MiraBoxModels.Origin.XL, (int)MiraBoxEventType.DipRight, 34, "encoder.0", InputCapabilities.Rotate, -1)]
     [TestCase(MiraBoxModels.Origin.XL, (int)MiraBoxEventType.DipLeft, 35, "encoder.1", InputCapabilities.Rotate, -1)]
+    [TestCase(MiraBoxModels.Origin.XL, (int)MiraBoxEventType.DipRight, 36, "encoder.1", InputCapabilities.Rotate, 1)]
     [TestCase(MiraBoxModels.Origin.XL, (int)MiraBoxEventType.DipPress, 37, "encoder.0", InputCapabilities.Press, 1)]
     [TestCase(MiraBoxModels.Origin.M18, (int)MiraBoxEventType.KeyPress, 17, "button.1", InputCapabilities.Press, 1)]
     [TestCase(MiraBoxModels.Origin.M3, (int)MiraBoxEventType.KnobRight, 21, "encoder.0", InputCapabilities.Rotate, 1)]
@@ -192,6 +195,19 @@ public class MiraBoxModelTests
     {
         Assert.That(MiraBoxModels.For(originType)!.TryMapInput((MiraBoxEventType)eventType, sdkId, out var mappedControl, out var mappedEvent, out var mappedValue), Is.True);
         Assert.That((mappedControl, mappedEvent, mappedValue), Is.EqualTo((controlId, inputEvent, value)));
+    }
+
+    [Test]
+    public void The_XL_has_a_wheel_on_each_side_of_its_keys()
+    {
+        var device = MiraBoxModels.XL.Describe("mirabox.xl", "XL", null, false, null);
+        var keys = device.Controls.Where(static control => control.Type == ControlType.Key).ToList();
+        var (left, right) = (device.FindControl("encoder.0")!, device.FindControl("encoder.1")!);
+
+        Assert.That((left.Side, right.Side), Is.EqualTo((DeviceSide.Left, DeviceSide.Right)));
+        Assert.That(left.Bounds.X + left.Bounds.Width, Is.LessThan(keys.Min(static key => key.Bounds.X)));
+        Assert.That(right.Bounds.X, Is.GreaterThan(keys.Max(static key => key.Bounds.X + key.Bounds.Width)));
+        Expect.All(device.Controls.Where(static control => control.Type != ControlType.Encoder), control => Assert.That(control.Side, Is.EqualTo(DeviceSide.Front)));
     }
 
     [Test]
