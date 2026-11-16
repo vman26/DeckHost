@@ -30,6 +30,9 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _install;
     private UpdateCheckResult? _result;
     private bool _checkAutomatically;
+    private bool _installAutomatically;
+    private System.Diagnostics.ProcessStartInfo? _pendingInstall;
+    private string? _pendingVersion;
     private bool _includePrereleases;
     private bool _isChecking;
     private bool _isInstalling;
@@ -50,6 +53,7 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
 
         var settings = loadSettings();
         _checkAutomatically = settings.CheckForUpdates;
+        _installAutomatically = settings.InstallUpdatesAutomatically;
         _includePrereleases = settings.IncludePrereleases ?? current?.IsPrerelease ?? false;
         _skippedVersion = settings.SkippedVersion;
         _status = settings.LastUpdateCheck is { } last ? $"Last checked {last.ToLocalTime():g}." : "Not checked yet.";
@@ -78,6 +82,78 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
                     _ = CheckAsync(manual: false);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Download a new release in the background and install it when DeckHost closes (not started
+    /// again then). Only where the install needs no questions (<see cref="UpdateInstaller.CanInstallSilently"/>).
+    /// </summary>
+    public bool InstallAutomatically
+    {
+        get => _installAutomatically;
+        set
+        {
+            if (SetProperty(ref _installAutomatically, value))
+            {
+                Save(settings => settings with { InstallUpdatesAutomatically = value });
+                if (value && IsUpdateAvailable && !IsSkipped)
+                {
+                    _ = PrepareInBackgroundAsync();
+                }
+            }
+        }
+    }
+
+    public bool CanInstallAutomatically => UpdateInstaller.CanInstallSilently;
+
+    /// <summary>A downloaded update waits for DeckHost to close.</summary>
+    public bool IsReadyToInstallOnExit => _pendingInstall is not null;
+
+    public string ReadyText => _pendingVersion is { } version ? $"DeckHost {version} is downloaded and installs when you close DeckHost." : string.Empty;
+
+    /// <summary>Called as DeckHost exits: starts the downloaded update's installer (it waits for DeckHost to end).</summary>
+    public void InstallPendingOnExit()
+    {
+        if (_pendingInstall is { } helper)
+        {
+            _pendingInstall = null;
+            try
+            {
+                UpdateInstaller.Start(helper);
+            }
+            catch (Exception ex) when (ex is UpdateException or System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+            }
+        }
+    }
+
+    /// <summary>The automatic install: download and prepare quietly; the installer starts on exit.</summary>
+    private async Task PrepareInBackgroundAsync()
+    {
+        if (!InstallAutomatically || !CanInstallAutomatically || IsInstalling || _pendingInstall is not null || Latest is not { } release ||
+            UpdateChecker.SelectAsset(release, UpdateChecker.CurrentRuntimeIdentifier) is not { } asset)
+        {
+            return;
+        }
+
+        try
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "DeckHost", "updates", release.Version.ToString());
+            var package = await Task.Run(() => _checker.DownloadAsync(release, asset, directory, null, CancellationToken.None));
+            var helper = await UpdateInstaller.PrepareAsync(package, CancellationToken.None, relaunch: false);
+            if (helper is not null)
+            {
+                _pendingInstall = helper;
+                _pendingVersion = release.Version.ToString();
+                Status = ReadyText;
+                OnPropertyChanged(nameof(IsReadyToInstallOnExit));
+                OnPropertyChanged(nameof(ReadyText));
+            }
+        }
+        catch (Exception ex) when (ex is UpdateException or IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException or System.Net.Http.HttpRequestException)
+        {
+            Status = $"The update couldn't be downloaded: {ex.Message}";
         }
     }
 
@@ -179,6 +255,10 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
             if (CheckAutomatically)
             {
                 await CheckAsync(manual: false);
+                if (IsUpdateAvailable && !IsSkipped)
+                {
+                    await PrepareInBackgroundAsync();
+                }
             }
         };
         _timer.Start();

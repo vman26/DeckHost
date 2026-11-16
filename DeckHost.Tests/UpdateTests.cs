@@ -282,8 +282,11 @@ public sealed class UpdateViewModelTests
 
         updates.CheckAutomatically = false;
         updates.IncludePrereleases = true;
+        updates.InstallAutomatically = true;
         Assert.False(_settings.CheckForUpdates);
         Assert.True(_settings.IncludePrereleases);
+        Assert.True(_settings.InstallUpdatesAutomatically);
+        Assert.False(updates.IsReadyToInstallOnExit);
 
         var before = updates.Status;
         await updates.CheckAsync(manual: false);
@@ -306,8 +309,10 @@ public sealed class UpdateInstallerTests
     public void Quotes_paths_for_PowerShell() =>
         Assert.Equal("'C:\\Users\\O''Brien\\setup.exe'", UpdateInstaller.Quote("C:\\Users\\O'Brien\\setup.exe"));
 
-    [Fact]
-    public void The_swap_script_replaces_the_install_and_starts_it()
+    [Theory]
+    [InlineData("DeckHost.App", true)]
+    [InlineData("none", false)]
+    public void The_swap_script_replaces_the_install_and_starts_it_unless_told_not_to(string launch, bool startsAgain)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -334,19 +339,19 @@ public sealed class UpdateInstallerTests
             // (/bin/sh is everywhere; /bin/true isn't on macOS.)
             using var exited = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", "exit 0" } })!;
             exited.WaitForExit();
-            using var helper = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { script, exited.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), source, target, "DeckHost.App" } })!;
+            using var helper = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { script, exited.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), source, target, launch } })!;
             Assert.True(helper.WaitForExit(10_000));
 
             Assert.Equal("1.4.0", File.ReadAllText(Path.Combine(target, "version.txt")));
             Assert.False(File.Exists(Path.Combine(target, "old-only.dll")));
             Assert.False(Directory.Exists(target + ".update-backup"));
-            var end = DateTime.UtcNow.AddSeconds(10);
+            var end = DateTime.UtcNow.AddSeconds(startsAgain ? 10 : 1);
             while (!File.Exists(started) && DateTime.UtcNow < end)
             {
                 Thread.Sleep(50);
             }
 
-            Assert.True(File.Exists(started), "the new version was started");
+            Assert.Equal(startsAgain, File.Exists(started));
         }
         finally
         {

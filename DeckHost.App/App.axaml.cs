@@ -155,6 +155,10 @@ public partial class App : Application
                 // The host's worker never needs the UI thread, so waiting here cannot deadlock.
                 deviceHostService.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
                 pluginCatalog.Dispose();
+
+                // A downloaded update (Install updates automatically) installs now; its installer
+                // waits for this process to end and doesn't start DeckHost again.
+                updates.InstallPendingOnExit();
                 logger.LogInformation("DeckHost stopped.");
                 services.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
                 NLog.LogManager.Shutdown();

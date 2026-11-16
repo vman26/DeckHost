@@ -41,6 +41,9 @@
 				<TextBlock Text="{Binding CurrentVersionText}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" />
 				<CheckBox Content="Check for updates automatically" IsChecked="{Binding CheckAutomatically}" />
 				<TextBlock Classes="hint" Text="A little after start and every few hours, DeckHost asks GitHub for a new release and shows a notice when there is one." />
+				<CheckBox Content="Install updates automatically" IsChecked="{Binding InstallAutomatically}" IsVisible="{Binding CanInstallAutomatically}" />
+				<TextBlock Classes="hint" IsVisible="{Binding CanInstallAutomatically}" Text="A new version downloads in the background and installs when you close DeckHost. Plugin updates have their own setting on the Plugins page." />
+				<TextBlock Text="{Binding ReadyText}" IsVisible="{Binding IsReadyToInstallOnExit}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
 				<CheckBox Content="Include pre-releases" IsChecked="{Binding IncludePrereleases}" />
 				<TextBlock Classes="hint" Text="Alpha, beta and release-candidate builds: new features sooner, with more rough edges." />
 				<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">

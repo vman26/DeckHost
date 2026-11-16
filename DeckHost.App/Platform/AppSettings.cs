@@ -19,6 +19,7 @@ namespace DeckHost.App.Platform;
 /// <param name="OfferCrashReports">After a crash, offer to report it on the next start (nothing is ever sent without asking).</param>
 /// <param name="WelcomeShown">The welcome tour was shown (it opens by itself on the first start only).</param>
 /// <param name="AutoUpdatePlugins">Install plugin updates from the store catalogs by themselves.</param>
+/// <param name="InstallUpdatesAutomatically">Download a new DeckHost in the background and install it when DeckHost closes.</param>
 public sealed record AppSettingsData(
     bool StartMinimized = true,
     bool? CloseToTray = null,
@@ -31,7 +32,8 @@ public sealed record AppSettingsData(
     bool OfferCrashReports = true,
     bool WelcomeShown = false,
     string Theme = AppTheme.Dark,
-    bool AutoUpdatePlugins = false)
+    bool AutoUpdatePlugins = false,
+    bool InstallUpdatesAutomatically = false)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
 }
