@@ -51,6 +51,7 @@ nav:
   - Vision:
       - The master plan: vision/master-plan.md
       - Status against the plan: vision/status.md
+      - "Devices: research and plan": vision/devices-research.md
   - For maintainers:
       - Releasing and signing: maintainers/releasing.md
       - Writing plugins: maintainers/plugins.md
