@@ -13,6 +13,14 @@ env:
   OPENCV_VERSION: 4.10.0
 
 jobs:
+  # CHANGELOG.md keeps the format the release notes are made from (scripts/release-notes.py).
+  changelog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 scripts/release-notes.py check
+
   build:
     name: build (${{ matrix.os }})
     strategy:

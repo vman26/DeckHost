@@ -32,6 +32,8 @@ For devices with screens or lights, see the [device plugin guide](docs/maintaine
    are immutable; the plugin API only grows.
 4. Add tests for what you change. CI builds and tests on Windows, Linux and macOS.
 5. Say how you tested it, and on which hardware if any (it's fine if you couldn't).
+6. If people will notice the change, add a line to [`CHANGELOG.md`](CHANGELOG.md) under
+   **Unreleased**, written for them: what they can do now, or what works again.
 
 By contributing you agree that your contribution is licensed under the project's license
 (GPL-3.0-or-later; MIT for `DeckHost.Contracts` and the plugin template) and that you have the right

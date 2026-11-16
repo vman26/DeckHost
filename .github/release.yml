@@ -1,0 +1,20 @@
+# Groups the pull request list GitHub generates for a release (folded at the bottom of the release
+# notes; the notes themselves come from CHANGELOG.md, see scripts/release-notes.py).
+changelog:
+  exclude:
+    labels: [skip-changelog]
+  categories:
+    - title: New features
+      labels: [enhancement, feature]
+    - title: Fixes
+      labels: [bug]
+    - title: Devices
+      labels: [devices]
+    - title: Plugins
+      labels: [plugins]
+    - title: Documentation
+      labels: [documentation]
+    - title: Dependencies
+      labels: [dependencies]
+    - title: Other changes
+      labels: ["*"]

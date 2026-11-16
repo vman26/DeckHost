@@ -16,6 +16,7 @@ on:
       - "Directory.Build.props"
       - "GitVersion.yml"
       - "scripts/version.sh"
+      - "scripts/release-notes.py"
   workflow_dispatch:
 
 env:
@@ -27,8 +28,21 @@ permissions:
   contents: read
 
 jobs:
+  # Before anything is built: a tag needs its section in CHANGELOG.md (scripts/release-notes.py).
+  notes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the changelog
+        run: python3 scripts/release-notes.py check
+      - name: The tag's release notes
+        if: github.ref_type == 'tag'
+        run: python3 scripts/release-notes.py section "${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+
   package:
     name: package (${{ matrix.rid }})
+    needs: notes
     strategy:
       fail-fast: false
       matrix:
@@ -268,7 +282,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: package
+    needs: [notes, package]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
@@ -277,6 +291,8 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@v5
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -303,8 +319,11 @@ jobs:
           if [[ "$TAG" == *-* ]]; then
             prerelease=(--prerelease)
           fi
-          # The notes: the pull requests merged since the previous release.
-          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body > notes.md
+          # The notes: the tag's section of CHANGELOG.md (the build fails without one), downloads and
+          # checks, then the pull requests merged since the previous release (grouped by label,
+          # .github/release.yml), folded. DeckHost's update screen shows the part before the marker.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body > pull-requests.md
+          python3 scripts/release-notes.py compose "$TAG" --pull-requests pull-requests.md > notes.md
           gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "DeckHost ${TAG#v}" --notes-file notes.md "${prerelease[@]}"
 
       # NuGet Trusted Publishing: no stored key. With the NUGET_USER variable (your nuget.org

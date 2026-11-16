@@ -6,6 +6,34 @@ Push a tag; the tag is the version (`v1.4.0`, or `v1.4.0-rc.1` for a pre-release
 
 Versions come from git (GitVersion, git-flow): `develop` builds alpha versions of the next minor, `release/x.y.z` builds release candidates, `hotfix/*` betas of the next patch.
 
+## Release notes
+
+The notes come from [`CHANGELOG.md`](https://github.com/vman26/DeckHost/blob/develop/CHANGELOG.md),
+written for users ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)): every pull request that
+changes something people notice adds a line under `## [Unreleased]`, in Added, Changed, Deprecated,
+Removed, Fixed or Security. CI checks the format (`python3 scripts/release-notes.py check`).
+
+Before tagging:
+
+- **A release** (`v1.4.0`): on the release branch, rename `## [Unreleased]` to
+  `## [1.4.0] - 2026-12-01`, add a new empty `## [Unreleased]` above it and update the links at the
+  bottom.
+- **A release candidate** (`v1.4.0-rc.1`) uses the `[1.4.0]` section when there is one, else
+  `[Unreleased]`. A section of its own (`## [1.4.0-rc.1]`) wins when you want different notes.
+
+The release workflow checks this before it builds anything (a stable tag without its section, or
+an empty section, stops the release), then publishes `scripts/release-notes.py compose <tag>`:
+
+1. the changelog section,
+2. the download table,
+3. how to check the files (checksums, build provenance), and
+4. the pull requests since the previous release, folded and grouped by label (`.github/release.yml`;
+   label a pull request `skip-changelog` to leave it out).
+
+DeckHost's update screen shows the notes up to the `<!-- deckhost:end-of-notes -->` marker after
+the download table, so people see what changed, not the checks for maintainers. Try it locally:
+`python3 scripts/release-notes.py compose v1.4.0`.
+
 ## Where releases, docs and reports go
 
 Everything happens in this repository: releases, the in-app update check (it reads the public
