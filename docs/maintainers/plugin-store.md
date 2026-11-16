@@ -30,12 +30,11 @@ new version: author ──GitHub release──▶ update workflow (every 6 h, ch
 2. **Pages:** Settings → Pages → Source: **GitHub Actions**.
 3. **Workflows that open pull requests** (submit, discover): Settings → Actions → General →
    *Allow GitHub Actions to create and approve pull requests*, and create the label `add-plugin`.
-   The **update** workflow commits to `main` itself and opens `review-update` issues (it creates
-   the label).
-4. **Protecting `main` (optional):** only collaborators can push to it anyway; outside authors
-   always go through a pull request and the **check** workflow. If you add a ruleset that requires
-   pull requests, let the update workflow's commits through (the ruleset's bypass list), or new
-   versions wait.
+   The **update** workflow opens `review-update` issues (it creates the label).
+4. **Protect `main`** with a ruleset that requires pull requests and a review: then nothing new is
+   listed without you. The update workflow never writes to `main`: new versions go to the
+   `catalog-updates` branch (it creates it), which must stay writable for GitHub Actions, so don't
+   put that branch under the ruleset.
 5. **The OBS entry** points at the OBS package of a DeckHost release (`deckhost.plugin.obs.zip`,
    with its line from that release's `SHA256SUMS.txt`). It has `"auto_update": false`: its
    repository is DeckHost itself, whose releases hold the app too, so move it to a newer release by
@@ -68,8 +67,11 @@ request, when the release:
 - passes the **same checks** as a pull request: download, checksum, id and version against the
   package, and loading it with `DeckHost --check-plugin`.
 
-It also refreshes the name, author and description from the package's manifest, then commits and
-publishes. Anything else opens an issue labelled `review-update` with the reason. If it's fine, run
+It also takes the name, author and description from the package's manifest. Because `main` only
+takes reviewed pull requests, the new version isn't written to the entry: it goes to
+`updates/<id>.json` on the `catalog-updates` branch, and **publish** applies it on top of the
+reviewed entry (`catalog.py build --overrides`). A pull request that brings the entry on `main` to
+that version or later makes the update file obsolete; the next run removes it. Anything else opens an issue labelled `review-update` with the reason. If it's fine, run
 **Actions → update → Run workflow** with the plugin id under *approve*; if not, set
 `"auto_update": false` in the entry or remove it. A different plugin id is never taken, approved or
 not.
