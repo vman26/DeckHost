@@ -27,6 +27,10 @@ The store lists the DeckHost catalog, OpenAction and an archive of the Elgato st
 browse** in the store opens the Elgato Marketplace, MiraBox Space and OpenAction in your browser:
 download a plugin there and install the file with **Install plugin…**.
 
+**Install from GitHub** takes a GitHub repository's address (`https://github.com/owner/plugin`) and
+installs the plugin file of its newest release (`.streamDeckPlugin`, `.dhplugin` or `.zip`; a stable
+release before a pre-release), checked against the checksum GitHub publishes for it.
+
 ## A plugin's documentation
 
 Right-click an action or a plugin in the action list, or a control that has an action, and choose

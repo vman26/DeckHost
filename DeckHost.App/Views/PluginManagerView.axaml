@@ -292,6 +292,11 @@
 							</ItemsControl>
 							<TextBlock Text="Download a plugin there, then install the file with Install plugin… at the top." Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,0,6" />
 						</WrapPanel>
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+							<TextBox Text="{Binding GitHubUrl, Mode=TwoWay}" PlaceholderText="Install from GitHub: https://github.com/owner/plugin"
+									 ToolTip.Tip="A GitHub repository whose releases have a plugin file (.streamDeckPlugin, .dhplugin or .zip): its newest release is installed" />
+							<Button Grid.Column="1" Content="Install from GitHub" Command="{Binding InstallFromGitHubCommand}" />
+						</Grid>
 						<Expander Header="Sources" HorizontalAlignment="Stretch">
 							<StackPanel Spacing="8">
 								<TextBlock Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap"

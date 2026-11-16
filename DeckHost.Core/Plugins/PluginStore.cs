@@ -54,6 +54,7 @@ public sealed class PluginStore(HttpClient http)
     public const string DeckHostSource = "DeckHost";
     public const string OpenActionSource = "OpenAction";
     public const string ElgatoArchiveSource = "Elgato (community archive)";
+    public const string GitHubSource = "GitHub";
 
     private const string OpenActionCatalogUrl = "https://openactionapi.github.io/plugins/catalogue.json";
     private const string OpenActionIconUrl = "https://openactionapi.github.io/plugins/icons/{0}.png";
@@ -300,20 +301,89 @@ public sealed class PluginStore(HttpClient http)
         }
 
         var releasesJson = await http.GetStringAsync($"https://api.github.com/repos/{path[0]}/{path[1]}/releases", cancellationToken).ConfigureAwait(false);
+        return PickReleaseAsset(releasesJson)?.Url;
+    }
+
+    /// <summary>
+    /// "Install from GitHub": the newest release of a GitHub repository with a plugin file
+    /// (<c>.streamDeckPlugin</c>, <c>.dhplugin</c> or <c>.zip</c>) as an entry to download, checked
+    /// against the SHA-256 GitHub publishes for release files. Throws <see cref="PluginException"/>
+    /// with a message for the user when there is none.
+    /// </summary>
+    public async Task<StoreEntry> FromGitHubAsync(string repositoryUrl, CancellationToken cancellationToken = default)
+    {
+        if (GitHubLocation.Parse(repositoryUrl) is not { } location)
+        {
+            throw new PluginException("That isn't a GitHub repository address, like https://github.com/owner/plugin.");
+        }
+
+        string releasesJson;
+        try
+        {
+            releasesJson = await http.GetStringAsync(
+                $"https://api.github.com/repos/{Uri.EscapeDataString(location.Owner)}/{Uri.EscapeDataString(location.Repository)}/releases?per_page=20",
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new PluginException(ex.StatusCode switch
+            {
+                System.Net.HttpStatusCode.NotFound => $"GitHub has no public repository {location.Owner}/{location.Repository}.",
+                System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.TooManyRequests => "GitHub is limiting requests from this computer for a while; try again later.",
+                _ => $"Couldn't reach GitHub: {ex.Message}",
+            }, ex);
+        }
+
+        var asset = PickReleaseAsset(releasesJson)
+            ?? throw new PluginException($"{location.Owner}/{location.Repository} has no release with a plugin file (.streamDeckPlugin, .dhplugin or .zip).");
+        return new StoreEntry(
+            location.Repository,
+            location.Repository,
+            location.Owner,
+            null,
+            GitHubSource,
+            asset.Version,
+            null,
+            $"https://github.com/{location.Owner}/{location.Repository}",
+            asset.Url)
+        {
+            Sha256 = asset.Sha256,
+        };
+    }
+
+    /// <summary>
+    /// The plugin file of the newest release in GitHub's releases JSON (stable before pre-release,
+    /// no drafts; .streamDeckPlugin, then .dhplugin, then .zip), with GitHub's sha256 digest when given.
+    /// </summary>
+    internal static (string Version, string Url, string? Sha256)? PickReleaseAsset(string releasesJson)
+    {
         if (JsonNode.Parse(releasesJson) is not JsonArray releases)
         {
             return null;
         }
 
-        var release = releases.OfType<JsonObject>().FirstOrDefault(static release => release["prerelease"]?.GetValue<bool>() != true)
-            ?? releases.OfType<JsonObject>().FirstOrDefault();
+        static int Rank(string name) =>
+            name.EndsWith(".streamdeckplugin", StringComparison.OrdinalIgnoreCase) ? 0
+            : name.EndsWith(".dhplugin", StringComparison.OrdinalIgnoreCase) ? 1
+            : name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ? 2
+            : -1;
 
-        return (release?["assets"] as JsonArray)?.OfType<JsonObject>()
-            .Where(static asset => Text(asset, "name") is { } name &&
-                (name.EndsWith(".streamdeckplugin", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
-            .OrderByDescending(static asset => Text(asset, "name")!.EndsWith(".streamdeckplugin", StringComparison.OrdinalIgnoreCase))
-            .Select(static asset => Text(asset, "browser_download_url"))
-            .FirstOrDefault();
+        var published = releases.OfType<JsonObject>().Where(static release => release["draft"]?.GetValue<bool>() != true).ToList();
+        foreach (var release in published.Where(static release => release["prerelease"]?.GetValue<bool>() != true).Concat(published.Where(static release => release["prerelease"]?.GetValue<bool>() == true)))
+        {
+            var asset = (release["assets"] as JsonArray)?.OfType<JsonObject>()
+                .Where(static asset => Text(asset, "name") is { } name && Rank(name) >= 0)
+                .OrderBy(static asset => Rank(Text(asset, "name")!))
+                .FirstOrDefault();
+            if (asset is not null && Text(asset, "browser_download_url") is { } url)
+            {
+                var digest = Text(asset, "digest");
+                var sha256 = digest is not null && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? digest["sha256:".Length..] : null;
+                return ((Text(release, "tag_name") ?? "?").TrimStart('v', 'V'), url, sha256);
+            }
+        }
+
+        return null;
     }
 
     private static bool IsWebUrl(string value) =>

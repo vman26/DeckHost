@@ -69,6 +69,76 @@ public partial class PluginStoreViewModel : ViewModelBase
         new("OpenAction", "https://openactionapi.github.io/plugins/"),
     ];
 
+    private string _gitHubUrl = string.Empty;
+    private bool _isInstallingFromGitHub;
+
+    /// <summary>A GitHub repository to install a plugin from (its newest release's plugin file).</summary>
+    public string GitHubUrl
+    {
+        get => _gitHubUrl;
+        set
+        {
+            if (SetProperty(ref _gitHubUrl, value))
+            {
+                InstallFromGitHubCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool IsInstallingFromGitHub
+    {
+        get => _isInstallingFromGitHub;
+        private set
+        {
+            if (SetProperty(ref _isInstallingFromGitHub, value))
+            {
+                InstallFromGitHubCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    private bool CanInstallFromGitHub() => !IsInstallingFromGitHub && GitHubLocation.Parse(GitHubUrl) is not null;
+
+    /// <summary>Installs the plugin file of a GitHub repository's newest release (checked against GitHub's sha256).</summary>
+    [RelayCommand(CanExecute = nameof(CanInstallFromGitHub))]
+    private async Task InstallFromGitHubAsync()
+    {
+        IsInstallingFromGitHub = true;
+        string? package = null;
+        try
+        {
+            StatusReported?.Invoke("Looking for the newest release on GitHub…", false);
+            var entry = await Task.Run(() => _store.FromGitHubAsync(GitHubUrl));
+            StatusReported?.Invoke($"Downloading {entry.Name} {entry.Version}…", false);
+            package = await Task.Run(() => _store.DownloadAsync(entry, Path.Combine(Path.GetTempPath(), "DeckHost", "downloads"), null, CancellationToken.None));
+            var installed = await Task.Run(() => _catalog.Install(package, entry.Id, null, PluginStore.GitHubSource));
+            StatusReported?.Invoke(
+                installed.Error is null
+                    ? $"Installed {installed.Name} {installed.Version} from GitHub. Its actions are in the action list now."
+                    : $"Installed {installed.Name}, but it can't run: {installed.Error}",
+                installed.Error is not null);
+            GitHubUrl = string.Empty;
+        }
+        catch (Exception ex) when (ex is PluginException or HttpRequestException or IOException or TaskCanceledException or InvalidDataException)
+        {
+            StatusReported?.Invoke($"Could not install from GitHub: {ex.Message}", true);
+        }
+        finally
+        {
+            IsInstallingFromGitHub = false;
+            if (package is not null)
+            {
+                try
+                {
+                    File.Delete(package);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+    }
+
     [RelayCommand]
     private static void OpenStore(string url)
     {
