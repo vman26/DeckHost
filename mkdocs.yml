@@ -30,6 +30,9 @@ markdown_extensions:
       permalink: true
   - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
 nav:
   - Home: index.md
   - Download: download.md
@@ -46,6 +49,7 @@ nav:
       - Built-in actions: reference/actions.md
       - Plugin API: reference/api.md
   - Updates: updates.md
+  - Changelog: changelog.md
   - Troubleshooting: troubleshooting.md
   - Privacy: privacy.md
   - Vision:
