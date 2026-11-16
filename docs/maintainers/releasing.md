@@ -17,6 +17,13 @@ the app. The user reads it and sends it themselves; nothing is sent automaticall
 its builds at its own releases with the build property `DeckHostUpdateRepository` (the release
 workflow sets it to the repository it runs in).
 
+## The NuGet package
+
+Each release also packs the plugin API, `DeckHost.Contracts`, as a NuGet package (attached to the
+release). To publish it on nuget.org, add an Actions secret `NUGET_API_KEY`: a nuget.org API key
+with push rights for `DeckHost.*` packages. Plugin authors then reference it
+(`ExcludeAssets="runtime"`, DeckHost supplies it) instead of a copy of this repository.
+
 ## Code signing
 
 Without signing the packages still work: Windows SmartScreen warns, and macOS asks to allow the app once. Add secrets to sign them; nothing else changes. A trusted certificate always means a check of who you are by a certificate authority, so no script can get one by itself. What can be automated is everything around it, and that's what's here.

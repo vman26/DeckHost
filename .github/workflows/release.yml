@@ -253,6 +253,12 @@ jobs:
         if: runner.os == 'Linux'
         run: cp artifacts/plugins/deckhost.plugin.obs.zip artifacts/release/
 
+      # The plugin API as a NuGet package (DeckHost.Contracts), for plugins built outside this
+      # repository and the dotnet new template; attached to the release, pushed to NuGet below.
+      - name: NuGet packages
+        if: runner.os == 'Linux'
+        run: dotnet pack DeckHost.Contracts/DeckHost.Contracts.csproj -c Release $VERSION_ARGS -o artifacts/release
+
       - uses: actions/upload-artifact@v4
         with:
           name: DeckHost-${{ steps.version.outputs.file }}-${{ matrix.rid }}
@@ -298,3 +304,17 @@ jobs:
           # The notes: the pull requests merged since the previous release.
           gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body > notes.md
           gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "DeckHost ${TAG#v}" --notes-file notes.md "${prerelease[@]}"
+
+      # With a NUGET_API_KEY secret (nuget.org → API keys, push for DeckHost.*), the NuGet packages
+      # go to nuget.org too. Without it they're only attached to the release.
+      - name: Publish to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [[ -z "$NUGET_API_KEY" ]]; then
+            echo "No NUGET_API_KEY secret: the NuGet packages are only attached to the release."
+            exit 0
+          fi
+          for package in artifacts/*.nupkg; do
+            dotnet nuget push "$package" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
