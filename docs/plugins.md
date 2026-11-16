@@ -38,6 +38,14 @@ You can turn it off for a plugin, after a warning: it then runs inside DeckHost,
 
 Stream Deck and OpenAction plugins are restarted the same way when their program ends unexpectedly, and get back what they had on your devices; the Plugins page shows their process too. One that keeps stopping (three times in a row) is left stopped with a message: disable and enable it to try again. A plugin that runs for a few minutes between crashes starts the count again.
 
+## Updating plugins
+
+DeckHost checks the store catalogs for newer versions of the plugins you installed a minute after it
+starts and every 6 hours. On the Plugins page, **Plugin updates** shows what it found: **Update to
+v…** on a plugin, or **Update all**. **Check for updates** asks right away. With **Install plugin
+updates automatically** on, DeckHost installs them by itself. DeckHost's own plugins update with
+DeckHost.
+
 ## Going back to an earlier version
 
 When a plugin is updated, DeckHost keeps the version before it. If the new one misbehaves, **Back to v…** on the Plugins page brings the earlier one back (and keeps the newer one, so you can switch again).

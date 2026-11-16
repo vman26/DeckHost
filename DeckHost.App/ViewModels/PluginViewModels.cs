@@ -62,11 +62,17 @@ public partial class PluginManagerViewModel : ViewModelBase
         _catalog.EnabledApplicationPlugins.FirstOrDefault(plugin => string.Equals(plugin.Id, pluginId, StringComparison.OrdinalIgnoreCase))?
             .Actions.Select(static action => action.ListIcon).FirstOrDefault(static icon => !string.IsNullOrWhiteSpace(icon));
 
-    public PluginManagerViewModel(PluginCatalog catalog, IDeviceHostService host, DeviceSettingsService? deviceSettings = null)
+    public PluginManagerViewModel(PluginCatalog catalog, IDeviceHostService host, DeviceSettingsService? deviceSettings = null, PluginUpdatesViewModel? updates = null)
     {
         _catalog = catalog;
         _host = host;
         _deviceSettings = deviceSettings;
+        Updates = updates;
+        if (updates is not null)
+        {
+            updates.Changed += OnUpdatesChanged;
+        }
+
         _catalog.Changed += OnCatalogChanged;
         _host.DevicesChanged += OnDevicesChanged;
         Store = new PluginStoreViewModel(catalog);
@@ -163,8 +169,20 @@ public partial class PluginManagerViewModel : ViewModelBase
             plugin);
     }
 
+    /// <summary>Plugin updates (check, update one or all, automatic); null in tests.</summary>
+    public PluginUpdatesViewModel? Updates { get; }
+
+    public bool HasUpdatesPanel => Updates is not null;
+
+    private void OnUpdatesChanged(object? sender, EventArgs e) => Refresh();
+
     public void Detach()
     {
+        if (Updates is not null)
+        {
+            Updates.Changed -= OnUpdatesChanged;
+        }
+
         _catalog.Changed -= OnCatalogChanged;
         _host.DevicesChanged -= OnDevicesChanged;
     }
@@ -349,6 +367,13 @@ public partial class PluginEntryViewModel : ViewModelBase
     public string Name => Entry.Name;
 
     public string Version => $"v{Entry.Version}";
+
+    /// <summary>A newer version in the store, found by the last update check.</summary>
+    public PluginUpdate? Update => _owner.Updates?.For(Entry.Id);
+
+    public bool HasUpdate => Update is not null;
+
+    public string UpdateLabel => Update is { } update ? $"Update to v{update.ToVersion}" : string.Empty;
 
     /// <summary>Connects devices (a device plugin) rather than adding actions.</summary>
     public bool IsDevicePlugin => Entry.Kind == PluginKind.Device;

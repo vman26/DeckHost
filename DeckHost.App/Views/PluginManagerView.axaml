@@ -98,6 +98,13 @@
 						<Border Classes="badge" Background="{DynamicResource C.1E293B}" IsVisible="{Binding IsLocked}" HorizontalAlignment="Right">
 							<TextBlock Text="{Binding LockedReason}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
 						</Border>
+						<Button Content="{Binding UpdateLabel}"
+								Classes="accent"
+								IsVisible="{Binding HasUpdate}"
+								HorizontalAlignment="Right"
+								ToolTip.Tip="Install the newer version from the store (this one is kept, so you can go back)"
+								Command="{Binding $parent[UserControl].((vm:PluginManagerViewModel)DataContext).Updates.UpdateCommand}"
+								CommandParameter="{Binding Update}" />
 						<Button Content="Documentation"
 								HorizontalAlignment="Right"
 								ToolTip.Tip="What the plugin does, its actions, links and README"
@@ -211,6 +218,23 @@
 				</ItemsControl>
 
 				<TextBlock Classes="section" Text="ACTION PLUGINS: INSTALLED" Margin="0,8,0,0" />
+				<!-- Plugin updates from the store catalogs. -->
+				<Border Classes="card" IsVisible="{Binding HasUpdatesPanel}">
+					<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" DataContext="{Binding Updates}" x:DataType="vm:PluginUpdatesViewModel">
+						<StackPanel Spacing="6">
+							<TextBlock Text="Plugin updates" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+							<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
+							<CheckBox IsChecked="{Binding InstallAutomatically, Mode=TwoWay}"
+									  Content="Install plugin updates automatically"
+									  ToolTip.Tip="DeckHost checks the store a minute after it starts and every 6 hours. Each update keeps the previous version, so you can go back." />
+						</StackPanel>
+						<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+							<Button Content="Check for updates" Command="{Binding CheckCommand}" IsEnabled="{Binding IsIdle}" HorizontalAlignment="Right" />
+							<Button Content="{Binding UpdateAllLabel}" Classes="accent" IsVisible="{Binding HasUpdates}" IsEnabled="{Binding IsIdle}"
+									Command="{Binding UpdateAllCommand}" HorizontalAlignment="Right" />
+						</StackPanel>
+					</Grid>
+				</Border>
 				<Border Classes="card" IsVisible="{Binding HasNoInstalledPlugins}">
 					<StackPanel Spacing="4">
 						<TextBlock Text="No plugins installed yet." FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />

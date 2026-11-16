@@ -122,6 +122,7 @@ public partial class App : Application
                 });
             ListenForActivation(ShowMainWindow);
             updates.StartAutomaticChecks();
+            services.GetRequiredService<PluginUpdatesViewModel>().StartAutomaticChecks();
 
             if (Program.StartedAtLogin && settings.StartMinimized)
             {
@@ -338,10 +339,26 @@ public partial class App : Application
         services.AddSingleton(provider => new Core.Firmware.FirmwareService(provider.GetServices<IDevicePlugin>(), provider.GetRequiredService<IDeviceHostService>()));
         services.AddSingleton(provider => new PluginDocsService(provider.GetRequiredService<PluginCatalog>()));
         services.AddSingleton(provider => new DeviceSettingsService(provider.GetServices<IDevicePlugin>(), () => provider.GetRequiredService<MainViewModel>(), provider.GetRequiredService<Core.Firmware.FirmwareService>()));
+        services.AddSingleton(provider =>
+        {
+            // The user's store sources can change while DeckHost runs: read them for every check.
+            var store = new PluginStore(PluginStore.CreateHttpClient());
+            var updater = new PluginUpdater(provider.GetRequiredService<PluginCatalog>(), store, Path.Combine(Path.GetTempPath(), "DeckHost", "downloads"));
+            return new PluginUpdatesViewModel(
+                () =>
+                {
+                    store.DeckHostCatalogUrls = PluginStoreViewModel.LoadCatalogUrls();
+                    return updater.CheckAsync();
+                },
+                (update, progress) => updater.InstallAsync(update, progress),
+                Platform.AppSettings.Load,
+                Platform.AppSettings.Save);
+        });
         services.AddTransient(provider => new PluginManagerViewModel(
             provider.GetRequiredService<PluginCatalog>(),
             provider.GetRequiredService<IDeviceHostService>(),
-            provider.GetRequiredService<DeviceSettingsService>()));
+            provider.GetRequiredService<DeviceSettingsService>(),
+            provider.GetRequiredService<PluginUpdatesViewModel>()));
         services.AddTransient(provider => new ProfileManagerViewModel(provider.GetRequiredService<MainViewModel>()));
 
         // Updates: GitHub releases of DeckHost.

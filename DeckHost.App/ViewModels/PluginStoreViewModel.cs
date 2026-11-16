@@ -271,7 +271,7 @@ public partial class PluginStoreViewModel : ViewModelBase
         }
     }
 
-    private static List<string> LoadCatalogUrls()
+    internal static List<string> LoadCatalogUrls()
     {
         try
         {
