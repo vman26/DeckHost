@@ -54,16 +54,40 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
                 _workflowSource.WorkflowEditorRequested -= OpenWorkflowEditor;
             }
 
+            if (_workflowSource is not null)
+            {
+                _workflowSource.PropertyChanged -= OnMainViewModelPropertyChanged;
+            }
+
             _workflowSource = DataContext as MainViewModel;
             if (_workflowSource is not null)
             {
                 _workflowSource.WorkflowEditorRequested += OpenWorkflowEditor;
+                _workflowSource.PropertyChanged += OnMainViewModelPropertyChanged;
             }
+
+            ShowEditor();
         };
         AppSettingsViewModel.Changed += settings => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyDebugSetting(settings));
     }
 
     private MainViewModel? _workflowSource;
+
+    private void OnMainViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.Editor))
+        {
+            ShowEditor();
+        }
+    }
+
+    /// <summary>
+    /// A new editor view for each control, never a reused one: a reused view's choice boxes keep the
+    /// previous control's selection while their items change, and wrote it into the new control
+    /// (selecting a tile key after a transparent one turned its tile off).
+    /// </summary>
+    private void ShowEditor() =>
+        EditorHost.Content = _workflowSource?.Editor is { } editor ? new ControlCustomizationView { DataContext = editor } : null;
 
     /// <summary>The workflow editor as a page (one at a time: a second one replaces the first).</summary>
     private void OpenWorkflowEditor(WorkflowEditorViewModel editor)

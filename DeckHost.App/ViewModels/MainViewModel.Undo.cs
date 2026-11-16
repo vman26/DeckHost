@@ -50,7 +50,17 @@ public partial class MainViewModel
     internal static bool SameBinding(ControlBinding? left, ControlBinding? right) =>
         ReferenceEquals(left, right) ||
         (left is not null && right is not null &&
-         System.Text.Json.JsonSerializer.Serialize(left, BindingComparison) == System.Text.Json.JsonSerializer.Serialize(right, BindingComparison));
+         System.Text.Json.JsonSerializer.Serialize(Normalized(left), BindingComparison) == System.Text.Json.JsonSerializer.Serialize(Normalized(right), BindingComparison));
+
+    /// <summary>No settings and empty settings mean the same (a binding read from the file has none, the editor builds empty ones).</summary>
+    private static ControlBinding Normalized(ControlBinding binding) => binding with
+    {
+        Action = Normalized(binding.Action),
+        Steps = [.. binding.Steps.Select(static step => step with { Action = Normalized(step.Action) })],
+    };
+
+    private static ActionReference Normalized(ActionReference action) =>
+        action.Settings is { } settings && !settings.Any() ? action with { Settings = null } : action;
 
     private void RecordBindingChange(ProfileItemViewModel layout, string controlId, ControlBinding? after)
     {
