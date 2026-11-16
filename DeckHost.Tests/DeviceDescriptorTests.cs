@@ -16,7 +16,11 @@ public sealed class DeviceDescriptorTests : IDisposable
 
     private IEnumerable<DeviceDefinition> EveryBuiltInDevice()
     {
-        yield return N4ProLayout.Create("mirabox.n4pro", "MiraBox N4 Pro", null, isConnected: false, detail: null);
+        foreach (var model in MiraBoxModels.All)
+        {
+            yield return model.Describe(model.DefaultDeviceId, $"MiraBox {model.ShortName}", null, isConnected: false, detail: null);
+        }
+
         foreach (var model in StreamDeckModel.All)
         {
             yield return model.Describe($"elgato.{model.ProductId:x4}.test", false, "TEST", null, null);
@@ -51,7 +55,7 @@ public sealed class DeviceDescriptorTests : IDisposable
     [Test]
     public void The_N4_Pro_describes_its_two_screens_round_knobs_and_capabilities()
     {
-        var n4 = N4ProLayout.Create("mirabox.n4pro", "MiraBox N4 Pro", null, isConnected: false, detail: null);
+        var n4 = MiraBoxModels.N4Pro.Describe("mirabox.n4pro", "MiraBox N4 Pro", null, isConnected: false, detail: null);
 
         Assert.That(n4.Identity, Is.EqualTo(new DeviceIdentity("MiraBox", "StreamDock N4 Pro", Connection: "USB")));
         Assert.That(n4.Displays.Select(static display => (display.Id, display.ControlIds.Count)), Is.EqualTo(new[] { ("main", 10), ("strip", 4) }));
@@ -97,7 +101,7 @@ public sealed class DeviceDescriptorTests : IDisposable
     [Test]
     public void The_plugins_page_shows_identity_and_capabilities()
     {
-        var card = new DeviceInfoViewModel(N4ProLayout.Create("mirabox.n4pro", "MiraBox N4 Pro", null, false, null), null);
+        var card = new DeviceInfoViewModel(MiraBoxModels.N4Pro.Describe("mirabox.n4pro", "MiraBox N4 Pro", null, false, null), null);
 
         Assert.That(card.IdentityText, Is.EqualTo("MiraBox StreamDock N4 Pro · USB"));
         Assert.That(card.CapabilitiesText, Does.StartWith("Screens · Touch · Brightness · RGB lights"));

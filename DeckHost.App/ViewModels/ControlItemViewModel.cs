@@ -69,6 +69,7 @@ public class ControlItemViewModel : ViewModelBase
     public string TypeLabel => Type switch
     {
         ControlType.Key => "Key",
+        ControlType.Button => "Button",
         ControlType.Encoder => "Knob",
         ControlType.TouchSurface => "Touch",
         ControlType.Display => "Display",

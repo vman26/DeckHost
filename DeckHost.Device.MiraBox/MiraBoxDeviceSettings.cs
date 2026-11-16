@@ -4,12 +4,13 @@ using System.Text.Json;
 namespace DeckHost.Device.MiraBox;
 
 /// <summary>
-/// N4 Pro settings: device configuration (vibration, boot animation, LED behaviour), key and LED
-/// brightness, and the idle screen. Stored per device in <c>%AppData%/DeckHost/devices/&lt;id&gt;.json</c>
+/// MiraBox device settings: device configuration (vibration, boot animation, LED behaviour; the N4
+/// Pro only), key and LED brightness, and the idle screen; each model gets the ones it has
+/// (<see cref="For"/>). Stored per device in <c>%AppData%/DeckHost/devices/&lt;id&gt;.json</c>
 /// and applied when changed and whenever the device connects. Items left on their default are
 /// not sent unless DeckHost changed them before; then the default is sent once to restore it.
 /// </summary>
-internal static class N4ProDeviceSettings
+internal static class MiraBoxDeviceSettings
 {
     public const string Vibration = "vibration";
     public const string BootVideo = "bootVideo";
@@ -37,24 +38,38 @@ internal static class N4ProDeviceSettings
         new("off", "Off"),
     ];
 
-    public static IReadOnlyList<ActionSettingDefinition> Definitions { get; } =
-    [
-        new(Vibration, "Vibrate when a control is used", ActionSettingKind.Choice, "default", Options: SwitchOptions),
-        new(BootVideo, "Play the start-up animation", ActionSettingKind.Choice, "default", Options: SwitchOptions),
-        new(LedFollowsKeyLight, "LEDs follow the key brightness", ActionSettingKind.Choice, "default", Options: SwitchOptions),
-        new(KeyLightWhenDisconnected, "Keep keys lit when DeckHost isn't running", ActionSettingKind.Choice, "default", Options: SwitchOptions),
-        new(KeyBrightness, "Screen brightness", ActionSettingKind.Number, Placeholder: "Default") { Range = Percentage },
-        new(LedBrightness, "LED brightness", ActionSettingKind.Number, Placeholder: "Default") { Range = Percentage },
-        new(IdleScreen, "Idle / start-up screen", ActionSettingKind.Choice, "keep",
+    /// <summary>The N4 Pro's settings (every one).</summary>
+    public static IReadOnlyList<ActionSettingDefinition> Definitions { get; } = For(MiraBoxModels.N4Pro);
+
+    /// <summary>The settings a model has: the configuration items only where the SDK's are known, LED brightness only with LEDs.</summary>
+    public static IReadOnlyList<ActionSettingDefinition> For(MiraBoxModel model)
+    {
+        var definitions = new List<ActionSettingDefinition>();
+        if (model.HasDeviceConfig)
+        {
+            definitions.Add(new(Vibration, "Vibrate when a control is used", ActionSettingKind.Choice, "default", Options: SwitchOptions));
+            definitions.Add(new(BootVideo, "Play the start-up animation", ActionSettingKind.Choice, "default", Options: SwitchOptions));
+            definitions.Add(new(LedFollowsKeyLight, "LEDs follow the key brightness", ActionSettingKind.Choice, "default", Options: SwitchOptions));
+            definitions.Add(new(KeyLightWhenDisconnected, "Keep keys lit when DeckHost isn't running", ActionSettingKind.Choice, "default", Options: SwitchOptions));
+        }
+
+        definitions.Add(new(KeyBrightness, "Screen brightness", ActionSettingKind.Number, Placeholder: "Default") { Range = Percentage });
+        if (model.LedCount > 0)
+        {
+            definitions.Add(new(LedBrightness, "LED brightness", ActionSettingKind.Number, Placeholder: "Default") { Range = Percentage });
+        }
+
+        definitions.Add(new(IdleScreen, "Idle / start-up screen", ActionSettingKind.Choice, "keep",
             Description: "What the device shows when DeckHost isn't running. Choose Black or an image to replace an old picture stored on the device.",
             Options:
             [
                 new("keep", "Leave as it is"),
                 new("black", "Black"),
                 new("image", "Image file"),
-            ]),
-        new(IdleImage, "Idle screen image", ActionSettingKind.FilePath, Placeholder: "PNG or JPG, ideally 800×480"),
-    ];
+            ]));
+        definitions.Add(new(IdleImage, "Idle screen image", ActionSettingKind.FilePath, Placeholder: string.Create(System.Globalization.CultureInfo.InvariantCulture, $"PNG or JPG, ideally {model.ScreenWidth}×{model.ScreenHeight}")));
+        return definitions;
+    }
 
     private static string Directory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost", "devices");
@@ -94,14 +109,18 @@ internal static class N4ProDeviceSettings
     /// default, so the device really returns to it. Returns the problems found and whether the
     /// idle screen was rewritten (which also clears the key images).
     /// </summary>
-    public static (List<string> Problems, bool IdleScreenWritten) Apply(string deviceKey, ActionSettings settings, Action<string, string?> remember)
+    public static (List<string> Problems, bool IdleScreenWritten) Apply(string deviceKey, MiraBoxModel model, ActionSettings settings, Action<string, string?> remember)
     {
         var problems = new List<string>();
+        if (!model.HasDeviceConfig)
+        {
+            settings = settings.With(AppliedConfig, null);
+        }
 
         // Configer takes all items at once, in the device's order. Unset items use the SDK default (on).
         var items = new[] { LedFollowsKeyLight, KeyLightWhenDisconnected, null, Vibration, null, BootVideo };
         var config = string.Join(",", items.Select(item => item is null ? "-" : settings.Get(item, "default")));
-        var anySet = items.Any(item => item is not null && settings.Get(item, "default") != "default");
+        var anySet = model.HasDeviceConfig && items.Any(item => item is not null && settings.Get(item, "default") != "default");
         if (anySet || !string.IsNullOrEmpty(settings.Get(AppliedConfig)))
         {
             var states = items.Select(item => item is null ? Follow : settings.Get(item, "default") switch
@@ -116,7 +135,10 @@ internal static class N4ProDeviceSettings
         }
 
         ApplyBrightness(settings, KeyBrightness, AppliedKeyBrightness, "screen brightness", value => MiraBoxNative.SetKeyBrightness(deviceKey, (byte)value), remember, problems);
-        ApplyBrightness(settings, LedBrightness, AppliedLedBrightness, "LED brightness", value => MiraBoxNative.SetLedBrightness(deviceKey, (byte)Math.Round(value * 2.55)), remember, problems);
+        if (model.LedCount > 0)
+        {
+            ApplyBrightness(settings, LedBrightness, AppliedLedBrightness, "LED brightness", value => MiraBoxNative.SetLedBrightness(deviceKey, (byte)Math.Round(value * 2.55)), remember, problems);
+        }
 
         var idle = settings.Get(IdleScreen, "keep");
         var idleKey = idle == "image" ? $"image:{settings.Get(IdleImage)}:{SafeTimestamp(settings.Get(IdleImage))}" : idle;
@@ -125,7 +147,7 @@ internal static class N4ProDeviceSettings
         {
             var result = idle == "image"
                 ? MiraBoxNative.SendBackgroundFile(deviceKey, settings.Get(IdleImage))
-                : MiraBoxNative.SendBackground(deviceKey, new byte[800 * 480 * 4], 800, 480);
+                : MiraBoxNative.SendBackground(deviceKey, new byte[model.ScreenWidth * model.ScreenHeight * 4], model.ScreenWidth, model.ScreenHeight);
             if (Check(result, "idle screen", problems))
             {
                 remember(AppliedIdleScreen, idleKey);

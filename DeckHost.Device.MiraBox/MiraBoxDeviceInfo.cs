@@ -24,12 +24,7 @@ internal sealed record MiraBoxDeviceInfo(
     bool HasRgbLed,
     int LedCount)
 {
-    /// <summary>DeviceOriginType::SDN4Pro in the SDK.</summary>
-    public const int N4ProOriginType = 0x07;
-
     private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
-
-    public bool IsN4Pro => OriginType == N4ProOriginType;
 
     public static MiraBoxDeviceInfo? FromJson(string? json)
     {
