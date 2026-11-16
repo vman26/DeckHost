@@ -81,7 +81,10 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         if (DataContext is MainViewModel vm)
         {
             vm.ShowDebugPanel = settings.ShowDebugPanel;
+            vm.ShowDeviceSimulator = settings.DeviceSimulator;
         }
+
+        TryResolve<DeckHost.Device.Simulator.SimulatorDevicePlugin>()?.SetEnabled(settings.DeviceSimulator);
     }
 
     /// <summary>A service from the app's container, or null when there is none (tests, previews).</summary>

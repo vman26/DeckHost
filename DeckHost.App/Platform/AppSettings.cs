@@ -20,6 +20,7 @@ namespace DeckHost.App.Platform;
 /// <param name="WelcomeShown">The welcome tour was shown (it opens by itself on the first start only).</param>
 /// <param name="AutoUpdatePlugins">Install plugin updates from the store catalogs by themselves.</param>
 /// <param name="InstallUpdatesAutomatically">Download a new DeckHost in the background and install it when DeckHost closes.</param>
+/// <param name="DeviceSimulator">Developer option: let device simulator windows connect (☰ → Device simulator).</param>
 public sealed record AppSettingsData(
     bool StartMinimized = true,
     bool? CloseToTray = null,
@@ -33,7 +34,8 @@ public sealed record AppSettingsData(
     bool WelcomeShown = false,
     string Theme = AppTheme.Dark,
     bool AutoUpdatePlugins = false,
-    bool InstallUpdatesAutomatically = false)
+    bool InstallUpdatesAutomatically = false,
+    bool DeviceSimulator = false)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
 }

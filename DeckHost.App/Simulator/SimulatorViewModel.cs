@@ -87,7 +87,7 @@ public sealed partial class SimulatorViewModel : ObservableObject, IAsyncDisposa
             var endpoint = SimulatorWire.ReadEndpoint(_directory);
             if (endpoint is null)
             {
-                Post(() => Status = "Waiting for DeckHost. Start it; this window connects by itself.");
+                Post(() => Status = "Waiting for DeckHost. Start it and turn on DeckHost settings → Developer → Device simulator; this window connects by itself.");
                 await DelayAsync().ConfigureAwait(false);
                 continue;
             }

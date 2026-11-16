@@ -747,6 +747,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     private ControlCustomizationViewModel? _editor;
     private bool _applyingFromEditor;
     private bool _showDebugPanel;
+    private bool _showDeviceSimulator;
 
     /// <summary>
     /// The editor below the device for the selected control (what the Customize window was). Edits
@@ -765,6 +766,13 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     }
 
     public bool HasEditor => _editor is not null;
+
+    /// <summary>☰ → Device simulator is offered (DeckHost settings → Developer → Device simulator).</summary>
+    public bool ShowDeviceSimulator
+    {
+        get => _showDeviceSimulator;
+        set => SetProperty(ref _showDeviceSimulator, value);
+    }
 
     /// <summary>The debug panel (the selected control's capabilities, the runtime connection and log): DeckHost settings → Show debug panel.</summary>
     public bool ShowDebugPanel

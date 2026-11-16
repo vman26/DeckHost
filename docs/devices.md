@@ -49,8 +49,9 @@ This support was written from the protocol and isn't tested on every model yet. 
 
 ## Device simulator
 
-Try DeckHost with any device it supports, without the hardware: **☰ → Device simulator** opens a
-window that acts like the device you pick. DeckHost lists it as a connected device (**Simulated …**
+Try DeckHost with any device it supports, without the hardware. It's a developer option: turn on
+**DeckHost settings → Developer → Device simulator**, then **☰ → Device simulator** opens a window
+that acts like the device you pick. DeckHost lists it as a connected device (**Simulated …**
 in the device picker), sends it the same images and lights it sends the hardware, and takes its
 input like the real thing.
 
@@ -65,8 +66,9 @@ input like the real thing.
   vibrate (the window shakes).
 - A simulated device has its **own profiles**. To try your real device's profile on it, use
   **Profiles → Copy to**.
-- Open as many simulators as you like, each its own device. Closing one unplugs it; opening the same
-  model again brings its profiles back. It reconnects by itself when DeckHost restarts.
+- Open as many simulators as you like, each its own device. Closing one removes the device from the
+  picker; its profiles are kept, and opening the same model again brings them back. It reconnects by
+  itself when DeckHost restarts. Turning the setting off closes every simulator's connection.
 - From a terminal: `DeckHost --simulator` (or `DeckHost --simulator deckhost.device.mirabox/mirabox.xl`
   for a model).
 

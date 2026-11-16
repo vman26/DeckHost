@@ -118,19 +118,47 @@ public sealed class SimulatorTests : IAsyncDisposable
     }
 
     [Test]
-    public async Task Closing_the_window_unplugs_the_device_and_opening_it_again_keeps_its_id()
+    public async Task Closing_the_window_removes_the_device_and_opening_it_again_brings_its_id_back()
     {
         var (client, _) = await AttachAsync("deckhost.device.mirabox/mirabox.xl");
         await client.DisposeAsync();
         _clients.Remove(client);
 
-        await Until(() => _plugin.Devices.Single().IsConnected == false);
+        await Until(() => _plugin.Devices.Count == 0);
         Assert.That(_plugin.TryPushImage("simulator.mirabox.xl", "key.0", new byte[4], 1, 1, out var error), Is.False);
         Assert.That(error, Is.Not.Null);
 
         await AttachAsync("deckhost.device.mirabox/mirabox.xl");
         var device = Expect.Single(_plugin.Devices);
         Assert.That((device.Id, device.IsConnected), Is.EqualTo(("simulator.mirabox.xl", true)));
+    }
+
+    [Test]
+    public async Task Switched_off_nothing_can_connect_and_open_windows_are_closed()
+    {
+        await AttachAsync("deckhost.device.mirabox/mirabox.n4pro");
+
+        _plugin.SetEnabled(false);
+
+        await Until(() => _plugin.Devices.Count == 0);
+        Assert.That(SimulatorWire.ReadEndpoint(_directory), Is.Null);
+        Assert.That(_plugin.Port, Is.Zero);
+
+        _plugin.SetEnabled(true);
+        Assert.That(SimulatorWire.ReadEndpoint(_directory), Is.Not.Null);
+        await AttachAsync("deckhost.device.mirabox/mirabox.n4pro");
+        Assert.That(Expect.Single(_plugin.Devices).IsConnected, Is.True);
+    }
+
+    [Test]
+    public async Task Off_from_the_start_there_is_no_endpoint()
+    {
+        using var plugin = new SimulatorDevicePlugin(Path.Combine(_directory, "off"), () => [_mirabox], enabled: false);
+
+        await plugin.InitializeAsync(_context, CancellationToken.None);
+
+        Assert.That(SimulatorWire.ReadEndpoint(Path.Combine(_directory, "off")), Is.Null);
+        Assert.That(plugin.Port, Is.Zero);
     }
 
     [Test]

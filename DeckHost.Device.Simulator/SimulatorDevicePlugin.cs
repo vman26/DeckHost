@@ -19,10 +19,11 @@ namespace DeckHost.Device.Simulator;
 /// actions, lights) runs as with real hardware.
 /// <para>
 /// The endpoint's port and a random token go to <c>simulator.json</c> in DeckHost's data folder;
-/// only a process of the same user that can read it can connect. A simulated device's id is
-/// <c>simulator.{model id}</c> (then <c>-2</c>, …), so its profiles are its own; profiles copy
-/// from the real device with Profiles → Copy to. It stays listed, unplugged, after its window
-/// closes, until DeckHost restarts.
+/// only a process of the same user that can read it can connect, and only while the endpoint is
+/// switched on (DeckHost settings → Developer → Device simulator; <see cref="SetEnabled"/>). A
+/// simulated device's id is <c>simulator.{model id}</c> (then <c>-2</c>, …), so its profiles are
+/// its own; profiles copy from the real device with Profiles → Copy to. It goes away when its
+/// window closes; opening the same model again brings back the id and its profiles.
 /// </para>
 /// </summary>
 public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin
@@ -38,20 +39,26 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
     private readonly Lock _sync = new();
     private readonly List<SimulatedDevice> _devices = [];
     private readonly ConcurrentDictionary<(string DeviceId, string ControlId), Timer> _longPressTimers = new();
-    private readonly CancellationTokenSource _stop = new();
+    private CancellationTokenSource? _session;
     private IReadOnlyCollection<DeviceDefinition> _definitions = [];
     private IDevicePluginContext? _context;
     private TcpListener? _listener;
     private string _token = string.Empty;
     private bool _disposed;
+    private bool _enabled;
 
     /// <param name="directory">DeckHost's data folder: the endpoint file goes there, device settings under <c>devices/</c>.</param>
     /// <param name="plugins">The device plugins whose models can be simulated (read when a simulator connects).</param>
-    public SimulatorDevicePlugin(string directory, Func<IEnumerable<IDevicePlugin>> plugins)
+    /// <param name="enabled">Listen for simulators (DeckHost settings → Developer → Device simulator); see <see cref="SetEnabled"/>.</param>
+    public SimulatorDevicePlugin(string directory, Func<IEnumerable<IDevicePlugin>> plugins, bool enabled = true)
     {
         _directory = directory;
         _plugins = plugins;
+        _enabled = enabled;
     }
+
+    /// <summary>Whether simulators can connect.</summary>
+    public bool IsEnabled => _enabled;
 
     public string Id => "deckhost.device.simulator";
 
@@ -69,13 +76,63 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
     public Task InitializeAsync(IDevicePluginContext context, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_listener is not null)
+        _context = context;
+        lock (_sync)
         {
-            return Task.CompletedTask;
+            if (_enabled)
+            {
+                StartListening();
+            }
+            else
+            {
+                // A file left by a DeckHost that didn't close cleanly would send simulators to a dead port.
+                StopListening();
+            }
         }
 
-        _context = context;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Turns the endpoint on or off. Off closes every simulator window's connection (its device
+    /// goes away) and removes the endpoint file, so nothing can connect.
+    /// </summary>
+    public void SetEnabled(bool enabled)
+    {
+        lock (_sync)
+        {
+            if (_enabled == enabled || _disposed)
+            {
+                return;
+            }
+
+            _enabled = enabled;
+            if (_context is null)
+            {
+                return; // Started by InitializeAsync.
+            }
+
+            if (enabled)
+            {
+                StartListening();
+            }
+            else
+            {
+                StopListening();
+            }
+        }
+    }
+
+    /// <summary>Must hold <see cref="_sync"/>.</summary>
+    private void StartListening()
+    {
+        if (_listener is not null)
+        {
+            return;
+        }
+
         _token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+        _session = new CancellationTokenSource();
         _listener = new TcpListener(IPAddress.Loopback, 0);
         _listener.Start();
         try
@@ -84,11 +141,30 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            context.Log("Warning", $"The device simulator can't connect: {ex.Message}");
+            _context?.Log("Warning", $"The device simulator can't connect: {ex.Message}");
         }
 
-        _ = Task.Run(AcceptLoopAsync, CancellationToken.None);
-        return Task.CompletedTask;
+        var listener = _listener;
+        var session = _session.Token;
+        _ = Task.Run(() => AcceptLoopAsync(listener, session), CancellationToken.None);
+    }
+
+    /// <summary>Must hold <see cref="_sync"/>. The connections end by themselves when the session is cancelled.</summary>
+    private void StopListening()
+    {
+        // Cancelled, not disposed: connections still hold its token while they close.
+        _session?.Cancel();
+        _session = null;
+        _listener?.Stop();
+        _listener = null;
+        try
+        {
+            // Only one DeckHost runs per user, so whatever file is there is ours or a stale one.
+            File.Delete(Path.Combine(_directory, SimulatorWire.EndpointFileName));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     /// <summary>Every model the other device plugins describe.</summary>
@@ -117,25 +193,25 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
 
     // ---------------------------------------------------------------- connections
 
-    private async Task AcceptLoopAsync()
+    private async Task AcceptLoopAsync(TcpListener listener, CancellationToken session)
     {
-        while (!_stop.IsCancellationRequested && _listener is { } listener)
+        while (!session.IsCancellationRequested)
         {
             TcpClient client;
             try
             {
-                client = await listener.AcceptTcpClientAsync(_stop.Token).ConfigureAwait(false);
+                client = await listener.AcceptTcpClientAsync(session).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or SocketException)
             {
                 return;
             }
 
-            _ = Task.Run(() => ServeAsync(client), CancellationToken.None);
+            _ = Task.Run(() => ServeAsync(client, session), CancellationToken.None);
         }
     }
 
-    private async Task ServeAsync(TcpClient client)
+    private async Task ServeAsync(TcpClient client, CancellationToken session)
     {
         client.NoDelay = true;
         var connection = new SimulatorConnection(client.GetStream());
@@ -152,7 +228,7 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
             var models = Models();
             connection.Send(new SimulatorMessage { Type = SimulatorMessage.ModelList, Models = [.. models] });
 
-            while (await connection.ReadAsync(_stop.Token).ConfigureAwait(false) is { } message)
+            while (await connection.ReadAsync(session).ConfigureAwait(false) is { } message)
             {
                 switch (message.Type)
                 {
@@ -216,30 +292,23 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
         lock (_sync)
         {
             var baseId = IdPrefix + model.Device.Id;
-            var existing = _devices.FirstOrDefault(candidate => candidate.ModelKey == model.Key && candidate.Connection is null);
-            if (existing is not null)
+            // The first free id: the same model opened again gets its id, and so its profiles, back.
+            var id = baseId;
+            for (var number = 2; _devices.Any(candidate => string.Equals(candidate.Definition.Id, id, StringComparison.OrdinalIgnoreCase)); number++)
             {
-                // The same model again (the window was closed and opened): keep its id and profiles.
-                device = existing;
-            }
-            else
-            {
-                var id = baseId;
-                for (var number = 2; _devices.Any(candidate => string.Equals(candidate.Definition.Id, id, StringComparison.OrdinalIgnoreCase)); number++)
-                {
-                    id = $"{baseId}-{number}";
-                }
-
-                device = new SimulatedDevice(model.Key, model.Device with
-                {
-                    Id = id,
-                    Name = $"Simulated {model.Device.Name}",
-                    Detail = $"Simulator ({model.Plugin})",
-                });
-                _devices.Add(device);
+                id = $"{baseId}-{number}";
             }
 
-            device.Connection = connection;
+            device = new SimulatedDevice(model.Key, model.Device with
+            {
+                Id = id,
+                Name = $"Simulated {model.Device.Name}",
+                Detail = $"Simulator ({model.Plugin})",
+            })
+            {
+                Connection = connection,
+            };
+            _devices.Add(device);
             Publish();
         }
 
@@ -251,15 +320,17 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
         return device;
     }
 
+    /// <summary>The window closed (or became another model): the simulated device goes away; its profiles stay for next time.</summary>
     private void Detach(SimulatedDevice device)
     {
         lock (_sync)
         {
             device.Connection = null;
+            _devices.Remove(device);
             Publish();
         }
 
-        _context?.ReportConnectionStatus(device.Id, "Disconnected", "Open the device simulator (☰ → Device simulator).");
+        _context?.ReportConnectionStatus(device.Id, "Disconnected", "The simulator window was closed.");
         DevicesChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -459,26 +530,15 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
         }
 
         _disposed = true;
-        _stop.Cancel();
-        _listener?.Stop();
+        lock (_sync)
+        {
+            StopListening();
+        }
+
         foreach (var timer in _longPressTimers.Values)
         {
             timer.Dispose();
         }
-
-        try
-        {
-            var path = Path.Combine(_directory, SimulatorWire.EndpointFileName);
-            if (SimulatorWire.ReadEndpoint(_directory)?.Token == _token)
-            {
-                File.Delete(path);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-        }
-
-        _stop.Dispose();
     }
 
     private sealed class SimulatedDevice(string modelKey, DeviceDefinition definition)

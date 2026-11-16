@@ -71,8 +71,11 @@
 
 		<Border Classes="card">
 			<StackPanel Spacing="10">
+				<TextBlock Text="Developer" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
 				<CheckBox Content="Show the debug panel" IsChecked="{Binding ShowDebugPanel}" />
 				<TextBlock Classes="hint" Text="Next to the editor: the selected control's inputs and outputs, the runtime connection and the runtime log." />
+				<CheckBox Content="Device simulator" IsChecked="{Binding DeviceSimulator}" />
+				<TextBlock Classes="hint" Text="Adds ☰ → Device simulator: a window that acts like any device DeckHost supports, for trying devices and plugins without the hardware. Off, no simulator can connect." />
 			</StackPanel>
 		</Border>
 

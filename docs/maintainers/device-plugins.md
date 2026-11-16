@@ -122,8 +122,8 @@ Report connection changes with `context.ReportConnectionStatus(deviceId, "Connec
 ## Your models in the device simulator
 
 Implement the optional `IDeviceModelCatalog` (`DescribeModels()`): every model your plugin drives,
-as an unplugged `DeviceDefinition`. The device simulator (**☰ → Device simulator**,
-`DeckHost --simulator`) then offers them; a simulator window acting as one appears as a connected
+as an unplugged `DeviceDefinition`. The device simulator (**DeckHost settings → Developer → Device
+simulator**, then **☰ → Device simulator** or `DeckHost --simulator`) then offers them; a simulator window acting as one appears as a connected
 device (`simulator.<your device id>`), so you can try your layout, rendering and input mapping
 without the hardware. The simulator uses only the descriptor, so a good descriptor (control bounds,
 displays, `LedIndex`, `DisplayControlId`, capabilities such as `Haptics`) is what makes it look

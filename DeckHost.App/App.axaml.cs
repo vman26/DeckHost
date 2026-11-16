@@ -261,8 +261,9 @@ public partial class App : Application
         services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Web.WebDeckPlugin>());
 
         // The device simulator (DeckHost --simulator) connects here and can be any model the other
-        // device plugins describe; they are asked when a simulator connects, not now.
-        services.AddSingleton(provider => new DeckHost.Device.Simulator.SimulatorDevicePlugin(appData, () => provider.GetServices<IDevicePlugin>()));
+        // device plugins describe; they are asked when a simulator connects, not now. Only listens
+        // with DeckHost settings → Developer → Device simulator on.
+        services.AddSingleton(provider => new DeckHost.Device.Simulator.SimulatorDevicePlugin(appData, () => provider.GetServices<IDevicePlugin>(), Platform.AppSettings.Load().DeviceSimulator));
         services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Simulator.SimulatorDevicePlugin>());
 
         // Runtime
