@@ -48,6 +48,9 @@ nav:
   - Updates: updates.md
   - Troubleshooting: troubleshooting.md
   - Privacy: privacy.md
+  - Vision:
+      - The master plan: vision/master-plan.md
+      - Status against the plan: vision/status.md
   - For maintainers:
       - Releasing and signing: maintainers/releasing.md
       - Writing plugins: maintainers/plugins.md

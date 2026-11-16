@@ -9,6 +9,8 @@ License: GPL-3.0-or-later (`LICENSE`, `NOTICE.md` with a section-7 permission fo
 
 DeckHost is a .NET 10 / Avalonia 12 desktop host for physical control surfaces: the MiraBox / StreamDock **N4 Pro**, Elgato Stream Decks (preview) and a browser-based Web Deck. A C++ bridge (`native/MiraBoxBridge`) wraps the vendor StreamDock C++ SDK (git submodule at `native/StreamDock-SDK`) and exposes a flat C ABI that the C# device plugin P/Invokes.
 
+The product direction is `docs/vision/master-plan.md` (the master plan, with Appendix A for what DeckHost does beyond it) and `docs/vision/status.md` (done / partly / not yet per requirement): update the status when a requirement changes, and add new capabilities to Appendix A. Features the plan lists as missing are only built after the maintainer approves the plan for them.
+
 ## Commands
 
 Run these from the repository root. Windows is the primary development platform.
