@@ -49,7 +49,7 @@ nav:
       - Writing plugins: maintainers/plugins.md
       - Device plugins: maintainers/device-plugins.md
       - The plugin catalog: maintainers/plugin-store.md
-      - Going public: maintainers/going-public.md
+      - Launch checklist: maintainers/going-public.md
       - Architecture: maintainers/architecture.md
       - Decisions:
           - maintainers/adr/index.md

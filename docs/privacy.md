@@ -4,7 +4,7 @@ DeckHost has no account, no analytics and no telemetry. It only goes online for 
 
 | What | Where it connects | When |
 |---|---|---|
-| Update check | `api.github.com` (the releases repository) | Now and then, unless turned off in DeckHost settings |
+| Update check | `api.github.com` (DeckHost's releases on GitHub) | Now and then, unless turned off in DeckHost settings |
 | Downloading an update | `github.com` | When you choose to update |
 | The plugin store | The store sources (DeckHost catalogs, OpenAction, the Elgato community archive), `raw.githubusercontent.com` for READMEs, icon hosts | When you open the store |
 | Icon search | `api.iconify.design` | When you search for icons |

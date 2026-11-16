@@ -1,30 +1,10 @@
-# Going public: checklist
+# Public launch checklist
 
-What's left to do by hand to make DeckHost's repository public and announce it. Everything that could
-be prepared in the code is done (license, notices, docs, issue forms, the plugin catalog, the release
-workflow).
+DeckHost's repository is public, with everything in one repository under GPL-3.0. What's left by hand
+before announcing it:
 
-## Before flipping the switch
+## Repository settings
 
-- [ ] **Merge the work to `main`.** The pull request stack (#4 → #5 → #6) holds everything; the
-      release, docs and catalog workflows run from the default branch.
-- [ ] **Your email on old commits.** Six commits carry your personal email address; it becomes
-      visible when the repository is public. Either accept that, or (before going public) rewrite
-      those commits' author email, which needs a force-push of every branch: ask for it if you want it.
-      For new commits, use GitHub's private address: Settings → Emails → *Keep my email addresses
-      private*, then `git config --global user.email <id>+vman26@users.noreply.github.com`.
-- [ ] **History size.** Old OpenCV debug DLLs (about 38 MB) are in the history from before the native
-      build moved to CMake. Harmless (OpenCV is Apache-2.0), only makes clones bigger. Leave them,
-      unless you want to rewrite history anyway.
-- [ ] **Remove the releases-repo settings** if you made them: the `RELEASES_REPO` variable and
-      `RELEASES_TOKEN` secret. Without them the release goes to this repository, the apps check it
-      for updates, the docs are published here, and the issue sync turns itself off.
-
-A scan of the whole history found **no secrets** (tokens, keys, certificates) and no other personal data.
-
-## Step 3: public, quietly
-
-- [ ] **Settings → General → Danger zone → Change visibility → Public.**
 - [ ] **Settings → Actions → General → Fork pull request workflows:** *Require approval for
       first-time contributors*.
 - [ ] **Settings → Code security:** turn on *Private vulnerability reporting* (SECURITY.md links to
@@ -34,12 +14,11 @@ A scan of the whole history found **no secrets** (tokens, keys, certificates) an
       The docs appear at `https://vman26.github.io/DeckHost/`, which is where the app's Help links.
 - [ ] **Settings → General → Features:** Issues on; Discussions on if you want a place for questions
       that aren't bugs.
-- [ ] **Sponsor button:** `.github/FUNDING.yml` shows Buy me a coffee; set up GitHub Sponsors
-      (github.com/sponsors) and add `github: vman26` to that file.
-- [ ] **The plugin catalog:** create `vman26/deckhost-plugins` ([guide](plugin-store.md)).
+- [x] **Sponsor button:** `.github/FUNDING.yml` (GitHub Sponsors and Buy me a coffee).
+- [x] **The plugin catalog:** `vman26/deckhost-plugins` ([guide](plugin-store.md)).
 - [ ] Look at the repository logged out (or in a private window) and read the README as a stranger.
 
-## Step 4: release and announce
+## Release and announce
 
 - [ ] **First release:** tag `v0.1.0` (or whatever you want the first public version to be) on `main`.
       The release workflow builds Windows, Linux and macOS, checks each, and publishes them with

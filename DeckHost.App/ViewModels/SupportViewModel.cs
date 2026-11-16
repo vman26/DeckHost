@@ -51,7 +51,7 @@ public sealed partial class SupportViewModel : ViewModelBase
 
     public string SystemDescription => $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})";
 
-    /// <summary>The documentation, published next to the releases (GitHub Pages of the releases repository).</summary>
+    /// <summary>The documentation: the GitHub Pages of the repository DeckHost gets its releases from.</summary>
     public static string DocumentationUrl => DocumentationUrlFor(AppInfo.UpdateRepository);
 
     internal static string DocumentationUrlFor(string repository)

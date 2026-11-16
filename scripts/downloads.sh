@@ -2,14 +2,13 @@
 # How often each DeckHost release was downloaded, per file and in total (GitHub counts every
 # download of a release file; update checks aren't counted, installs through the updater are).
 #
-#   scripts/downloads.sh [owner/repo]     default: vman26/DeckHost-releases, else vman26/DeckHost
+#   scripts/downloads.sh [owner/repo]     default: vman26/DeckHost
 #
-# A private repository needs a token: GITHUB_TOKEN=... scripts/downloads.sh vman26/DeckHost
 set -euo pipefail
 
 repo="${1:-}"
 if [[ -z "$repo" ]]; then
-    repo="vman26/DeckHost-releases"
+    repo="vman26/DeckHost"
 fi
 
 auth=()

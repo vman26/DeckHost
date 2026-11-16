@@ -94,9 +94,9 @@ public sealed class SupportTests : IDisposable
     }
 
     [Fact]
-    public void The_documentation_lives_on_the_releases_repository_pages()
+    public void The_documentation_lives_on_the_repository_pages()
     {
-        Assert.Equal("https://vman26.github.io/DeckHost-releases/", SupportViewModel.DocumentationUrlFor("Vman26/DeckHost-releases"));
+        Assert.Equal("https://vman26.github.io/DeckHost/", SupportViewModel.DocumentationUrlFor("Vman26/DeckHost"));
         Assert.Equal("https://github.com/odd", SupportViewModel.DocumentationUrlFor("odd"));
     }
 }

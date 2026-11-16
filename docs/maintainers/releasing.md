@@ -8,37 +8,14 @@ Versions come from git (GitVersion, git-flow): `develop` builds alpha versions o
 
 ## Where releases, docs and reports go
 
-With a public repository (the default), everything happens here: releases, the in-app update check,
-the documentation (GitHub Pages, **Settings → Pages → Source: GitHub Actions**) and problem reports.
-Nothing else to set up.
+Everything happens in this repository: releases, the in-app update check (it reads the public
+releases without signing in), the documentation (GitHub Pages, **Settings → Pages → Source: GitHub
+Actions**) and problem reports.
 
-## Optional: a private source repository
-
-The updater reads releases without signing in, so they must be public. If you keep the source private:
-
-1. Create a public repository for releases, for example `vman26/DeckHost-releases`, with one commit (a README).
-2. Create a fine-grained token: resource owner you, **only** that repository, **Contents: Read and write**, with an expiry date. Add it to the source repository as the Actions **secret** `RELEASES_TOKEN`.
-3. Add the Actions **variable** `RELEASES_REPO` = `vman26/DeckHost-releases`.
-
-Each release then goes to both repositories, and the apps check the releases repository. The **docs** workflow publishes this documentation to the releases repository's `gh-pages` branch: turn on **Settings → Pages → Deploy from a branch → gh-pages** there once. The documentation is then at `https://vman26.github.io/DeckHost-releases/`, which is where DeckHost's **Help** links.
-
-## Problem reports
-
-DeckHost's **Report a problem** (and the offer after a crash) opens a new issue, filled in by the app, in the repository it checks for updates: the public releases repository when `RELEASES_REPO` is set, else this one. The user reads it and sends it themselves; nothing is sent automatically.
-
-With a private source repository, the **sync issues** workflow links the two (every hour, and right away on comments here):
-
-- every new public issue gets a copy here, labeled `public-report`, with a link back; the public one gets the label `tracked`;
-- comments on the public issue are copied to the copy;
-- a comment here that starts with `/public` is posted to the public issue (without the `/public`), so you answer from here;
-- closing the copy as **completed** thanks the reporter and closes the public issue; when the reporter closes it, the copy says so.
-
-Nothing else from this repository reaches the public one. Setup, once:
-
-1. Turn on **Issues** in the releases repository (Settings → General → Features).
-2. Give the `RELEASES_TOKEN` token **Issues: Read and write** on the releases repository, next to Contents.
-3. Copy `packaging/releases-repo/` (README and `.github/ISSUE_TEMPLATE/`) into the releases repository: issue forms for problems and ideas, with a link to the documentation.
-4. Run **sync issues** by hand once (Actions → sync issues → Run workflow, with **dry run** to see what it would do).
+DeckHost's **Report a problem** (and the offer after a crash) opens a new issue here, filled in by
+the app. The user reads it and sends it themselves; nothing is sent automatically. A fork can point
+its builds at its own releases with the build property `DeckHostUpdateRepository` (the release
+workflow sets it to the repository it runs in).
 
 ## Code signing
 
@@ -50,11 +27,11 @@ Without signing the packages still work: Windows SmartScreen warns, and macOS as
 |---|---|---|---|
 | **Azure Artifact Signing** (Windows) | about 10 USD/month | organizations in the US, Canada, EU, UK and several other countries; individual developers only in the US and Canada | `scripts/setup-azure-signing.sh` sets it up; Microsoft renews the certificates, nothing expires on you except the app secret (2 years) |
 | A **code-signing certificate** from a CA (Windows) | 150–400 USD/year | anyone, also individuals in Europe (Certum, Sectigo, SSL.com, …) | the `.pfx` secrets below; cloud-only certificates need the CA's tool |
-| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository: DeckHost qualifies once it's public | their GitHub action, added to the release workflow after they approve the project ([checklist](going-public.md#step-4-release-and-announce)) |
+| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository, like DeckHost | their GitHub action, added to the release workflow after they approve the project ([checklist](going-public.md#release-and-announce)) |
 | **Apple Developer ID** (macOS) | 99 USD/year | anyone with an Apple Developer account | the macOS secrets below; signing and notarizing are automatic |
-| **Build provenance** (all files) | free | public source repositories (private ones need GitHub Enterprise Cloud) | on by itself: the release job attests every file (`gh attestation verify <file> --repo <owner/repo>`) |
+| **Build provenance** (all files) | free | public source repositories | on by itself: the release job attests every file (`gh attestation verify <file> --repo <owner/repo>`) |
 
-For DeckHost as a public open-source project: SignPath Foundation for Windows (free) and the Apple Developer Program for macOS. With a private source repository instead: a CA certificate for Windows (or Artifact Signing through a registered business).
+For DeckHost: SignPath Foundation for Windows (free for open source) and the Apple Developer Program for macOS.
 
 ### Windows: Azure Artifact Signing
 
