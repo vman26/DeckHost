@@ -12,8 +12,11 @@ namespace DeckHost.Device.Hid;
 /// when its hardware is plugged in it is opened and its reports become key presses and knob turns.
 /// These devices only send input: they have no screens or lights DeckHost could drive.
 /// </summary>
-public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmware
+public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmware, IDeviceModelCatalog
 {
+    /// <summary>Every device described in the device creator (for the device simulator).</summary>
+    public IReadOnlyList<DeviceDefinition> DescribeModels() => [.. Devices.Select(static device => device with { IsConnected = false })];
+
     /// <summary>The device's release number from USB (what most makers bump with firmware); read only.</summary>
     public DeviceFirmwareInfo? GetFirmwareInfo(string deviceId)
     {

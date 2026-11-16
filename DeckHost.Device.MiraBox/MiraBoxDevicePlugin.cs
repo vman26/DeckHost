@@ -18,8 +18,12 @@ namespace DeckHost.Device.MiraBox;
 /// remembered (<c>devices/mirabox-known.json</c>), connected or not, so profiles can be edited offline.
 /// </para>
 /// </summary>
-public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin, IDeviceFirmware
+public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog
 {
+    /// <summary>Every StreamDock model DeckHost knows, unplugged (for the device simulator).</summary>
+    public IReadOnlyList<DeviceDefinition> DescribeModels() =>
+        [.. MiraBoxModels.All.Select(static model => model.Describe(model.DefaultDeviceId, $"MiraBox {model.ShortName}", null, isConnected: false, detail: null))];
+
     /// <summary>The version the SDK reads; the StreamDock SDK has no way to write firmware.</summary>
     public DeviceFirmwareInfo? GetFirmwareInfo(string deviceId)
     {

@@ -13,8 +13,12 @@ namespace DeckHost.Device.Elgato;
 /// app, which otherwise holds the device). Devices are found and followed as they are plugged in
 /// and out; each one seen before stays listed while unplugged, so its profiles can be edited.
 /// </summary>
-public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceFirmware
+public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog
 {
+    /// <summary>Every Stream Deck model, unplugged (for the device simulator).</summary>
+    public IReadOnlyList<DeviceDefinition> DescribeModels() =>
+        [.. StreamDeckModel.All.Select(static model => model.Describe($"elgato.{model.ProductId:x4}", isConnected: false, serial: null, firmware: null, detail: null))];
+
     /// <summary>The version the deck reports (read when it connects); Elgato's update protocol isn't public.</summary>
     public DeviceFirmwareInfo? GetFirmwareInfo(string deviceId) =>
         Find(deviceId)?.Firmware is { Length: > 0 } version

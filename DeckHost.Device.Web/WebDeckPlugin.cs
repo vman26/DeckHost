@@ -22,8 +22,11 @@ namespace DeckHost.Device.Web;
 /// and asks for the pairing code (and the PIN, when one is set); the deck only connects with them,
 /// so others on the network can't press keys. Wrong guesses from one address are limited.
 /// </summary>
-public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceSettingActions
+public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceSettingActions, IDeviceModelCatalog
 {
+    /// <summary>The Web Deck with its current columns and rows (for the device simulator).</summary>
+    public IReadOnlyList<DeviceDefinition> DescribeModels() => [.. Devices.Select(static device => device with { IsConnected = false })];
+
     public const string DeviceId = "web.deck";
     public const string Sharing = "sharing";
     public const string Columns = "columns";

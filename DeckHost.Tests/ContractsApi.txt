@@ -96,6 +96,7 @@
   DeckHost.Contracts.Interfaces.IDeviceFirmware.GetFirmwareInfo(System.String deviceId) : DeckHost.Contracts.Models.DeviceFirmwareInfo abstract
   DeckHost.Contracts.Interfaces.IDeviceFirmware.InstallFirmwareAsync(System.String deviceId, DeckHost.Contracts.Models.FirmwareImage image, System.IProgress<DeckHost.Contracts.Models.FirmwareProgress> progress, System.Threading.CancellationToken cancellationToken) : System.Threading.Tasks.Task<DeckHost.Contracts.Models.FirmwareUpdateResult>
   DeckHost.Contracts.Interfaces.IDeviceLightBatchOutput.TrySetLights(System.String deviceId, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.LightColor> lights, System.String& error) : System.Boolean abstract
+  DeckHost.Contracts.Interfaces.IDeviceModelCatalog.DescribeModels() : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.DeviceDefinition> abstract
   DeckHost.Contracts.Interfaces.IDeviceOutput.Clear(System.String deviceId) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDeviceOutput.TryPushImage(System.String deviceId, System.String controlId, System.ReadOnlySpan<System.Byte> rgba, System.Int32 width, System.Int32 height, System.String& error) : System.Boolean abstract
   DeckHost.Contracts.Interfaces.IDeviceOutput.TrySetLight(System.String deviceId, System.String controlId, System.Byte red, System.Byte green, System.Byte blue, System.String& error) : System.Boolean abstract
@@ -806,6 +807,7 @@ interface DeckHost.Contracts.Interfaces.IDeckAction
 interface DeckHost.Contracts.Interfaces.IDeviceBackdropOutput
 interface DeckHost.Contracts.Interfaces.IDeviceFirmware
 interface DeckHost.Contracts.Interfaces.IDeviceLightBatchOutput
+interface DeckHost.Contracts.Interfaces.IDeviceModelCatalog
 interface DeckHost.Contracts.Interfaces.IDeviceOutput
 interface DeckHost.Contracts.Interfaces.IDevicePlugin
 interface DeckHost.Contracts.Interfaces.IDevicePluginContext

@@ -218,6 +218,14 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 |---|---|
 | `bool TrySetLights(string deviceId, IReadOnlyList<LightColor> lights, string error)` |  |
 
+### IDeviceModelCatalog
+
+*interface* — Optional for an `IDevicePlugin`: every model the plugin can drive, each described as an unplugged device (its controls, displays, capabilities). DeckHost's device simulator (`DeckHost --simulator`) offers these models and behaves like the hardware: it shows the controls, sends their input and shows the images and lights DeckHost sends. A plugin that describes a device it can't see yet (a model table, a saved layout) is a good fit.
+
+| Member | |
+|---|---|
+| `IReadOnlyList<DeviceDefinition> DescribeModels()` | The models, as unplugged devices. Ids only need to be unique within the plugin. |
+
 ### IDeviceOutput
 
 *interface* — Device output. The host calls these from a single worker thread, never the UI thread.
