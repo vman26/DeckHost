@@ -307,16 +307,22 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body > notes.md
           gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "DeckHost ${TAG#v}" --notes-file notes.md "${prerelease[@]}"
 
-      # With a NUGET_API_KEY secret (nuget.org → API keys, push for DeckHost.*), the NuGet packages
-      # go to nuget.org too. Without it they're only attached to the release.
+      # NuGet Trusted Publishing: no stored key. With the NUGET_USER variable (your nuget.org
+      # username) and a trusted publishing policy on nuget.org for this repository and release.yml,
+      # NuGet/login trades this run's GitHub OIDC token for a short-lived API key. Without the
+      # variable the NuGet packages are only attached to the release.
+      - name: NuGet login
+        id: nuget
+        if: vars.NUGET_USER != ''
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
       - name: Publish to NuGet
+        if: vars.NUGET_USER != ''
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget.outputs.NUGET_API_KEY }}
         run: |
-          if [[ -z "$NUGET_API_KEY" ]]; then
-            echo "No NUGET_API_KEY secret: the NuGet packages are only attached to the release."
-            exit 0
-          fi
           for package in artifacts/*.nupkg; do
             dotnet nuget push "$package" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
           done

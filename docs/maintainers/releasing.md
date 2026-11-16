@@ -19,10 +19,20 @@ workflow sets it to the repository it runs in).
 
 ## The NuGet package
 
-Each release also packs the plugin API, `DeckHost.Contracts`, as a NuGet package (attached to the
-release). To publish it on nuget.org, add an Actions secret `NUGET_API_KEY`: a nuget.org API key
-with push rights for `DeckHost.*` packages. Plugin authors then reference it
-(`ExcludeAssets="runtime"`, DeckHost supplies it) instead of a copy of this repository.
+Each release also packs the plugin API (`DeckHost.Contracts`) and the plugin template
+(`DeckHost.Templates`) as NuGet packages, attached to the release. They go to nuget.org with
+**Trusted Publishing**: no API key is stored; the release workflow trades its GitHub sign-in (OIDC)
+for a key that lasts only that run. Set it up once:
+
+1. On nuget.org: your profile → **Trusted Publishing** → add a policy for GitHub Actions with
+   repository owner `vman26`, repository `DeckHost` and workflow file `release.yml` (no environment).
+2. In this repository: Settings → Secrets and variables → Actions → **Variables** → `NUGET_USER` =
+   your nuget.org username (a variable, not a secret: it's not sensitive).
+
+The next tagged release pushes both packages (a version that's already there is skipped). Without
+`NUGET_USER` the packages are only attached to the release. Plugin authors then reference
+`DeckHost.Contracts` (`ExcludeAssets="runtime"`, DeckHost supplies it) and install the template with
+`dotnet new install DeckHost.Templates`.
 
 ## Code signing
 
