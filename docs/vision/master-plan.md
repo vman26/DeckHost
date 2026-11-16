@@ -2441,6 +2441,9 @@ product and are kept as it grows.
 - **Device statistics:** inputs, frames, failures and the last error per device, on the Help page
   and in support bundles.
 - **N4 Pro specifics:** vibration, boot video, idle screen, LED brightness, key lights.
+- **Device simulator:** a window (`DeckHost --simulator`) that acts as any model a device plugin
+  describes (`IDeviceModelCatalog`): DeckHost sees it as a connected device and sends it images,
+  lights and settings; it sends presses, knob turns and swipes back.
 
 **Lights**
 

@@ -29,6 +29,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Every StreamDock model in MiraBox's SDK, as a preview: N4, 293, 293s, M18, XL, M3, N3, N1,
   K1 Pro and Mini, with their keys, buttons, knobs, side switches and small displays. A model
   you've plugged in once stays in the device picker.
+- A device simulator (☰ → Device simulator): a window that acts like any device DeckHost supports,
+  with its keys, knobs, touch strips, images, LED colors and vibration, so you can set up and try a
+  device without having it.
 
 ### Changed
 

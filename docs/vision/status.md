@@ -39,7 +39,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 4.4 One engine for both | 🟡 | `WorkflowConverter` turns Multi Actions into workflows, but Multi Actions still run on `ActionRouter.RunSteps` |
 | 4.5 Vector, raster, text, gradients, transparency, fonts, icon packs, scaling, LED visualization | ✅ | `SkiaRenderContext` |
 | 4.5 Layers, animations, data-bound properties, transitions | 🟡 | GIF animation; variables drive actions' drawings; no layers or transitions |
-| 4.6 Virtual surfaces, browser interface | ✅ | Web Deck |
+| 4.6 Virtual surfaces, browser interface | ✅ | Web Deck; device simulator (any model, `DeckHost --simulator`) |
 | 4.6 Mobile clients, remote profile management, remote events | ⬜ | The Web Deck works on phones; no app, no remote editing |
 | 4.8 App detection, profile switching, system monitoring, dynamic states | ✅ | `ForegroundAppWatcher`, System Info |
 | 4.8 Window/process rules, game contexts, contextual backgrounds | 🟡 | By app name only |
@@ -175,7 +175,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Device and plugin contracts documented | ✅ |
 | Elgato, OpenAction and MiraBox boundaries defined | 🟡 |
 | Shared action and event model | 🟡 |
-| Virtual devices | ✅ (Web Deck; simulator app planned) |
+| Virtual devices | ✅ (Web Deck; device simulator) |
 | MiraBox N4 Pro driver on the contracts | ✅ |
 | Portable, versioned profile schema | ✅ |
 | Rendering boundaries; where backgrounds fit in profiles | 🟡 |

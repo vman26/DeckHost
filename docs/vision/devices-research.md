@@ -99,5 +99,9 @@ device.
   device plugin, so everything above the plugin (profiles, rendering, actions, lights) is exercised.
 - **Also for tests:** the simulator protocol doubles as an end-to-end test device in CI.
 
-**Plan:** shared model descriptions first (so the simulator and the plugins use one source), then
-the simulator plugin and app.
+**Done:** device plugins describe their models (`IDeviceModelCatalog`); the
+`DeckHost.Device.Simulator` plugin and the simulator window (`DeckHost --simulator`, the same
+program in its own process rather than a separate app) work as described above, including LED
+colors, brightness and vibration. **Next:** an end-to-end test in CI that drives a simulated device
+through the host, and a stand-in mode where the simulator takes a real device's id while that
+device is unplugged.

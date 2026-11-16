@@ -10,7 +10,7 @@
 
 DeckHost is a free, open-source host for physical control surfaces (macro pads, rotary consoles, touch strips) on Windows, Linux and macOS. It separates the hardware from the actions: device plugins drive the hardware, application plugins provide the actions, and the editor lets you map one onto the other.
 
-- **Devices:** the **MiraBox / StreamDock N4 Pro** (10 LCD keys, a touch strip with 4 zones and swipe, 4 knobs with RGB rings) and the other StreamDock models (N4, 293, 293s, M18, XL, M3, N3, N1, K1 Pro, Mini; preview), **Elgato Stream Decks** (MK.2, XL, Neo, +, Pedal, Mini, the first edition; preview), a **Web Deck** on your phone or tablet, and **other USB devices** you teach it in the device creator.
+- **Devices:** the **MiraBox / StreamDock N4 Pro** (10 LCD keys, a touch strip with 4 zones and swipe, 4 knobs with RGB rings) and the other StreamDock models (N4, 293, 293s, M18, XL, M3, N3, N1, K1 Pro, Mini; preview), **Elgato Stream Decks** (MK.2, XL, Neo, +, Pedal, Mini, the first edition; preview), a **Web Deck** on your phone or tablet, **other USB devices** you teach it in the device creator, and a **device simulator** that acts like any of them without the hardware.
 - **Actions:** media, volume, apps, hotkeys, profiles, pages and folders; Multi Action, Key Logic and visual **workflows**; DeckHost plugins and thousands of **Stream Deck and OpenAction plugins**.
 - **Documentation:** [vman26.github.io/DeckHost](https://vman26.github.io/DeckHost/).
 

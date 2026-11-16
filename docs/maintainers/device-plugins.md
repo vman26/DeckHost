@@ -119,9 +119,20 @@ Report connection changes with `context.ReportConnectionStatus(deviceId, "Connec
   protocol. DeckHost handles downloads, checksums, confirmation and pausing the device
   ([decision 0009](adr/0009-firmware-updates.md)).
 
+## Your models in the device simulator
+
+Implement the optional `IDeviceModelCatalog` (`DescribeModels()`): every model your plugin drives,
+as an unplugged `DeviceDefinition`. The device simulator (**☰ → Device simulator**,
+`DeckHost --simulator`) then offers them; a simulator window acting as one appears as a connected
+device (`simulator.<your device id>`), so you can try your layout, rendering and input mapping
+without the hardware. The simulator uses only the descriptor, so a good descriptor (control bounds,
+displays, `LedIndex`, `DisplayControlId`, capabilities such as `Haptics`) is what makes it look
+and behave like the device.
+
 ## Testing
 
 Keep the protocol pure and testable: the Elgato plugin's `StreamDeckProtocol` (report building and
 input parsing) and the MiraBox model table (`MiraBoxModels`) have no I/O and are covered by unit tests; only a thin
 layer talks to the hardware. The editor shows every device even when unplugged, so you can check
-the layout and the rendered images without hardware.
+the layout and the rendered images without hardware, and the device simulator runs the whole input
+and output path for any model in your `IDeviceModelCatalog`.

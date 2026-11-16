@@ -47,6 +47,29 @@ DeckHost talks to Stream Decks directly over USB, without Elgato's software. **C
 
 This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't (**☰ → Help and support → Report a problem**).
 
+## Device simulator
+
+Try DeckHost with any device it supports, without the hardware: **☰ → Device simulator** opens a
+window that acts like the device you pick. DeckHost lists it as a connected device (**Simulated …**
+in the device picker), sends it the same images and lights it sends the hardware, and takes its
+input like the real thing.
+
+![The simulator acting as an N4 Pro, with a clock, counters and the Key ID action](images/simulator.png)
+
+- **Pick a model** at the top: every MiraBox model, every Stream Deck, the Web Deck and the devices
+  you made in the device creator.
+- **Click** a key, button or touch zone to press it (hold for a long press). The **mouse wheel**
+  turns knobs and side switches. **Drag** across a touch strip to swipe.
+- Knob rings show the **LED colors**, keys the **images**, the screen the profile's **background**.
+  **Device settings** for the simulated device has its brightness, and vibration on models that
+  vibrate (the window shakes).
+- A simulated device has its **own profiles**. To try your real device's profile on it, use
+  **Profiles → Copy to**.
+- Open as many simulators as you like, each its own device. Closing one unplugs it; opening the same
+  model again brings its profiles back. It reconnects by itself when DeckHost restarts.
+- From a terminal: `DeckHost --simulator` (or `DeckHost --simulator deckhost.device.mirabox/mirabox.xl`
+  for a model).
+
 ## Firmware
 
 **Device settings → Firmware** shows the version each device runs. DeckHost installs firmware for devices whose plugin supports it, after you confirm: it checks the download, and the device doesn't respond until it's done. The N4 Pro, Stream Decks and other USB devices only show their version: MiraBox has no update protocol, Elgato's isn't public (use Elgato's app with DeckHost closed), and other devices use their maker's tool.
