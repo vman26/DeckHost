@@ -89,6 +89,43 @@ public class PerInputEditorTests
     }
 
     [Test]
+    public void Opening_the_editor_stores_no_defaults_that_were_never_set()
+    {
+        var editor = new SettingsEditorViewModel([Shared, Mode], ActionSettings.Empty, InputCapabilities.Press);
+
+        Assert.That(editor.Fields.Select(static field => field.Value), Is.EqualTo(new[] { "x", "a" }));
+        Assert.That(editor.ToSettings(), Is.Empty);
+
+        editor.Fields[1].Value = "b";
+        Assert.That(editor.ToSettings().Select(static pair => (pair.Key, pair.Value)), Is.EqualTo(new[] { ("mode", "b") }));
+    }
+
+    [Test]
+    public void A_stored_value_stays_stored_even_when_it_is_the_default()
+    {
+        // Kept explicitly: a plugin update that changes its default doesn't change what the user chose.
+        var editor = new SettingsEditorViewModel([Shared, Mode], new ActionSettings(new Dictionary<string, string> { ["mode"] = "a" }), InputCapabilities.Press);
+
+        Assert.That(editor.ToSettings().Select(static pair => (pair.Key, pair.Value)), Is.EqualTo(new[] { ("mode", "a") }));
+    }
+
+    [Test]
+    public void A_binding_rebuilt_by_the_editor_without_changes_is_the_same_binding()
+    {
+        static ControlBinding Make(string mode) => new(
+            "key.0",
+            ProfileActionKind.Single,
+            new ActionReference("p", "P", "a", "A", InputCapabilities.Press, OutputCapabilities.None, new ActionSettings(new Dictionary<string, string> { ["mode"] = mode })),
+            new ControlAppearance(),
+            new List<MultiActionStep>());
+
+        Assert.That(ReferenceEquals(Make("a").Steps, Make("a").Steps), Is.False);
+        Assert.That(MainViewModel.SameBinding(Make("a"), Make("a")), Is.True);
+        Assert.That(MainViewModel.SameBinding(Make("a"), Make("b")), Is.False);
+        Assert.That(MainViewModel.SameBinding(Make("a"), null), Is.False);
+    }
+
+    [Test]
     public void The_editor_keeps_one_field_on_a_control_with_one_input()
     {
         var editor = new SettingsEditorViewModel([Mode, Name], ActionSettings.Empty, InputCapabilities.Press);

@@ -37,6 +37,21 @@ public partial class MainViewModel
     public string RedoTip => _redo.Count > 0 ? $"Redo {_redo[^1].Description} (Ctrl+Y)" : "Nothing to redo";
 
     /// <summary>Records the change ApplyBinding is about to make (before it makes it).</summary>
+    private static readonly System.Text.Json.JsonSerializerOptions BindingComparison = new()
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
+
+    /// <summary>
+    /// Whether two bindings say the same thing. Record equality isn't enough: the step, setting and
+    /// workflow lists are compared by reference, so an unchanged binding rebuilt by the editor would
+    /// count as a change.
+    /// </summary>
+    internal static bool SameBinding(ControlBinding? left, ControlBinding? right) =>
+        ReferenceEquals(left, right) ||
+        (left is not null && right is not null &&
+         System.Text.Json.JsonSerializer.Serialize(left, BindingComparison) == System.Text.Json.JsonSerializer.Serialize(right, BindingComparison));
+
     private void RecordBindingChange(ProfileItemViewModel layout, string controlId, ControlBinding? after)
     {
         if (_restoring)
@@ -45,7 +60,7 @@ public partial class MainViewModel
         }
 
         var before = layout.GetModel(controlId);
-        if (Equals(before, after))
+        if (SameBinding(before, after))
         {
             return;
         }

@@ -830,10 +830,17 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             return;
         }
 
+        // Fields that settle when the editor opens (a choice showing its default) aren't an edit.
+        var binding = editor.BuildBinding();
+        if (SelectedProfile is { } layout && SameBinding(layout.GetModel(editor.ControlId), binding))
+        {
+            return;
+        }
+
         _applyingFromEditor = true;
         try
         {
-            ApplyBinding(editor.ControlId, editor.BuildBinding());
+            ApplyBinding(editor.ControlId, binding);
         }
         finally
         {
