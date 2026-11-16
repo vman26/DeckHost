@@ -13,8 +13,39 @@ namespace DeckHost.Device.Elgato;
 /// app, which otherwise holds the device). Devices are found and followed as they are plugged in
 /// and out; each one seen before stays listed while unplugged, so its profiles can be edited.
 /// </summary>
-public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog
+public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog, IDeviceSettingActions
 {
+    public const string ForgetActionId = "forget";
+
+    /// <summary>An unplugged deck seen before can be forgotten: it leaves the device list until it's plugged in again.</summary>
+    public IReadOnlyList<DeviceSettingAction> GetSettingActions(string deviceId) =>
+        Find(deviceId) is { Stream: null } session
+            ? [new DeviceSettingAction(ForgetActionId, "Forget this device", "Removes it from the device list until it's plugged in again. Its profiles are kept for then.", $"Forget {session.Model.Name} ({session.Serial})?")]
+            : [];
+
+    public string RunSettingAction(string deviceId, string actionId)
+    {
+        if (actionId != ForgetActionId)
+        {
+            return "Unknown action.";
+        }
+
+        lock (_sync)
+        {
+            if (!_sessions.TryGetValue(deviceId, out var session) || session.Stream is not null)
+            {
+                return "Only an unplugged device can be forgotten.";
+            }
+
+            _sessions.Remove(deviceId);
+            Volatile.Write(ref _devices, BuildDefinitions());
+            SaveKnown();
+        }
+
+        DevicesChanged?.Invoke(this, EventArgs.Empty);
+        return "Forgotten. It comes back when you plug it in.";
+    }
+
     /// <summary>Every Stream Deck model, unplugged (for the device simulator).</summary>
     public IReadOnlyList<DeviceDefinition> DescribeModels() =>
         [.. StreamDeckModel.All.Select(static model => model.Describe($"elgato.{model.ProductId:x4}", isConnected: false, serial: null, firmware: null, detail: null))];

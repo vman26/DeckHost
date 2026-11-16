@@ -47,6 +47,13 @@ DeckHost talks to Stream Decks directly over USB, without Elgato's software. **C
 
 This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't (**☰ → Help and support → Report a problem**).
 
+## Devices you no longer use
+
+DeckHost remembers every MiraBox and Stream Deck it has seen, so you can edit them unplugged (and
+lists an N4 Pro before anything is plugged in). To remove one from the device picker, unplug it,
+open **Device settings** for it and click **Forget this device**. Its profiles are kept: plug it in
+again and it comes back with them. Devices from the device creator are removed on that page.
+
 ## Device simulator
 
 Try DeckHost with any device it supports, without the hardware. It's a developer option: turn on

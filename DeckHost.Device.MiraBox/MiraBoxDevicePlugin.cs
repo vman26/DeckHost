@@ -18,8 +18,47 @@ namespace DeckHost.Device.MiraBox;
 /// remembered (<c>devices/mirabox-known.json</c>), connected or not, so profiles can be edited offline.
 /// </para>
 /// </summary>
-public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog
+public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog, IDeviceSettingActions
 {
+    public const string ForgetActionId = "forget";
+
+    /// <summary>
+    /// An unplugged device can be forgotten: it leaves the device list until it's plugged in again
+    /// (the N4 Pro shown before any device was plugged in too).
+    /// </summary>
+    public IReadOnlyList<DeviceSettingAction> GetSettingActions(string deviceId)
+    {
+        lock (_sync)
+        {
+            return FindSession(deviceId) is { DeviceKey: null } session
+                ? [new DeviceSettingAction(ForgetActionId, "Forget this device", "Removes it from the device list until it's plugged in again. Its profiles are kept for then.", $"Forget MiraBox {session.Model.ShortName}?")]
+                : [];
+        }
+    }
+
+    public string RunSettingAction(string deviceId, string actionId)
+    {
+        if (actionId != ForgetActionId)
+        {
+            return "Unknown action.";
+        }
+
+        lock (_sync)
+        {
+            if (FindSession(deviceId) is not { DeviceKey: null } session)
+            {
+                return "Only an unplugged device can be forgotten.";
+            }
+
+            _sessions.Remove(session);
+            Volatile.Write(ref _devices, BuildDefinitions());
+        }
+
+        SaveKnown();
+        DevicesChanged?.Invoke(this, EventArgs.Empty);
+        return "Forgotten. It comes back when you plug it in.";
+    }
+
     /// <summary>Every StreamDock model DeckHost knows, unplugged (for the device simulator).</summary>
     public IReadOnlyList<DeviceDefinition> DescribeModels() =>
         [.. MiraBoxModels.All.Select(static model => model.Describe(model.DefaultDeviceId, $"MiraBox {model.ShortName}", null, isConnected: false, detail: null))];
@@ -164,6 +203,13 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         _directory = directory;
         foreach (var known in LoadKnown())
         {
+            if (known.Forgotten)
+            {
+                // The N4 Pro shown before anything was plugged in, forgotten.
+                _sessions.RemoveAll(session => string.Equals(session.DeviceId, known.Id, StringComparison.OrdinalIgnoreCase));
+                continue;
+            }
+
             if (MiraBoxModels.For(known.OriginType) is { } model && FindSession(known.Id) is null)
             {
                 _sessions.Add(new DeviceSession(known.Id, model) { SerialNumber = string.IsNullOrEmpty(known.Serial) ? null : known.Serial });
@@ -678,6 +724,10 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
                 known = [.. _sessions
                     .Where(static session => session.DeviceId != PrimaryDeviceId || session.SerialNumber is not null)
                     .Select(static session => new KnownDevice(session.DeviceId, session.Model.OriginType, session.SerialNumber ?? string.Empty))];
+                if (FindSession(PrimaryDeviceId) is null)
+                {
+                    known.Add(new KnownDevice(PrimaryDeviceId, MiraBoxModels.N4Pro.OriginType, string.Empty) { Forgotten = true });
+                }
             }
 
             Directory.CreateDirectory(_directory);
@@ -689,7 +739,11 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         }
     }
 
-    private sealed record KnownDevice(string Id, int OriginType, string Serial);
+    private sealed record KnownDevice(string Id, int OriginType, string Serial)
+    {
+        /// <summary>For the N4 Pro that is listed before anything is plugged in: the user forgot it.</summary>
+        public bool Forgotten { get; init; }
+    }
 
     private bool TryGetConnectedKey(string deviceId, out string deviceKey, out string? error)
     {
