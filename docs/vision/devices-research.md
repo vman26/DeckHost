@@ -6,8 +6,8 @@ Facts come from the sources linked; what still needs checking says so.
 ## MiraBox / StreamDock models in the vendor SDK
 
 The StreamDock C++ SDK in `native/StreamDock-SDK` (the submodule DeckHost's bridge builds on) has a
-device class per model. DeckHost describes only the N4 Pro's layout so far (`N4ProLayout`); the
-bridge already opens any device the SDK knows.
+device class per model. DeckHost describes every one of them (`MiraBoxModels`); the bridge opens
+any device the SDK knows. Only the N4 Pro has been checked on hardware.
 
 | Model (SDK class) | USB ids (VID:PID) | Screen (SDK) | Rotation | Extras the SDK reports |
 |---|---|---|---|---|
@@ -22,14 +22,15 @@ bridge already opens any device the SDK knows.
 | XL (`StreamDockXL`) | 5548:1028/1031 | 1024×600 | 180° | 6 RGB LEDs, background GIF |
 | K1 Pro (`K1Pro`) | 6603:1015 (+ EU) | | 90° | 3 knobs (press 7–9, rotate 10–15), a keyboard with keys |
 
-Still to read per model, from its device class: the number of keys, their SDK ids and their image
-size (the SDK resizes key images per model), and the knob ids. That's what a layout like
-`N4ProLayout` needs.
+Per model, the SDK's device class gives the logical ids (`_readValueMap`), the event each one
+reports (`dispatchEvent`), where the keys are (its comments) and the image sizes. DeckHost's
+`MiraBoxModels` turns that into a layout per model, picked by the SDK's origin type, with the same
+tests as the N4 Pro (`MiraBoxModelTests`).
 
-**Plan:** turn `N4ProLayout` into a table of model layouts (controls, SDK ids, image sizes, knobs,
-touch zones, LEDs, rotation), picked by the device the SDK reports, starting with the models people
-ask for (N4, 293 V3, M18, XL, N3). Each model gets the same layout tests as the N4 Pro; real
-hardware checks the key order.
+**Done:** N4, 293 (V2/V3), 293s, M18, XL, M3, N3, N1, K1 Pro and Mini, plus their USB ids in the
+Linux udev rule. **Still open:** checking each on real hardware (key order, which side the knobs
+are on), and the RGB LEDs of the M18 (24), XL (6) and Mini (12), which the SDK sets as one strip
+with no tie to controls.
 
 ## Loupedeck and Razer Stream Controller
 

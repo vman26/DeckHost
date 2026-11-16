@@ -122,6 +122,6 @@ Report connection changes with `context.ReportConnectionStatus(deviceId, "Connec
 ## Testing
 
 Keep the protocol pure and testable: the Elgato plugin's `StreamDeckProtocol` (report building and
-input parsing) and the MiraBox `N4ProLayout` have no I/O and are covered by unit tests; only a thin
+input parsing) and the MiraBox model table (`MiraBoxModels`) have no I/O and are covered by unit tests; only a thin
 layer talks to the hardware. The editor shows every device even when unplugged, so you can check
 the layout and the rendered images without hardware.

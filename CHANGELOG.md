@@ -26,6 +26,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - A Download page on the documentation site that always points at the newest release.
 - For plugin authors: the plugin API as the `DeckHost.Contracts` NuGet package and a
   `dotnet new deckhost-plugin` template.
+- Every StreamDock model in MiraBox's SDK, as a preview: N4, 293, 293s, M18, XL, M3, N3, N1,
+  K1 Pro and Mini, with their keys, buttons, knobs, side switches and small displays. A model
+  you've plugged in once stays in the device picker.
 
 ### Changed
 

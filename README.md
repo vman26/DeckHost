@@ -10,7 +10,7 @@
 
 DeckHost is a free, open-source host for physical control surfaces (macro pads, rotary consoles, touch strips) on Windows, Linux and macOS. It separates the hardware from the actions: device plugins drive the hardware, application plugins provide the actions, and the editor lets you map one onto the other.
 
-- **Devices:** the **MiraBox / StreamDock N4 Pro** (10 LCD keys, a touch strip with 4 zones and swipe, 4 knobs with RGB rings), **Elgato Stream Decks** (MK.2, XL, Neo, +, Pedal, Mini, the first edition; preview), a **Web Deck** on your phone or tablet, and **other USB devices** you teach it in the device creator.
+- **Devices:** the **MiraBox / StreamDock N4 Pro** (10 LCD keys, a touch strip with 4 zones and swipe, 4 knobs with RGB rings) and the other StreamDock models (N4, 293, 293s, M18, XL, M3, N3, N1, K1 Pro, Mini; preview), **Elgato Stream Decks** (MK.2, XL, Neo, +, Pedal, Mini, the first edition; preview), a **Web Deck** on your phone or tablet, and **other USB devices** you teach it in the device creator.
 - **Actions:** media, volume, apps, hotkeys, profiles, pages and folders; Multi Action, Key Logic and visual **workflows**; DeckHost plugins and thousands of **Stream Deck and OpenAction plugins**.
 - **Documentation:** [vman26.github.io/DeckHost](https://vman26.github.io/DeckHost/).
 
@@ -45,6 +45,7 @@ I'm saying this up front because you should know how the software you run is mad
 | | Windows | Linux | macOS |
 |---|---|---|---|
 | N4 Pro (keys, touch strip, knobs, LEDs, settings) | ✓ | ✓ (udev rule) | ✓ |
+| Other StreamDock models: keys, buttons, knobs, small displays (preview) | ✓ | ✓ (udev rule) | ✓ |
 | Elgato Stream Deck: MK.2, Original v2, XL, Neo, +, Pedal (preview, see below) | ✓ | ✓ (udev rule) | ✓ |
 | Web Deck: keys on a phone, tablet or browser window | ✓ | ✓ | ✓ |
 | Media keys, volume | ✓ | playerctl; wpctl, pactl or amixer | ✓ (volume HUD) |
@@ -340,9 +341,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Apply-StreamDockSdkPatch.ps1 
 
 When you update the submodule and the patch no longer applies, regenerate it against the new upstream commit with `git -C native/StreamDock-SDK diff > native/patches/streamdock-sdk.patch` after fixing the files.
 
-## N4 Pro key mapping
+## MiraBox key mapping
 
-The SDK numbers the N4 Pro's keys from the bottom-left, so the top row is SDK keys 11–15 and the bottom row 6–10. If an image appears on the wrong key on your unit, assign the **Key ID (Diagnostic)** action to the keys and adjust `KeyHardwareIds` in `DeckHost.Device.MiraBox/N4ProLayout.cs`.
+The SDK numbers the N4 Pro's keys from the bottom-left, so the top row is SDK keys 11–15 and the bottom row 6–10. Each model's numbering is in `DeckHost.Device.MiraBox/MiraBoxModels.cs`, taken from the SDK's device classes. If an image appears on the wrong key on your unit, assign the **Key ID (Diagnostic)** action to the keys and adjust that model's entry (and please report it).
 
 ## Contributing
 

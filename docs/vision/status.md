@@ -30,7 +30,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 4.1 Device simulation | 🟡 | Preview and simulated input in the editor; a separate simulator app is planned |
 | 4.1 Themes and design systems | 🟡 | App themes, tiles; no layout themes |
 | 4.1 Visual asset management | 🟡 | Icon library, `assets/` per imported profile; no asset manager |
-| 4.2 Keys, encoders, touch strips, pedals, LEDs, LED rings, generic HID, virtual | ✅ | N4 Pro, Elgato, HID creator, Web Deck |
+| 4.2 Keys, encoders, touch strips, pedals, LEDs, LED rings, generic HID, virtual | ✅ | MiraBox (N4 Pro and every SDK model), Elgato, HID creator, Web Deck |
 | 4.2 Touchscreens, sliders/faders, haptics, network controllers | 🟡 | Touch zones; N4 vibration setting; Web Deck; no sliders |
 | 4.4 Multi Action: sequence, delays, toggles | ✅ | |
 | 4.4 Multi Action: parallel, conditions, repeats, nested groups, error handling | ⬜ | Available in workflows, not in Multi Action |
@@ -83,7 +83,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 7.1.11.7 Hardware modes and modules | 🟡 | `DevicesChanged` with new controls; no modes described |
 | 7.1.11.8 Nested controls, vendor extensions | ⬜ | |
 | 7.1.11.9 Serialized descriptor | 🟡 | Generic HID devices are described in JSON (`HidDeviceDescription`); `DeviceDefinition` itself has no file form |
-| 7.3 N4 Pro, Elgato family, generic HID, virtual | ✅ | |
+| 7.3 N4 Pro, Elgato family, generic HID, virtual | ✅ | Also the other StreamDock models (N4, 293, 293s, M18, XL, M3, N3, N1, K1 Pro, Mini) from the SDK, not yet checked on hardware |
 | 7.4 Device-independent profiles | 🟡 | Conventional control ids and `LayoutMapper`; no logical-control layer |
 
 ## 8. Plugins

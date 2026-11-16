@@ -2,12 +2,35 @@
 
 DeckHost shows every device it knows in the device picker at the top. Each device has its own profiles. You can set a device up while it's unplugged; it picks up its profile as soon as it's connected.
 
-## MiraBox / StreamDock N4 Pro
+## MiraBox / StreamDock
+
+### N4 Pro
 
 Ten keys, a touch strip with four zones and swipes, four knobs with LED rings. Everything works on Windows, Linux and macOS: keys, touch zones, knobs, lights, brightness, vibration, the boot video and the idle screen (**Device settings**).
 
 - A knob without a display of its own shows its action on the touch zone above it. Turn this off per knob in its editor (**Show this on Touch …**).
 - A swipe over the strip without an action of its own flips through the profile's pages.
+
+### Other StreamDock models (preview)
+
+DeckHost knows every model in MiraBox's SDK. Their layouts come from that SDK and haven't been tried on the hardware yet: if a key shows its picture in the wrong place or a knob turns the wrong way, please report it (**☰ → Help and support → Report a problem**).
+
+| Model | What DeckHost uses |
+|---|---|
+| N4 | 10 keys, touch strip with 4 zones and swipes, 4 knobs (no LEDs) |
+| 293 (V2, V3) | 15 keys |
+| 293s | 15 keys and 3 small displays (pictures only) |
+| M18 | 15 keys and 3 buttons |
+| XL | 32 keys and 2 side switches |
+| M3 | 15 keys and 3 knobs |
+| N3 | 6 keys, 3 buttons and 3 knobs |
+| N1 | 15 keys, 3 small displays (two are buttons, one shows the knob) and a knob |
+| K1 Pro | the keyboard's 6 display keys and 3 knobs |
+| Mini | 6 keys and 2 side switches |
+
+- **Side switches** (XL, Mini) act like knobs: push one left or right to turn, push it in to press.
+- **Device settings** has the screen brightness and the idle screen for every model. The LEDs of the M18, XL and Mini aren't driven yet.
+- A model you've plugged in once stays in the device picker, so you can set it up unplugged.
 
 ## Elgato Stream Deck (preview)
 
