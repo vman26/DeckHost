@@ -21,7 +21,7 @@ DeckHost knows every model in MiraBox's SDK. Their layouts come from that SDK an
 | 293 (V2, V3) | 15 keys |
 | 293s | 15 keys and 3 small displays (pictures only) |
 | M18 | 15 keys and 3 buttons |
-| XL | 32 keys and 2 side switches |
+| XL | 32 keys and 2 switches on its right side |
 | M3 | 15 keys and 3 knobs |
 | N3 | 6 keys, 3 buttons and 3 knobs |
 | N1 | 15 keys, 3 small displays (two are buttons, one shows the knob) and a knob |

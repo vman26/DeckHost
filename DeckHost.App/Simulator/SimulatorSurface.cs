@@ -162,14 +162,29 @@ public sealed class SimulatorSurface : Control
         }
         else
         {
-            // A side switch: pushed left or right, pressed in.
+            // A switch: pushed one way or the other, pressed in. Tall on the side of a device (the
+            // wheel up moves it up), wide below the keys.
             context.DrawRectangle(Cap, ring, rect, 8, 8);
-            var offset = Math.Clamp(_knobAngles.GetValueOrDefault(control.Id) / 15, -1, 1) * rect.Width * 0.12;
-            context.DrawEllipse(Label, null, rect.Center + new Point(offset, 0), rect.Height * 0.14, rect.Height * 0.14);
-            var left = Text("◀", Math.Max(9, rect.Height * 0.3), Label);
-            var right = Text("▶", Math.Max(9, rect.Height * 0.3), Label);
-            context.DrawText(left, new Point(rect.X + (rect.Width * 0.12), rect.Y + ((rect.Height - left.Height) / 2)));
-            context.DrawText(right, new Point(rect.Right - (rect.Width * 0.12) - right.Width, rect.Y + ((rect.Height - right.Height) / 2)));
+            var step = Math.Clamp(_knobAngles.GetValueOrDefault(control.Id) / 15, -1, 1);
+            var upright = rect.Height > rect.Width;
+            var size = Math.Max(9, Math.Min(rect.Width, rect.Height) * 0.3);
+            var dot = Math.Min(rect.Width, rect.Height) * 0.14;
+            if (upright)
+            {
+                context.DrawEllipse(Label, null, rect.Center - new Point(0, step * rect.Height * 0.07), dot, dot);
+                var up = Text("▲", size, Label);
+                var down = Text("▼", size, Label);
+                context.DrawText(up, new Point(rect.X + ((rect.Width - up.Width) / 2), rect.Y + (rect.Height * 0.08)));
+                context.DrawText(down, new Point(rect.X + ((rect.Width - down.Width) / 2), rect.Bottom - (rect.Height * 0.08) - down.Height));
+            }
+            else
+            {
+                context.DrawEllipse(Label, null, rect.Center + new Point(step * rect.Width * 0.12, 0), dot, dot);
+                var left = Text("◀", size, Label);
+                var right = Text("▶", size, Label);
+                context.DrawText(left, new Point(rect.X + (rect.Width * 0.12), rect.Y + ((rect.Height - left.Height) / 2)));
+                context.DrawText(right, new Point(rect.Right - (rect.Width * 0.12) - right.Width, rect.Y + ((rect.Height - right.Height) / 2)));
+            }
         }
     }
 

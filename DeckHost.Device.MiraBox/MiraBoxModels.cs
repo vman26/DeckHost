@@ -32,6 +32,9 @@ internal static class MiraBoxModels
     private const double KnobSize = 80;
     private const double ButtonHeight = 40;
 
+    /// <summary>The vertical middle of the XL's four key rows, where its side switches are centered.</summary>
+    private const double XlGridMiddle = Margin + (((4 * (KeySize + KeyGap)) - KeyGap) / 2);
+
     private const InputCapabilities KeyInputs = InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.LongPress;
     private const InputCapabilities KnobInputs = InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release;
 
@@ -135,12 +138,13 @@ internal static class MiraBoxModels
         Notes = ["Its 24 RGB LEDs aren't driven by DeckHost yet."],
     };
 
-    /// <summary>The XL: 32 keys (1–32 from the bottom-left) and two side switches (left/right/press: 33/34/37 and 35/36/38).</summary>
+    /// <summary>The XL: 32 keys (1–32 from the bottom-left) and two switches on its right side (left/right/press: 33/34/37 and 35/36/38).</summary>
     public static MiraBoxModel XL { get; } = new(Origin.XL, "xl", "XL", "StreamDock XL",
         [
             .. Keys(8, 4, BottomLeftRows(8, 4, 1), Margin, Margin),
-            Switch(0, Margin, Margin + (4 * (KeySize + KeyGap)), left: 33, right: 34, press: 37),
-            Switch(1, Margin + (7 * (KeySize + KeyGap)), Margin + (4 * (KeySize + KeyGap)), left: 35, right: 36, press: 38),
+            // On the right side of the keys, upright: switch 1 (the SDK's left switch) above switch 2.
+            Switch(0, Margin + (8 * (KeySize + KeyGap)), XlGridMiddle - (KeyGap / 2) - KeySize, left: 33, right: 34, press: 37, upright: true),
+            Switch(1, Margin + (8 * (KeySize + KeyGap)), XlGridMiddle + (KeyGap / 2), left: 35, right: 36, press: 38, upright: true),
         ])
     {
         ScreenWidth = 1024,
@@ -369,8 +373,9 @@ internal static class MiraBoxModels
         };
 
     /// <summary>A side switch (XL, Mini): pushed left or right it turns like a knob, pushed in it presses.</summary>
-    private static MiraBoxControl Switch(int index, double x, double y, int left, int right, int press) =>
-        new($"{EncoderPrefix}{index}", $"Switch {index + 1}", ControlType.Encoder, new Rect(x, y, KeySize, ButtonHeight + 20), KnobInputs)
+    /// <param name="upright">On the side of the device: drawn tall instead of wide.</param>
+    private static MiraBoxControl Switch(int index, double x, double y, int left, int right, int press, bool upright = false) =>
+        new($"{EncoderPrefix}{index}", $"Switch {index + 1}", ControlType.Encoder, upright ? new Rect(x, y, ButtonHeight + 20, KeySize) : new Rect(x, y, KeySize, ButtonHeight + 20), KnobInputs)
         {
             HardwareId = string.Create(CultureInfo.InvariantCulture, $"{left}/{right}/{press}"),
             Events =
