@@ -353,3 +353,10 @@ Bug reports, ideas, device support, plugins and fixes are welcome: see [CONTRIBU
 DeckHost is free software under the **GNU General Public License v3.0 or later** ([`LICENSE`](LICENSE)): you may use, study, share and change it; changed versions you share must stay under the GPL too.
 
 The **plugin API** (`DeckHost.Contracts`) and the plugin template are **MIT**, and an additional permission lets plugins of any license, free or paid, run with DeckHost: see [`NOTICE.md`](NOTICE.md).
+
+## Trademarks
+
+Stream Deck is a trademark of Corsair Memory, Inc. / Elgato, and DeckHost is an independent project
+not affiliated with or endorsed by Elgato. StreamDock is a trademark of MiraBox; DeckHost is not
+affiliated with or endorsed by MiraBox either. Other product names belong to their owners and are
+used only to say which devices and plugins DeckHost works with.

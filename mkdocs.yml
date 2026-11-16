@@ -2,7 +2,7 @@ site_name: DeckHost
 site_description: One platform. Unlimited control. A free, open-source host for the MiraBox N4 Pro, Elgato Stream Decks, a Web Deck and USB devices.
 repo_url: https://github.com/vman26/DeckHost
 repo_name: vman26/DeckHost
-copyright: DeckHost is free software under the GNU GPL v3.0 or later
+copyright: "DeckHost is free software under the GNU GPL v3.0 or later. Stream Deck is a trademark of Corsair Memory, Inc. / Elgato, and DeckHost is an independent project not affiliated with or endorsed by Elgato. StreamDock is a trademark of MiraBox; DeckHost is not affiliated with MiraBox either."
 docs_dir: docs
 site_dir: site
 strict: true
