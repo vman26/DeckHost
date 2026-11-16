@@ -9,8 +9,9 @@ Use **[Report a vulnerability](https://github.com/vman26/DeckHost/security/advis
 (GitHub's private advisories). Please include what's affected, how to reproduce it and what an
 attacker could do. Don't open a public issue for it.
 
-You'll get an answer within a week. Fixes go into the next release; you're credited in the release
-notes unless you'd rather not be.
+DeckHost is maintained by volunteers, so there's no fixed response time: we answer and fix it as
+soon as possible, and release the fix as soon as it's ready. You're credited in the release notes
+unless you'd rather not be.
 
 ## Supported versions
 
