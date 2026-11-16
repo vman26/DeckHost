@@ -375,6 +375,13 @@
   DeckHost.Contracts.Models.DeviceProfile.Name : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile.ParentId : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceSide.Back = 5
+  DeckHost.Contracts.Models.DeviceSide.Bottom = 4
+  DeckHost.Contracts.Models.DeviceSide.Front = 0
+  DeckHost.Contracts.Models.DeviceSide.Left = 1
+  DeckHost.Contracts.Models.DeviceSide.Right = 2
+  DeckHost.Contracts.Models.DeviceSide.Top = 3
+  DeckHost.Contracts.Models.DeviceSide.value__ : System.Int32
   DeckHost.Contracts.Models.FirmwareImage(System.String Path, System.String Version)
   DeckHost.Contracts.Models.FirmwareImage.<Clone>$() : DeckHost.Contracts.Models.FirmwareImage
   DeckHost.Contracts.Models.FirmwareImage.Deconstruct(System.String& Path, System.String& Version) : System.Void
@@ -522,6 +529,7 @@
   DeckHost.Contracts.Models.PhysicalControl.RenderHeight : System.Int32 {set}
   DeckHost.Contracts.Models.PhysicalControl.RenderWidth : System.Int32 {set}
   DeckHost.Contracts.Models.PhysicalControl.Shape : DeckHost.Contracts.Models.ControlShape {set}
+  DeckHost.Contracts.Models.PhysicalControl.Side : DeckHost.Contracts.Models.DeviceSide {set}
   DeckHost.Contracts.Models.PhysicalControl.ToString() : System.String
   DeckHost.Contracts.Models.PhysicalControl.Type : DeckHost.Contracts.Models.ControlType {set}
   DeckHost.Contracts.Models.PhysicalSize(System.Double WidthMillimetres, System.Double HeightMillimetres)
@@ -797,6 +805,7 @@ enum DeckHost.Contracts.Models.ActionSettingKind
 enum DeckHost.Contracts.Models.ControlShape
 enum DeckHost.Contracts.Models.ControlType
 enum DeckHost.Contracts.Models.DeviceCapabilities
+enum DeckHost.Contracts.Models.DeviceSide
 enum DeckHost.Contracts.Models.ProfileActionKind
 enum DeckHost.Contracts.Models.TextHorizontalAlignment
 enum DeckHost.Contracts.Models.TextVerticalAlignment

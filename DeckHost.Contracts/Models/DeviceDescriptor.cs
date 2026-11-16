@@ -96,3 +96,17 @@ public enum ControlShape
     Rectangle,
     Round,
 }
+
+/// <summary>
+/// Which face of the device a control is on (master plan 7.1.3). Most are on the front; a wheel
+/// on the side of the device is drawn on that edge, not as part of the front.
+/// </summary>
+public enum DeviceSide
+{
+    Front,
+    Left,
+    Right,
+    Top,
+    Bottom,
+    Back,
+}

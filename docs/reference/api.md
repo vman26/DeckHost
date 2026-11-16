@@ -603,6 +603,19 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `string Name { get; init; }` |  |
 | `string ParentId { get; init; }` | For a page or folder: the layout it belongs to. A page belongs to its profile; a folder to the page (or folder) whose key opens it. Null for a profile (its own first page). |
 
+### DeviceSide
+
+*enum* — Which face of the device a control is on (master plan 7.1.3). Most are on the front; a wheel on the side of the device is drawn on that edge, not as part of the front.
+
+| Member | |
+|---|---|
+| `Front` |  |
+| `Left` |  |
+| `Right` |  |
+| `Top` |  |
+| `Bottom` |  |
+| `Back` |  |
+
 ### FirmwareImage
 
 *record* — A firmware file on this computer, downloaded and checked by DeckHost or picked by the user.
@@ -767,6 +780,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `int RenderHeight { get; init; }` | Pixel height of the control's own image on the device; 0 when it has none. |
 | `int RenderWidth { get; init; }` | Pixel width of the control's own image on the device; 0 when it has none. |
 | `ControlShape Shape { get; init; }` | Its outline, for drawing it like the hardware. |
+| `DeviceSide Side { get; init; }` | The face it is on; `Front` unless the device says otherwise. Its `Bounds` still place it in the layout, next to the front controls on that side. |
 | `ControlType Type { get; init; }` |  |
 
 ### PhysicalSize

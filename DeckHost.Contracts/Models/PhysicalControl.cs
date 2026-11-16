@@ -38,6 +38,12 @@ public sealed record PhysicalControl(
     /// <summary>Its outline, for drawing it like the hardware.</summary>
     public ControlShape Shape { get; init; }
 
+    /// <summary>
+    /// The face it is on; <see cref="DeviceSide.Front"/> unless the device says otherwise. Its
+    /// <c>Bounds</c> still place it in the layout, next to the front controls on that side.
+    /// </summary>
+    public DeviceSide Side { get; init; }
+
     public bool HasImageOutput => RenderWidth > 0 && RenderHeight > 0 && Outputs != OutputCapabilities.None;
 
     public bool HasLight => LedIndex is not null;
