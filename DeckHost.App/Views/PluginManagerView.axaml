@@ -274,6 +274,24 @@
 					</Grid>
 					<StackPanel Grid.Row="1" Spacing="6">
 						<TextBlock Text="{Binding Summary}" Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap" />
+						<WrapPanel>
+							<TextBlock Text="Also browse:" Foreground="{DynamicResource C.94A3B8}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,6" />
+							<ItemsControl ItemsSource="{Binding OtherStores}">
+								<ItemsControl.ItemsPanel>
+									<ItemsPanelTemplate>
+										<WrapPanel />
+									</ItemsPanelTemplate>
+								</ItemsControl.ItemsPanel>
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="vm:PluginDocsLink">
+										<Button Content="{Binding Label}" Margin="0,0,8,6" Padding="10,3" FontSize="12" ToolTip.Tip="{Binding Url}"
+												Command="{Binding $parent[ItemsControl].((vm:PluginStoreViewModel)DataContext).OpenStoreCommand}"
+												CommandParameter="{Binding Url}" />
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+							<TextBlock Text="Download a plugin there, then install the file with Install plugin… at the top." Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,0,6" />
+						</WrapPanel>
 						<Expander Header="Sources" HorizontalAlignment="Stretch">
 							<StackPanel Spacing="8">
 								<TextBlock Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap"

@@ -58,6 +58,26 @@ public partial class PluginStoreViewModel : ViewModelBase
         _catalogUrlsText = string.Join(Environment.NewLine, _store.DeckHostCatalogUrls);
     }
 
+    /// <summary>
+    /// The plugin stores of the ecosystems DeckHost runs plugins from, to browse in the browser:
+    /// a plugin downloaded there installs with Install plugin….
+    /// </summary>
+    public IReadOnlyList<PluginDocsLink> OtherStores { get; } =
+    [
+        new("Elgato Marketplace", "https://marketplace.elgato.com/stream-deck/plugins"),
+        new("MiraBox Space", "https://space.mirabox.net/"),
+        new("OpenAction", "https://openactionapi.github.io/plugins/"),
+    ];
+
+    [RelayCommand]
+    private static void OpenStore(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https")
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+        }
+    }
+
     /// <summary>Icons and READMEs of the listed plugins.</summary>
     internal StoreMedia Media => _media;
 

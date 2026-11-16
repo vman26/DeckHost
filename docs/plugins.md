@@ -21,6 +21,12 @@ DeckHost runs Stream Deck plugins in their own processes and speaks their protoc
   Node.js template are started the way they expect.
 - Settings pages need WebView2 (Windows, built in), WKWebView (macOS) or WebKitGTK (Linux, `libwebkit2gtk-4.1`; else they open in your browser).
 
+## Other stores
+
+The store lists the DeckHost catalog, OpenAction and an archive of the Elgato store. **Also
+browse** in the store opens the Elgato Marketplace, MiraBox Space and OpenAction in your browser:
+download a plugin there and install the file with **Install plugin…**.
+
 ## A plugin's documentation
 
 Right-click an action or a plugin in the action list, or a control that has an action, and choose
