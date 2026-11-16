@@ -6,6 +6,36 @@ namespace DeckHost.Core.Rendering
 {
     internal sealed class SkiaRenderContext : IRenderContext
     {
+        /// <summary>
+        /// The control's own text (Customize → Text) while the action draws; whether the action drew
+        /// it is in <see cref="ExpectedTextDrawn"/>, so the host can add it when the action doesn't.
+        /// </summary>
+        internal string? ExpectedText
+        {
+            get => _expectedText;
+            set
+            {
+                _expectedText = value;
+                ExpectedTextDrawn = false;
+            }
+        }
+
+        private string? _expectedText;
+
+        internal bool ExpectedTextDrawn { get; private set; }
+
+        private void Note(string text)
+        {
+            if (!ExpectedTextDrawn && ExpectedText is { Length: > 0 } expected &&
+                (text.Contains(expected, StringComparison.Ordinal) || Squash(text).Contains(Squash(expected), StringComparison.Ordinal)))
+            {
+                ExpectedTextDrawn = true;
+            }
+        }
+
+        /// <summary>Lines joined for a strip: compare without line breaks and repeated spaces.</summary>
+        private static string Squash(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
         private const float MinTextSize = 9f;
         private readonly SKCanvas _canvas;
         private readonly SkiaDrawingResources _resources;
@@ -40,6 +70,7 @@ namespace DeckHost.Core.Rendering
 
         public void DrawText(string text, double x, double y, float size, uint argbColor = 0xFFFFFFFF)
         {
+            Note(text ?? string.Empty);
             if (string.IsNullOrEmpty(text))
             {
                 return;
@@ -56,6 +87,7 @@ namespace DeckHost.Core.Rendering
 
         public void DrawCenteredText(string text, double centerX, double centerY, float size, uint argbColor = 0xFFFFFFFF)
         {
+            Note(text ?? string.Empty);
             if (string.IsNullOrEmpty(text))
             {
                 return;
@@ -174,6 +206,7 @@ namespace DeckHost.Core.Rendering
 
         public void DrawRightAlignedText(string text, double right, double baselineY, float size, uint argbColor = 0xFFFFFFFF)
         {
+            Note(text ?? string.Empty);
             if (string.IsNullOrEmpty(text))
             {
                 return;
@@ -223,6 +256,7 @@ namespace DeckHost.Core.Rendering
 
         public void DrawLabel(string text, TextVerticalAlignment defaultVertical = TextVerticalAlignment.Middle, float? defaultSize = null, uint defaultColor = 0xFFFFFFFF)
         {
+            Note(text ?? string.Empty);
             if (string.IsNullOrWhiteSpace(text))
             {
                 return;

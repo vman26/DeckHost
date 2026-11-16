@@ -130,7 +130,18 @@ internal static class ControlRenderer
 
         if (action is not null)
         {
+            // The user's own text shows on every action: an action that draws its own picture
+            // without it (a plugin, a readout) gets it as a label at the bottom, in the text style.
+            var ownText = string.IsNullOrWhiteSpace(binding.Appearance.Text) ? null : binding.Appearance.Text;
+            context.ExpectedText = ownText;
             action.Render(context);
+            var drawn = context.ExpectedTextDrawn;
+            context.ExpectedText = null;
+            if (ownText is not null && !drawn)
+            {
+                context.DrawLabel(ownText, TextVerticalAlignment.Bottom, Math.Max(10f, context.Height * 0.14f));
+            }
+
             return;
         }
 
