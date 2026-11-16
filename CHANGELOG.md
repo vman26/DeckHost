@@ -44,6 +44,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- Selecting a key after another one could turn its tile off or change its Run when setting, and
+  merely selecting a control added an undo step.
 - The text you set in Customize → Text now shows on every action, including plugins and readouts
   such as Show Variable.
 - Stream Deck plugins that are web pages (such as an analog clock) no longer freeze while DeckHost's
