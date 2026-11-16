@@ -54,6 +54,7 @@ nav:
       - Device plugins: maintainers/device-plugins.md
       - The plugin catalog: maintainers/plugin-store.md
       - Launch checklist: maintainers/going-public.md
+      - Asking Claude to fix issues: maintainers/claude.md
       - Architecture: maintainers/architecture.md
       - Decisions:
           - maintainers/adr/index.md
