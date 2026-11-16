@@ -443,11 +443,11 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
     private IReadOnlyCollection<DeviceDefinition> BuildDefinitions() =>
         [.. _sessions.Values
             .OrderBy(static session => session.DeviceId, StringComparer.Ordinal)
-            .Select(static session => new DeviceDefinition(
+            .Select(static session => session.Model.Describe(
                 session.DeviceId,
-                session.Model.Name,
-                session.Model.Controls(),
                 session.Stream is not null,
+                session.Serial,
+                session.Firmware,
                 session.Firmware is { } firmware ? $"Serial {session.Serial}, firmware {firmware}" : $"Serial {session.Serial}"))];
 
     internal static string DeviceIdFor(StreamDeckModel model, string serial)

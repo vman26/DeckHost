@@ -76,7 +76,10 @@ public sealed record HidDeviceDescription(string Id, string Name, int VendorId, 
                 ? InputCapabilities.Rotate | (control.Press is null ? InputCapabilities.None : InputCapabilities.Press | InputCapabilities.Release)
                 : InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.LongPress,
             OutputCapabilities.None,
-            HardwareId: control.Input.Describe())),
+            HardwareId: control.Input.Describe())
+        {
+            Shape = control.Kind == HidControlKind.Knob ? ControlShape.Round : ControlShape.Rectangle,
+        }),
     ];
 }
 

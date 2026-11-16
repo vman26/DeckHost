@@ -33,6 +33,16 @@ internal static class N4ProLayout
 
     public const int DefaultKeySize = 112;
     public const int DefaultTouchZoneWidth = 176;
+
+    /// <summary>The main screen behind the keys, and the touch strip (display ids of the descriptor).</summary>
+    public const string MainDisplayId = "main";
+
+    public const string StripDisplayId = "strip";
+
+    /// <summary>The main screen's size when the SDK doesn't report it.</summary>
+    public const int MainScreenWidth = 800;
+
+    public const int MainScreenHeight = 480;
     public const int DefaultTouchZoneHeight = 112;
 
     /// <summary>SDK key id for key.0 .. key.9 in reading order (top-left first).</summary>
@@ -81,7 +91,10 @@ internal static class N4ProLayout
                 OutputCapabilities.ColorImage | OutputCapabilities.Text,
                 keyWidth,
                 keyHeight,
-                KeyHardwareIds[index].ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                KeyHardwareIds[index].ToString(System.Globalization.CultureInfo.InvariantCulture))
+            {
+                DisplayId = MainDisplayId,
+            });
         }
 
         for (var index = 0; index < TouchZoneCount; index++)
@@ -95,7 +108,10 @@ internal static class N4ProLayout
                 OutputCapabilities.ColorImage | OutputCapabilities.Text,
                 zoneWidth,
                 zoneHeight,
-                (FirstTouchZoneId + index).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                (FirstTouchZoneId + index).ToString(System.Globalization.CultureInfo.InvariantCulture))
+            {
+                DisplayId = StripDisplayId,
+            });
         }
 
         var swipeTop = StripTop + zoneDesignHeight + 8;
@@ -121,10 +137,34 @@ internal static class N4ProLayout
                 OutputCapabilities.None,
                 HardwareId: $"{FirstKnobLeftId + (index * 2)}/{FirstKnobRightId + (index * 2)}/{FirstKnobPressId + index}",
                 LedIndex: index < ledCount ? index : null,
-                DisplayControlId: $"{TouchPrefix}{index}"));
+                DisplayControlId: $"{TouchPrefix}{index}")
+            {
+                Shape = ControlShape.Round,
+            });
         }
 
-        return new DeviceDefinition(deviceId, name, controls, isConnected, detail);
+        return new DeviceDefinition(deviceId, name, controls, isConnected, detail)
+        {
+            Identity = new DeviceIdentity("MiraBox", "StreamDock N4 Pro", info?.SerialNumber, FirmwareVersion: info?.FirmwareVersion, Connection: "USB"),
+            Displays =
+            [
+                new DeviceDisplay(MainDisplayId, info is { Width: > 0 } ? info.Width : MainScreenWidth, info is { Height: > 0 } ? info.Height : MainScreenHeight)
+                {
+                    RotationDegrees = 180,
+                    ControlIds = [.. controls.Where(static control => control.DisplayId == MainDisplayId).Select(static control => control.Id)],
+                },
+                new DeviceDisplay(StripDisplayId, zoneWidth * TouchZoneCount, zoneHeight)
+                {
+                    ControlIds = [.. controls.Where(static control => control.DisplayId == StripDisplayId).Select(static control => control.Id)],
+                },
+            ],
+            Capabilities = DeviceCapabilities.Images | DeviceCapabilities.Touch | DeviceCapabilities.Brightness | DeviceCapabilities.RgbLights
+                | DeviceCapabilities.Haptics | DeviceCapabilities.Backdrop | DeviceCapabilities.Firmware | DeviceCapabilities.Settings,
+            Limits = new DeviceLimits
+            {
+                Notes = ["The knobs report a press but no release: DeckHost adds the release.", "Every LED dark shows the firmware's own rainbow: DeckHost dims them instead."],
+            },
+        };
     }
 
     /// <summary>SDK key id that receives this control's image, or null when the control has no image.</summary>

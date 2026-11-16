@@ -374,7 +374,12 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmw
                 session.Description.Name,
                 session.Description.PhysicalControls(),
                 session.Stream is not null,
-                $"USB {session.Description.VendorId:X4}:{session.Description.ProductId:X4}"))];
+                $"USB {session.Description.VendorId:X4}:{session.Description.ProductId:X4}")
+            {
+                Identity = new DeviceIdentity(Model: session.Description.Name, Connection: $"USB {session.Description.VendorId:X4}:{session.Description.ProductId:X4}"),
+                Capabilities = DeviceCapabilities.Firmware,
+                Limits = new DeviceLimits { Notes = ["Input only: described in the device creator, no screens or lights."] },
+            })];
 
     private sealed class Session(HidDeviceDescription description)
     {

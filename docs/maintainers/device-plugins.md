@@ -52,10 +52,29 @@ they're unplugged (with `isConnected: false`), so their profiles can be edited; 
 seen before (the Elgato plugin keeps them in `devices/elgato-known.json`). Give each device a stable
 id, ideally from its serial number (`elgato.<product>.<serial>`).
 
+Describe the hardware itself too (the device descriptor, [decision 0011](adr/0011-device-descriptor.md));
+all of it is optional, but the editor, the Plugins page and fallbacks use it:
+
+```csharp
+new DeviceDefinition(id, "My Deck", controls, isConnected, detail)
+{
+    Identity = new DeviceIdentity("Maker", "My Deck", serial, FirmwareVersion: firmware, Connection: "USB"),
+    Displays = [new DeviceDisplay("main", 800, 480) { RotationDegrees = 180, ControlIds = ["key.0", "key.1"] }],
+    Capabilities = DeviceCapabilities.Images | DeviceCapabilities.Brightness | DeviceCapabilities.RgbLights,
+    Limits = new DeviceLimits { MaxFramesPerSecond = 30, Notes = ["The knob reports no release."] },
+    PhysicalSize = new PhysicalSize(118, 84),
+}
+```
+
+Controls whose images are on a display say so with `DisplayId` (and may give `PhysicalBounds` in
+millimetres and a `Shape`). `definition.FindDescriptorProblems()` lists what doesn't add up; put it in
+your tests.
+
 Each control is a `PhysicalControl`:
 
 | | |
 |---|---|
+| `DisplayId`, `PhysicalBounds`, `Shape` | The display it's on, where it is in millimetres, and whether it's round (a knob). |
 | `Id` | `key.N` (reading order, left to right, top to bottom), `encoder.N` (knobs, left to right), `touch.N` (touch zones), `touch.swipe` (swipes over a strip). Using these lets profiles move between devices. |
 | `DisplayName`, `Type` | "Key 1", and `Key`, `Encoder`, `TouchSurface`, `Display` or `Slider`. |
 | `Bounds` | Where it sits in the editor, in layout units (a key is about 72). |

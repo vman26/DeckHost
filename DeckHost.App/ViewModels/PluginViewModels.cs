@@ -582,4 +582,30 @@ public sealed class DeviceInfoViewModel(DeviceDefinition device, string? status,
         : $"Firmware {firmware.Version}. " + (firmware.CanUpdate ? "Updates: Settings… → Firmware." : firmware.Detail ?? "DeckHost can't update it.");
 
     public bool HasFirmwareText => FirmwareText.Length > 0;
+
+    /// <summary>Maker and model from the device's descriptor: "MiraBox StreamDock N4 Pro · USB".</summary>
+    public string IdentityText => device.Identity is { } identity
+        ? string.Join(" · ", new[] { string.Join(' ', new[] { identity.Manufacturer, identity.Model }.Where(static part => !string.IsNullOrWhiteSpace(part))), identity.Connection }
+            .Where(static part => !string.IsNullOrWhiteSpace(part)))
+        : string.Empty;
+
+    public bool HasIdentityText => IdentityText.Length > 0;
+
+    /// <summary>What the device can do, from its descriptor: "Screens · Touch · RGB lights".</summary>
+    public string CapabilitiesText => DescribeCapabilities(device.Capabilities);
+
+    public bool HasCapabilitiesText => CapabilitiesText.Length > 0;
+
+    internal static string DescribeCapabilities(DeviceCapabilities capabilities) => string.Join(" · ", new (DeviceCapabilities Flag, string Text)[]
+    {
+        (DeviceCapabilities.Images, "Screens"),
+        (DeviceCapabilities.AnimatedImages, "Animations on the device"),
+        (DeviceCapabilities.Touch, "Touch"),
+        (DeviceCapabilities.MultiTouch, "Multi-touch"),
+        (DeviceCapabilities.Brightness, "Brightness"),
+        (DeviceCapabilities.RgbLights, "RGB lights"),
+        (DeviceCapabilities.Haptics, "Vibration"),
+        (DeviceCapabilities.Backdrop, "Screen background"),
+        (DeviceCapabilities.Firmware, "Firmware info"),
+    }.Where(item => capabilities.HasFlag(item.Flag)).Select(static item => item.Text));
 }

@@ -65,14 +65,14 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Requirement | | Where / what's missing |
 |---|---|---|
 | Devices as controls with capabilities, not a grid | ✅ | `DeviceDefinition`, `PhysicalControl` (inputs, outputs, bounds, render size, LED, linked display) |
-| 7.1.1 Identity, metadata | 🟡 | Id, name, detail text, firmware; no structured manufacturer/model/serial fields |
-| 7.1.1 Physical dimensions, limitations, descriptor version | ⬜ | |
-| 7.1.2 Control types | 🟡 | Key, encoder, touch surface, display, slider types; no joystick, LED-only zones |
-| 7.1.3 Physical / logical / display coordinates | 🟡 | Logical bounds and pixel size per control; no physical mapping |
-| 7.1.4 Capabilities queried before use | 🟡 | Input/output flags, optional interfaces (backdrop, batch lights, firmware, settings); no capability registry |
+| 7.1.1 Identity, metadata | ✅ | `DeviceIdentity` (manufacturer, model, serial, revision, firmware, connection); shown on the Plugins page |
+| 7.1.1 Physical dimensions, limitations, descriptor version | ✅ | `PhysicalSize`, `DeviceLimits`, `DescriptorVersion` ([ADR 0011](../maintainers/adr/0011-device-descriptor.md)); not every device fills its size yet |
+| 7.1.2 Control types, shapes | ✅ | Key, button, encoder, touch surface, display, slider, joystick, LED; round or rectangular |
+| 7.1.3 Physical / logical / display coordinates, display regions | 🟡 | Layout `Bounds`, `PhysicalBounds` (mm, optional), `DeviceDisplay` regions with the controls on them; the host doesn't use physical coordinates yet |
+| 7.1.4 Capabilities queried before use | 🟡 | `DeviceCapabilities` flags and `Has()`, next to the optional interfaces; the host doesn't adapt to limits (frame rate, transparency) yet |
 | 7.1.5 Topology changes | ✅ | `DevicesChanged` (Web Deck grid size, hot-plug); bindings keyed by control id |
 | 7.1.6 Hardware description apart from user layout | ✅ | |
-| 7.1.8 `IDeviceProvider`, `IDeviceSession`, `DeviceDescriptor`, … | 🟡 | Same roles under other names: `IDevicePlugin`, `DeviceDefinition`, `IDeviceOutput` |
+| 7.1.8 `IDeviceProvider`, `IDeviceSession`, `DeviceDescriptor`, … | ✅ | Same roles under other names: `IDevicePlugin`, `DeviceDefinition` (+ `DeviceDisplay`, `DeviceCapabilities`), `IDeviceOutput`; `FindDescriptorProblems()` validates |
 | 7.3 N4 Pro, Elgato family, generic HID, virtual | ✅ | |
 | 7.4 Device-independent profiles | 🟡 | Conventional control ids and `LayoutMapper`; no logical-control layer |
 

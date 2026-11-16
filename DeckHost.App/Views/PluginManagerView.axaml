@@ -189,6 +189,10 @@
 										<Button Grid.Column="1" Content="Settings…" IsVisible="{Binding HasSettings}" Click="DeviceSettings_OnClick"
 												ToolTip.Tip="This device's settings (what it offers: brightness, lights, idle screen, pairing, firmware, …)" />
 									</Grid>
+									<TextBlock Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap"
+											   Text="{Binding IdentityText}" IsVisible="{Binding HasIdentityText}" />
+									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
+											   Text="{Binding CapabilitiesText}" IsVisible="{Binding HasCapabilitiesText}" />
 									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
 											   Text="{Binding FirmwareText}" IsVisible="{Binding HasFirmwareText}" />
 								</StackPanel>

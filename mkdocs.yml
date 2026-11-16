@@ -72,3 +72,4 @@ nav:
           - "0008 Generic USB devices": maintainers/adr/0008-generic-usb-devices.md
           - "0009 Firmware updates": maintainers/adr/0009-firmware-updates.md
           - "0010 License": maintainers/adr/0010-license.md
+          - "0011 Device descriptor": maintainers/adr/0011-device-descriptor.md

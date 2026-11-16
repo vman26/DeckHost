@@ -281,12 +281,22 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
         _clients.Clear();
     }
 
-    private DeviceDefinition Definition() => new(
-        DeviceId,
-        "Web Deck",
-        WebDeckLayout.Controls(ColumnCount, RowCount),
-        ListeningPort is not null,
-        Link ?? "Off");
+    private DeviceDefinition Definition()
+    {
+        var controls = WebDeckLayout.Controls(ColumnCount, RowCount);
+        return new DeviceDefinition(DeviceId, "Web Deck", controls, ListeningPort is not null, Link ?? "Off")
+        {
+            Identity = new DeviceIdentity("DeckHost", "Web Deck", Connection: SharingMode == SharingNetwork ? "Network" : "This computer"),
+            Displays =
+            [
+                new DeviceDisplay(WebDeckLayout.DisplayId, ColumnCount * WebDeckLayout.KeyPixels, RowCount * WebDeckLayout.KeyPixels)
+                {
+                    ControlIds = [.. controls.Select(static control => control.Id)],
+                },
+            ],
+            Capabilities = DeviceCapabilities.Images | DeviceCapabilities.Touch | DeviceCapabilities.Settings,
+        };
+    }
 
     private int ColumnCount => Math.Clamp(_settings.GetInt(Columns, 5), WebDeckLayout.MinSize, WebDeckLayout.MaxColumns);
 

@@ -460,6 +460,15 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `static IReadOnlyList<string> Of(InputCapabilities inputs)` | The inputs a control with these capabilities can be set up for, in the order the editor shows them. A release isn't one: it only ends a press. |
 | `static string SettingKey(string key, string input)` | Where a `PerInput` setting's value for one input is stored. |
 
+### ControlShape
+
+*enum* — The outline of a control, for drawing it like the hardware (master plan 7.1.2).
+
+| Member | |
+|---|---|
+| `Rectangle` |  |
+| `Round` |  |
+
 ### ControlType
 
 *enum*
@@ -471,20 +480,65 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `TouchSurface` |  |
 | `Display` |  |
 | `Slider` |  |
+| `Button` | A physical button without a display of its own. |
+| `Joystick` | A joystick or directional pad. |
+| `Led` | A light only (an indicator or a lighting zone), no input. |
 
-### DeviceDefinition
+### DeviceCapabilities
 
-*record* — A device a plugin can drive. Plugins also expose definitions for devices that are not plugged in, so profiles can be edited offline; `IsConnected` tells them apart.
+*enum* — What a device can do (master plan 7.1.4). Query before using a feature.
 
 | Member | |
 |---|---|
-| `DeviceDefinition(string Id, string Name, IReadOnlyList<PhysicalControl> Controls, bool IsConnected = false, string Detail = null)` | A device a plugin can drive. Plugins also expose definitions for devices that are not plugged in, so profiles can be edited offline; `IsConnected` tells them apart. |
+| `None` |  |
+| `Images` | Shows pictures on its controls. |
+| `AnimatedImages` | Plays animated pictures by itself (else the host sends frames). |
+| `Touch` | Reports touches on a surface. |
+| `MultiTouch` | Reports several touches at once. |
+| `Brightness` | Its screen brightness can be set. |
+| `RgbLights` | Has RGB lights the host can set. |
+| `Haptics` | Can vibrate. |
+| `Backdrop` | Shows a background behind all controls (`IDeviceBackdropOutput`). |
+| `Firmware` | Reports its firmware (`IDeviceFirmware`). |
+| `Settings` | Has its own settings page (`IConfigurableDevicePlugin`). |
+
+### DeviceDefinition
+
+*record* — A device a plugin can drive: its descriptor (master plan 7.1). Plugins also expose definitions for devices that are not plugged in, so profiles can be edited offline; `IsConnected` tells them apart. The control topology is `Controls`; identity, displays, capabilities and limits are optional properties, so plugins built before them keep working. When the topology changes, the plugin raises `DevicesChanged` with the new definition; bindings are kept by control id, so a control that disappears doesn't move others.
+
+| Member | |
+|---|---|
+| `DeviceDefinition(string Id, string Name, IReadOnlyList<PhysicalControl> Controls, bool IsConnected = false, string Detail = null)` | A device a plugin can drive: its descriptor (master plan 7.1). Plugins also expose definitions for devices that are not plugged in, so profiles can be edited offline; `IsConnected` tells them apart. The control topology is `Controls`; identity, displays, capabilities and limits are optional properties, so plugins built before them keep working. When the topology changes, the plugin raises `DevicesChanged` with the new definition; bindings are kept by control id, so a control that disappears doesn't move others. |
+| `DeviceCapabilities Capabilities { get; init; }` | What the device can do. |
 | `IReadOnlyList<PhysicalControl> Controls { get; init; }` |  |
+| `int DescriptorVersion { get; init; }` | The descriptor format version; plugins built for an older one say so. |
 | `string Detail { get; init; }` |  |
+| `IReadOnlyList<DeviceDisplay> Displays { get; init; }` | The displays or display regions; empty when the device has none or doesn't say. |
 | `string Id { get; init; }` |  |
+| `DeviceIdentity Identity { get; init; }` | Manufacturer, model, serial, revision, firmware and connection; null when unknown. |
 | `bool IsConnected { get; init; }` |  |
+| `DeviceLimits Limits { get; init; }` | What it can't do, or not fully; null when nothing is known. |
 | `string Name { get; init; }` |  |
+| `PhysicalSize PhysicalSize { get; init; }` | The device's outer size in millimetres; null when unknown. |
+| `const int CurrentDescriptorVersion` | The descriptor format version this definition follows. |
 | `PhysicalControl FindControl(string controlId)` |  |
+| `IReadOnlyList<string> FindDescriptorProblems()` | What's inconsistent in this descriptor, in words (empty when it's fine): duplicate control ids, controls with images but no display (when the device lists displays), displays that list unknown controls or none, links to unknown controls. Device plugin authors can test with it. |
+| `DeviceDisplay FindDisplay(string displayId)` |  |
+| `bool Has(DeviceCapabilities capability)` | Whether the device declares `capability` (all of the given flags). |
+
+### DeviceDisplay
+
+*record* — A display or a region of one (master plan 7.1.3): its pixel size and the controls whose images are shown on it. Controls point back with `DisplayId`.
+
+| Member | |
+|---|---|
+| `DeviceDisplay(string Id, int Width, int Height)` | A display or a region of one (master plan 7.1.3): its pixel size and the controls whose images are shown on it. Controls point back with `DisplayId`. |
+| `IReadOnlyList<string> ControlIds { get; init; }` | The controls on this display, in reading order. |
+| `int Height { get; init; }` | Height in pixels. |
+| `string Id { get; init; }` | Stable id within the device: "main", "strip", "keys". |
+| `int? MaxFramesPerSecond { get; init; }` | The most frames a second the display takes; null when it doesn't say. |
+| `int RotationDegrees { get; init; }` | How the device turns what it gets (0, 90, 180, 270); device plugins apply it. |
+| `int Width { get; init; }` | Width in pixels, as the device draws it (before `RotationDegrees`). |
 
 ### DeviceFirmwareInfo
 
@@ -497,6 +551,32 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `string Detail { get; init; }` | A line for the user: where updates come from, or why there are none here. |
 | `IReadOnlyList<string> FileExtensions { get; init; }` | File types the plugin installs from a file the user picks (".bin", ".dfu"); empty for none. |
 | `string Version { get; init; }` | The version the device reports. |
+
+### DeviceIdentity
+
+*record* — Who made a device and which one it is (master plan 7.1.1); every field is optional.
+
+| Member | |
+|---|---|
+| `DeviceIdentity(string Manufacturer = null, string Model = null, string SerialNumber = null, string HardwareRevision = null, string FirmwareVersion = null, string Connection = null)` | Who made a device and which one it is (master plan 7.1.1); every field is optional. |
+| `string Connection { get; init; }` | How it's connected: "USB", "Network", "Virtual", … |
+| `string FirmwareVersion { get; init; }` | The firmware version, when the device reports one. |
+| `string HardwareRevision { get; init; }` | A hardware revision, when the device reports one. |
+| `string Manufacturer { get; init; }` | "MiraBox", "Elgato", … |
+| `string Model { get; init; }` | "StreamDock N4 Pro", "Stream Deck +", … |
+| `string SerialNumber { get; init; }` | The device's serial number, when it reports one. |
+
+### DeviceLimits
+
+*record* — What a device can't do, or not fully (master plan 7.1.1 "limitations"); null fields: no limit known.
+
+| Member | |
+|---|---|
+| `DeviceLimits()` | Creates it with the positional properties. |
+| `int? ColorDepthBits { get; init; }` | Bits per pixel of its screens (16 for RGB565), when fewer than 24. |
+| `int? MaxFramesPerSecond { get; init; }` | The most image updates a second the device keeps up with, for all its controls. |
+| `IReadOnlyList<string> Notes { get; init; }` | Anything else worth knowing, in words: "no knob release events", … |
+| `bool? Transparency { get; init; }` | False when transparent pixels can't be shown (the host flattens them). |
 
 ### DeviceProfile
 
@@ -665,6 +745,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `PhysicalControl(string Id, string DisplayName, ControlType Type, Rect Bounds, InputCapabilities Inputs, OutputCapabilities Outputs, int RenderWidth = 0, int RenderHeight = 0, string HardwareId = null, int? LedIndex = null, string DisplayControlId = null)` | One physical control on a device. |
 | `Rect Bounds { get; init; }` | Position in the designer's layout coordinates (not device pixels). |
 | `string DisplayControlId { get; init; }` | For a control without a display of its own: the id of the control whose display belongs to it (the touch zone above a knob). The host shows this control's action there; see `ShowOnLinkedDisplay`. |
+| `string DisplayId { get; init; }` | The display (or region) its image is on (`Displays`); null when it has none or the device doesn't say. |
 | `string DisplayName { get; init; }` |  |
 | `string HardwareId { get; init; }` | The id the hardware/SDK uses for this control, for diagnostics. |
 | `bool HasImageOutput` |  |
@@ -674,9 +755,21 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `InputCapabilities Inputs { get; init; }` |  |
 | `int? LedIndex { get; init; }` | Index of the RGB LED tied to this control, when there is one. |
 | `OutputCapabilities Outputs { get; init; }` |  |
+| `Rect? PhysicalBounds { get; init; }` | Where the control is on the device, in millimetres from its top left (physical coordinates); null when unknown. |
 | `int RenderHeight { get; init; }` | Pixel height of the control's own image on the device; 0 when it has none. |
 | `int RenderWidth { get; init; }` | Pixel width of the control's own image on the device; 0 when it has none. |
+| `ControlShape Shape { get; init; }` | Its outline, for drawing it like the hardware. |
 | `ControlType Type { get; init; }` |  |
+
+### PhysicalSize
+
+*record* — A size in millimetres (physical dimensions, master plan 7.1.3).
+
+| Member | |
+|---|---|
+| `PhysicalSize(double WidthMillimetres, double HeightMillimetres)` | A size in millimetres (physical dimensions, master plan 7.1.3). |
+| `double HeightMillimetres { get; init; }` |  |
+| `double WidthMillimetres { get; init; }` |  |
 
 ### ProfileActionKind
 

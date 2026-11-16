@@ -264,25 +264,66 @@
   DeckHost.Contracts.Models.ControlInputs.SettingKey(System.String key, System.String input) : System.String
   DeckHost.Contracts.Models.ControlInputs.SwipeLeft : System.String const
   DeckHost.Contracts.Models.ControlInputs.SwipeRight : System.String const
+  DeckHost.Contracts.Models.ControlShape.Rectangle = 0
+  DeckHost.Contracts.Models.ControlShape.Round = 1
+  DeckHost.Contracts.Models.ControlShape.value__ : System.Int32
+  DeckHost.Contracts.Models.ControlType.Button = 5
   DeckHost.Contracts.Models.ControlType.Display = 3
   DeckHost.Contracts.Models.ControlType.Encoder = 1
+  DeckHost.Contracts.Models.ControlType.Joystick = 6
   DeckHost.Contracts.Models.ControlType.Key = 0
+  DeckHost.Contracts.Models.ControlType.Led = 7
   DeckHost.Contracts.Models.ControlType.Slider = 4
   DeckHost.Contracts.Models.ControlType.TouchSurface = 2
   DeckHost.Contracts.Models.ControlType.value__ : System.Int32
+  DeckHost.Contracts.Models.DeviceCapabilities.AnimatedImages = 2
+  DeckHost.Contracts.Models.DeviceCapabilities.Backdrop = 128
+  DeckHost.Contracts.Models.DeviceCapabilities.Brightness = 16
+  DeckHost.Contracts.Models.DeviceCapabilities.Firmware = 256
+  DeckHost.Contracts.Models.DeviceCapabilities.Haptics = 64
+  DeckHost.Contracts.Models.DeviceCapabilities.Images = 1
+  DeckHost.Contracts.Models.DeviceCapabilities.MultiTouch = 8
+  DeckHost.Contracts.Models.DeviceCapabilities.None = 0
+  DeckHost.Contracts.Models.DeviceCapabilities.RgbLights = 32
+  DeckHost.Contracts.Models.DeviceCapabilities.Settings = 512
+  DeckHost.Contracts.Models.DeviceCapabilities.Touch = 4
+  DeckHost.Contracts.Models.DeviceCapabilities.value__ : System.Int32
   DeckHost.Contracts.Models.DeviceDefinition(System.String Id, System.String Name, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.PhysicalControl> Controls, System.Boolean IsConnected, System.String Detail)
   DeckHost.Contracts.Models.DeviceDefinition.<Clone>$() : DeckHost.Contracts.Models.DeviceDefinition
+  DeckHost.Contracts.Models.DeviceDefinition.Capabilities : DeckHost.Contracts.Models.DeviceCapabilities {set}
   DeckHost.Contracts.Models.DeviceDefinition.Controls : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.PhysicalControl> {set}
+  DeckHost.Contracts.Models.DeviceDefinition.CurrentDescriptorVersion : System.Int32 const
   DeckHost.Contracts.Models.DeviceDefinition.Deconstruct(System.String& Id, System.String& Name, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.PhysicalControl>& Controls, System.Boolean& IsConnected, System.String& Detail) : System.Void
+  DeckHost.Contracts.Models.DeviceDefinition.DescriptorVersion : System.Int32 {set}
   DeckHost.Contracts.Models.DeviceDefinition.Detail : System.String {set}
+  DeckHost.Contracts.Models.DeviceDefinition.Displays : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.DeviceDisplay> {set}
   DeckHost.Contracts.Models.DeviceDefinition.Equals(DeckHost.Contracts.Models.DeviceDefinition other) : System.Boolean
   DeckHost.Contracts.Models.DeviceDefinition.Equals(System.Object obj) : System.Boolean
   DeckHost.Contracts.Models.DeviceDefinition.FindControl(System.String controlId) : DeckHost.Contracts.Models.PhysicalControl
+  DeckHost.Contracts.Models.DeviceDefinition.FindDescriptorProblems() : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.DeviceDefinition.FindDisplay(System.String displayId) : DeckHost.Contracts.Models.DeviceDisplay
   DeckHost.Contracts.Models.DeviceDefinition.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceDefinition.Has(DeckHost.Contracts.Models.DeviceCapabilities capability) : System.Boolean
   DeckHost.Contracts.Models.DeviceDefinition.Id : System.String {set}
+  DeckHost.Contracts.Models.DeviceDefinition.Identity : DeckHost.Contracts.Models.DeviceIdentity {set}
   DeckHost.Contracts.Models.DeviceDefinition.IsConnected : System.Boolean {set}
+  DeckHost.Contracts.Models.DeviceDefinition.Limits : DeckHost.Contracts.Models.DeviceLimits {set}
   DeckHost.Contracts.Models.DeviceDefinition.Name : System.String {set}
+  DeckHost.Contracts.Models.DeviceDefinition.PhysicalSize : DeckHost.Contracts.Models.PhysicalSize {set}
   DeckHost.Contracts.Models.DeviceDefinition.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceDisplay(System.String Id, System.Int32 Width, System.Int32 Height)
+  DeckHost.Contracts.Models.DeviceDisplay.<Clone>$() : DeckHost.Contracts.Models.DeviceDisplay
+  DeckHost.Contracts.Models.DeviceDisplay.ControlIds : System.Collections.Generic.IReadOnlyList<System.String> {set}
+  DeckHost.Contracts.Models.DeviceDisplay.Deconstruct(System.String& Id, System.Int32& Width, System.Int32& Height) : System.Void
+  DeckHost.Contracts.Models.DeviceDisplay.Equals(DeckHost.Contracts.Models.DeviceDisplay other) : System.Boolean
+  DeckHost.Contracts.Models.DeviceDisplay.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.DeviceDisplay.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceDisplay.Height : System.Int32 {set}
+  DeckHost.Contracts.Models.DeviceDisplay.Id : System.String {set}
+  DeckHost.Contracts.Models.DeviceDisplay.MaxFramesPerSecond : System.Nullable<System.Int32> {set}
+  DeckHost.Contracts.Models.DeviceDisplay.RotationDegrees : System.Int32 {set}
+  DeckHost.Contracts.Models.DeviceDisplay.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceDisplay.Width : System.Int32 {set}
   DeckHost.Contracts.Models.DeviceFirmwareInfo(System.String Version, System.Boolean CanUpdate, System.String Detail)
   DeckHost.Contracts.Models.DeviceFirmwareInfo.<Clone>$() : DeckHost.Contracts.Models.DeviceFirmwareInfo
   DeckHost.Contracts.Models.DeviceFirmwareInfo.CanUpdate : System.Boolean {set}
@@ -294,6 +335,29 @@
   DeckHost.Contracts.Models.DeviceFirmwareInfo.GetHashCode() : System.Int32
   DeckHost.Contracts.Models.DeviceFirmwareInfo.ToString() : System.String
   DeckHost.Contracts.Models.DeviceFirmwareInfo.Version : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity(System.String Manufacturer, System.String Model, System.String SerialNumber, System.String HardwareRevision, System.String FirmwareVersion, System.String Connection)
+  DeckHost.Contracts.Models.DeviceIdentity.<Clone>$() : DeckHost.Contracts.Models.DeviceIdentity
+  DeckHost.Contracts.Models.DeviceIdentity.Connection : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.Deconstruct(System.String& Manufacturer, System.String& Model, System.String& SerialNumber, System.String& HardwareRevision, System.String& FirmwareVersion, System.String& Connection) : System.Void
+  DeckHost.Contracts.Models.DeviceIdentity.Equals(DeckHost.Contracts.Models.DeviceIdentity other) : System.Boolean
+  DeckHost.Contracts.Models.DeviceIdentity.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.DeviceIdentity.FirmwareVersion : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceIdentity.HardwareRevision : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.Manufacturer : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.Model : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.SerialNumber : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceLimits()
+  DeckHost.Contracts.Models.DeviceLimits.<Clone>$() : DeckHost.Contracts.Models.DeviceLimits
+  DeckHost.Contracts.Models.DeviceLimits.ColorDepthBits : System.Nullable<System.Int32> {set}
+  DeckHost.Contracts.Models.DeviceLimits.Equals(DeckHost.Contracts.Models.DeviceLimits other) : System.Boolean
+  DeckHost.Contracts.Models.DeviceLimits.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.DeviceLimits.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceLimits.MaxFramesPerSecond : System.Nullable<System.Int32> {set}
+  DeckHost.Contracts.Models.DeviceLimits.Notes : System.Collections.Generic.IReadOnlyList<System.String> {set}
+  DeckHost.Contracts.Models.DeviceLimits.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceLimits.Transparency : System.Nullable<System.Boolean> {set}
   DeckHost.Contracts.Models.DeviceProfile(System.String Id, System.String Name, System.String DeviceId, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.ControlBinding> Bindings, System.Collections.Generic.IReadOnlyList<System.String> AutoSwitchApps, DeckHost.Contracts.Models.ProfileBackground Background)
   DeckHost.Contracts.Models.DeviceProfile.<Clone>$() : DeckHost.Contracts.Models.DeviceProfile
   DeckHost.Contracts.Models.DeviceProfile.AutoSwitchApps : System.Collections.Generic.IReadOnlyList<System.String> {set}
@@ -440,6 +504,7 @@
   DeckHost.Contracts.Models.PhysicalControl.Bounds : DeckHost.Contracts.Models.Rect {set}
   DeckHost.Contracts.Models.PhysicalControl.Deconstruct(System.String& Id, System.String& DisplayName, DeckHost.Contracts.Models.ControlType& Type, DeckHost.Contracts.Models.Rect& Bounds, DeckHost.Contracts.Enums.InputCapabilities& Inputs, DeckHost.Contracts.Enums.OutputCapabilities& Outputs, System.Int32& RenderWidth, System.Int32& RenderHeight, System.String& HardwareId, System.Nullable<System.Int32>& LedIndex, System.String& DisplayControlId) : System.Void
   DeckHost.Contracts.Models.PhysicalControl.DisplayControlId : System.String {set}
+  DeckHost.Contracts.Models.PhysicalControl.DisplayId : System.String {set}
   DeckHost.Contracts.Models.PhysicalControl.DisplayName : System.String {set}
   DeckHost.Contracts.Models.PhysicalControl.Equals(DeckHost.Contracts.Models.PhysicalControl other) : System.Boolean
   DeckHost.Contracts.Models.PhysicalControl.Equals(System.Object obj) : System.Boolean
@@ -452,10 +517,21 @@
   DeckHost.Contracts.Models.PhysicalControl.Inputs : DeckHost.Contracts.Enums.InputCapabilities {set}
   DeckHost.Contracts.Models.PhysicalControl.LedIndex : System.Nullable<System.Int32> {set}
   DeckHost.Contracts.Models.PhysicalControl.Outputs : DeckHost.Contracts.Enums.OutputCapabilities {set}
+  DeckHost.Contracts.Models.PhysicalControl.PhysicalBounds : System.Nullable<DeckHost.Contracts.Models.Rect> {set}
   DeckHost.Contracts.Models.PhysicalControl.RenderHeight : System.Int32 {set}
   DeckHost.Contracts.Models.PhysicalControl.RenderWidth : System.Int32 {set}
+  DeckHost.Contracts.Models.PhysicalControl.Shape : DeckHost.Contracts.Models.ControlShape {set}
   DeckHost.Contracts.Models.PhysicalControl.ToString() : System.String
   DeckHost.Contracts.Models.PhysicalControl.Type : DeckHost.Contracts.Models.ControlType {set}
+  DeckHost.Contracts.Models.PhysicalSize(System.Double WidthMillimetres, System.Double HeightMillimetres)
+  DeckHost.Contracts.Models.PhysicalSize.<Clone>$() : DeckHost.Contracts.Models.PhysicalSize
+  DeckHost.Contracts.Models.PhysicalSize.Deconstruct(System.Double& WidthMillimetres, System.Double& HeightMillimetres) : System.Void
+  DeckHost.Contracts.Models.PhysicalSize.Equals(DeckHost.Contracts.Models.PhysicalSize other) : System.Boolean
+  DeckHost.Contracts.Models.PhysicalSize.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.PhysicalSize.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.PhysicalSize.HeightMillimetres : System.Double {set}
+  DeckHost.Contracts.Models.PhysicalSize.ToString() : System.String
+  DeckHost.Contracts.Models.PhysicalSize.WidthMillimetres : System.Double {set}
   DeckHost.Contracts.Models.ProfileActionKind.KeyLogic = 3
   DeckHost.Contracts.Models.ProfileActionKind.MultiAction = 1
   DeckHost.Contracts.Models.ProfileActionKind.MultiActionSwitch = 2
@@ -690,7 +766,10 @@ class DeckHost.Contracts.Models.ActionSettings
 class DeckHost.Contracts.Models.ControlAppearance
 class DeckHost.Contracts.Models.ControlBinding
 class DeckHost.Contracts.Models.DeviceDefinition
+class DeckHost.Contracts.Models.DeviceDisplay
 class DeckHost.Contracts.Models.DeviceFirmwareInfo
+class DeckHost.Contracts.Models.DeviceIdentity
+class DeckHost.Contracts.Models.DeviceLimits
 class DeckHost.Contracts.Models.DeviceProfile
 class DeckHost.Contracts.Models.FirmwareImage
 class DeckHost.Contracts.Models.FirmwareProgress
@@ -702,6 +781,7 @@ class DeckHost.Contracts.Models.LightStyle
 class DeckHost.Contracts.Models.MultiActionStep
 class DeckHost.Contracts.Models.NumberRange
 class DeckHost.Contracts.Models.PhysicalControl
+class DeckHost.Contracts.Models.PhysicalSize
 class DeckHost.Contracts.Models.ProfileBackground
 class DeckHost.Contracts.Models.RgbFeedback
 class DeckHost.Contracts.Models.SettingCondition
@@ -713,7 +793,9 @@ class DeckHost.Contracts.Models.WorkflowNode
 enum DeckHost.Contracts.Enums.InputCapabilities
 enum DeckHost.Contracts.Enums.OutputCapabilities
 enum DeckHost.Contracts.Models.ActionSettingKind
+enum DeckHost.Contracts.Models.ControlShape
 enum DeckHost.Contracts.Models.ControlType
+enum DeckHost.Contracts.Models.DeviceCapabilities
 enum DeckHost.Contracts.Models.ProfileActionKind
 enum DeckHost.Contracts.Models.TextHorizontalAlignment
 enum DeckHost.Contracts.Models.TextVerticalAlignment

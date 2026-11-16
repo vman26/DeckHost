@@ -45,7 +45,7 @@ The dependency rule: `Contracts` ← `Core` ← `App` → `Device.*` (MiraBox, E
 
 - **`DeckHost.Contracts`**: the plugin-facing surface.
   - Interfaces: `IDevicePlugin` (devices, `DevicesChanged`, `Output`, `InitializeAsync`), `IDeviceOutput` (`TryPushImage`, `TrySetLight`, `Clear`), optional `IDeviceBackdropOutput` (`TrySetBackdrop`), `IDevicePluginContext` (input, connection status, log), `IApplicationPlugin`, `IDeckAction`, `IRenderContext`, `IVariableStore`.
-  - Records: `PhysicalControl` carries the device pixel size (`RenderWidth`/`RenderHeight`), `HardwareId` and `LedIndex`. `DeviceDefinition` has an `IsConnected` flag.
+  - Records: `PhysicalControl` carries the device pixel size (`RenderWidth`/`RenderHeight`), `HardwareId` and `LedIndex`, and optional `PhysicalBounds` (mm), `DisplayId`, `Shape`. `DeviceDefinition` (the device descriptor, ADR 0011) has an `IsConnected` flag and optional `DescriptorVersion`, `Identity` (`DeviceIdentity`), `Displays` (`DeviceDisplay`), `Capabilities` (`DeviceCapabilities`, `Has()`), `Limits` (`DeviceLimits`), `PhysicalSize`; `FindDescriptorProblems()` checks consistency (tests run it on every built-in device).
 - **`DeckHost.Core`**: the runtime.
   - `DeviceHostService`: every public method only enqueues work onto a `Channel` that **one worker task** processes in order. That worker owns all mutable state, which is why the class has almost no locks. Events are raised on background threads.
   - `ActionRouter`: dispatches input events to actions.
