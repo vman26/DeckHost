@@ -112,6 +112,7 @@
 									<Button Content="Plugins and store" HorizontalAlignment="Stretch" Click="OpenPluginManager_OnClick" />
 									<Button Content="Device settings" HorizontalAlignment="Stretch" Click="OpenDeviceSettings_OnClick" />
 									<Button Content="Add a USB device" HorizontalAlignment="Stretch" Click="OpenDeviceCreator_OnClick" ToolTip.Tip="Make a button box, pedal, jog wheel or other USB device into a deck" />
+									<Button Content="Device simulator" HorizontalAlignment="Stretch" Click="OpenSimulator_OnClick" ToolTip.Tip="Open a window that acts like any device DeckHost supports, without the hardware" />
 									<Button Content="DeckHost settings" HorizontalAlignment="Stretch" Click="OpenAppSettings_OnClick" />
 									<Button Content="Help and support" HorizontalAlignment="Stretch" Click="OpenSupport_OnClick" />
 									<Button Content="Welcome tour" HorizontalAlignment="Stretch" Click="OpenWelcome_OnClick" />

@@ -57,6 +57,7 @@
     <ProjectReference Include="..\DeckHost.Device.Elgato\DeckHost.Device.Elgato.csproj" />
     <ProjectReference Include="..\DeckHost.Device.Hid\DeckHost.Device.Hid.csproj" />
     <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
+    <ProjectReference Include="..\DeckHost.Device.Simulator\DeckHost.Device.Simulator.csproj" />
     <ProjectReference Include="..\DeckHost.Device.Web\DeckHost.Device.Web.csproj" />
   </ItemGroup>
 

@@ -254,6 +254,27 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     private void OpenDeviceCreator_OnClick(object? sender, RoutedEventArgs e) => OpenDeviceCreator();
 
+    /// <summary>Starts a device simulator window (this program with --simulator, its own process).</summary>
+    private void OpenSimulator_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (Environment.ProcessPath is not { } program)
+        {
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(program) { ArgumentList = { "--simulator" }, UseShellExecute = false });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            if (Ioc.Default.GetService<Microsoft.Extensions.Logging.ILogger<MainWindow>>() is { } logger)
+            {
+                Microsoft.Extensions.Logging.LoggerExtensions.LogWarning(logger, ex, "Could not start the device simulator");
+            }
+        }
+    }
+
     /// <summary>The device creator: a USB device DeckHost doesn't know, made into a deck.</summary>
     public void OpenDeviceCreator()
     {

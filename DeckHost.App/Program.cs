@@ -45,6 +45,18 @@ sealed class Program
             return Core.Plugins.Isolation.PluginProcessServer.Run(args[1..]);
         }
 
+        // "DeckHost --simulator [model]": the device simulator, a window DeckHost sees as a connected
+        // device. Its own process (several can run), no single-instance check.
+        if (args.Length > 0 && string.Equals(args[0], "--simulator", StringComparison.OrdinalIgnoreCase))
+        {
+            Simulator.SimulatorApp.StartModel = args.Length > 1 ? args[1] : null;
+            return AppBuilder.Configure<Simulator.SimulatorApp>()
+                .UsePlatformDetect()
+                .WithInterFont()
+                .LogToTrace()
+                .StartWithClassicDesktopLifetime(args);
+        }
+
         // "DeckHost --check-plugin <package.zip|folder>": checks a DeckHost plugin for its author and
         // loads it in a scratch folder (nothing is installed). Exit code 1 on errors.
         var check = Array.FindIndex(args, static arg => string.Equals(arg, "--check-plugin", StringComparison.OrdinalIgnoreCase));
