@@ -24,7 +24,7 @@ public class DeviceHostServiceTests
         return (host, plugin, action, store);
     }
 
-    [Fact]
+    [Test]
     public async Task The_host_counts_inputs_and_images_per_device()
     {
         var (host, plugin, _, store) = Create();
@@ -35,15 +35,15 @@ public class DeviceHostServiceTests
         plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1);
         await host.WhenIdleAsync();
 
-        var statistics = Assert.Single(host.DeviceStatistics);
-        Assert.Equal(FakeDevicePlugin.DeviceId, statistics.DeviceId);
-        Assert.Equal(1, statistics.Inputs);
-        Assert.NotNull(statistics.LastInput);
-        Assert.True(statistics.FramesSent >= 2);
-        Assert.Equal(0, statistics.FrameFailures);
+        var statistics = Expect.Single(host.DeviceStatistics);
+        Assert.That(statistics.DeviceId, Is.EqualTo(FakeDevicePlugin.DeviceId));
+        Assert.That(statistics.Inputs, Is.EqualTo(1));
+        Assert.That(statistics.LastInput, Is.Not.Null);
+        Assert.That(statistics.FramesSent >= 2, Is.True);
+        Assert.That(statistics.FrameFailures, Is.EqualTo(0));
     }
 
-    [Fact]
+    [Test]
     public async Task Start_pushes_every_control_with_an_image_once()
     {
         var (host, plugin, _, store) = Create();
@@ -53,10 +53,10 @@ public class DeviceHostServiceTests
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
 
-        Assert.Equal(["key.0", "key.1"], plugin.PushedImages.Order());
+        Assert.That(plugin.PushedImages.Order(), Is.EqualTo(new[] { "key.0", "key.1" }));
     }
 
-    [Fact]
+    [Test]
     public async Task Input_is_queued_for_the_worker_and_pushes_only_changed_controls()
     {
         var (host, plugin, action, store) = Create();
@@ -81,18 +81,18 @@ public class DeviceHostServiceTests
         reportReturned.Set();
         await host.WhenIdleAsync();
 
-        Assert.Single(action.Executions);
-        Assert.True(ranAfterReportReturned);
-        Assert.Equal(["key.0"], plugin.PushedImages);
+        Assert.That(action.Executions, Has.Exactly(1).Items);
+        Assert.That(ranAfterReportReturned, Is.True);
+        Assert.That(plugin.PushedImages, Is.EqualTo(new[] { "key.0" }));
 
         // Nothing changed visually: no further pushes.
         plugin.PushedImages.Clear();
         host.SetActiveProfile("profile");
         await host.WhenIdleAsync();
-        Assert.Empty(plugin.PushedImages);
+        Assert.That(plugin.PushedImages, Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task Light_feedback_sets_active_color_then_returns_to_idle()
     {
         var (host, plugin, _, store) = Create(new RgbFeedback("FF0000", "0000FF", 50));
@@ -100,19 +100,19 @@ public class DeviceHostServiceTests
         using var __ = store;
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
-        Assert.Contains(("encoder.0", (byte)0, (byte)0, (byte)255), plugin.Lights);
+        Assert.That(plugin.Lights, Does.Contain(("encoder.0", (byte)0, (byte)0, (byte)255)));
         plugin.Lights.Clear();
 
         plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "encoder.0", InputCapabilities.Rotate, 1);
         await host.WhenIdleAsync();
-        Assert.Equal([("encoder.0", (byte)255, (byte)0, (byte)0)], plugin.Lights);
+        Assert.That(plugin.Lights, Is.EqualTo(new[] { ("encoder.0", (byte)255, (byte)0, (byte)0) }));
 
         await Task.Delay(300);
         await host.WhenIdleAsync();
-        Assert.Equal(("encoder.0", (byte)0, (byte)0, (byte)255), plugin.Lights.Last());
+        Assert.That(plugin.Lights.Last(), Is.EqualTo(("encoder.0", (byte)0, (byte)0, (byte)255)));
     }
 
-    [Fact]
+    [Test]
     public async Task Disconnected_devices_are_not_rendered_until_they_connect()
     {
         var (host, plugin, _, store) = Create(connected: false);
@@ -120,7 +120,7 @@ public class DeviceHostServiceTests
         using var __ = store;
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
-        Assert.Empty(plugin.PushedImages);
+        Assert.That(plugin.PushedImages, Is.Empty);
 
         var devicesChanged = new TaskCompletionSource();
         host.DevicesChanged += () => devicesChanged.TrySetResult();
@@ -128,11 +128,11 @@ public class DeviceHostServiceTests
         await devicesChanged.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await host.WhenIdleAsync();
 
-        Assert.Equal(2, plugin.PushedImages.Count);
-        Assert.True(Assert.Single(host.Devices).IsConnected);
+        Assert.That(plugin.PushedImages.Count, Is.EqualTo(2));
+        Assert.That(Expect.Single(host.Devices).IsConnected, Is.True);
     }
 
-    [Fact]
+    [Test]
     public async Task Dispose_clears_the_device_and_disposes_plugins()
     {
         var (host, plugin, _, store) = Create();
@@ -141,11 +141,11 @@ public class DeviceHostServiceTests
 
         await host.DisposeAsync();
 
-        Assert.Equal(1, plugin.ClearCount);
-        Assert.True(plugin.Disposed);
+        Assert.That(plugin.ClearCount, Is.EqualTo(1));
+        Assert.That(plugin.Disposed, Is.True);
     }
 
-    [Fact]
+    [Test]
     public async Task Log_buffer_is_bounded()
     {
         var (host, plugin, _, store) = Create();
@@ -161,7 +161,7 @@ public class DeviceHostServiceTests
             plugin.Context!.Log("Info", $"message {i}");
         }
 
-        Assert.True(host.RuntimeLogs.Count <= 500);
-        Assert.Equal("message 1999", host.RuntimeLogs.Last().Message);
+        Assert.That(host.RuntimeLogs.Count <= 500, Is.True);
+        Assert.That(host.RuntimeLogs.Last().Message, Is.EqualTo("message 1999"));
     }
 }

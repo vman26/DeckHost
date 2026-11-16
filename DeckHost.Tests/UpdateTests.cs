@@ -5,45 +5,42 @@ using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
-using Xunit;
 
 namespace DeckHost.Tests;
 
 public sealed class SemanticVersionTests
 {
-    [Theory]
-    [InlineData("1.4.0", "1.3.9")]
-    [InlineData("1.4.0", "1.4.0-rc.1")]
-    [InlineData("1.4.0-rc.1", "1.4.0-beta.5")]
-    [InlineData("1.4.0-alpha.10", "1.4.0-alpha.9")]
-    [InlineData("1.4.0-alpha.1", "1.4.0-alpha")]
-    [InlineData("1.4.0-alpha.beta", "1.4.0-alpha.1")]
-    [InlineData("2.0.0", "1.99.99")]
-    [InlineData("v1.3.1", "1.3.0+4b09090")]
+    [TestCase("1.4.0", "1.3.9")]
+    [TestCase("1.4.0", "1.4.0-rc.1")]
+    [TestCase("1.4.0-rc.1", "1.4.0-beta.5")]
+    [TestCase("1.4.0-alpha.10", "1.4.0-alpha.9")]
+    [TestCase("1.4.0-alpha.1", "1.4.0-alpha")]
+    [TestCase("1.4.0-alpha.beta", "1.4.0-alpha.1")]
+    [TestCase("2.0.0", "1.99.99")]
+    [TestCase("v1.3.1", "1.3.0+4b09090")]
     public void Orders_versions_like_SemVer(string newer, string older)
     {
-        Assert.True(SemanticVersion.Parse(newer) > SemanticVersion.Parse(older));
-        Assert.True(SemanticVersion.Parse(older) < SemanticVersion.Parse(newer));
+        Assert.That(SemanticVersion.Parse(newer) > SemanticVersion.Parse(older), Is.True);
+        Assert.That(SemanticVersion.Parse(older) < SemanticVersion.Parse(newer), Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Build_metadata_and_the_v_prefix_are_ignored()
     {
-        Assert.Equal(SemanticVersion.Parse("1.3.0-alpha.3"), SemanticVersion.Parse("v1.3.0-alpha.3+4b09090"));
-        Assert.Equal("1.3.0-alpha.3", SemanticVersion.Parse("1.3.0-alpha.3+4b09090").ToString());
-        Assert.True(SemanticVersion.Parse("1.3.0-alpha.3+abc").IsPrerelease);
-        Assert.Equal("1.2.0", SemanticVersion.Parse("1.2").ToString());
+        Assert.That(SemanticVersion.Parse("v1.3.0-alpha.3+4b09090"), Is.EqualTo(SemanticVersion.Parse("1.3.0-alpha.3")));
+        Assert.That(SemanticVersion.Parse("1.3.0-alpha.3+4b09090").ToString(), Is.EqualTo("1.3.0-alpha.3"));
+        Assert.That(SemanticVersion.Parse("1.3.0-alpha.3+abc").IsPrerelease, Is.True);
+        Assert.That(SemanticVersion.Parse("1.2").ToString(), Is.EqualTo("1.2.0"));
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("latest")]
-    [InlineData("1")]
-    [InlineData("1.2.3.4")]
-    [InlineData("1.2.x")]
-    [InlineData("1.2.3-")]
-    [InlineData("1.2.3-alpha..1")]
-    public void Rejects_what_isnt_a_version(string text) => Assert.False(SemanticVersion.TryParse(text, out _));
+    [TestCase("")]
+    [TestCase("latest")]
+    [TestCase("1")]
+    [TestCase("1.2.3.4")]
+    [TestCase("1.2.x")]
+    [TestCase("1.2.3-")]
+    [TestCase("1.2.3-alpha..1")]
+    public void Rejects_what_isnt_a_version(string text) => Assert.That(SemanticVersion.TryParse(text, out _), Is.False);
 }
 
 public sealed class UpdateCheckerTests : IDisposable
@@ -78,7 +75,7 @@ public sealed class UpdateCheckerTests : IDisposable
         }
     }
 
-    [Fact]
+    [Test]
     public async Task Finds_the_releases_since_the_running_version()
     {
         var checker = new UpdateChecker(new HttpClient(new FakeHandler(request =>
@@ -86,59 +83,58 @@ public sealed class UpdateCheckerTests : IDisposable
 
         var result = await checker.CheckAsync("1.3.0", includePrereleases: false);
 
-        Assert.True(result.IsUpdateAvailable);
-        Assert.Equal(["1.4.0", "1.3.1"], result.Newer.Select(release => release.Version.ToString()));
-        Assert.Equal("1.4.0", result.Latest!.Version.ToString());
+        Assert.That(result.IsUpdateAvailable, Is.True);
+        Assert.That(result.Newer.Select(release => release.Version.ToString()), Is.EqualTo(new[] { "1.4.0", "1.3.1" }));
+        Assert.That(result.Latest!.Version.ToString(), Is.EqualTo("1.4.0"));
 
         // The changelog has every newer release, newest first, with a name for the unnamed one.
         var changelog = result.Changelog;
-        Assert.True(changelog.IndexOf("## DeckHost 1.4.0", StringComparison.Ordinal) < changelog.IndexOf("## DeckHost 1.3.1", StringComparison.Ordinal));
-        Assert.Contains("* Lights", changelog);
-        Assert.Contains("No release notes.", changelog);
-        Assert.DoesNotContain("Old", changelog);
+        Assert.That(changelog.IndexOf("## DeckHost 1.4.0", StringComparison.Ordinal) < changelog.IndexOf("## DeckHost 1.3.1", StringComparison.Ordinal), Is.True);
+        Assert.That(changelog, Does.Contain("* Lights"));
+        Assert.That(changelog, Does.Contain("No release notes."));
+        Assert.That(changelog, Does.Not.Contain("Old"));
     }
 
-    [Fact]
+    [Test]
     public void Prereleases_count_only_when_asked_and_drafts_never()
     {
         var releases = UpdateChecker.ParseReleases(Releases);
-        Assert.DoesNotContain(releases, release => release.Tag is "v1.6.0" or "nightly");
+        Assert.That(releases.Any(release => release.Tag is "v1.6.0" or "nightly"), Is.False);
 
         var stable = UpdateChecker.Evaluate(SemanticVersion.Parse("1.4.0"), releases, includePrereleases: false);
-        Assert.False(stable.IsUpdateAvailable);
+        Assert.That(stable.IsUpdateAvailable, Is.False);
 
         var preview = UpdateChecker.Evaluate(SemanticVersion.Parse("1.4.0"), releases, includePrereleases: true);
-        Assert.Equal("1.5.0-alpha.2", Assert.Single(preview.Newer).Version.ToString());
+        Assert.That(Expect.Single(preview.Newer).Version.ToString(), Is.EqualTo("1.5.0-alpha.2"));
 
         // A pre-release build is offered its release.
         var alpha = UpdateChecker.Evaluate(SemanticVersion.Parse("1.4.0-alpha.7+4b09090"), releases, includePrereleases: false);
-        Assert.Equal("1.4.0", alpha.Newer[0].Version.ToString());
+        Assert.That(alpha.Newer[0].Version.ToString(), Is.EqualTo("1.4.0"));
     }
 
-    [Theory]
-    [InlineData("win-x64", "DeckHost-1.4.0-win-x64-setup.exe")]
-    [InlineData("linux-x64", "DeckHost-1.4.0-linux-x64.tar.gz")]
-    [InlineData("osx-arm64", "DeckHost-1.4.0-osx-arm64.zip")]
-    [InlineData("linux-arm64", null)]
+    [TestCase("win-x64", "DeckHost-1.4.0-win-x64-setup.exe")]
+    [TestCase("linux-x64", "DeckHost-1.4.0-linux-x64.tar.gz")]
+    [TestCase("osx-arm64", "DeckHost-1.4.0-osx-arm64.zip")]
+    [TestCase("linux-arm64", null)]
     public void Picks_the_package_for_the_platform(string rid, string? expected)
     {
         var release = UpdateChecker.ParseReleases(Releases).Single(release => release.Tag == "v1.4.0");
-        Assert.Equal(expected, UpdateChecker.SelectAsset(release, rid)?.Name);
+        Assert.That(UpdateChecker.SelectAsset(release, rid)?.Name, Is.EqualTo(expected));
     }
 
-    [Fact]
+    [Test]
     public async Task Reports_problems_plainly()
     {
         var offline = new UpdateChecker(new HttpClient(new FakeHandler(_ => throw new HttpRequestException("No such host"))));
-        Assert.Contains("Couldn't reach GitHub", (await Assert.ThrowsAsync<UpdateException>(() => offline.CheckAsync("1.3.0", false))).Message);
+        Assert.That((Assert.ThrowsAsync<UpdateException>(() => offline.CheckAsync("1.3.0", false))).Message, Does.Contain("Couldn't reach GitHub"));
 
         var limited = new UpdateChecker(new HttpClient(new FakeHandler(_ => null, HttpStatusCode.Forbidden, ("X-RateLimit-Remaining", "0"))));
-        Assert.Contains("try again in an hour", (await Assert.ThrowsAsync<UpdateException>(() => limited.CheckAsync("1.3.0", false))).Message);
+        Assert.That((Assert.ThrowsAsync<UpdateException>(() => limited.CheckAsync("1.3.0", false))).Message, Does.Contain("try again in an hour"));
 
-        await Assert.ThrowsAsync<UpdateException>(() => offline.CheckAsync("dev build", false));
+        Assert.ThrowsAsync<UpdateException>(() => offline.CheckAsync("dev build", false));
     }
 
-    [Fact]
+    [Test]
     public async Task Downloads_and_verifies_the_package()
     {
         var package = Encoding.UTF8.GetBytes("the new DeckHost");
@@ -154,11 +150,11 @@ public sealed class UpdateCheckerTests : IDisposable
 
         var path = await checker.DownloadAsync(release, release.Assets[0], _directory, new SyncProgress(reported.Add));
 
-        Assert.Equal(package, await File.ReadAllBytesAsync(path));
-        Assert.Equal(1d, reported[^1]);
+        Assert.That(await File.ReadAllBytesAsync(path), Is.EqualTo(package));
+        Assert.That(reported[^1], Is.EqualTo(1d));
     }
 
-    [Fact]
+    [Test]
     public async Task A_damaged_download_is_deleted()
     {
         var release = Release(("DeckHost-1.4.0-linux-x64.tar.gz", "https://example.com/linux.tar.gz"), ("SHA256SUMS.txt", "https://example.com/sums"));
@@ -166,18 +162,18 @@ public sealed class UpdateCheckerTests : IDisposable
             ? Encoding.UTF8.GetBytes($"{new string('a', 64)}  DeckHost-1.4.0-linux-x64.tar.gz\n")
             : "tampered"u8.ToArray())));
 
-        var error = await Assert.ThrowsAsync<UpdateException>(() => checker.DownloadAsync(release, release.Assets[0], _directory, null));
+        var error = Assert.ThrowsAsync<UpdateException>(() => checker.DownloadAsync(release, release.Assets[0], _directory, null));
 
-        Assert.Contains("damaged", error.Message);
-        Assert.Empty(Directory.GetFiles(_directory));
+        Assert.That(error.Message, Does.Contain("damaged"));
+        Assert.That(Directory.GetFiles(_directory), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void Reads_sha256sum_output()
     {
         var hash = new string('b', 64);
-        Assert.Equal(hash, UpdateChecker.FindChecksum($"{hash} *DeckHost-setup.exe\r\n", "DeckHost-setup.exe"));
-        Assert.Null(UpdateChecker.FindChecksum($"{hash}  DeckHost-setup.exe.sig\n", "DeckHost-setup.exe"));
+        Assert.That(UpdateChecker.FindChecksum($"{hash} *DeckHost-setup.exe\r\n", "DeckHost-setup.exe"), Is.EqualTo(hash));
+        Assert.That(UpdateChecker.FindChecksum($"{hash}  DeckHost-setup.exe.sig\n", "DeckHost-setup.exe"), Is.Null);
     }
 
     private static ReleaseInfo Release(params (string Name, string Url)[] assets) => new(
@@ -214,35 +210,35 @@ public sealed class UpdateViewModelTests
 
     private AppSettingsData _settings = new();
 
-    [Fact]
+    [Test]
     public async Task Announces_an_update_until_it_is_skipped()
     {
         var updates = Create("1.3.0");
 
         await updates.CheckAsync(manual: false);
 
-        Assert.True(updates.IsUpdateAvailable);
-        Assert.True(updates.ShowBanner);
-        Assert.Equal("DeckHost 1.4.0 is available", updates.AvailableTitle);
-        Assert.NotNull(_settings.LastUpdateCheck);
+        Assert.That(updates.IsUpdateAvailable, Is.True);
+        Assert.That(updates.ShowBanner, Is.True);
+        Assert.That(updates.AvailableTitle, Is.EqualTo("DeckHost 1.4.0 is available"));
+        Assert.That(_settings.LastUpdateCheck, Is.Not.Null);
 
         updates.SkipCommand.Execute(null);
-        Assert.False(updates.ShowBanner);
-        Assert.Equal("1.4.0", _settings.SkippedVersion);
+        Assert.That(updates.ShowBanner, Is.False);
+        Assert.That(_settings.SkippedVersion, Is.EqualTo("1.4.0"));
 
         // Next start: still skipped.
         var restarted = Create("1.3.0");
         await restarted.CheckAsync(manual: false);
-        Assert.True(restarted.IsSkipped);
-        Assert.False(restarted.ShowBanner);
+        Assert.That(restarted.IsSkipped, Is.True);
+        Assert.That(restarted.ShowBanner, Is.False);
 
         // Checking by hand shows it again.
         await restarted.CheckAsync(manual: true);
-        Assert.True(restarted.ShowBanner);
-        Assert.Null(_settings.SkippedVersion);
+        Assert.That(restarted.ShowBanner, Is.True);
+        Assert.That(_settings.SkippedVersion, Is.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task Later_hides_the_notice_for_this_session_only()
     {
         var updates = Create("1.3.0");
@@ -250,28 +246,28 @@ public sealed class UpdateViewModelTests
 
         updates.LaterCommand.Execute(null);
 
-        Assert.False(updates.ShowBanner);
-        Assert.True(updates.IsUpdateAvailable);
-        Assert.Null(_settings.SkippedVersion);
+        Assert.That(updates.ShowBanner, Is.False);
+        Assert.That(updates.IsUpdateAvailable, Is.True);
+        Assert.That(_settings.SkippedVersion, Is.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task Prereleases_are_offered_to_prerelease_builds_by_default()
     {
         var stable = Create("1.4.0");
         await stable.CheckAsync(manual: true);
-        Assert.False(stable.IncludePrereleases);
-        Assert.False(stable.IsUpdateAvailable);
-        Assert.StartsWith("DeckHost is up to date", stable.Status);
+        Assert.That(stable.IncludePrereleases, Is.False);
+        Assert.That(stable.IsUpdateAvailable, Is.False);
+        Assert.That(stable.Status, Does.StartWith("DeckHost is up to date"));
 
         var beta = Create("1.4.0-alpha.3+4b09090");
-        Assert.True(beta.IncludePrereleases);
+        Assert.That(beta.IncludePrereleases, Is.True);
         await beta.CheckAsync(manual: true);
-        Assert.Equal("1.4.1-beta.1", beta.Latest!.Version.ToString());
-        Assert.Equal("You have 1.4.0-alpha.3+4b09090. 2 releases since then.", beta.AvailableSummary);
+        Assert.That(beta.Latest!.Version.ToString(), Is.EqualTo("1.4.1-beta.1"));
+        Assert.That(beta.AvailableSummary, Is.EqualTo("You have 1.4.0-alpha.3+4b09090. 2 releases since then."));
     }
 
-    [Fact]
+    [Test]
     public async Task Settings_are_saved_and_errors_reported_only_when_asked()
     {
         var updates = new UpdateViewModel(
@@ -283,17 +279,17 @@ public sealed class UpdateViewModelTests
         updates.CheckAutomatically = false;
         updates.IncludePrereleases = true;
         updates.InstallAutomatically = true;
-        Assert.False(_settings.CheckForUpdates);
-        Assert.True(_settings.IncludePrereleases);
-        Assert.True(_settings.InstallUpdatesAutomatically);
-        Assert.False(updates.IsReadyToInstallOnExit);
+        Assert.That(_settings.CheckForUpdates, Is.False);
+        Assert.That(_settings.IncludePrereleases, Is.True);
+        Assert.That(_settings.InstallUpdatesAutomatically, Is.True);
+        Assert.That(updates.IsReadyToInstallOnExit, Is.False);
 
         var before = updates.Status;
         await updates.CheckAsync(manual: false);
-        Assert.Equal(before, updates.Status);
+        Assert.That(updates.Status, Is.EqualTo(before));
 
         await updates.CheckAsync(manual: true);
-        Assert.Contains("Couldn't reach GitHub", updates.Status);
+        Assert.That(updates.Status, Does.Contain("Couldn't reach GitHub"));
     }
 
     private UpdateViewModel Create(string version) => new(
@@ -305,13 +301,12 @@ public sealed class UpdateViewModelTests
 
 public sealed class UpdateInstallerTests
 {
-    [Fact]
+    [Test]
     public void Quotes_paths_for_PowerShell() =>
-        Assert.Equal("'C:\\Users\\O''Brien\\setup.exe'", UpdateInstaller.Quote("C:\\Users\\O'Brien\\setup.exe"));
+        Assert.That(UpdateInstaller.Quote("C:\\Users\\O'Brien\\setup.exe"), Is.EqualTo("'C:\\Users\\O''Brien\\setup.exe'"));
 
-    [Theory]
-    [InlineData("DeckHost.App", true)]
-    [InlineData("none", false)]
+    [TestCase("DeckHost.App", true)]
+    [TestCase("none", false)]
     public void The_swap_script_replaces_the_install_and_starts_it_unless_told_not_to(string launch, bool startsAgain)
     {
         if (OperatingSystem.IsWindows())
@@ -340,18 +335,18 @@ public sealed class UpdateInstallerTests
             using var exited = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", "exit 0" } })!;
             exited.WaitForExit();
             using var helper = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { script, exited.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), source, target, launch } })!;
-            Assert.True(helper.WaitForExit(10_000));
+            Assert.That(helper.WaitForExit(10_000), Is.True);
 
-            Assert.Equal("1.4.0", File.ReadAllText(Path.Combine(target, "version.txt")));
-            Assert.False(File.Exists(Path.Combine(target, "old-only.dll")));
-            Assert.False(Directory.Exists(target + ".update-backup"));
+            Assert.That(File.ReadAllText(Path.Combine(target, "version.txt")), Is.EqualTo("1.4.0"));
+            Assert.That(File.Exists(Path.Combine(target, "old-only.dll")), Is.False);
+            Assert.That(Directory.Exists(target + ".update-backup"), Is.False);
             var end = DateTime.UtcNow.AddSeconds(startsAgain ? 10 : 1);
             while (!File.Exists(started) && DateTime.UtcNow < end)
             {
                 Thread.Sleep(50);
             }
 
-            Assert.Equal(startsAgain, File.Exists(started));
+            Assert.That(File.Exists(started), Is.EqualTo(startsAgain));
         }
         finally
         {

@@ -17,10 +17,10 @@ namespace DeckHost.Tests;
 /// </summary>
 public class ReferenceDocsTests
 {
-    [Fact]
+    [Test]
     public void The_built_in_actions_reference_is_up_to_date() => Check("actions.md", ActionsReference());
 
-    [Fact]
+    [Test]
     public void The_plugin_API_reference_is_up_to_date() => Check("api.md", ApiReference());
 
     private static void Check(string name, string generated)
@@ -33,8 +33,10 @@ public class ReferenceDocsTests
             return;
         }
 
-        Assert.True(File.Exists(path), $"docs/reference/{name} is missing: run the tests once with UPDATE_DOCS=1.");
-        Assert.True(File.ReadAllText(path).ReplaceLineEndings("\n") == generated,
+        Assert.That(File.Exists(path), Is.True, $"docs/reference/{name} is missing: run the tests once with UPDATE_DOCS=1.");
+        Assert.That(
+            File.ReadAllText(path).ReplaceLineEndings("\n") == generated,
+            Is.True,
             $"docs/reference/{name} is out of date: run the tests once with UPDATE_DOCS=1.");
     }
 

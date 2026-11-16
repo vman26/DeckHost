@@ -28,47 +28,47 @@ public class ArchitectureTests
     private static string[] DeckHostReferences(Assembly assembly) =>
         [.. References(assembly).Where(static name => name.StartsWith("DeckHost.", StringComparison.Ordinal)).Order()];
 
-    [Fact]
+    [Test]
     public void Contracts_depends_on_nothing_of_DeckHost_and_on_no_UI_or_drawing_library()
     {
-        Assert.Empty(DeckHostReferences(Contracts));
-        Assert.DoesNotContain(References(Contracts), static name => name.StartsWith("Avalonia", StringComparison.Ordinal) || name.StartsWith("SkiaSharp", StringComparison.Ordinal));
+        Assert.That(DeckHostReferences(Contracts), Is.Empty);
+        Assert.That(References(Contracts).Any(static name => name.StartsWith("Avalonia", StringComparison.Ordinal) || name.StartsWith("SkiaSharp", StringComparison.Ordinal)), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Core_depends_only_on_Contracts_and_never_on_a_device_plugin_or_the_UI()
     {
-        Assert.Equal(["DeckHost.Contracts"], DeckHostReferences(Core));
-        Assert.DoesNotContain(References(Core), static name => name.StartsWith("Avalonia", StringComparison.Ordinal) || name.StartsWith("HidSharp", StringComparison.Ordinal));
+        Assert.That(DeckHostReferences(Core), Is.EqualTo(new[] { "DeckHost.Contracts" }));
+        Assert.That(References(Core).Any(static name => name.StartsWith("Avalonia", StringComparison.Ordinal) || name.StartsWith("HidSharp", StringComparison.Ordinal)), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Device_plugins_depend_only_on_Contracts()
     {
         foreach (var plugin in DevicePlugins)
         {
-            Assert.True(DeckHostReferences(plugin).SequenceEqual(["DeckHost.Contracts"]), $"{plugin.GetName().Name} references {string.Join(", ", DeckHostReferences(plugin))}");
-            Assert.DoesNotContain(References(plugin), static name => name.StartsWith("Avalonia", StringComparison.Ordinal));
+            Assert.That(DeckHostReferences(plugin).SequenceEqual(["DeckHost.Contracts"]), Is.True, $"{plugin.GetName().Name} references {string.Join(", ", DeckHostReferences(plugin))}");
+            Assert.That(References(plugin).Any(static name => name.StartsWith("Avalonia", StringComparison.Ordinal)), Is.False);
         }
     }
 
-    [Fact]
+    [Test]
     public void Every_device_plugin_implements_IDevicePlugin()
     {
         foreach (var plugin in DevicePlugins)
         {
-            Assert.Contains(plugin.GetExportedTypes(), static type => typeof(IDevicePlugin).IsAssignableFrom(type) && !type.IsAbstract);
+            Assert.That(plugin.GetExportedTypes().Any(static type => typeof(IDevicePlugin).IsAssignableFrom(type) && !type.IsAbstract), Is.True);
         }
     }
 
-    [Fact]
+    [Test]
     public void The_app_is_the_only_assembly_that_knows_the_device_plugins()
     {
         var names = DevicePlugins.Select(static plugin => plugin.GetName().Name).ToHashSet();
-        Assert.Contains(DeckHostReferences(App), name => names.Contains(name));
+        Assert.That(DeckHostReferences(App).Any(name => names.Contains(name)), Is.True);
         foreach (var assembly in DevicePlugins.Append(Core).Append(Contracts))
         {
-            Assert.DoesNotContain(DeckHostReferences(assembly), name => names.Contains(name));
+            Assert.That(DeckHostReferences(assembly).Any(name => names.Contains(name)), Is.False);
         }
     }
 
@@ -79,7 +79,7 @@ public class ArchitectureTests
     /// <c>ContractsApi.txt</c>; additions only need the file updated (run the tests with
     /// <c>UPDATE_API_BASELINE=1</c>).
     /// </summary>
-    [Fact]
+    [Test]
     public void The_plugin_API_only_grows_unless_the_host_API_version_is_bumped()
     {
         var current = DescribeApi(Contracts);
@@ -102,11 +102,13 @@ public class ArchitectureTests
         var newAbstract = now.Skip(1).Where(line => line.EndsWith(" abstract", StringComparison.Ordinal) && !before.Contains(line) &&
             before.Contains("interface " + line.Trim().Split(' ')[0][..line.Trim().Split(' ')[0].LastIndexOf('.')]));
         var breaking = removed.Concat(newAbstract).ToList();
-        Assert.True(breaking.Count == 0 || versionChanged,
+        Assert.That(
+            breaking.Count == 0 || versionChanged,
+            Is.True,
             "Breaking change to the plugin API: bump PluginManifest.CurrentHostApiVersion, then run the tests with UPDATE_API_BASELINE=1.\n  " + string.Join("\n  ", breaking));
 
         var added = now.Skip(1).Where(line => line.Length > 0 && !before.Contains(line)).ToList();
-        Assert.True(added.Count == 0 && !versionChanged, "The plugin API changed: run the tests once with UPDATE_API_BASELINE=1 to update ContractsApi.txt.\n  " + string.Join("\n  ", added));
+        Assert.That(added.Count == 0 && !versionChanged, Is.True, "The plugin API changed: run the tests once with UPDATE_API_BASELINE=1 to update ContractsApi.txt.\n  " + string.Join("\n  ", added));
     }
 
     /// <summary>One line per public member; interface members without a body are marked "abstract".</summary>

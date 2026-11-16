@@ -57,21 +57,21 @@ public sealed class PagesAndFoldersTests : IAsyncDisposable
     private DeviceProfile Folder(string id, string parent, params ControlBinding[] bindings) =>
         new DeviceProfile(id, id, Device, bindings) { ParentId = parent, Kind = ProfileKinds.Folder };
 
-    [Fact]
+    [Test]
     public async Task The_pages_action_flips_through_the_pages_and_wraps_around()
     {
         var next = Builtin("key.0", "builtin.page", ("mode", "next"));
         await Start(Profile("p1", next), Page("p2", "p1", next), Page("p3", "p1", next), Profile("other"));
 
         await Press("key.0");
-        Assert.Equal("p2", _active);
+        Assert.That(_active, Is.EqualTo("p2"));
         await Press("key.0");
-        Assert.Equal("p3", _active);
+        Assert.That(_active, Is.EqualTo("p3"));
         await Press("key.0");
-        Assert.Equal("p1", _active);
+        Assert.That(_active, Is.EqualTo("p1"));
     }
 
-    [Fact]
+    [Test]
     public async Task A_specific_page_and_the_previous_page()
     {
         await Start(
@@ -80,26 +80,26 @@ public sealed class PagesAndFoldersTests : IAsyncDisposable
             Page("p3", "p1", Builtin("key.0", "builtin.page", ("mode", "previous"))));
 
         await Press("key.0");
-        Assert.Equal("p3", _active);
+        Assert.That(_active, Is.EqualTo("p3"));
         await Press("key.0");
-        Assert.Equal("p2", _active);
+        Assert.That(_active, Is.EqualTo("p2"));
     }
 
-    [Fact]
+    [Test]
     public async Task Swiping_a_strip_without_an_action_flips_pages_like_a_phone()
     {
         await Start(Profile("p1"), Page("p2", "p1"));
 
         _host.SimulateInput(new DeviceInputEvent(Device, "key.1", InputCapabilities.Swipe, -1));
         await _host.WhenIdleAsync();
-        Assert.Equal("p2", _active);
+        Assert.That(_active, Is.EqualTo("p2"));
 
         _host.SimulateInput(new DeviceInputEvent(Device, "key.1", InputCapabilities.Swipe, 1));
         await _host.WhenIdleAsync();
-        Assert.Equal("p1", _active);
+        Assert.That(_active, Is.EqualTo("p1"));
     }
 
-    [Fact]
+    [Test]
     public async Task A_folder_opens_and_its_back_key_returns_to_the_page_it_was_opened_from()
     {
         await Start(
@@ -111,16 +111,16 @@ public sealed class PagesAndFoldersTests : IAsyncDisposable
         await _host.WhenIdleAsync();
 
         await Press("key.1");
-        Assert.Equal("f1", _active);
+        Assert.That(_active, Is.EqualTo("f1"));
         await Press("key.1");
-        Assert.Equal("f2", _active); // a folder in a folder
+        Assert.That(_active, Is.EqualTo("f2")); // a folder in a folder
         await Press("key.0");
-        Assert.Equal("f1", _active);
+        Assert.That(_active, Is.EqualTo("f1"));
         await Press("key.0");
-        Assert.Equal("p2", _active);
+        Assert.That(_active, Is.EqualTo("p2"));
     }
 
-    [Fact]
+    [Test]
     public async Task Next_page_inside_a_folder_goes_to_the_page_after_the_folders_page()
     {
         await Start(
@@ -128,13 +128,13 @@ public sealed class PagesAndFoldersTests : IAsyncDisposable
             Page("p2", "p1"),
             Folder("f1", "p1", Builtin("key.0", "builtin.page", ("mode", "next"))));
         await Press("key.1");
-        Assert.Equal("f1", _active);
+        Assert.That(_active, Is.EqualTo("f1"));
 
         await Press("key.0");
-        Assert.Equal("p2", _active);
+        Assert.That(_active, Is.EqualTo("p2"));
     }
 
-    [Fact]
+    [Test]
     public async Task Switching_profiles_skips_pages_and_folders()
     {
         var switchNext = Builtin("key.0", "builtin.switch-profile", ("mode", "next"));
@@ -143,24 +143,24 @@ public sealed class PagesAndFoldersTests : IAsyncDisposable
         await _host.WhenIdleAsync();
 
         await Press("key.0");
-        Assert.Equal("b", _active);
+        Assert.That(_active, Is.EqualTo("b"));
         await Press("key.0");
-        Assert.Equal("a", _active); // a profile starts on its first page
+        Assert.That(_active, Is.EqualTo("a")); // a profile starts on its first page
     }
 
-    [Fact]
+    [Test]
     public void Layouts_keep_their_kind_and_parent_when_saved()
     {
         var page = Page("p2", "p1");
         var json = System.Text.Json.JsonSerializer.Serialize(page);
         var loaded = System.Text.Json.JsonSerializer.Deserialize<DeviceProfile>(json)!;
 
-        Assert.Equal((ProfileKinds.Page, "p1"), (loaded.Kind, loaded.ParentId));
-        Assert.False(loaded.IsRoot);
-        Assert.True(Profile("p1").IsRoot);
+        Assert.That((loaded.Kind, loaded.ParentId), Is.EqualTo((ProfileKinds.Page, "p1")));
+        Assert.That(loaded.IsRoot, Is.False);
+        Assert.That(Profile("p1").IsRoot, Is.True);
     }
 
-    [Fact]
+    [Test]
     public void The_settings_editor_keeps_values_it_doesnt_show()
     {
         var folder = (FolderAction)_builtIns.Actions.First(action => action.Id == FolderAction.ActionId);
@@ -171,8 +171,8 @@ public sealed class PagesAndFoldersTests : IAsyncDisposable
         editor.Fields.First(field => field.Definition.Key == FolderAction.NameKey).Value = "Audio";
         var saved = editor.ToSettings();
 
-        Assert.Equal("f1", saved.Get(FolderAction.FolderIdKey));
-        Assert.Equal("x", saved.Get("plugin.private"));
-        Assert.Equal("Audio", saved.Get(FolderAction.NameKey));
+        Assert.That(saved.Get(FolderAction.FolderIdKey), Is.EqualTo("f1"));
+        Assert.That(saved.Get("plugin.private"), Is.EqualTo("x"));
+        Assert.That(saved.Get(FolderAction.NameKey), Is.EqualTo("Audio"));
     }
 }

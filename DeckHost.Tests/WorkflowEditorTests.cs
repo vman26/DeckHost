@@ -27,7 +27,7 @@ public class WorkflowEditorTests
         return (editor, stored);
     }
 
-    [Fact]
+    [Test]
     public void An_action_added_with_a_node_selected_is_linked_after_it_and_stored_on_the_control()
     {
         var (editor, stored) = Editor();
@@ -35,53 +35,53 @@ public class WorkflowEditorTests
 
         var node = editor.AddAction(Item("Mute"))!;
 
-        Assert.Equal(new WorkflowLink("n1", WorkflowPorts.Next, node.Id), Assert.Single(editor.Workflow.Links));
-        Assert.Equal(editor.Workflow, stored[^1]);
-        Assert.Equal(node.Id, editor.SelectedNode?.Id);
-        Assert.True(editor.SelectedIsAction);
-        Assert.Contains("1 action", editor.Overview);
+        Assert.That(Expect.Single(editor.Workflow.Links), Is.EqualTo(new WorkflowLink("n1", WorkflowPorts.Next, node.Id)));
+        Assert.That(stored[^1], Is.EqualTo(editor.Workflow));
+        Assert.That(editor.SelectedNode?.Id, Is.EqualTo(node.Id));
+        Assert.That(editor.SelectedIsAction, Is.True);
+        Assert.That(editor.Overview, Does.Contain("1 action"));
     }
 
-    [Fact]
+    [Test]
     public void Links_into_a_trigger_loops_and_duplicates_are_refused()
     {
         var (editor, _) = Editor();
         var a = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
         var b = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
 
-        Assert.Null(editor.Connect("n1", WorkflowPorts.Next, a.Id));
-        Assert.Null(editor.Connect(a.Id, WorkflowPorts.Next, b.Id));
-        Assert.NotNull(editor.Connect(a.Id, WorkflowPorts.Next, b.Id));          // already linked
-        Assert.NotNull(editor.Connect(b.Id, WorkflowPorts.Next, a.Id));          // a loop
-        Assert.NotNull(editor.Connect(b.Id, WorkflowPorts.Next, "n1"));          // into a When node
-        Assert.NotNull(editor.Connect(a.Id, WorkflowPorts.Yes, b.Id));           // a Wait has no Yes
-        Assert.Equal(2, editor.Workflow.Links.Count);
+        Assert.That(editor.Connect("n1", WorkflowPorts.Next, a.Id), Is.Null);
+        Assert.That(editor.Connect(a.Id, WorkflowPorts.Next, b.Id), Is.Null);
+        Assert.That(editor.Connect(a.Id, WorkflowPorts.Next, b.Id), Is.Not.Null);          // already linked
+        Assert.That(editor.Connect(b.Id, WorkflowPorts.Next, a.Id), Is.Not.Null);          // a loop
+        Assert.That(editor.Connect(b.Id, WorkflowPorts.Next, "n1"), Is.Not.Null);          // into a When node
+        Assert.That(editor.Connect(a.Id, WorkflowPorts.Yes, b.Id), Is.Not.Null);           // a Wait has no Yes
+        Assert.That(editor.Workflow.Links.Count, Is.EqualTo(2));
     }
 
-    [Fact]
+    [Test]
     public void Undo_and_redo_step_through_edits_and_quick_setting_edits_merge()
     {
         var (editor, stored) = Editor();
         var wait = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
         editor.SelectNode(wait.Id);
-        var field = Assert.IsType<NumberSettingField>(editor.NodeSettings!.Fields.Single());
+        var field = Expect.IsType<NumberSettingField>(editor.NodeSettings!.Fields.Single());
         field.Value = "700";
         field.Value = "800";   // merges with the edit before
 
-        Assert.Equal("800", editor.Workflow.Find(wait.Id)!.EffectiveSettings.Get(WorkflowKeys.Milliseconds));
+        Assert.That(editor.Workflow.Find(wait.Id)!.EffectiveSettings.Get(WorkflowKeys.Milliseconds), Is.EqualTo("800"));
         editor.UndoCommand.Execute(null);
-        Assert.Equal("500", editor.Workflow.Find(wait.Id)!.EffectiveSettings.Get(WorkflowKeys.Milliseconds));
+        Assert.That(editor.Workflow.Find(wait.Id)!.EffectiveSettings.Get(WorkflowKeys.Milliseconds), Is.EqualTo("500"));
         editor.UndoCommand.Execute(null);
-        Assert.Null(editor.Workflow.Find(wait.Id));
-        Assert.False(editor.CanUndo);
+        Assert.That(editor.Workflow.Find(wait.Id), Is.Null);
+        Assert.That(editor.CanUndo, Is.False);
 
         editor.RedoCommand.Execute(null);
         editor.RedoCommand.Execute(null);
-        Assert.Equal("800", editor.Workflow.Find(wait.Id)!.EffectiveSettings.Get(WorkflowKeys.Milliseconds));
-        Assert.Equal(editor.Workflow, stored[^1]);
+        Assert.That(editor.Workflow.Find(wait.Id)!.EffectiveSettings.Get(WorkflowKeys.Milliseconds), Is.EqualTo("800"));
+        Assert.That(stored[^1], Is.EqualTo(editor.Workflow));
     }
 
-    [Fact]
+    [Test]
     public void Removing_a_node_takes_its_links_and_revert_brings_back_the_start()
     {
         var start = WorkflowConverter.FromBinding(new ControlBinding("key.0", ProfileActionKind.MultiAction, Item("Multi Action").ToActionReference(), new ControlAppearance(),
@@ -92,12 +92,12 @@ public class WorkflowEditorTests
         editor.SelectNode(mute.Id);
         editor.DeleteSelection();
 
-        Assert.DoesNotContain(editor.Workflow.Links, link => link.From == mute.Id || link.To == mute.Id);
+        Assert.That(editor.Workflow.Links.Any(link => link.From == mute.Id || link.To == mute.Id), Is.False);
         editor.RevertAllCommand.Execute(null);
-        Assert.Equal(start, editor.Workflow);
+        Assert.That(editor.Workflow, Is.EqualTo(start));
     }
 
-    [Fact]
+    [Test]
     public void Arrange_puts_nodes_in_columns_by_their_distance_from_the_trigger()
     {
         var (editor, _) = Editor();
@@ -109,20 +109,20 @@ public class WorkflowEditorTests
         editor.ArrangeCommand.Execute(null);
 
         var x = editor.Workflow.Nodes.ToDictionary(node => node.Id, node => node.X);
-        Assert.True(x["n1"] < x[a.Id] && x[a.Id] < x[b.Id]);
+        Assert.That(x["n1"] < x[a.Id] && x[a.Id] < x[b.Id], Is.True);
     }
 
-    [Fact]
+    [Test]
     public void A_trigger_only_offers_inputs_the_control_has_and_a_lost_control_is_reported()
     {
         var knobless = new PhysicalControl("touch.0", "Touch 1", ControlType.TouchSurface, new Rect(0, 0, 10, 10), InputCapabilities.Press, OutputCapabilities.ColorImage);
         var editor = new WorkflowEditorViewModel("device", "layout", knobless, "Touch 1", WorkflowConverter.Starter(), Actions, _ => false);
         editor.SelectNode("n1");
 
-        var choice = Assert.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.Single());
-        Assert.Equal([WorkflowTriggers.Down], choice.Options.Select(option => option.Value));
+        var choice = Expect.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.Single());
+        Assert.That(choice.Options.Select(option => option.Value), Is.EqualTo(new[] { WorkflowTriggers.Down }));
 
         editor.AddNode(WorkflowNodeKinds.Wait, 0, 0);
-        Assert.Contains("no longer has this workflow", editor.Status);
+        Assert.That(editor.Status, Does.Contain("no longer has this workflow"));
     }
 }

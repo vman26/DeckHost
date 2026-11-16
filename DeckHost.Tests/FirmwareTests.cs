@@ -104,7 +104,7 @@ public sealed class FirmwareTests : IDisposable
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) });
     }
 
-    [Fact]
+    [Test]
     public async Task Installing_pauses_the_device_in_the_host_and_redraws_it_afterwards()
     {
         var device = new FlashableDevice();
@@ -127,15 +127,15 @@ public sealed class FirmwareTests : IDisposable
         var result = await service.InstallAsync(FlashableDevice.DeviceId, new FirmwareImage(file));
         await host.WhenIdleAsync();
 
-        Assert.True(result.Success);
-        Assert.Equal("1.5", service.GetInfo(FlashableDevice.DeviceId)!.Version);
-        Assert.Equal(0, device.PushesWhileWriting);
-        Assert.Equal(0, host.DeviceStatistics.SingleOrDefault()?.Inputs ?? 0);
-        Assert.True(device.Pushes > before);    // redrawn after resuming
+        Assert.That(result.Success, Is.True);
+        Assert.That(service.GetInfo(FlashableDevice.DeviceId)!.Version, Is.EqualTo("1.5"));
+        Assert.That(device.PushesWhileWriting, Is.EqualTo(0));
+        Assert.That(host.DeviceStatistics.SingleOrDefault()?.Inputs ?? 0, Is.EqualTo(0));
+        Assert.That(device.Pushes > before, Is.True);    // redrawn after resuming
         store.Dispose();
     }
 
-    [Fact]
+    [Test]
     public async Task Downloads_must_be_https_and_match_their_checksum()
     {
         var body = "firmware"u8.ToArray();
@@ -143,44 +143,44 @@ public sealed class FirmwareTests : IDisposable
         var service = new FirmwareService([], IdleHost(), new HttpClient(new Handler(body)), _folder);
 
         var image = await service.DownloadAsync(new FirmwareRelease("2.0", new Uri("https://example.test/fw.bin"), sha.ToLowerInvariant()));
-        Assert.Equal("2.0", image.Version);
-        Assert.Equal(body, File.ReadAllBytes(image.Path));
+        Assert.That(image.Version, Is.EqualTo("2.0"));
+        Assert.That(File.ReadAllBytes(image.Path), Is.EqualTo(body));
 
-        await Assert.ThrowsAsync<FirmwareException>(() => service.DownloadAsync(new FirmwareRelease("2.0", new Uri("https://example.test/fw.bin"), null)));
-        await Assert.ThrowsAsync<FirmwareException>(() => service.DownloadAsync(new FirmwareRelease("2.0", new Uri("http://example.test/fw.bin"), sha)));
-        var mismatch = await Assert.ThrowsAsync<FirmwareException>(() => service.DownloadAsync(new FirmwareRelease("2.1", new Uri("https://example.test/fw.bin"), new string('0', 64))));
-        Assert.Contains("checksum", mismatch.Message);
-        Assert.Single(Directory.GetFiles(_folder));    // the bad download was deleted
+        Assert.ThrowsAsync<FirmwareException>(() => service.DownloadAsync(new FirmwareRelease("2.0", new Uri("https://example.test/fw.bin"), null)));
+        Assert.ThrowsAsync<FirmwareException>(() => service.DownloadAsync(new FirmwareRelease("2.0", new Uri("http://example.test/fw.bin"), sha)));
+        var mismatch = Assert.ThrowsAsync<FirmwareException>(() => service.DownloadAsync(new FirmwareRelease("2.1", new Uri("https://example.test/fw.bin"), new string('0', 64))));
+        Assert.That(mismatch.Message, Does.Contain("checksum"));
+        Assert.That(Directory.GetFiles(_folder), Has.Exactly(1).Items);    // the bad download was deleted
     }
 
-    [Fact]
+    [Test]
     public async Task Devices_whose_plugin_cant_install_or_that_are_unplugged_are_refused()
     {
         var device = new FlashableDevice();
         var service = new FirmwareService([device, new FakeDevicePlugin()], IdleHost(), downloadDirectory: _folder);
 
-        Assert.True(service.Supports(FlashableDevice.DeviceId));
-        Assert.False(service.Supports(FakeDevicePlugin.DeviceId));
-        await Assert.ThrowsAsync<FirmwareException>(() => service.InstallAsync(FakeDevicePlugin.DeviceId, new FirmwareImage("x")));
-        await Assert.ThrowsAsync<FirmwareException>(() => service.InstallAsync(FlashableDevice.DeviceId, new FirmwareImage(Path.Combine(_folder, "missing.bin"))));
-        Assert.Equal("2.0", (await service.CheckAsync(FlashableDevice.DeviceId))!.Version);
+        Assert.That(service.Supports(FlashableDevice.DeviceId), Is.True);
+        Assert.That(service.Supports(FakeDevicePlugin.DeviceId), Is.False);
+        Assert.ThrowsAsync<FirmwareException>(() => service.InstallAsync(FakeDevicePlugin.DeviceId, new FirmwareImage("x")));
+        Assert.ThrowsAsync<FirmwareException>(() => service.InstallAsync(FlashableDevice.DeviceId, new FirmwareImage(Path.Combine(_folder, "missing.bin"))));
+        Assert.That((await service.CheckAsync(FlashableDevice.DeviceId))!.Version, Is.EqualTo("2.0"));
     }
 
-    [Fact]
+    [Test]
     public void Stream_Decks_report_their_firmware_version_in_a_feature_report()
     {
         var mk2 = StreamDeckModel.Find(0x0080)!;
         var report = StreamDeckProtocol.FirmwareRequest(mk2);
-        Assert.Equal((0x05, 32), (report[0], report.Length));
+        Assert.That((report[0], report.Length), Is.EqualTo((0x05, 32)));
         "1.01.000"u8.CopyTo(report.AsSpan(6));
-        Assert.Equal("1.01.000", StreamDeckProtocol.FirmwareVersion(mk2, report));
+        Assert.That(StreamDeckProtocol.FirmwareVersion(mk2, report), Is.EqualTo("1.01.000"));
 
         var mini = StreamDeckModel.Find(0x0063)!;
         var old = StreamDeckProtocol.FirmwareRequest(mini);
-        Assert.Equal((0x04, 17), (old[0], old.Length));
+        Assert.That((old[0], old.Length), Is.EqualTo((0x04, 17)));
         "2.03"u8.CopyTo(old.AsSpan(5));
-        Assert.Equal("2.03", StreamDeckProtocol.FirmwareVersion(mini, old));
-        Assert.Null(StreamDeckProtocol.FirmwareVersion(mini, new byte[17]));
+        Assert.That(StreamDeckProtocol.FirmwareVersion(mini, old), Is.EqualTo("2.03"));
+        Assert.That(StreamDeckProtocol.FirmwareVersion(mini, new byte[17]), Is.Null);
     }
 
     private static DeviceHostService IdleHost() => new([], [], new VariableStore());

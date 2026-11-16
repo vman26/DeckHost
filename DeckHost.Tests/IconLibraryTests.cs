@@ -37,7 +37,7 @@ public sealed class IconLibraryTests : IDisposable
         return pack;
     }
 
-    [Fact]
+    [Test]
     public void A_Stream_Deck_icon_pack_installs_from_its_archive()
     {
         var source = Directory.CreateTempSubdirectory("deckhost-pack-src").FullName;
@@ -51,13 +51,13 @@ public sealed class IconLibraryTests : IDisposable
             var pack = library.Install(archive);
             File.Delete(archive);
 
-            Assert.Equal("com.example.lights", pack.Id);
-            Assert.Equal(("Lights", "1.0.1", "Example"), (pack.Name, pack.Version, pack.Author));
-            Assert.Equal("MIT License", pack.LicenseText);
-            Assert.NotNull(pack.PreviewPath);
-            Assert.Equal(["Red Light", "Blue Light", "Unlisted"], pack.Icons.Select(icon => icon.Name));
-            Assert.All(pack.Icons, icon => Assert.True(File.Exists(icon.FilePath)));
-            Assert.DoesNotContain(pack.Icons, icon => icon.Name == "Escapes");
+            Assert.That(pack.Id, Is.EqualTo("com.example.lights"));
+            Assert.That((pack.Name, pack.Version, pack.Author), Is.EqualTo(("Lights", "1.0.1", "Example")));
+            Assert.That(pack.LicenseText, Is.EqualTo("MIT License"));
+            Assert.That(pack.PreviewPath, Is.Not.Null);
+            Assert.That(pack.Icons.Select(icon => icon.Name), Is.EqualTo(new[] { "Red Light", "Blue Light", "Unlisted" }));
+            Expect.All(pack.Icons, icon => Assert.That(File.Exists(icon.FilePath), Is.True));
+            Assert.That(pack.Icons.Any(icon => icon.Name == "Escapes"), Is.False);
         }
         finally
         {
@@ -65,20 +65,20 @@ public sealed class IconLibraryTests : IDisposable
         }
     }
 
-    [Fact]
+    [Test]
     public void A_pack_folder_installs_and_search_uses_names_and_tags()
     {
         var library = new IconLibrary(Path.Combine(_root, "library"));
         library.Install(MakeStreamDeckPack(_root));
 
-        Assert.Equal(["Red Light"], library.Search("red").Select(icon => icon.Name));
-        Assert.Equal(["Blue Light", "Red Light"], library.Search("colour light").Select(icon => icon.Name).Order());
-        Assert.Equal(3, library.Search("").Count);
-        Assert.Empty(library.Search("green"));
-        Assert.Equal("Blue Light", library.Search("blue light").First().Name);
+        Assert.That(library.Search("red").Select(icon => icon.Name), Is.EqualTo(new[] { "Red Light" }));
+        Assert.That(library.Search("colour light").Select(icon => icon.Name).Order(), Is.EqualTo(new[] { "Blue Light", "Red Light" }));
+        Assert.That(library.Search("").Count, Is.EqualTo(3));
+        Assert.That(library.Search("green"), Is.Empty);
+        Assert.That(library.Search("blue light").First().Name, Is.EqualTo("Blue Light"));
     }
 
-    [Fact]
+    [Test]
     public void A_zip_of_images_becomes_a_pack_named_after_the_file()
     {
         var images = Directory.CreateTempSubdirectory("deckhost-images").FullName;
@@ -94,8 +94,8 @@ public sealed class IconLibraryTests : IDisposable
 
             var pack = library.Install(archive);
 
-            Assert.Equal(("my-icons", "My Icons"), (pack.Id, pack.Name));
-            Assert.Equal(["play", "stop"], pack.Icons.Select(icon => icon.Name).Order());
+            Assert.That((pack.Id, pack.Name), Is.EqualTo(("my-icons", "My Icons")));
+            Assert.That(pack.Icons.Select(icon => icon.Name).Order(), Is.EqualTo(new[] { "play", "stop" }));
         }
         finally
         {
@@ -103,7 +103,7 @@ public sealed class IconLibraryTests : IDisposable
         }
     }
 
-    [Fact]
+    [Test]
     public void Installing_again_replaces_and_uninstall_removes()
     {
         var library = new IconLibrary(Path.Combine(_root, "library"));
@@ -112,14 +112,14 @@ public sealed class IconLibraryTests : IDisposable
         File.Delete(Path.Combine(source, "icons", "Unlisted.svg"));
         library.Install(source);
 
-        var pack = Assert.Single(library.Packs);
-        Assert.Equal(2, pack.Icons.Count);
-        Assert.True(library.Uninstall(pack.Id));
-        Assert.Empty(library.Packs);
-        Assert.False(library.Uninstall("../escape"));
+        var pack = Expect.Single(library.Packs);
+        Assert.That(pack.Icons.Count, Is.EqualTo(2));
+        Assert.That(library.Uninstall(pack.Id), Is.True);
+        Assert.That(library.Packs, Is.Empty);
+        Assert.That(library.Uninstall("../escape"), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Something_that_is_no_icon_pack_is_refused()
     {
         var empty = Path.Combine(_root, "empty.zip");
@@ -132,11 +132,11 @@ public sealed class IconLibraryTests : IDisposable
         Assert.Throws<IconPackException>(() => library.Install(empty));
         File.WriteAllText(Path.Combine(_root, "broken.zip"), "not a zip");
         Assert.Throws<IconPackException>(() => library.Install(Path.Combine(_root, "broken.zip")));
-        Assert.Empty(library.Packs);
-        Assert.DoesNotContain(Directory.GetDirectories(Path.Combine(_root, "library")), directory => Path.GetFileName(directory).StartsWith(".staging", StringComparison.Ordinal));
+        Assert.That(library.Packs, Is.Empty);
+        Assert.That(Directory.GetDirectories(Path.Combine(_root, "library")).Any(directory => Path.GetFileName(directory).StartsWith(".staging", StringComparison.Ordinal)), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Downloaded_icons_are_kept_with_their_license()
     {
         var library = new IconLibrary(Path.Combine(_root, "library"));
@@ -146,13 +146,13 @@ public sealed class IconLibraryTests : IDisposable
         library.SaveDownloaded(play, Svg);
         library.SaveDownloaded(play with { Name = "pause" }, Svg);
 
-        Assert.True(File.Exists(path));
-        var pack = Assert.Single(library.Packs);
-        Assert.True(pack.IsDownloads);
-        Assert.Equal(["pause", "play"], pack.Icons.Select(icon => icon.Name).Order());
-        Assert.Contains("Material Design Icons (mdi): Apache 2.0", pack.LicenseText);
-        Assert.Single(pack.LicenseText!.Split('\n'), line => line.Contains("(mdi)", StringComparison.Ordinal));
-        Assert.Equal("play", library.Search("material play").First().Name);
+        Assert.That(File.Exists(path), Is.True);
+        var pack = Expect.Single(library.Packs);
+        Assert.That(pack.IsDownloads, Is.True);
+        Assert.That(pack.Icons.Select(icon => icon.Name).Order(), Is.EqualTo(new[] { "pause", "play" }));
+        Assert.That(pack.LicenseText, Does.Contain("Material Design Icons (mdi): Apache 2.0"));
+        Assert.That(pack.LicenseText!.Split('\n').Count(line => line.Contains("(mdi)", StringComparison.Ordinal)), Is.EqualTo(1));
+        Assert.That(library.Search("material play").First().Name, Is.EqualTo("play"));
     }
 }
 
@@ -173,20 +173,20 @@ public class IconifyClientTests
          "aliases":{"play-alias":{"parent":"play"}}}
         """;
 
-    [Fact]
+    [Test]
     public async Task Search_returns_icons_with_their_set_license_and_colors()
     {
         var client = new IconifyClient(new HttpClient(new FakeHandler(request => request.RequestUri!.AbsolutePath == "/search" ? SearchResponse : null)));
 
         var icons = await client.SearchAsync("play");
 
-        Assert.Equal(["mdi:play", "lucide:play", "logos:spotify-icon"], icons.Select(icon => icon.Id));
-        Assert.Equal(("Material Design Icons", "Apache 2.0", "Pictogrammers", true), (icons[0].SetName, icons[0].License, icons[0].Author, icons[0].IsMonochrome));
-        Assert.False(icons[2].IsMonochrome);
-        Assert.Empty(await client.SearchAsync("  "));
+        Assert.That(icons.Select(icon => icon.Id), Is.EqualTo(new[] { "mdi:play", "lucide:play", "logos:spotify-icon" }));
+        Assert.That((icons[0].SetName, icons[0].License, icons[0].Author, icons[0].IsMonochrome), Is.EqualTo(("Material Design Icons", "Apache 2.0", "Pictogrammers", true)));
+        Assert.That(icons[2].IsMonochrome, Is.False);
+        Assert.That(await client.SearchAsync("  "), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task Icons_come_back_as_svg_documents_one_request_per_set()
     {
         var requests = new List<string>();
@@ -199,30 +199,30 @@ public class IconifyClientTests
 
         var svgs = await client.GetSvgsAsync([play, play with { Name = "play-alias" }, play with { Name = "missing" }]);
 
-        Assert.Single(requests);
-        Assert.Contains("icons=play%2Cplay-alias%2Cmissing", requests[0]);
-        Assert.Equal(2, svgs.Count);
-        Assert.StartsWith("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><path", svgs["lucide:play"]);
-        Assert.Equal(svgs["lucide:play"], svgs["lucide:play-alias"]);
-        Assert.NotNull(DeckHost.Core.Rendering.SvgRasterizer.ToImage(Encoding.UTF8.GetBytes(svgs["lucide:play"])));
+        Assert.That(requests, Has.Exactly(1).Items);
+        Assert.That(requests[0], Does.Contain("icons=play%2Cplay-alias%2Cmissing"));
+        Assert.That(svgs.Count, Is.EqualTo(2));
+        Assert.That(svgs["lucide:play"], Does.StartWith("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><path"));
+        Assert.That(svgs["lucide:play-alias"], Is.EqualTo(svgs["lucide:play"]));
+        Assert.That(DeckHost.Core.Rendering.SvgRasterizer.ToImage(Encoding.UTF8.GetBytes(svgs["lucide:play"])), Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public void An_icon_uses_its_own_size_over_the_sets()
     {
         var set = (JsonObject)JsonNode.Parse("""{"width":24,"height":24,"icons":{"wide":{"body":"<g/>","width":32,"left":-4}}}""")!;
 
-        Assert.Equal("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"24\" viewBox=\"-4 0 32 24\"><g/></svg>", IconifyClient.ToSvg(set, "wide"));
-        Assert.Null(IconifyClient.ToSvg(set, "nothing"));
+        Assert.That(IconifyClient.ToSvg(set, "wide"), Is.EqualTo("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"24\" viewBox=\"-4 0 32 24\"><g/></svg>"));
+        Assert.That(IconifyClient.ToSvg(set, "nothing"), Is.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task An_unreachable_server_is_reported_plainly()
     {
         var client = new IconifyClient(new HttpClient(new FakeHandler(_ => throw new HttpRequestException("No such host"))));
 
-        var error = await Assert.ThrowsAsync<IconPackException>(() => client.SearchAsync("play"));
-        Assert.Contains("Couldn't reach Iconify", error.Message);
+        var error = Assert.ThrowsAsync<IconPackException>(() => client.SearchAsync("play"));
+        Assert.That(error.Message, Does.Contain("Couldn't reach Iconify"));
     }
 
     private sealed class FakeHandler(Func<HttpRequestMessage, string?> respond) : HttpMessageHandler

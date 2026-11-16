@@ -124,7 +124,7 @@ public sealed class PluginProcessTests : IDisposable
         return true;
     }
 
-    [Fact]
+    [Test]
     public void Descriptors_values_and_drawings_survive_the_wire()
     {
         var setting = new ActionSettingDefinition("speed", "Speed", ActionSettingKind.Number, Placeholder: "5") { Range = new NumberRange(1, 10) { Unit = "x" } };
@@ -136,16 +136,16 @@ public sealed class PluginProcessTests : IDisposable
 
         var back = Wire.Decode(Wire.Encode(message))!;
         var action = back.Plugin!.Actions.Single();
-        Assert.Equal(setting.Range, action.Settings.Single().Range);
-        Assert.Equal(1000, action.RefreshIntervalMs);
-        Assert.Equal(0xFF112233u, back.Commands!.Single().Color);
+        Assert.That(action.Settings.Single().Range, Is.EqualTo(setting.Range));
+        Assert.That(action.RefreshIntervalMs, Is.EqualTo(1000));
+        Assert.That(back.Commands!.Single().Color, Is.EqualTo(0xFF112233u));
 
         foreach (var value in new object?[] { "text", true, 42, 42L, 1.5, 2.5f, DateTimeOffset.UnixEpoch, null })
         {
-            Assert.Equal(value, WireValue.From(value)!.ToObject());
+            Assert.That(WireValue.From(value)!.ToObject(), Is.EqualTo(value));
         }
 
-        Assert.Null(WireValue.From(new object()));
+        Assert.That(WireValue.From(new object()), Is.Null);
 
         var recorded = Surface();
         recorded.FillRoundedRect(1, 2, 3, 4, 5, 0xFF000000);
@@ -153,21 +153,21 @@ public sealed class PluginProcessTests : IDisposable
         recorded.DrawIcon("M0 0h1v1Z", 10, 10, 12);
         var copy = Surface();
         DisplayList.Replay(copy, recorded.Commands);
-        Assert.Equal(JsonSerializer.Serialize(recorded.Commands, Wire.Options), JsonSerializer.Serialize(copy.Commands, Wire.Options));
+        Assert.That(JsonSerializer.Serialize(copy.Commands, Wire.Options), Is.EqualTo(JsonSerializer.Serialize(recorded.Commands, Wire.Options)));
     }
 
-    [Fact]
+    [Test]
     public async Task A_plugin_in_its_own_process_draws_runs_and_publishes_through_DeckHost()
     {
         var launcher = new InProcessLauncher();
         using var catalog = CreateCatalog(launcher);
         var entry = catalog.Install(ObsPackagePath);
 
-        Assert.True(entry.RunsInOwnProcess);
-        Assert.Contains("own process", entry.ProcessStatus);
-        var plugin = Assert.IsType<IsolatedApplicationPlugin>(Assert.Single(catalog.EnabledApplicationPlugins, candidate => candidate.Id == "deckhost.plugin.obs"));
+        Assert.That(entry.RunsInOwnProcess, Is.True);
+        Assert.That(entry.ProcessStatus, Does.Contain("own process"));
+        var plugin = Expect.IsType<IsolatedApplicationPlugin>(Expect.Single(catalog.EnabledApplicationPlugins, candidate => candidate.Id == "deckhost.plugin.obs"));
         var scene = plugin.Actions.Single(action => action.Id == "obs.scene");
-        Assert.Contains(scene.Settings, setting => setting.Key == "scene");
+        Assert.That(scene.Settings.Any(setting => setting.Key == "scene"), Is.True);
 
         var host = new RecordingHost();
         var context = new ActionContext("dev", "key.0", _variables) { Host = host, ProfileId = "profile", Settings = new ActionSettings([new("scene", "Live"), new("port", "1")]) };
@@ -176,27 +176,30 @@ public sealed class PluginProcessTests : IDisposable
         // The first render asks for a picture; when it arrives, DeckHost is asked to draw again.
         var first = Surface();
         scene.Render(first);
-        Assert.Empty(first.Commands);
-        Assert.True(await host.Renders.WaitAsync(10_000));
+        Assert.That(first.Commands, Is.Empty);
+        Assert.That(await host.Renders.WaitAsync(10_000), Is.True);
         var second = Surface();
         scene.Render(second);
-        Assert.Contains(second.Commands, command => command.Text == "OBS");
+        Assert.That(second.Commands.Any(command => command.Text == "OBS"), Is.True);
 
         // A press: the plugin can't reach OBS, publishes the error and asks for a redraw.
         scene.Execute(context with { EventType = InputCapabilities.Press, Value = 1 });
         var errorKey = VariableKeys.For("dev", "key.0", VariableKeys.LastError);
-        Assert.True(await Until(() => _variables.TryGetValue<string>(errorKey, out var error) && !string.IsNullOrEmpty(error)));
+        Assert.That(await Until(() => _variables.TryGetValue<string>(errorKey, out var error) && !string.IsNullOrEmpty(error)), Is.True);
         string? drawn = null;
-        Assert.True(await Until(() =>
+        Assert.That(
+            await Until(() =>
         {
             var surface = Surface();
             scene.Render(surface);
             drawn = surface.Commands.LastOrDefault()?.Text;
             return surface.Commands.Any(command => command.Color == 0xFFFCA5A5);
-        }), $"last drawn: {drawn}");
+        }),
+            Is.True,
+            $"last drawn: {drawn}");
     }
 
-    [Fact]
+    [Test]
     public async Task A_crashed_plugin_process_is_restarted_and_draws_again()
     {
         var launcher = new InProcessLauncher();
@@ -211,22 +214,22 @@ public sealed class PluginProcessTests : IDisposable
         // Installing ran a trial process first; the last one started is the plugin's.
         launcher.Started.Last().Kill();
 
-        Assert.True(await Until(() => catalog.Entries.Single(entry => entry.Id == "deckhost.plugin.obs").ProcessStatus?.Contains("restarted 1", StringComparison.Ordinal) == true));
+        Assert.That(await Until(() => catalog.Entries.Single(entry => entry.Id == "deckhost.plugin.obs").ProcessStatus?.Contains("restarted 1", StringComparison.Ordinal) == true), Is.True);
         // The status is read live; the Changed events for it arrive a moment later.
-        Assert.True(await Until(() => Volatile.Read(ref changes) >= 2));
+        Assert.That(await Until(() => Volatile.Read(ref changes) >= 2), Is.True);
         while (host.Renders.CurrentCount > 0)
         {
             host.Renders.Wait();
         }
 
         scene.Render(Surface());
-        Assert.True(await host.Renders.WaitAsync(10_000));
+        Assert.That(await host.Renders.WaitAsync(10_000), Is.True);
         var surface = Surface();
         scene.Render(surface);
-        Assert.Contains(surface.Commands, command => command.Text == "OBS");
+        Assert.That(surface.Commands.Any(command => command.Text == "OBS"), Is.True);
     }
 
-    [Fact]
+    [Test]
     public void A_plugin_can_be_moved_into_DeckHost_and_back_and_that_is_remembered()
     {
         var launcher = new InProcessLauncher();
@@ -236,16 +239,16 @@ public sealed class PluginProcessTests : IDisposable
             catalog.SetRunInOwnProcess("deckhost.plugin.obs", ownProcess: false);
 
             var entry = catalog.Entries.Single(candidate => candidate.Id == "deckhost.plugin.obs");
-            Assert.False(entry.RunsInOwnProcess);
-            Assert.Equal("Runs inside DeckHost", entry.ProcessStatus);
-            Assert.IsNotType<IsolatedApplicationPlugin>(catalog.EnabledApplicationPlugins.Single(plugin => plugin.Id == "deckhost.plugin.obs"));
+            Assert.That(entry.RunsInOwnProcess, Is.False);
+            Assert.That(entry.ProcessStatus, Is.EqualTo("Runs inside DeckHost"));
+            Assert.That(catalog.EnabledApplicationPlugins.Single(plugin => plugin.Id == "deckhost.plugin.obs"), Is.Not.TypeOf<IsolatedApplicationPlugin>());
         }
 
         using (var reloaded = CreateCatalog(launcher))
         {
-            Assert.False(reloaded.Entries.Single(candidate => candidate.Id == "deckhost.plugin.obs").RunsInOwnProcess);
+            Assert.That(reloaded.Entries.Single(candidate => candidate.Id == "deckhost.plugin.obs").RunsInOwnProcess, Is.False);
             reloaded.SetRunInOwnProcess("deckhost.plugin.obs", ownProcess: true);
-            Assert.IsType<IsolatedApplicationPlugin>(reloaded.EnabledApplicationPlugins.Single(plugin => plugin.Id == "deckhost.plugin.obs"));
+            Assert.That(reloaded.EnabledApplicationPlugins.Single(plugin => plugin.Id == "deckhost.plugin.obs"), Is.TypeOf<IsolatedApplicationPlugin>());
         }
     }
 }

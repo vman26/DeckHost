@@ -42,7 +42,7 @@ public sealed class ProfileFileTests : IDisposable
                 new ActionSettings(settings.Select(static pair => new KeyValuePair<string, string>(pair.Item1, pair.Item2)))),
             new ControlAppearance(ImagePath: image), []);
 
-    [Fact]
+    [Test]
     public void A_profile_travels_with_its_pages_folders_and_images()
     {
         var image = Path.Combine(_root, "photo.png");
@@ -56,17 +56,17 @@ public sealed class ProfileFileTests : IDisposable
         File.Delete(image); // the bundle carries its own copy
         var imported = ProfileBundle.Import(file, "other-device", Path.Combine(_root, "assets"));
 
-        Assert.Equal(3, imported.Count);
-        Assert.All(imported, layout => Assert.Equal("other-device", layout.DeviceId));
-        Assert.DoesNotContain(imported, layout => layout.Id is "p" or "p.page" or "p.folder"); // never replaces the original
+        Assert.That(imported.Count, Is.EqualTo(3));
+        Expect.All(imported, layout => Assert.That(layout.DeviceId, Is.EqualTo("other-device")));
+        Assert.That(imported.Any(layout => layout.Id is "p" or "p.page" or "p.folder"), Is.False); // never replaces the original
         var root = imported[0];
         var importedFolder = imported.Single(layout => layout.Kind == ProfileKinds.Folder);
-        Assert.Equal(root.Id, importedFolder.ParentId);
-        Assert.Equal(importedFolder.Id, root.Bindings[0].Action.Settings.Get(FolderAction.FolderIdKey)); // the key opens the copy
-        Assert.Equal([1, 2, 3], File.ReadAllBytes(root.Bindings[0].Appearance.ImagePath!));
+        Assert.That(importedFolder.ParentId, Is.EqualTo(root.Id));
+        Assert.That(root.Bindings[0].Action.Settings.Get(FolderAction.FolderIdKey), Is.EqualTo(importedFolder.Id)); // the key opens the copy
+        Assert.That(File.ReadAllBytes(root.Bindings[0].Appearance.ImagePath!), Is.EqualTo(new[] { 1, 2, 3 }));
     }
 
-    [Fact]
+    [Test]
     public void Other_files_are_refused_plainly()
     {
         var file = Path.Combine(_root, "not-a-profile" + ProfileBundle.Extension);
@@ -75,21 +75,21 @@ public sealed class ProfileFileTests : IDisposable
             zip.CreateEntry("readme.txt");
         }
 
-        Assert.Contains("isn't a DeckHost profile", Assert.Throws<ProfileBundleException>(() => ProfileBundle.Import(file, "dev", _root)).Message);
+        Assert.That(Assert.Throws<ProfileBundleException>(() => ProfileBundle.Import(file, "dev", _root)).Message, Does.Contain("isn't a DeckHost profile"));
     }
 
-    [Fact]
+    [Test]
     public void Profiles_are_backed_up_once_a_day()
     {
         var store = new ProfileStore(Path.Combine(_root, "profiles.json"));
         var document = new ProfileDocument(ProfileDocument.CurrentVersion, "p", [new DeviceProfile("p", "P", "dev", [])]);
         store.Save(document); // nothing to back up yet
-        Assert.Empty(store.ListBackups());
+        Assert.That(store.ListBackups(), Is.Empty);
 
         store.Save(document with { SelectedProfileId = "p2" });
         store.Save(document with { SelectedProfileId = "p3" }); // same day: one backup
-        var backup = Assert.Single(store.ListBackups());
-        Assert.Equal("p", ProfileStore.LoadFrom(backup.FullName)!.SelectedProfileId);
+        var backup = Expect.Single(store.ListBackups());
+        Assert.That(ProfileStore.LoadFrom(backup.FullName)!.SelectedProfileId, Is.EqualTo("p"));
     }
 
     private string StreamDeckProfile(params (string Path, string Content)[] files)
@@ -105,7 +105,7 @@ public sealed class ProfileFileTests : IDisposable
         return file;
     }
 
-    [Fact]
+    [Test]
     public void A_paged_stream_deck_profile_becomes_a_profile_with_pages_and_folders()
     {
         var file = StreamDeckProfile(
@@ -139,31 +139,31 @@ public sealed class ProfileFileTests : IDisposable
         var result = StreamDeckProfileImporter.Import(file, "dev", Controls, Actions, Path.Combine(_root, "assets"));
 
         var root = result.Layouts[0];
-        Assert.Equal(("Streaming", (string?)null), (root.Name, root.Kind));
-        Assert.Contains(result.Layouts, layout => layout.Kind == ProfileKinds.Page && layout.ParentId == root.Id && layout.Bindings[0].Action.Settings.Get("mode") == "previous");
+        Assert.That((root.Name, root.Kind), Is.EqualTo(("Streaming", (string?)null)));
+        Assert.That(result.Layouts.Any(layout => layout.Kind == ProfileKinds.Page && layout.ParentId == root.Id && layout.Bindings[0].Action.Settings.Get("mode") == "previous"), Is.True);
 
         var website = root.Bindings.Single(binding => binding.ControlId == "key.0");
-        Assert.Equal(("system.open", "https://example.com", "Docs"), (website.Action.ActionId, website.Action.Settings.Get("target"), website.Appearance.Text));
-        Assert.Equal("png-bytes", File.ReadAllText(website.Appearance.ImagePath!));
-        Assert.Equal("media.mute", root.Bindings.Single(binding => binding.ControlId == "key.6").Action.ActionId); // column 1, row 1
-        Assert.Equal("builtin.page", root.Bindings.Single(binding => binding.ControlId == "encoder.1").Action.ActionId);
+        Assert.That((website.Action.ActionId, website.Action.Settings.Get("target"), website.Appearance.Text), Is.EqualTo(("system.open", "https://example.com", "Docs")));
+        Assert.That(File.ReadAllText(website.Appearance.ImagePath!), Is.EqualTo("png-bytes"));
+        Assert.That(root.Bindings.Single(binding => binding.ControlId == "key.6").Action.ActionId, Is.EqualTo("media.mute")); // column 1, row 1
+        Assert.That(root.Bindings.Single(binding => binding.ControlId == "encoder.1").Action.ActionId, Is.EqualTo("builtin.page"));
 
         var toggle = root.Bindings.Single(binding => binding.ControlId == "key.2");
-        Assert.Equal(ProfileActionKind.MultiActionSwitch, toggle.ActionKind);
-        Assert.Equal([("media.playpause", StepGroups.First), ("media.next", StepGroups.Second)], toggle.Steps.Select(step => (step.Action.ActionId, step.Group)));
+        Assert.That(toggle.ActionKind, Is.EqualTo(ProfileActionKind.MultiActionSwitch));
+        Assert.That(toggle.Steps.Select(step => (step.Action.ActionId, step.Group)), Is.EqualTo(new[] { ("media.playpause", StepGroups.First), ("media.next", StepGroups.Second) }));
 
         var folderKey = root.Bindings.Single(binding => binding.ControlId == "key.4");
         var folder = result.Layouts.Single(layout => layout.Id == folderKey.Action.Settings.Get(FolderAction.FolderIdKey));
-        Assert.Equal((ProfileKinds.Folder, root.Id, "Tools"), (folder.Kind, folder.ParentId, folder.Name));
-        Assert.Equal([FolderBackAction.ActionId, "system.type-text"], folder.Bindings.OrderBy(binding => binding.ControlId).Select(binding => binding.Action.ActionId));
+        Assert.That((folder.Kind, folder.ParentId, folder.Name), Is.EqualTo((ProfileKinds.Folder, root.Id, "Tools")));
+        Assert.That(folder.Bindings.OrderBy(binding => binding.ControlId).Select(binding => binding.Action.ActionId), Is.EqualTo(new[] { FolderBackAction.ActionId, "system.type-text" }));
 
         // Unknown: kept as the key looked; a key past this device's grid: not placed.
-        Assert.Equal("Sunny", root.Bindings.Single(binding => binding.ControlId == "key.3").Appearance.Text);
-        Assert.Contains("Weather", result.Unavailable);
-        Assert.Equal(1, result.NotPlaced);
+        Assert.That(root.Bindings.Single(binding => binding.ControlId == "key.3").Appearance.Text, Is.EqualTo("Sunny"));
+        Assert.That(result.Unavailable, Does.Contain("Weather"));
+        Assert.That(result.NotPlaced, Is.EqualTo(1));
     }
 
-    [Fact]
+    [Test]
     public void A_single_page_stream_deck_profile_imports_too()
     {
         var file = StreamDeckProfile(("X.sdProfile/manifest.json", """
@@ -176,10 +176,10 @@ public sealed class ProfileFileTests : IDisposable
 
         var result = StreamDeckProfileImporter.Import(file, "dev", Controls, Actions, _root);
 
-        var root = Assert.Single(result.Layouts);
-        Assert.Equal("system.launch", root.Bindings.Single(binding => binding.ControlId == "key.0").Action.ActionId);
+        var root = Expect.Single(result.Layouts);
+        Assert.That(root.Bindings.Single(binding => binding.ControlId == "key.0").Action.ActionId, Is.EqualTo("system.launch"));
         var multi = root.Bindings.Single(binding => binding.ControlId == "key.1");
-        Assert.Equal((ProfileActionKind.MultiAction, 2), (multi.ActionKind, multi.Steps.Count));
-        Assert.Equal(2, result.Imported);
+        Assert.That((multi.ActionKind, multi.Steps.Count), Is.EqualTo((ProfileActionKind.MultiAction, 2)));
+        Assert.That(result.Imported, Is.EqualTo(2));
     }
 }

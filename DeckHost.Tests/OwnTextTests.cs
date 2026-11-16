@@ -15,26 +15,26 @@ public sealed class OwnTextTests
     private const uint Blue = 0xFF0000FF;
     private const uint Green = 0xFF00FF00;
 
-    [Fact]
+    [Test]
     public async Task An_action_that_ignores_the_text_gets_it_as_a_label()
     {
         var plain = await RenderAsync(new SolidAction("solid", Blue), text: null);
         var titled = await RenderAsync(new SolidAction("solid", Blue), text: "HELLO");
 
-        Assert.False(HasWhite(plain));
-        Assert.True(HasWhite(titled), "the host draws the text (white by default) over a picture without it");
+        Assert.That(HasWhite(plain), Is.False);
+        Assert.That(HasWhite(titled), Is.True, "the host draws the text (white by default) over a picture without it");
     }
 
-    [Fact]
+    [Test]
     public async Task An_action_that_draws_the_text_itself_gets_no_second_copy()
     {
         var frame = await RenderAsync(new SelfTitledAction(), text: "HELLO");
 
-        Assert.True(Has(frame, 0, 255, 0), "the action's own (green) text");
-        Assert.False(HasWhite(frame), "no extra white label from the host");
+        Assert.That(Has(frame, 0, 255, 0), Is.True, "the action's own (green) text");
+        Assert.That(HasWhite(frame), Is.False, "no extra white label from the host");
     }
 
-    [Fact]
+    [Test]
     public void A_reading_on_a_key_shows_the_own_text_with_its_icon()
     {
         var context = new TextCapture();
@@ -42,18 +42,18 @@ public sealed class OwnTextTests
 
         context.DrawReading("MY COUNT", "7", null, 0xFF93C5FD, Icons.Counter);
 
-        Assert.Contains("MY COUNT", context.Labels);
-        Assert.Contains("7", context.Texts);
+        Assert.That(context.Labels, Does.Contain("MY COUNT"));
+        Assert.That(context.Texts, Does.Contain("7"));
     }
 
-    [Fact]
+    [Test]
     public void A_reading_on_a_key_keeps_the_icon_alone_without_own_text()
     {
         var context = new TextCapture();
 
         context.DrawReading("Counter", "7", null, 0xFF93C5FD, Icons.Counter);
 
-        Assert.DoesNotContain("Counter", context.Labels.Concat(context.Texts));
+        Assert.That(context.Labels.Concat(context.Texts), Does.Not.Contain("Counter"));
     }
 
     private static async Task<ControlFrame> RenderAsync(IDeckAction action, string? text)

@@ -25,7 +25,7 @@ public class PerInputEditorTests
 
     private static readonly ActionSettingDefinition Shared = new("shared", "Shared", DefaultValue: "x");
 
-    [Fact]
+    [Test]
     public void Switch_Profile_on_a_knob_does_what_each_input_is_set_to()
     {
         using var store = new VariableStore();
@@ -45,10 +45,10 @@ public class PerInputEditorTests
         router.Dispatch(profile, new DeviceInputEvent(DeviceId, "encoder.0", InputCapabilities.Rotate, -1), host); // default: previous
         router.Dispatch(profile, new DeviceInputEvent(DeviceId, "encoder.0", InputCapabilities.Rotate, 1), host); // set to do nothing
 
-        Assert.Equal(["profile:Gaming", "relative:-1"], host.Calls);
+        Assert.That(host.Calls, Is.EqualTo(new[] { "profile:Gaming", "relative:-1" }));
     }
 
-    [Fact]
+    [Test]
     public void Switch_Profile_bindings_from_before_keep_working()
     {
         // Saved before per-input settings: press used the mode, turning stepped by direction.
@@ -63,39 +63,39 @@ public class PerInputEditorTests
         router.Dispatch(profile, new DeviceInputEvent(DeviceId, "encoder.0", InputCapabilities.Rotate, 1), host);
         router.Dispatch(profile, new DeviceInputEvent(DeviceId, "encoder.0", InputCapabilities.Rotate, -1), host);
 
-        Assert.Equal(["relative:-1", "relative:1", "relative:-1"], host.Calls);
+        Assert.That(host.Calls, Is.EqualTo(new[] { "relative:-1", "relative:1", "relative:-1" }));
     }
 
-    [Fact]
+    [Test]
     public void The_editor_shows_a_group_per_input_on_a_knob()
     {
         var editor = new SettingsEditorViewModel([Shared, Mode, Name], new ActionSettings(new Dictionary<string, string> { ["mode@rotate-left"] = "c", ["name@rotate-left"] = "Left" }), Knob);
 
-        Assert.Equal(["shared", "mode@press", "name@press", "mode@rotate-left", "name@rotate-left", "mode@rotate-right", "name@rotate-right"], editor.Fields.Select(field => field.Definition.Key));
-        Assert.Equal([null, "When pressed", null, "When turned left", null, "When turned right", null], editor.Fields.Select(field => field.SectionTitle));
-        Assert.Equal(["x", "a", "", "c", "Left", "c", ""], editor.Fields.Select(field => field.Value));
+        Assert.That(editor.Fields.Select(field => field.Definition.Key), Is.EqualTo(new[] { "shared", "mode@press", "name@press", "mode@rotate-left", "name@rotate-left", "mode@rotate-right", "name@rotate-right" }));
+        Assert.That(editor.Fields.Select(field => field.SectionTitle), Is.EqualTo(new[] { null, "When pressed", null, "When turned left", null, "When turned right", null }));
+        Assert.That(editor.Fields.Select(field => field.Value), Is.EqualTo(new[] { "x", "a", "", "c", "Left", "c", "" }));
 
         // The name only shows where the mode asks for it, and follows the mode.
-        Assert.Equal([true, true, false, true, true, true, true], editor.Fields.Select(field => field.IsVisible));
+        Assert.That(editor.Fields.Select(field => field.IsVisible), Is.EqualTo(new[] { true, true, false, true, true, true, true }));
         editor.Fields[1].Value = "c";
-        Assert.True(editor.Fields[2].IsVisible);
+        Assert.That(editor.Fields[2].IsVisible, Is.True);
         editor.Fields[3].Value = "a";
-        Assert.False(editor.Fields[4].IsVisible);
+        Assert.That(editor.Fields[4].IsVisible, Is.False);
 
         var saved = editor.ToSettings();
-        Assert.Equal("c", saved.ForInput([Mode], ControlInputs.Press).Get("mode"));
-        Assert.Equal("a", saved.ForInput([Mode], ControlInputs.RotateLeft).Get("mode"));
-        Assert.Equal("c", saved.ForInput([Mode], ControlInputs.RotateRight).Get("mode"));
+        Assert.That(saved.ForInput([Mode], ControlInputs.Press).Get("mode"), Is.EqualTo("c"));
+        Assert.That(saved.ForInput([Mode], ControlInputs.RotateLeft).Get("mode"), Is.EqualTo("a"));
+        Assert.That(saved.ForInput([Mode], ControlInputs.RotateRight).Get("mode"), Is.EqualTo("c"));
     }
 
-    [Fact]
+    [Test]
     public void The_editor_keeps_one_field_on_a_control_with_one_input()
     {
         var editor = new SettingsEditorViewModel([Mode, Name], ActionSettings.Empty, InputCapabilities.Press);
 
-        Assert.Equal(["mode", "name"], editor.Fields.Select(field => field.Definition.Key));
-        Assert.All(editor.Fields, field => Assert.Null(field.SectionTitle));
-        Assert.False(editor.Fields[1].IsVisible);
+        Assert.That(editor.Fields.Select(field => field.Definition.Key), Is.EqualTo(new[] { "mode", "name" }));
+        Expect.All(editor.Fields, field => Assert.That(field.SectionTitle, Is.Null));
+        Assert.That(editor.Fields[1].IsVisible, Is.False);
     }
 
     private sealed class RecordingHost : IActionHost

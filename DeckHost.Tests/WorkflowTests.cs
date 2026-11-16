@@ -111,7 +111,7 @@ public sealed class WorkflowTests : IAsyncDisposable
         }
     }
 
-    [Fact]
+    [Test]
     public async Task A_chain_runs_its_actions_in_order_when_pressed()
     {
         await Start(new Workflow
@@ -122,11 +122,11 @@ public sealed class WorkflowTests : IAsyncDisposable
 
         await Click();
 
-        Assert.Equal(["a", "b"], Ran());
-        Assert.Contains(Traces(), trace => trace.Kind == WorkflowTraceKind.Finished && trace.ControlId == "key.0");
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b" }));
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Finished && trace.ControlId == "key.0"), Is.True);
     }
 
-    [Fact]
+    [Test]
     public async Task If_takes_yes_or_no_by_a_variable_that_set_variable_changed()
     {
         await Start(new Workflow
@@ -146,12 +146,12 @@ public sealed class WorkflowTests : IAsyncDisposable
         await Click(); // 1 → no, mode = 2
         await Click(); // 2 → yes
 
-        Assert.Equal(["b", "b", "a"], Ran());
-        Assert.True(_store.TryGetValue<string>(VariableKeys.UserVariable("MODE"), out var mode));
-        Assert.Equal("2", mode);
+        Assert.That(Ran(), Is.EqualTo(new[] { "b", "b", "a" }));
+        Assert.That(_store.TryGetValue<string>(VariableKeys.UserVariable("MODE"), out var mode), Is.True);
+        Assert.That(mode, Is.EqualTo("2"));
     }
 
-    [Fact]
+    [Test]
     public async Task Toggle_alternates_and_repeat_runs_its_body_one_round_after_the_other()
     {
         await Start(new Workflow
@@ -179,13 +179,13 @@ public sealed class WorkflowTests : IAsyncDisposable
 
         await Click();
         await WaitUntil(() => Ran().Count >= 4);
-        Assert.Equal(["a", "a", "a", "b"], Ran());
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "a", "a", "b" }));
 
         await Click();
-        Assert.Equal(["a", "a", "a", "b", "c"], Ran());
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "a", "a", "b", "c" }));
     }
 
-    [Fact]
+    [Test]
     public async Task Waits_do_not_block_the_device_and_a_second_press_can_stop_the_run()
     {
         await Start(new Workflow
@@ -200,11 +200,11 @@ public sealed class WorkflowTests : IAsyncDisposable
         await Task.Delay(500);
         await _host.WhenIdleAsync();
 
-        Assert.Empty(Ran());
-        Assert.Contains(Traces(), trace => trace.Kind == WorkflowTraceKind.Stopped);
+        Assert.That(Ran(), Is.Empty);
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Stopped), Is.True);
     }
 
-    [Fact]
+    [Test]
     public async Task Ignore_keeps_the_first_run_and_restart_starts_over()
     {
         await Start(new Workflow
@@ -220,11 +220,11 @@ public sealed class WorkflowTests : IAsyncDisposable
         await Task.Delay(300);
         await _host.WhenIdleAsync();
 
-        Assert.Equal(["a"], Ran());
-        Assert.Contains(Traces(), trace => trace.Kind == WorkflowTraceKind.Ignored);
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Ignored), Is.True);
     }
 
-    [Fact]
+    [Test]
     public async Task Tap_double_press_and_hold_are_told_apart()
     {
         await Start(new Workflow
@@ -240,23 +240,23 @@ public sealed class WorkflowTests : IAsyncDisposable
 
         await Click();
         await WaitUntil(() => Ran().Count >= 1);
-        Assert.Equal(["a"], Ran());
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
 
         await Click();
         await Click();
         await Task.Delay(DeviceHostService.DoublePressWindow * 2);
         await _host.WhenIdleAsync();
-        Assert.Equal(["a", "b"], Ran());
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b" }));
 
         await Input(InputCapabilities.Press);
         await Input(InputCapabilities.LongPress);
         await Input(InputCapabilities.Release);
         await Task.Delay(DeviceHostService.DoublePressWindow * 2);
         await _host.WhenIdleAsync();
-        Assert.Equal(["a", "b", "c"], Ran());
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b", "c" }));
     }
 
-    [Fact]
+    [Test]
     public async Task A_knob_turn_reaches_its_action_as_a_turn()
     {
         await Start(new Workflow
@@ -268,11 +268,11 @@ public sealed class WorkflowTests : IAsyncDisposable
         await Input(InputCapabilities.Rotate, -1);
         await Input(InputCapabilities.Rotate, 1);
 
-        Assert.Equal(["a", "b"], Ran());
-        Assert.Contains(_a.Executions, context => context.EventType == InputCapabilities.Rotate && context.Value == -1);
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b" }));
+        Assert.That(_a.Executions.Any(context => context.EventType == InputCapabilities.Rotate && context.Value == -1), Is.True);
     }
 
-    [Fact]
+    [Test]
     public async Task Stop_node_ends_branches_that_are_still_waiting()
     {
         await Start(new Workflow
@@ -291,10 +291,10 @@ public sealed class WorkflowTests : IAsyncDisposable
         await Task.Delay(400);
         await _host.WhenIdleAsync();
 
-        Assert.Empty(Ran());
+        Assert.That(Ran(), Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task The_editor_can_run_a_trigger_and_a_missing_action_is_reported()
     {
         await Start(new Workflow
@@ -306,31 +306,31 @@ public sealed class WorkflowTests : IAsyncDisposable
         _host.RunWorkflowTrigger(Device, "key.0", WorkflowTriggers.Hold);
         await _host.WhenIdleAsync();
 
-        Assert.Equal(["a"], Ran());
-        Assert.Contains(Traces(), trace => trace.Kind == WorkflowTraceKind.Failed && trace.NodeId == "gone");
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Failed && trace.NodeId == "gone"), Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Conditions_on_the_app_in_front_and_the_time_of_day()
     {
         using var store = new VariableStore();
         var engine = new WorkflowEngine(store, (_, _, _, _) => true) { Clock = () => new DateTime(2026, 1, 1, 23, 30, 0) };
         store.Publish(VariableKeys.ForegroundApp, "obs64");
 
-        Assert.True(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckApp), (WorkflowKeys.App, "OBS"))));
-        Assert.False(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckApp), (WorkflowKeys.App, "zoom"))));
-        Assert.True(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckTime), (WorkflowKeys.From, "22:00"), (WorkflowKeys.To, "06:00"))));
-        Assert.False(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckTime), (WorkflowKeys.From, "09:00"), (WorkflowKeys.To, "17:30"))));
-        Assert.False(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckTime), (WorkflowKeys.From, "nonsense"), (WorkflowKeys.To, "17:30"))));
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckApp), (WorkflowKeys.App, "OBS"))), Is.True);
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckApp), (WorkflowKeys.App, "zoom"))), Is.False);
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckTime), (WorkflowKeys.From, "22:00"), (WorkflowKeys.To, "06:00"))), Is.True);
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckTime), (WorkflowKeys.From, "09:00"), (WorkflowKeys.To, "17:30"))), Is.False);
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckTime), (WorkflowKeys.From, "nonsense"), (WorkflowKeys.To, "17:30"))), Is.False);
 
         engine.Apply(Settings((WorkflowKeys.Name, "count"), (WorkflowKeys.Operation, WorkflowKeys.Add), (WorkflowKeys.Value, "2.5")));
-        Assert.Equal("2.5", engine.ReadVariable("count"));
-        Assert.True(engine.Evaluate(Settings((WorkflowKeys.Name, "count"), (WorkflowKeys.Operation, WorkflowKeys.IsGreater), (WorkflowKeys.Value, "2"))));
+        Assert.That(engine.ReadVariable("count"), Is.EqualTo("2.5"));
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Name, "count"), (WorkflowKeys.Operation, WorkflowKeys.IsGreater), (WorkflowKeys.Value, "2"))), Is.True);
         engine.Apply(Settings((WorkflowKeys.Name, "on"), (WorkflowKeys.Operation, WorkflowKeys.Flip)));
-        Assert.Equal("true", engine.ReadVariable("on"));
+        Assert.That(engine.ReadVariable("on"), Is.EqualTo("true"));
     }
 
-    [Fact]
+    [Test]
     public void Multi_action_switch_and_key_logic_convert_into_the_same_behavior()
     {
         var steps = new[]
@@ -340,23 +340,23 @@ public sealed class WorkflowTests : IAsyncDisposable
         };
         var toggle = WorkflowConverter.FromBinding(new ControlBinding("key.0", ProfileActionKind.MultiActionSwitch, Bindings.Reference("p", "scaffold"), new ControlAppearance(), steps));
 
-        var toggleNode = Assert.Single(toggle.Nodes, node => node.Kind == WorkflowNodeKinds.Toggle);
-        var first = toggle.Find(Assert.Single(toggle.LinksFrom(toggleNode.Id, WorkflowPorts.First)).To)!;
-        Assert.Equal("a", first.Action!.ActionId);
-        var wait = toggle.Find(Assert.Single(toggle.LinksFrom(toggleNode.Id, WorkflowPorts.Second)).To)!;
-        Assert.Equal(WorkflowNodeKinds.Wait, wait.Kind);
-        Assert.Equal("250", wait.EffectiveSettings.Get(WorkflowKeys.Milliseconds));
-        Assert.Equal(toggle.Nodes.Count, toggle.Nodes.Select(static node => node.Id).Distinct().Count());
+        var toggleNode = Expect.Single(toggle.Nodes, node => node.Kind == WorkflowNodeKinds.Toggle);
+        var first = toggle.Find(Expect.Single(toggle.LinksFrom(toggleNode.Id, WorkflowPorts.First)).To)!;
+        Assert.That(first.Action!.ActionId, Is.EqualTo("a"));
+        var wait = toggle.Find(Expect.Single(toggle.LinksFrom(toggleNode.Id, WorkflowPorts.Second)).To)!;
+        Assert.That(wait.Kind, Is.EqualTo(WorkflowNodeKinds.Wait));
+        Assert.That(wait.EffectiveSettings.Get(WorkflowKeys.Milliseconds), Is.EqualTo("250"));
+        Assert.That(toggle.Nodes.Select(static node => node.Id).Distinct().Count(), Is.EqualTo(toggle.Nodes.Count));
 
         var keyLogic = WorkflowConverter.FromBinding(new ControlBinding("key.0", ProfileActionKind.KeyLogic, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
             [new MultiActionStep(0, Bindings.Reference("p", "a")) { Group = StepGroups.Press }, new MultiActionStep(1, Bindings.Reference("p", "c")) { Group = StepGroups.Hold }]));
-        Assert.Equal(
-            new HashSet<string> { WorkflowTriggers.Tap, WorkflowTriggers.Hold },
-            WorkflowEngine.TriggersOf(keyLogic).ToHashSet());
-        Assert.Equal("n5", WorkflowConverter.NextId(keyLogic));
+        Assert.That(
+            WorkflowEngine.TriggersOf(keyLogic).ToHashSet(),
+            Is.EqualTo(new HashSet<string> { WorkflowTriggers.Tap, WorkflowTriggers.Hold }));
+        Assert.That(WorkflowConverter.NextId(keyLogic), Is.EqualTo("n5"));
     }
 
-    [Fact]
+    [Test]
     public void A_link_that_closes_a_loop_is_detected()
     {
         var workflow = new Workflow
@@ -365,12 +365,12 @@ public sealed class WorkflowTests : IAsyncDisposable
             Links = [Link("t", "1"), Link("1", "2")],
         };
 
-        Assert.True(workflow.WouldCycle("2", "1"));
-        Assert.True(workflow.WouldCycle("1", "1"));
-        Assert.False(workflow.WouldCycle("t", "2"));
+        Assert.That(workflow.WouldCycle("2", "1"), Is.True);
+        Assert.That(workflow.WouldCycle("1", "1"), Is.True);
+        Assert.That(workflow.WouldCycle("t", "2"), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void A_workflow_binding_survives_the_profile_file()
     {
         var options = new JsonSerializerOptions
@@ -389,10 +389,10 @@ public sealed class WorkflowTests : IAsyncDisposable
         var json = JsonSerializer.Serialize(binding, options);
         var back = JsonSerializer.Deserialize<ControlBinding>(json, options)!;
 
-        Assert.Contains("\"workflow\"", json);
-        Assert.Equal(binding.Workflow, back.Workflow);
-        Assert.Equal(ProfileActionKind.Workflow, back.ActionKind);
-        Assert.DoesNotContain("\"workflow\"", JsonSerializer.Serialize(binding with { Workflow = null }, options));
+        Assert.That(json, Does.Contain("\"workflow\""));
+        Assert.That(back.Workflow, Is.EqualTo(binding.Workflow));
+        Assert.That(back.ActionKind, Is.EqualTo(ProfileActionKind.Workflow));
+        Assert.That(JsonSerializer.Serialize(binding with { Workflow = null }, options), Does.Not.Contain("\"workflow\""));
     }
 
     private static ActionSettings Settings(params (string Key, string Value)[] pairs) =>

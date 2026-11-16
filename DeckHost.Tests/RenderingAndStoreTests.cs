@@ -21,27 +21,26 @@ public sealed class RenderingAndStoreTests : IDisposable
         }
     }
 
-    [Fact]
+    [Test]
     public void Rasterizes_svg_images()
     {
         var svg = Encoding.UTF8.GetBytes("""<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>""");
 
-        Assert.True(SvgRasterizer.IsSvg(svg));
-        Assert.False(SvgRasterizer.IsSvg([0x89, 0x50, 0x4E, 0x47]));
+        Assert.That(SvgRasterizer.IsSvg(svg), Is.True);
+        Assert.That(SvgRasterizer.IsSvg([0x89, 0x50, 0x4E, 0x47]), Is.False);
 
         using var image = SvgRasterizer.ToImage(svg, 64);
-        Assert.NotNull(image);
-        Assert.Equal(64, image.Width);
+        Assert.That(image, Is.Not.Null);
+        Assert.That(image.Width, Is.EqualTo(64));
 
         using var bitmap = SKBitmap.FromImage(image);
         var center = bitmap.GetPixel(32, 32);
-        Assert.Equal((byte)255, center.Red);
-        Assert.Equal((byte)0, center.Green);
+        Assert.That(center.Red, Is.EqualTo((byte)255));
+        Assert.That(center.Green, Is.EqualTo((byte)0));
     }
 
-    [Theory]
-    [InlineData(TextVerticalAlignment.Top, true)]
-    [InlineData(TextVerticalAlignment.Bottom, false)]
+    [TestCase(TextVerticalAlignment.Top, true)]
+    [TestCase(TextVerticalAlignment.Bottom, false)]
     public void Labels_follow_the_text_style(TextVerticalAlignment vertical, bool expectTopHalf)
     {
         using var resources = new SkiaDrawingResources();
@@ -57,10 +56,10 @@ public sealed class RenderingAndStoreTests : IDisposable
         canvas.Flush();
 
         var (top, bottom) = (CountGreen(bitmap, 0, 48), CountGreen(bitmap, 48, 96));
-        Assert.True(expectTopHalf ? top > bottom : bottom > top, $"top={top} bottom={bottom}");
+        Assert.That(expectTopHalf ? top > bottom : bottom > top, Is.True, $"top={top} bottom={bottom}");
     }
 
-    [Fact]
+    [Test]
     public void Italic_and_bold_always_show()
     {
         using var resources = new SkiaDrawingResources();
@@ -70,17 +69,16 @@ public sealed class RenderingAndStoreTests : IDisposable
         foreach (var family in new[] { null, SKTypeface.Default.FamilyName, "No Such Font Family" })
         {
             var italic = resources.GetFont(14, family, bold: false, italic: true);
-            Assert.True(italic.Typeface.IsItalic || italic.SkewX < 0, $"italic, family '{family}'");
+            Assert.That(italic.Typeface.IsItalic || italic.SkewX < 0, Is.True, $"italic, family '{family}'");
 
             var bold = resources.GetFont(14, family, bold: true, italic: false);
-            Assert.True(bold.Typeface.IsBold || bold.Embolden, $"bold, family '{family}'");
-            Assert.Equal(0f, bold.SkewX);
+            Assert.That(bold.Typeface.IsBold || bold.Embolden, Is.True, $"bold, family '{family}'");
+            Assert.That(bold.SkewX, Is.EqualTo(0f));
         }
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [TestCase(true)]
+    [TestCase(false)]
     public void Italic_changes_the_text_an_action_draws(bool label)
     {
         byte[] Draw(bool italic)
@@ -108,10 +106,10 @@ public sealed class RenderingAndStoreTests : IDisposable
             return bitmap.Bytes;
         }
 
-        Assert.NotEqual(Draw(italic: false), Draw(italic: true));
+        Assert.That(Draw(italic: true), Is.Not.EqualTo(Draw(italic: false)));
     }
 
-    [Fact]
+    [Test]
     public void A_strip_shows_one_line()
     {
         using var resources = new SkiaDrawingResources();
@@ -123,20 +121,20 @@ public sealed class RenderingAndStoreTests : IDisposable
         // The bottom 36 pixels, drawn compact: two lines of large text become one line that fits.
         context.DrawRegion(0, 76, 176, 36, "encoder.0", null, compact: true, region =>
         {
-            Assert.True(region.IsCompact);
-            Assert.Equal((176, 36, "encoder.0"), (region.Width, region.Height, region.ControlId));
+            Assert.That(region.IsCompact, Is.True);
+            Assert.That((region.Width, region.Height, region.ControlId), Is.EqualTo((176, 36, "encoder.0")));
             region.TextStyle = new TextStyle(Color: "#00FF00", Size: 40);
             region.DrawLabel("Master volume\n42%");
         });
         canvas.Flush();
 
-        Assert.Equal(0, CountGreen(bitmap, 0, 76));
-        Assert.True(CountGreen(bitmap, 76, 112) > 40);
+        Assert.That(CountGreen(bitmap, 0, 76), Is.EqualTo(0));
+        Assert.That(CountGreen(bitmap, 76, 112) > 40, Is.True);
         var edgeColumns = new[] { 0, 1, 174, 175 };
-        Assert.DoesNotContain(edgeColumns, x => Enumerable.Range(76, 36).Any(y => bitmap.GetPixel(x, y).Green > 160));
+        Assert.That(edgeColumns.Any(x => Enumerable.Range(76, 36).Any(y => bitmap.GetPixel(x, y).Green > 160)), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Wraps_long_text_onto_several_lines()
     {
         using var resources = new SkiaDrawingResources();
@@ -153,10 +151,10 @@ public sealed class RenderingAndStoreTests : IDisposable
 
         // Wrapped text covers more than one line band.
         var rowsWithText = Enumerable.Range(0, 96).Count(y => Enumerable.Range(0, 96).Any(x => bitmap.GetPixel(x, y).Green > 160));
-        Assert.True(rowsWithText > 20, $"rows={rowsWithText}");
+        Assert.That(rowsWithText > 20, Is.True, $"rows={rowsWithText}");
     }
 
-    [Fact]
+    [Test]
     public void Parses_a_DeckHost_catalog_with_categories()
     {
         var entries = PluginStore.ParseDeckHostCatalog("""
@@ -172,12 +170,12 @@ public sealed class RenderingAndStoreTests : IDisposable
             }
             """);
 
-        var entry = Assert.Single(entries);
-        Assert.Equal(("deckhost.plugin.obs", "OBS Studio", "Streaming", PluginStore.DeckHostSource), (entry.Id, entry.Name, entry.Category, entry.Source));
-        Assert.Equal("https://example.com/obs.zip", entry.DownloadUrl);
+        var entry = Expect.Single(entries);
+        Assert.That((entry.Id, entry.Name, entry.Category, entry.Source), Is.EqualTo(("deckhost.plugin.obs", "OBS Studio", "Streaming", PluginStore.DeckHostSource)));
+        Assert.That(entry.DownloadUrl, Is.EqualTo("https://example.com/obs.zip"));
     }
 
-    [Fact]
+    [Test]
     public void Copies_and_moves_stream_deck_settings_with_profiles_and_controls()
     {
         var data = Path.Combine(_root, "data");
@@ -193,12 +191,12 @@ public sealed class RenderingAndStoreTests : IDisposable
         }
 
         var saved = JsonNode.Parse(File.ReadAllText(instances))!.AsObject();
-        Assert.Equal("general", saved["dev|p1|key.0|com.test.action"]?["channel"]?.GetValue<string>());
-        Assert.Equal("general", saved["dev|p2|key.5|com.test.action"]?["channel"]?.GetValue<string>());
-        Assert.False(saved.ContainsKey("dev|p2|key.0|com.test.action"));
+        Assert.That(saved["dev|p1|key.0|com.test.action"]?["channel"]?.GetValue<string>(), Is.EqualTo("general"));
+        Assert.That(saved["dev|p2|key.5|com.test.action"]?["channel"]?.GetValue<string>(), Is.EqualTo("general"));
+        Assert.That(saved.ContainsKey("dev|p2|key.0|com.test.action"), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Shrinks_unwrapped_text_to_fit_the_width()
     {
         using var resources = new SkiaDrawingResources();
@@ -215,22 +213,21 @@ public sealed class RenderingAndStoreTests : IDisposable
 
         // Nothing is cut off at the edges: the line was made smaller instead.
         var edgeColumns = new[] { 0, 1, 94, 95 };
-        Assert.DoesNotContain(edgeColumns, x => Enumerable.Range(0, 96).Any(y => bitmap.GetPixel(x, y).Green > 160));
-        Assert.True(CountGreen(bitmap, 0, 96) > 50);
+        Assert.That(edgeColumns.Any(x => Enumerable.Range(0, 96).Any(y => bitmap.GetPixel(x, y).Green > 160)), Is.False);
+        Assert.That(CountGreen(bitmap, 0, 96) > 50, Is.True);
     }
 
-    [Theory]
-    [InlineData("Discord", null, "Communication")]
-    [InlineData("OBS Studio", "Control scenes", "Streaming")]
-    [InlineData("Philips Hue", null, "Lighting & smart home")]
-    [InlineData("Zzz", "nothing known", PluginCategories.Other)]
+    [TestCase("Discord", null, "Communication")]
+    [TestCase("OBS Studio", "Control scenes", "Streaming")]
+    [TestCase("Philips Hue", null, "Lighting & smart home")]
+    [TestCase("Zzz", "nothing known", PluginCategories.Other)]
     public void Derives_a_category_when_the_catalog_has_none(string name, string? description, string expected) =>
-        Assert.Equal(expected, PluginCategories.Resolve(null, name, description, "com.example.plugin"));
+        Assert.That(PluginCategories.Resolve(null, name, description, "com.example.plugin"), Is.EqualTo(expected));
 
-    [Fact]
-    public void A_given_category_wins() => Assert.Equal("Tools", PluginCategories.Resolve("Tools", "Discord", null, "x"));
+    [Test]
+    public void A_given_category_wins() => Assert.That(PluginCategories.Resolve("Tools", "Discord", null, "x"), Is.EqualTo("Tools"));
 
-    [Fact]
+    [Test]
     public async Task Finds_plugins_in_a_local_folder_and_installs_from_it()
     {
         // A plugin project's build output (plugin.json next to its assembly) and a package.
@@ -249,18 +246,18 @@ public sealed class RenderingAndStoreTests : IDisposable
 
         var entries = PluginStore.LoadLocalSource(Path.Combine(_root, "plugins")).OrderBy(static entry => entry.Id).ToList();
 
-        Assert.Equal(["my.plugin", "other.plugin"], entries.Select(static entry => entry.Id));
-        Assert.Equal("My Plugin", entries[0].Name);
-        Assert.Equal("Audio", entries[1].Category);
+        Assert.That(entries.Select(static entry => entry.Id), Is.EqualTo(new[] { "my.plugin", "other.plugin" }));
+        Assert.That(entries[0].Name, Is.EqualTo("My Plugin"));
+        Assert.That(entries[1].Category, Is.EqualTo("Audio"));
 
         using var http = new HttpClient();
         var store = new PluginStore(http);
         var downloaded = await store.DownloadAsync(entries[0], Path.Combine(_root, "downloads"), null, CancellationToken.None);
         using var archive = System.IO.Compression.ZipFile.OpenRead(downloaded);
-        Assert.Contains(archive.Entries, static entry => entry.FullName == "plugin.json");
+        Assert.That(archive.Entries.Any(static entry => entry.FullName == "plugin.json"), Is.True);
     }
 
-    [Fact]
+    [Test]
     public async Task The_DeckHost_catalog_carries_checksums_permissions_and_paid_plugins()
     {
         Directory.CreateDirectory(_root);
@@ -275,17 +272,17 @@ public sealed class RenderingAndStoreTests : IDisposable
             """);
 
         var free = entries.Single(entry => entry.Id == "a.plugin");
-        Assert.Equal(["network", "processes"], free.Permissions);
+        Assert.That(free.Permissions, Is.EqualTo(new[] { "network", "processes" }));
         var paid = entries.Single(entry => entry.Id == "b.plugin");
-        Assert.Equal(("https://example.test/buy", "€5"), (paid.PurchaseUrl, paid.Price));
-        Assert.Equal("https://example.test/buy", paid.StorePageUrl);
+        Assert.That((paid.PurchaseUrl, paid.Price), Is.EqualTo(("https://example.test/buy", "€5")));
+        Assert.That(paid.StorePageUrl, Is.EqualTo("https://example.test/buy"));
 
         using var http = new HttpClient();
         var store = new PluginStore(http) { IncludeOfficialCatalog = false };
-        await Assert.ThrowsAsync<PluginException>(() => store.DownloadAsync(paid, Path.Combine(_root, "downloads"), null, CancellationToken.None));
+        Assert.ThrowsAsync<PluginException>(() => store.DownloadAsync(paid, Path.Combine(_root, "downloads"), null, CancellationToken.None));
     }
 
-    [Fact]
+    [Test]
     public async Task A_download_that_does_not_match_its_checksum_is_refused()
     {
         var bytes = "the real package"u8.ToArray();
@@ -295,24 +292,24 @@ public sealed class RenderingAndStoreTests : IDisposable
         var bad = good with { Sha256 = new string('0', 64) };
 
         var path = await store.DownloadAsync(good, Path.Combine(_root, "downloads"), null, CancellationToken.None);
-        Assert.Equal(bytes, File.ReadAllBytes(path));
-        var error = await Assert.ThrowsAsync<PluginException>(() => store.DownloadAsync(bad, Path.Combine(_root, "downloads"), null, CancellationToken.None));
-        Assert.Contains("checksum", error.Message);
-        Assert.Single(Directory.GetFiles(Path.Combine(_root, "downloads")));
+        Assert.That(File.ReadAllBytes(path), Is.EqualTo(bytes));
+        var error = Assert.ThrowsAsync<PluginException>(() => store.DownloadAsync(bad, Path.Combine(_root, "downloads"), null, CancellationToken.None));
+        Assert.That(error.Message, Does.Contain("checksum"));
+        Assert.That(Directory.GetFiles(Path.Combine(_root, "downloads")), Has.Exactly(1).Items);
     }
 
-    [Fact]
+    [Test]
     public async Task The_official_catalog_is_read_first_and_a_missing_one_is_simply_empty()
     {
         using var missing = new HttpClient(new FixedResponse([], System.Net.HttpStatusCode.NotFound));
         var store = new PluginStore(missing);
         var (entries, errors) = await store.LoadAsync(CancellationToken.None);
-        Assert.DoesNotContain(errors, error => error.StartsWith(PluginStore.DeckHostSource, StringComparison.Ordinal));
-        Assert.DoesNotContain(entries, entry => entry.Source == PluginStore.DeckHostSource);
+        Assert.That(errors.Any(error => error.StartsWith(PluginStore.DeckHostSource, StringComparison.Ordinal)), Is.False);
+        Assert.That(entries.Any(entry => entry.Source == PluginStore.DeckHostSource), Is.False);
 
         using var present = new HttpClient(new FixedResponse("""{ "deckhost.plugin.obs": { "name": "OBS Studio", "download_url": "https://example.test/obs.zip" } }"""u8.ToArray()));
         var (official, _) = await new PluginStore(present).LoadAsync(CancellationToken.None);
-        Assert.Contains(official, entry => entry.Id == "deckhost.plugin.obs" && entry.Source == PluginStore.DeckHostSource);
+        Assert.That(official.Any(entry => entry.Id == "deckhost.plugin.obs" && entry.Source == PluginStore.DeckHostSource), Is.True);
     }
 
     private sealed class FixedResponse(byte[] body, System.Net.HttpStatusCode status = System.Net.HttpStatusCode.OK) : HttpMessageHandler

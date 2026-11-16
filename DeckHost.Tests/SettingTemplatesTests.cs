@@ -5,7 +5,7 @@ namespace DeckHost.Tests;
 /// <summary>Every page that shows generated setting fields has a template for every kind of field.</summary>
 public sealed class SettingTemplatesTests
 {
-    [Fact]
+    [Test]
     public void Every_settings_page_has_a_template_for_every_field_kind()
     {
         // Without a template a field shows "Not found: DeckHost.App.Views.<Field>".
@@ -17,13 +17,13 @@ public sealed class SettingTemplatesTests
             .Where(static path => File.ReadAllText(path).Contains("DataType=\"vm:TextSettingField\"", StringComparison.Ordinal))
             .ToList();
 
-        Assert.NotEmpty(views);
-        Assert.Contains(kinds, static kind => kind == "SecretSettingField");
+        Assert.That(views, Is.Not.Empty);
+        Assert.That(kinds.Any(static kind => kind == "SecretSettingField"), Is.True);
         foreach (var view in views)
         {
             var text = File.ReadAllText(view);
             var missing = kinds.Where(kind => !text.Contains($"DataType=\"vm:{kind}\"", StringComparison.Ordinal)).ToList();
-            Assert.True(missing.Count == 0, $"{Path.GetFileName(view)} has no template for {string.Join(", ", missing)}.");
+            Assert.That(missing.Count == 0, Is.True, $"{Path.GetFileName(view)} has no template for {string.Join(", ", missing)}.");
         }
     }
 

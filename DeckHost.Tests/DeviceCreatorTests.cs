@@ -33,20 +33,20 @@ public sealed class DeviceCreatorTests : IDisposable
         }
     }
 
-    [Fact]
+    [Test]
     public void Keys_and_a_pushable_knob_are_learned_placed_numbered_and_saved_as_a_device()
     {
         using var plugin = new HidDevicePlugin(_folder);
         var source = new FakeSource();
         using var creator = new DeviceCreatorViewModel(plugin, source, static action => action());
         creator.SelectedHardware = creator.Hardware.Single();
-        Assert.Equal("Button Box", creator.Name);
+        Assert.That(creator.Name, Is.EqualTo("Button Box"));
         void Send(params byte[] report) => source.Report!(report);
 
         foreach (var bit in new byte[] { 0x01, 0x02 })
         {
             creator.AddKeyCommand.Execute(null);
-            Assert.True(creator.IsLearning);
+            Assert.That(creator.IsLearning, Is.True);
             Send(1, bit, 0, 0);
             Send(1, 0, 0, 0);
         }
@@ -54,7 +54,7 @@ public sealed class DeviceCreatorTests : IDisposable
         // The same key again is recognized, not added twice.
         creator.AddKeyCommand.Execute(null);
         Send(1, 0x01, 0, 0);
-        Assert.Contains("already there", creator.Status);
+        Assert.That(creator.Status, Does.Contain("already there"));
 
         creator.AddKnobCommand.Execute(null);
         Send(1, 0, 1, 0);
@@ -71,18 +71,18 @@ public sealed class DeviceCreatorTests : IDisposable
 
         creator.SaveCommand.Execute(null);
 
-        var description = Assert.Single(plugin.Descriptions);
-        Assert.Equal(("button-box", 0x16C0, 0x05DF, 0xFF00), (description.Id, description.VendorId, description.ProductId, description.UsagePage));
-        Assert.Equal(["key.0:Key 2", "key.1:Key 1", "encoder.0:Knob 1"], description.Controls.Select(static control => $"{control.Id}:{control.Name}"));
-        Assert.Equal(new HidInput(HidInputKind.Relative, 2, ReportId: 1), description.Controls[2].Input);
-        Assert.Equal(new HidInput(HidInputKind.Bit, 3, Mask: 0x10, ReportId: 1), description.Controls[2].Press);
-        Assert.Equal("hid.button-box", Assert.Single(plugin.Devices).Id);
+        var description = Expect.Single(plugin.Descriptions);
+        Assert.That((description.Id, description.VendorId, description.ProductId, description.UsagePage), Is.EqualTo(("button-box", 0x16C0, 0x05DF, 0xFF00)));
+        Assert.That(description.Controls.Select(static control => $"{control.Id}:{control.Name}"), Is.EqualTo(new[] { "key.0:Key 2", "key.1:Key 1", "encoder.0:Knob 1" }));
+        Assert.That(description.Controls[2].Input, Is.EqualTo(new HidInput(HidInputKind.Relative, 2, ReportId: 1)));
+        Assert.That(description.Controls[2].Press, Is.EqualTo(new HidInput(HidInputKind.Bit, 3, Mask: 0x10, ReportId: 1)));
+        Assert.That(Expect.Single(plugin.Devices).Id, Is.EqualTo("hid.button-box"));
 
         // Live: a press lights the key up.
         Send(1, 0x02, 0, 0);
-        Assert.True(second.IsDown);
+        Assert.That(second.IsDown, Is.True);
 
         creator.Dispose();
-        Assert.Null(source.Report);
+        Assert.That(source.Report, Is.Null);
     }
 }

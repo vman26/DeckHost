@@ -50,7 +50,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 |---|---|---|
 | C#, .NET 10, Avalonia, SkiaSharp, CommunityToolkit.Mvvm | ✅ | |
 | Microsoft.Extensions.Logging | ✅ | NLog behind `ILogger` |
-| NUnit | ⬜ | xUnit today; moving to NUnit is planned |
+| NUnit | ✅ | NUnit 4 (constraint model), one test instance per test, classes in parallel |
 | Versioned contracts and JSON | ✅ | `ContractsApi.txt` baseline, `ProfileMigrations` |
 | SQLite | ⬜ | Not needed yet; JSON files |
 | IPC: named pipes / Unix sockets | 🟡 | Loopback TCP with a one-time token (`PluginWire`); same isolation, different transport |
@@ -154,7 +154,8 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Requirement | | Where / what's missing |
 |---|---|---|
 | Automated tests | ✅ | About 640 tests |
-| NUnit, `MethodName_State_Expected` names, separate test projects | ⬜ | One xUnit project with sentence names; NUnit migration planned |
+| NUnit | ✅ | `DeckHost.Tests` on NUnit 4 |
+| `MethodName_State_Expected` names, separate test projects | ⬜ | One project with sentence names (`A_knob_fills_its_touch_zone…`) |
 
 ## 17. Foundation 1.0 checklist
 

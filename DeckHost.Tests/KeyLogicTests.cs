@@ -84,7 +84,7 @@ public sealed class KeyLogicTests : IAsyncDisposable
         }
     }
 
-    [Fact]
+    [Test]
     public async Task A_multi_action_switch_alternates_between_its_sets()
     {
         await Start(new ControlBinding("key.0", ProfileActionKind.MultiActionSwitch, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
@@ -94,12 +94,12 @@ public sealed class KeyLogicTests : IAsyncDisposable
         await Click();
         await Click();
 
-        Assert.Equal(["a", "c", "b", "a", "c"], Ran());
-        Assert.True(_store.TryGetValue<string>(DeckHost.Contracts.VariableKeys.For(Device, "key.0", DeckHost.Contracts.VariableKeys.SwitchState), out var next));
-        Assert.Equal(StepGroups.Second, next);
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "c", "b", "a", "c" }));
+        Assert.That(_store.TryGetValue<string>(DeckHost.Contracts.VariableKeys.For(Device, "key.0", DeckHost.Contracts.VariableKeys.SwitchState), out var next), Is.True);
+        Assert.That(next, Is.EqualTo(StepGroups.Second));
     }
 
-    [Fact]
+    [Test]
     public async Task Key_logic_tells_a_press_a_double_press_and_a_hold_apart()
     {
         await Start(new ControlBinding("key.0", ProfileActionKind.KeyLogic, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
@@ -107,23 +107,23 @@ public sealed class KeyLogicTests : IAsyncDisposable
 
         await Click();
         await WaitFor(1);
-        Assert.Equal(["a"], Ran()); // after the double-press window
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" })); // after the double-press window
 
         await Click();
         await Click();
         await Task.Delay(DeviceHostService.DoublePressWindow * 2);
         await _host.WhenIdleAsync();
-        Assert.Equal(["a", "b"], Ran()); // the double press, not two presses
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b" })); // the double press, not two presses
 
         await Input(InputCapabilities.Press);
         await Input(InputCapabilities.LongPress);
         await Input(InputCapabilities.Release);
         await Task.Delay(DeviceHostService.DoublePressWindow * 2);
         await _host.WhenIdleAsync();
-        Assert.Equal(["a", "b", "c"], Ran()); // the hold, and no press after it
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b", "c" })); // the hold, and no press after it
     }
 
-    [Fact]
+    [Test]
     public async Task Key_logic_without_double_press_steps_runs_a_press_at_once()
     {
         await Start(new ControlBinding("key.0", ProfileActionKind.KeyLogic, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
@@ -131,10 +131,10 @@ public sealed class KeyLogicTests : IAsyncDisposable
 
         await Click();
 
-        Assert.Equal(["a"], Ran());
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
     }
 
-    [Fact]
+    [Test]
     public async Task Steps_wait_without_blocking_the_device()
     {
         await Start(new ControlBinding("key.0", ProfileActionKind.MultiAction, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
@@ -142,25 +142,25 @@ public sealed class KeyLogicTests : IAsyncDisposable
         var started = DateTime.UtcNow;
 
         await Input(InputCapabilities.Press);
-        Assert.Equal(["a"], Ran()); // the rest waits; the worker is free meanwhile
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" })); // the rest waits; the worker is free meanwhile
 
         await WaitFor(3);
-        Assert.Equal(["a", "b", "c"], Ran());
-        Assert.True(DateTime.UtcNow - started >= TimeSpan.FromMilliseconds(240));
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b", "c" }));
+        Assert.That(DateTime.UtcNow - started >= TimeSpan.FromMilliseconds(240), Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Sets_and_waits_survive_saving()
     {
         var step = Step(3, "a", StepGroups.Hold, 1500);
         var loaded = System.Text.Json.JsonSerializer.Deserialize<MultiActionStep>(System.Text.Json.JsonSerializer.Serialize(step))!;
 
-        Assert.Equal((StepGroups.Hold, 1500), (loaded.Group, loaded.DelayMs));
-        Assert.Equal(StepGroups.First, StepGroups.Of(Step(0, "a"), ProfileActionKind.MultiActionSwitch)); // a converted Multi Action's steps
-        Assert.Null(StepGroups.Of(Step(0, "a", StepGroups.Hold), ProfileActionKind.MultiAction));
+        Assert.That((loaded.Group, loaded.DelayMs), Is.EqualTo((StepGroups.Hold, 1500)));
+        Assert.That(StepGroups.Of(Step(0, "a"), ProfileActionKind.MultiActionSwitch), Is.EqualTo(StepGroups.First)); // a converted Multi Action's steps
+        Assert.That(StepGroups.Of(Step(0, "a", StepGroups.Hold), ProfileActionKind.MultiAction), Is.Null);
     }
 
-    [Fact]
+    [Test]
     public void The_editor_keeps_each_steps_set_and_wait()
     {
         var builtIns = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
@@ -179,12 +179,12 @@ public sealed class KeyLogicTests : IAsyncDisposable
             new ControlBindingViewModel(model, keyLogic, [new StepItemViewModel(mute, ActionSettings.Empty), new StepItemViewModel(stop, ActionSettings.Empty)]),
             items, null);
 
-        Assert.Equal(["Press", "Double press", "Hold"], editor.StepGroupOptions.Select(option => option.Label));
+        Assert.That(editor.StepGroupOptions.Select(option => option.Label), Is.EqualTo(new[] { "Press", "Double press", "Hold" }));
         editor.Steps[1].Group = editor.StepGroupOptions[1];
         editor.Steps[1].DelayMilliseconds = 750;
         var built = editor.BuildBinding()!;
 
-        Assert.Equal(ProfileActionKind.KeyLogic, built.ActionKind);
-        Assert.Equal([(StepGroups.Hold, 200), (StepGroups.DoublePress, 750)], built.Steps.Select(step => (step.Group, step.DelayMs)));
+        Assert.That(built.ActionKind, Is.EqualTo(ProfileActionKind.KeyLogic));
+        Assert.That(built.Steps.Select(step => (step.Group, step.DelayMs)), Is.EqualTo(new[] { (StepGroups.Hold, 200), (StepGroups.DoublePress, 750) }));
     }
 }

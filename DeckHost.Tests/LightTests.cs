@@ -10,14 +10,14 @@ namespace DeckHost.Tests;
 
 public class LightEffectMathTests
 {
-    [Fact]
+    [Test]
     public void Solid_and_off()
     {
-        Assert.Equal(((byte)255, (byte)0, (byte)128), LightEffectMath.ColorAt(new LightStyle("FF0080"), TimeSpan.FromSeconds(7)));
-        Assert.Equal(((byte)0, (byte)0, (byte)0), LightEffectMath.ColorAt(new LightStyle("FF0080", LightEffects.Off), TimeSpan.Zero));
+        Assert.That(LightEffectMath.ColorAt(new LightStyle("FF0080"), TimeSpan.FromSeconds(7)), Is.EqualTo(((byte)255, (byte)0, (byte)128)));
+        Assert.That(LightEffectMath.ColorAt(new LightStyle("FF0080", LightEffects.Off), TimeSpan.Zero), Is.EqualTo(((byte)0, (byte)0, (byte)0)));
     }
 
-    [Fact]
+    [Test]
     public void Breathing_fades_between_a_glow_and_the_full_color()
     {
         var style = new LightStyle("FF0000", LightEffects.Breathe, 2);
@@ -25,24 +25,24 @@ public class LightEffectMathTests
         var start = LightEffectMath.ColorAt(style, TimeSpan.Zero);
         var middle = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1));
 
-        Assert.InRange(start.R, (byte)5, (byte)15); // never fully dark
-        Assert.Equal((byte)255, middle.R);
-        Assert.Equal(start, LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(2))); // one cycle later
+        Assert.That(start.R, Is.InRange((byte)5, (byte)15)); // never fully dark
+        Assert.That(middle.R, Is.EqualTo((byte)255));
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(2)), Is.EqualTo(start)); // one cycle later
     }
 
-    [Fact]
+    [Test]
     public void Rainbow_moves_on_and_each_light_is_ahead_of_the_previous_one()
     {
         var style = new LightStyle("000000", LightEffects.Rainbow, 4);
 
-        Assert.NotEqual(LightEffectMath.ColorAt(style, TimeSpan.Zero), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1)));
-        Assert.Equal(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1)), LightEffectMath.ColorAt(style, TimeSpan.Zero, phase: 1));
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1)), Is.Not.EqualTo(LightEffectMath.ColorAt(style, TimeSpan.Zero)));
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.Zero, phase: 1), Is.EqualTo(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1))));
     }
 }
 
 public class HostLightTests
 {
-    [Fact]
+    [Test]
     public async Task The_device_light_shows_on_every_knob_and_a_knob_can_have_its_own()
     {
         var device = new LightDevice();
@@ -52,12 +52,12 @@ public class HostLightTests
         fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle("FF0000"));
         await fixture.Host.WhenIdleAsync();
 
-        Assert.Equal((0, 255, 0), fixture.Shown("encoder.0")); // its own idle color
-        Assert.Equal((255, 0, 0), fixture.Shown("encoder.1")); // the device's
-        Assert.Contains("encoder.1:255,0,0", device.Calls);
+        Assert.That(fixture.Shown("encoder.0"), Is.EqualTo((0, 255, 0))); // its own idle color
+        Assert.That(fixture.Shown("encoder.1"), Is.EqualTo((255, 0, 0))); // the device's
+        Assert.That(device.Calls, Does.Contain("encoder.1:255,0,0"));
     }
 
-    [Fact]
+    [Test]
     public async Task An_unplugged_device_still_shows_its_lights_in_the_editor()
     {
         var device = new LightDevice(connected: false);
@@ -66,11 +66,11 @@ public class HostLightTests
         fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle("0000FF"));
         await fixture.Host.WhenIdleAsync();
 
-        Assert.Equal((0, 0, 255), fixture.Shown("encoder.0"));
-        Assert.Empty(device.Calls);
+        Assert.That(fixture.Shown("encoder.0"), Is.EqualTo((0, 0, 255)));
+        Assert.That(device.Calls, Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task A_press_shows_the_active_color_then_the_idle_light_again()
     {
         var device = new LightDevice();
@@ -78,13 +78,13 @@ public class HostLightTests
 
         fixture.Host.SimulateInput(new DeviceInputEvent(LightDevice.DeviceId, "encoder.0", InputCapabilities.Press, 1));
         await fixture.Host.WhenIdleAsync();
-        Assert.Equal((255, 255, 255), fixture.Shown("encoder.0"));
+        Assert.That(fixture.Shown("encoder.0"), Is.EqualTo((255, 255, 255)));
 
         await WaitUntil(() => fixture.Shown("encoder.0") == (0, 255, 0));
-        Assert.Equal((0, 255, 0), fixture.Shown("encoder.0"));
+        Assert.That(fixture.Shown("encoder.0"), Is.EqualTo((0, 255, 0)));
     }
 
-    [Fact]
+    [Test]
     public async Task An_effect_keeps_changing_the_light_in_one_command_for_all_knobs()
     {
         var device = new LightDevice();
@@ -95,8 +95,8 @@ public class HostLightTests
 
         await WaitUntil(() => fixture.Shown("encoder.0") != first);
 
-        Assert.NotEqual(first, fixture.Shown("encoder.0"));
-        Assert.Contains(device.Calls, call => call.StartsWith("batch:", StringComparison.Ordinal));
+        Assert.That(fixture.Shown("encoder.0"), Is.Not.EqualTo(first));
+        Assert.That(device.Calls.Any(call => call.StartsWith("batch:", StringComparison.Ordinal)), Is.True);
     }
 
     private static ControlBinding Knob(string controlId, RgbFeedback light) =>
@@ -215,24 +215,24 @@ public class LightSettingsTests
         public void SetDeviceLight(string deviceId, LightStyle? style) => Lights[deviceId] = style;
     }
 
-    [Fact]
+    [Test]
     public void The_knob_lights_card_sets_the_devices_light_right_away()
     {
         var store = new Store();
         var card = new DeckHost.App.ViewModels.KnobLightsViewModel(store, "dev");
 
-        Assert.Equal(DeckHost.App.ViewModels.KnobLightsViewModel.Off, card.SelectedEffect.Value); // dark until chosen
+        Assert.That(card.SelectedEffect.Value, Is.EqualTo(DeckHost.App.ViewModels.KnobLightsViewModel.Off)); // dark until chosen
         card.SelectedEffect = card.Effects.First(option => option.Value == LightEffects.Breathe);
         card.Color = "#FF8800";
         card.PeriodSeconds = 4.2;
 
-        Assert.Equal(new LightStyle("FF8800", LightEffects.Breathe, 4.2), store.Lights["dev"]);
-        Assert.True(card.ShowColor && card.ShowSpeed);
+        Assert.That(store.Lights["dev"], Is.EqualTo(new LightStyle("FF8800", LightEffects.Breathe, 4.2)));
+        Assert.That(card.ShowColor && card.ShowSpeed, Is.True);
         card.SelectedEffect = card.Effects.First(option => option.Value == DeckHost.App.ViewModels.KnobLightsViewModel.Off);
-        Assert.Null(store.Lights["dev"]);
+        Assert.That(store.Lights["dev"], Is.Null);
     }
 
-    [Fact]
+    [Test]
     public void A_knob_can_have_its_own_idle_effect()
     {
         var builtIns = DeckHost.App.SystemPlugins.SystemPluginSet.Create().First(plugin => plugin.Id == DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId);
@@ -243,17 +243,17 @@ public class LightSettingsTests
             new ControlBinding("encoder.0", ProfileActionKind.Single, item.ToActionReference(), new ControlAppearance(), []), item, []);
         var customize = new DeckHost.App.ViewModels.ControlCustomizationViewModel(knob, binding, [item], null);
 
-        Assert.Null(customize.BuildBinding()!.Appearance.RgbFeedback); // follows the device's knob lights
+        Assert.That(customize.BuildBinding()!.Appearance.RgbFeedback, Is.Null); // follows the device's knob lights
         customize.LightEnabled = true;
         customize.SelectedIdleEffect = customize.IdleEffects.First(option => option.Value == LightEffects.Rainbow);
         customize.EffectPeriod = 6;
 
         var light = customize.BuildBinding()!.Appearance.RgbFeedback!;
-        Assert.Equal((LightEffects.Rainbow, 6d), (light.IdleEffect, light.EffectPeriodSeconds));
-        Assert.Equal(new LightStyle(light.IdleColor, LightEffects.Rainbow, 6), light.IdleStyle);
+        Assert.That((light.IdleEffect, light.EffectPeriodSeconds), Is.EqualTo((LightEffects.Rainbow, 6d)));
+        Assert.That(light.IdleStyle, Is.EqualTo(new LightStyle(light.IdleColor, LightEffects.Rainbow, 6)));
     }
 
-    [Fact]
+    [Test]
     public void Device_lights_and_a_knobs_effect_are_saved()
     {
         var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}", "profiles.json");
@@ -267,8 +267,8 @@ public class LightSettingsTests
 
             var loaded = store.Load()!;
 
-            Assert.Equal(new LightStyle("FF0000", LightEffects.Rainbow, 5), loaded.DeviceLights!["dev"]);
-            Assert.Equal(light, Assert.Single(Assert.Single(loaded.Profiles).Bindings).Appearance.RgbFeedback);
+            Assert.That(loaded.DeviceLights!["dev"], Is.EqualTo(new LightStyle("FF0000", LightEffects.Rainbow, 5)));
+            Assert.That(Expect.Single(Expect.Single(loaded.Profiles).Bindings).Appearance.RgbFeedback, Is.EqualTo(light));
         }
         finally
         {

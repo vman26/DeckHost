@@ -8,25 +8,24 @@ namespace DeckHost.Tests;
 
 public class LightEffectTests
 {
-    [Theory]
-    [InlineData(LightEffects.Pulse)]
-    [InlineData(LightEffects.Blink)]
-    [InlineData(LightEffects.ColorCycle)]
-    [InlineData(LightEffects.Wave)]
-    [InlineData(LightEffects.Chase)]
-    [InlineData(LightEffects.Candle)]
-    [InlineData(LightEffects.Sparkle)]
+    [TestCase(LightEffects.Pulse)]
+    [TestCase(LightEffects.Blink)]
+    [TestCase(LightEffects.ColorCycle)]
+    [TestCase(LightEffects.Wave)]
+    [TestCase(LightEffects.Chase)]
+    [TestCase(LightEffects.Candle)]
+    [TestCase(LightEffects.Sparkle)]
     public void Every_effect_moves_and_repeats_exactly(string effect)
     {
         var style = new LightStyle("FF8000", effect, 2);
         var samples = Enumerable.Range(0, 60).Select(i => LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(i * 0.07), phase: 1)).ToList();
 
-        Assert.True(samples.Distinct().Count() > 3, $"{effect} should change over time");
-        Assert.True(LightEffects.IsAnimated(effect));
-        Assert.Equal(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.3), 2), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.3), 2));
+        Assert.That(samples.Distinct().Count() > 3, Is.True, $"{effect} should change over time");
+        Assert.That(LightEffects.IsAnimated(effect), Is.True);
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.3), 2), Is.EqualTo(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.3), 2)));
     }
 
-    [Fact]
+    [Test]
     public void Fades_are_smooth_steps_of_brightness()
     {
         // Sampled at 30 frames a second, breathing never jumps more than a small step.
@@ -35,23 +34,23 @@ public class LightEffectTests
         for (var frame = 1; frame < 90; frame++)
         {
             var current = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(frame / 30d)).R;
-            Assert.InRange(Math.Abs(current - previous), 0, 16);
+            Assert.That(Math.Abs(current - previous), Is.InRange(0, 16));
             previous = current;
         }
     }
 
-    [Fact]
+    [Test]
     public void Color_cycle_fades_through_its_colors()
     {
         var style = new LightStyle("000000", LightEffects.ColorCycle, 3) { Colors = ["FF0000", "00FF00", "0000FF"], Spread = 0 };
 
-        Assert.Equal(((byte)255, (byte)0, (byte)0), LightEffectMath.ColorAt(style, TimeSpan.Zero));
-        Assert.Equal(((byte)0, (byte)255, (byte)0), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1)));
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.Zero), Is.EqualTo(((byte)255, (byte)0, (byte)0)));
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1)), Is.EqualTo(((byte)0, (byte)255, (byte)0)));
         var halfway = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(0.5));
-        Assert.True(halfway.R is > 50 and < 205 && halfway.G is > 50 and < 205, $"between red and green: {halfway}");
+        Assert.That(halfway.R is > 50 and < 205 && halfway.G is > 50 and < 205, Is.True, $"between red and green: {halfway}");
     }
 
-    [Fact]
+    [Test]
     public void A_custom_effect_plays_its_steps()
     {
         var style = new LightStyle("000000", LightEffects.Custom)
@@ -59,36 +58,36 @@ public class LightEffectTests
             Steps = [new LightStep("FF0000", FadeSeconds: 0, HoldSeconds: 1), new LightStep("0000FF", FadeSeconds: 1, HoldSeconds: 1)],
         };
 
-        Assert.Equal(3, LightEffectMath.CustomLength(style));
-        Assert.Equal(((byte)255, (byte)0, (byte)0), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(0.5)));
+        Assert.That(LightEffectMath.CustomLength(style), Is.EqualTo(3));
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(0.5)), Is.EqualTo(((byte)255, (byte)0, (byte)0)));
         var fading = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.5));
-        Assert.True(fading.R is > 50 and < 205 && fading.B is > 50 and < 205, $"fading red to blue: {fading}");
-        Assert.Equal(((byte)0, (byte)0, (byte)255), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(2.5)));
-        Assert.Equal(((byte)255, (byte)0, (byte)0), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(3.5))); // from the start
+        Assert.That(fading.R is > 50 and < 205 && fading.B is > 50 and < 205, Is.True, $"fading red to blue: {fading}");
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(2.5)), Is.EqualTo(((byte)0, (byte)0, (byte)255)));
+        Assert.That(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(3.5)), Is.EqualTo(((byte)255, (byte)0, (byte)0))); // from the start
     }
 
-    [Fact]
+    [Test]
     public void Chase_lights_one_led_at_a_time()
     {
         var style = new LightStyle("FFFFFF", LightEffects.Chase, 4);
 
         // A quarter into the cycle the head is on the second of four LEDs.
         var leds = Enumerable.Range(0, 4).Select(i => LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1.1), i, 4).Item1).ToList();
-        Assert.Equal(1, leds.IndexOf(leds.Max()));
+        Assert.That(leds.IndexOf(leds.Max()), Is.EqualTo(1));
     }
 
-    [Fact]
+    [Test]
     public void Styles_with_the_same_lists_are_equal_and_saved_with_them()
     {
         var a = new LightStyle("FF0000", LightEffects.Custom) { Steps = [new LightStep("00FF00")], Spread = 0.1 };
         var b = new LightStyle("FF0000", LightEffects.Custom) { Steps = [new LightStep("00FF00")], Spread = 0.1 };
-        Assert.Equal(a, b);
+        Assert.That(b, Is.EqualTo(a));
 
         var json = System.Text.Json.JsonSerializer.Serialize(new RgbFeedback { IdleLight = a });
-        Assert.Equal(a, System.Text.Json.JsonSerializer.Deserialize<RgbFeedback>(json)!.IdleStyle);
+        Assert.That(System.Text.Json.JsonSerializer.Deserialize<RgbFeedback>(json)!.IdleStyle, Is.EqualTo(a));
     }
 
-    [Fact]
+    [Test]
     public void The_editor_composes_a_custom_effect()
     {
         var editor = new LightStyleEditorViewModel(null);
@@ -96,8 +95,8 @@ public class LightEffectTests
         editor.Changed += (_, _) => changes++;
 
         editor.SelectedEffect = editor.Effects.First(option => option.Value == LightEffects.Custom);
-        Assert.True(editor.ShowSteps);
-        Assert.NotEmpty(editor.Steps); // starts from a preset
+        Assert.That(editor.ShowSteps, Is.True);
+        Assert.That(editor.Steps, Is.Not.Empty); // starts from a preset
 
         editor.SelectedPreset = LightStyleEditorViewModel.Presets.First(preset => preset.Name == "Traffic light");
         editor.Steps[0].HoldSeconds = 1;
@@ -106,20 +105,20 @@ public class LightEffectTests
         editor.Steps[^1].MoveUpCommand.Execute(null);
 
         var style = editor.ToStyle()!;
-        Assert.Equal(LightEffects.Custom, style.Effect);
-        Assert.Equal(["FF0000", "FFA500", "123456", "00FF00"], style.Steps!.Select(step => step.Color));
-        Assert.Equal(1, style.Steps![0].HoldSeconds);
-        Assert.True(changes >= 4);
+        Assert.That(style.Effect, Is.EqualTo(LightEffects.Custom));
+        Assert.That(style.Steps!.Select(step => step.Color), Is.EqualTo(new[] { "FF0000", "FFA500", "123456", "00FF00" }));
+        Assert.That(style.Steps![0].HoldSeconds, Is.EqualTo(1));
+        Assert.That(changes >= 4, Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Off_in_device_settings_means_no_light_and_off_on_a_knob_means_dark()
     {
-        Assert.Null(new LightStyleEditorViewModel(null, KnobLightsViewModel.Off).ToStyle());
-        Assert.Equal(LightEffects.Off, new LightStyleEditorViewModel(new LightStyle(Effect: LightEffects.Off)).ToStyle()!.Effect);
+        Assert.That(new LightStyleEditorViewModel(null, KnobLightsViewModel.Off).ToStyle(), Is.Null);
+        Assert.That(new LightStyleEditorViewModel(new LightStyle(Effect: LightEffects.Off)).ToStyle()!.Effect, Is.EqualTo(LightEffects.Off));
     }
 
-    [Fact]
+    [Test]
     public async Task Off_is_sent_again_after_the_device_resets_its_lights()
     {
         var device = new HostLightTests.LightDevice();
@@ -136,11 +135,11 @@ public class LightEffectTests
         device.Context!.RequestRedraw(HostLightTests.LightDevice.DeviceId);
         await host.WhenIdleAsync();
 
-        Assert.Contains(device.Calls, call => call == "batch:encoder.0:0,0,0 encoder.1:0,0,0");
+        Assert.That(device.Calls.Any(call => call == "batch:encoder.0:0,0,0 encoder.1:0,0,0"), Is.True);
         store.Dispose();
     }
 
-    [Fact]
+    [Test]
     public async Task Each_led_can_have_its_own_light()
     {
         var device = new HostLightTests.LightDevice();
@@ -155,11 +154,11 @@ public class LightEffectTests
         await host.WhenIdleAsync();
 
         // The first LED its own red; the second (no style of its own) the shared green.
-        Assert.Contains(device.Calls, call => call == "batch:encoder.0:255,0,0 encoder.1:0,255,0");
+        Assert.That(device.Calls.Any(call => call == "batch:encoder.0:255,0,0 encoder.1:0,255,0"), Is.True);
         store.Dispose();
     }
 
-    [Fact]
+    [Test]
     public void The_knob_lights_card_composes_each_led()
     {
         var saved = new Dictionary<string, LightStyle?>();
@@ -171,12 +170,12 @@ public class LightEffectTests
         card.Leds[1].Editor.SelectedEffect = card.Leds[1].Editor.Effects.First(option => option.Value == LightEffects.Off);
 
         var style = saved["dev"]!;
-        Assert.Equal([LightEffects.Breathe, LightEffects.Off], style.Leds!.Select(led => led!.Effect));
+        Assert.That(style.Leds!.Select(led => led!.Effect), Is.EqualTo(new[] { LightEffects.Breathe, LightEffects.Off }));
 
         // Opened again: the card shows each LED's own light.
         var reopened = new KnobLightsViewModel(settings, "dev", ["Knob 1", "Knob 2"]);
-        Assert.True(reopened.EachLedOwn);
-        Assert.Equal(LightEffects.Breathe, reopened.Leds[0].Editor.Effect);
+        Assert.That(reopened.EachLedOwn, Is.True);
+        Assert.That(reopened.Leds[0].Editor.Effect, Is.EqualTo(LightEffects.Breathe));
     }
 
     private sealed class LightStore(Dictionary<string, LightStyle?> saved) : IDeviceLightSettings

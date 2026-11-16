@@ -9,7 +9,7 @@ namespace DeckHost.Tests;
 
 public class PreviewTests
 {
-    [Fact]
+    [Test]
     public async Task Frames_are_reported_for_the_preview_even_without_a_device()
     {
         var plugin = new FakeDevicePlugin(connected: false);
@@ -22,11 +22,11 @@ public class PreviewTests
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
 
-        Assert.Equal(["key.0", "key.1"], frames.Select(frame => frame.ControlId).Order());
-        Assert.Empty(plugin.PushedImages);
+        Assert.That(frames.Select(frame => frame.ControlId).Order(), Is.EqualTo(new[] { "key.0", "key.1" }));
+        Assert.That(plugin.PushedImages, Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public async Task Profile_and_control_backgrounds_are_drawn()
     {
         var plugin = new FakeDevicePlugin();
@@ -41,11 +41,11 @@ public class PreviewTests
         await host.WhenIdleAsync();
 
         // Corner pixels (RGBA): key.0 shows the green profile background, key.1 its own red background.
-        Assert.Equal(new byte[] { 0, 255, 0, 255 }, frames["key.0"].Rgba[..4]);
-        Assert.Equal(new byte[] { 255, 0, 0, 255 }, frames["key.1"].Rgba[..4]);
+        Assert.That(frames["key.0"].Rgba[..4], Is.EqualTo(new byte[] { 0, 255, 0, 255 }));
+        Assert.That(frames["key.1"].Rgba[..4], Is.EqualTo(new byte[] { 255, 0, 0, 255 }));
     }
 
-    [Fact]
+    [Test]
     public async Task Simulated_input_runs_actions_and_is_reported()
     {
         var plugin = new FakeDevicePlugin();
@@ -61,7 +61,7 @@ public class PreviewTests
         host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, "key.1", InputCapabilities.Press, 1));
         await host.WhenIdleAsync();
 
-        Assert.Single(action.Executions);
-        Assert.Equal(2, inputs.Count);
+        Assert.That(action.Executions, Has.Exactly(1).Items);
+        Assert.That(inputs.Count, Is.EqualTo(2));
     }
 }

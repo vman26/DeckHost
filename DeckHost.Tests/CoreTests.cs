@@ -10,18 +10,18 @@ namespace DeckHost.Tests;
 
 public class VariableStoreTests
 {
-    [Fact]
+    [Test]
     public void Publish_then_TryGetValue_returns_value()
     {
         using var store = new VariableStore();
         store.Publish("a", 42);
 
-        Assert.True(store.TryGetValue<int>("a", out var value));
-        Assert.Equal(42, value);
-        Assert.False(store.TryGetValue<string>("a", out _));
+        Assert.That(store.TryGetValue<int>("a", out var value), Is.True);
+        Assert.That(value, Is.EqualTo(42));
+        Assert.That(store.TryGetValue<string>("a", out _), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Observe_before_first_publish_receives_values()
     {
         using var store = new VariableStore();
@@ -31,10 +31,10 @@ public class VariableStoreTests
         store.Publish("a", 1);
         store.Publish("a", 2);
 
-        Assert.Equal([1, 2], received);
+        Assert.That(received, Is.EqualTo(new[] { 1, 2 }));
     }
 
-    [Fact]
+    [Test]
     public async Task Concurrent_observe_and_publish_never_loses_the_subscriber()
     {
         for (var round = 0; round < 200; round++)
@@ -60,7 +60,7 @@ public class VariableStoreTests
             await publish;
             store.Publish(key, 99);
 
-            Assert.Equal(99, Volatile.Read(ref last));
+            Assert.That(Volatile.Read(ref last), Is.EqualTo(99));
         }
     }
 }
@@ -69,7 +69,7 @@ public class ActionRouterTests
 {
     private const string DeviceId = "dev";
 
-    [Fact]
+    [Test]
     public void Dispatch_runs_bound_action_and_publishes_input_state()
     {
         using var store = new VariableStore();
@@ -79,14 +79,14 @@ public class ActionRouterTests
 
         var dispatched = router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance);
 
-        Assert.True(dispatched);
-        var context = Assert.Single(action.Executions);
-        Assert.Equal(InputCapabilities.Press, context.EventType);
-        Assert.True(store.TryGetValue<InputCapabilities>("devices.dev.key.0.lastEvent", out var lastEvent));
-        Assert.Equal(InputCapabilities.Press, lastEvent);
+        Assert.That(dispatched, Is.True);
+        var context = Expect.Single(action.Executions);
+        Assert.That(context.EventType, Is.EqualTo(InputCapabilities.Press));
+        Assert.That(store.TryGetValue<InputCapabilities>("devices.dev.key.0.lastEvent", out var lastEvent), Is.True);
+        Assert.That(lastEvent, Is.EqualTo(InputCapabilities.Press));
     }
 
-    [Fact]
+    [Test]
     public void Dispatch_skips_actions_that_do_not_accept_the_event()
     {
         using var store = new VariableStore();
@@ -94,11 +94,11 @@ public class ActionRouterTests
         var router = new ActionRouter(store, [new TestApplicationPlugin("p", action)]);
         var profile = new DeviceProfile("profile", "Profile", DeviceId, [Bindings.Single("key.0", "p", "a")]);
 
-        Assert.False(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance));
-        Assert.Empty(action.Executions);
+        Assert.That(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance), Is.False);
+        Assert.That(action.Executions, Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void MultiAction_runs_steps_in_order_and_survives_a_failing_step()
     {
         using var store = new VariableStore();
@@ -121,24 +121,24 @@ public class ActionRouterTests
             ]);
         var profile = new DeviceProfile("profile", "Profile", DeviceId, [binding]);
 
-        Assert.True(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance));
-        Assert.Equal(["first", "last"], order);
-        Assert.Equal(["failing"], failures);
+        Assert.That(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance), Is.True);
+        Assert.That(order, Is.EqualTo(new[] { "first", "last" }));
+        Assert.That(failures, Is.EqualTo(new[] { "failing" }));
     }
 
-    [Fact]
+    [Test]
     public void Duplicate_action_ids_are_reported_instead_of_throwing()
     {
         using var store = new VariableStore();
         var router = new ActionRouter(store, [new TestApplicationPlugin("p", new RecordingAction("a")), new TestApplicationPlugin("p", new RecordingAction("a"))]);
 
-        Assert.Equal(["p:a"], router.DuplicateActionKeys);
+        Assert.That(router.DuplicateActionKeys, Is.EqualTo(new[] { "p:a" }));
     }
 }
 
 public class ProfileStoreTests
 {
-    [Fact]
+    [Test]
     public void Save_then_Load_round_trips_profiles()
     {
         var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}", "profiles.json");
@@ -156,14 +156,14 @@ public class ProfileStoreTests
             store.Save(document);
             var loaded = store.Load();
 
-            Assert.NotNull(loaded);
-            Assert.Equal("profile", loaded.SelectedProfileId);
-            var loadedBinding = Assert.Single(Assert.Single(loaded.Profiles).Bindings);
-            Assert.Equal(binding.ControlId, loadedBinding.ControlId);
-            Assert.Equal(binding.ActionKind, loadedBinding.ActionKind);
-            Assert.Equal(binding.Appearance, loadedBinding.Appearance);
-            Assert.Equal(binding.Steps[0], loadedBinding.Steps[0]);
-            Assert.False(File.Exists(path + ".tmp"));
+            Assert.That(loaded, Is.Not.Null);
+            Assert.That(loaded.SelectedProfileId, Is.EqualTo("profile"));
+            var loadedBinding = Expect.Single(Expect.Single(loaded.Profiles).Bindings);
+            Assert.That(loadedBinding.ControlId, Is.EqualTo(binding.ControlId));
+            Assert.That(loadedBinding.ActionKind, Is.EqualTo(binding.ActionKind));
+            Assert.That(loadedBinding.Appearance, Is.EqualTo(binding.Appearance));
+            Assert.That(loadedBinding.Steps[0], Is.EqualTo(binding.Steps[0]));
+            Assert.That(File.Exists(path + ".tmp"), Is.False);
         }
         finally
         {
@@ -171,7 +171,7 @@ public class ProfileStoreTests
         }
     }
 
-    [Fact]
+    [Test]
     public void The_default_background_and_new_appearance_fields_round_trip()
     {
         var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}", "profiles.json");
@@ -185,8 +185,8 @@ public class ProfileStoreTests
 
             var loaded = store.Load()!;
 
-            Assert.Equal(new ProfileBackground("#0F766E", "/images/wall.png"), loaded.DefaultBackground);
-            Assert.Equal(appearance, Assert.Single(Assert.Single(loaded.Profiles).Bindings).Appearance);
+            Assert.That(loaded.DefaultBackground, Is.EqualTo(new ProfileBackground("#0F766E", "/images/wall.png")));
+            Assert.That(Expect.Single(Expect.Single(loaded.Profiles).Bindings).Appearance, Is.EqualTo(appearance));
         }
         finally
         {
@@ -194,9 +194,9 @@ public class ProfileStoreTests
         }
     }
 
-    [Fact]
+    [Test]
     public void Load_returns_null_when_there_is_no_file()
     {
-        Assert.Null(new ProfileStore(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.json")).Load());
+        Assert.That(new ProfileStore(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.json")).Load(), Is.Null);
     }
 }

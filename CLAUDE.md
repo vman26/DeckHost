@@ -29,6 +29,7 @@ dotnet run --project .\DeckHost.App -- --check-native                   # load t
 - `dotnet publish` copies the native bridge into `plugins/device/deckhost-device-mirabox` too (`PublishMiraBoxBridgeRuntime` in the App project).
 
 - The plugin catalog tests install the real OBS package, so `DeckHost.Tests` builds the OBS project first (`ReferenceOutputAssembly=false`).
+- Tests use NUnit 4 with the constraint model (`Assert.That(actual, Is.EqualTo(expected))`); `TestSetup.cs` makes one class instance per test (constructor = setup, `Dispose` = teardown) and runs classes in parallel; `Expect` has `Single`/`IsType`/`All` helpers that return what they checked.
 - The tests run on Linux too: `DeckHost.Tests` adds `SkiaSharp.NativeAssets.Linux` there. Wait for the host with `WhenIdleAsync`, not with thread ids or delays: the worker and the test both run on pool threads.
 
 - `DeckHost.Device.MiraBox.csproj` drives the native build. Its targets run in this order: `DetectCMake` → `ApplyStreamDockSdkPatch` (idempotent `git apply` of `native/patches/streamdock-sdk.patch`) → `ConfigureMiraBoxBridge` → `BuildMiraBoxBridge`. CMake is found through `CMakeExePath`, then Visual Studio's bundled CMake, then `PATH`. If none is found, the build only warns and the app runs without device support.

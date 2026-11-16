@@ -27,30 +27,29 @@ public class KnobActionTests
         return ActionItemViewModel.Create(plugin.Id, plugin.Name, plugin.Actions.First(action => action.Id == actionId));
     }
 
-    [Theory]
-    [InlineData("builtin.counter")]
-    [InlineData("deckhost.diagnostic.key-id")]
-    [InlineData("builtin.clock")]
-    [InlineData("system.info")]
+    [TestCase("builtin.counter")]
+    [TestCase("deckhost.diagnostic.key-id")]
+    [TestCase("builtin.clock")]
+    [TestCase("system.info")]
     public void Actions_that_show_text_fit_a_knob_with_a_touch_zone(string actionId)
     {
         var action = BuiltIn(actionId);
 
-        Assert.True(action.FitsControl(Knob));
-        Assert.True(action.FitsControl(Key));
-        Assert.False(action.FitsControl(KnobWithoutDisplay));
+        Assert.That(action.FitsControl(Knob), Is.True);
+        Assert.That(action.FitsControl(Key), Is.True);
+        Assert.That(action.FitsControl(KnobWithoutDisplay), Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Key_image_actions_still_need_a_display_of_their_own()
     {
         var keyImage = ActionItemViewModel.Create("p", "P", new ImageAction());
 
-        Assert.True(keyImage.FitsControl(Key));
-        Assert.False(keyImage.FitsControl(Knob));
+        Assert.That(keyImage.FitsControl(Key), Is.True);
+        Assert.That(keyImage.FitsControl(Knob), Is.False);
     }
 
-    [Fact]
+    [Test]
     public async Task A_counter_on_a_knob_counts_turns_and_shows_on_the_touch_zone()
     {
         var plugins = SystemPluginSet.Create();
@@ -71,9 +70,9 @@ public class KnobActionTests
         host.SimulateInput(new DeviceInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.KnobId, InputCapabilities.Rotate, -1));
         await host.WhenIdleAsync();
 
-        Assert.True(store.TryGetValue<int>(VariableKeys.For(StripDevicePlugin.DeviceId, StripDevicePlugin.KnobId, VariableKeys.Counter), out var count));
-        Assert.Equal(1, count);
-        Assert.False(before.AsSpan().SequenceEqual(frames[StripDevicePlugin.ZoneId].Rgba), "the zone shows the new count");
+        Assert.That(store.TryGetValue<int>(VariableKeys.For(StripDevicePlugin.DeviceId, StripDevicePlugin.KnobId, VariableKeys.Counter), out var count), Is.True);
+        Assert.That(count, Is.EqualTo(1));
+        Assert.That(before.AsSpan().SequenceEqual(frames[StripDevicePlugin.ZoneId].Rgba), Is.False, "the zone shows the new count");
     }
 
     private sealed class ImageAction : IDeckAction

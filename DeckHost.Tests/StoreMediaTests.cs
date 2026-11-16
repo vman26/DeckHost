@@ -1,7 +1,6 @@
 using DeckHost.App.Views;
 using DeckHost.Core.Plugins;
 using System.Net;
-using Xunit;
 
 namespace DeckHost.Tests;
 
@@ -20,61 +19,59 @@ public sealed class StoreMediaTests : IDisposable
         }
     }
 
-    [Theory]
-    [InlineData("https://github.com/OpenActionPlugins/counter", "OpenActionPlugins", "counter", null, "")]
-    [InlineData("https://github.com/owner/repo.git", "owner", "repo", null, "")]
-    [InlineData("https://www.github.com/owner/repo/", "owner", "repo", null, "")]
-    [InlineData("https://github.com/owner/mono/tree/main/plugins/clock", "owner", "mono", "main", "plugins/clock")]
+    [TestCase("https://github.com/OpenActionPlugins/counter", "OpenActionPlugins", "counter", null, "")]
+    [TestCase("https://github.com/owner/repo.git", "owner", "repo", null, "")]
+    [TestCase("https://www.github.com/owner/repo/", "owner", "repo", null, "")]
+    [TestCase("https://github.com/owner/mono/tree/main/plugins/clock", "owner", "mono", "main", "plugins/clock")]
     public void Reads_GitHub_repository_urls(string url, string owner, string repository, string? reference, string folder) =>
-        Assert.Equal(new GitHubLocation(owner, repository, reference, folder), GitHubLocation.Parse(url));
+        Assert.That(GitHubLocation.Parse(url), Is.EqualTo(new GitHubLocation(owner, repository, reference, folder)));
 
-    [Theory]
-    [InlineData("https://barraider.github.io/")]
-    [InlineData("https://github.com/owner")]
-    [InlineData("https://gitlab.com/owner/repo")]
-    [InlineData("not a url")]
-    [InlineData(null)]
-    public void Other_urls_are_not_repositories(string? url) => Assert.Null(GitHubLocation.Parse(url));
+    [TestCase("https://barraider.github.io/")]
+    [TestCase("https://github.com/owner")]
+    [TestCase("https://gitlab.com/owner/repo")]
+    [TestCase("not a url")]
+    [TestCase(null)]
+    public void Other_urls_are_not_repositories(string? url) => Assert.That(GitHubLocation.Parse(url), Is.Null);
 
-    [Fact]
+    [Test]
     public void Repository_bases_point_at_raw_files_and_web_pages()
     {
         var plain = GitHubLocation.Parse("https://github.com/o/r")!;
-        Assert.Equal("https://raw.githubusercontent.com/o/r/HEAD/", plain.RawBase.AbsoluteUri);
-        Assert.Equal("https://github.com/o/r/blob/HEAD/", plain.WebBase.AbsoluteUri);
+        Assert.That(plain.RawBase.AbsoluteUri, Is.EqualTo("https://raw.githubusercontent.com/o/r/HEAD/"));
+        Assert.That(plain.WebBase.AbsoluteUri, Is.EqualTo("https://github.com/o/r/blob/HEAD/"));
 
         var folder = GitHubLocation.Parse("https://github.com/o/r/tree/v2/src/my plugin")!;
-        Assert.Equal("https://raw.githubusercontent.com/o/r/v2/src/my%20plugin/", folder.RawBase.AbsoluteUri);
+        Assert.That(folder.RawBase.AbsoluteUri, Is.EqualTo("https://raw.githubusercontent.com/o/r/v2/src/my%20plugin/"));
     }
 
-    [Fact]
+    [Test]
     public void The_repository_comes_from_the_repository_or_the_page()
     {
         var openAction = Entry(repository: "https://github.com/o/r");
         var elgato = Entry(repository: "https://barraider.github.io/", page: "https://github.com/o/page-repo");
 
-        Assert.Equal("r", StoreMedia.FindRepository(openAction)!.Repository);
-        Assert.Equal("page-repo", StoreMedia.FindRepository(elgato)!.Repository);
-        Assert.Null(StoreMedia.FindRepository(Entry(repository: "https://example.com")));
+        Assert.That(StoreMedia.FindRepository(openAction)!.Repository, Is.EqualTo("r"));
+        Assert.That(StoreMedia.FindRepository(elgato)!.Repository, Is.EqualTo("page-repo"));
+        Assert.That(StoreMedia.FindRepository(Entry(repository: "https://example.com")), Is.Null);
     }
 
-    [Fact]
+    [Test]
     public void GitHub_blob_links_are_read_from_the_raw_file()
     {
-        Assert.Equal("https://raw.githubusercontent.com/o/r/main/docs/shot.png", StoreMedia.ToRawGitHubUrl("https://github.com/o/r/blob/main/docs/shot.png"));
-        Assert.Equal("https://example.com/a.png", StoreMedia.ToRawGitHubUrl("https://example.com/a.png"));
+        Assert.That(StoreMedia.ToRawGitHubUrl("https://github.com/o/r/blob/main/docs/shot.png"), Is.EqualTo("https://raw.githubusercontent.com/o/r/main/docs/shot.png"));
+        Assert.That(StoreMedia.ToRawGitHubUrl("https://example.com/a.png"), Is.EqualTo("https://example.com/a.png"));
     }
 
-    [Fact]
+    [Test]
     public void Elgato_archive_icons_come_from_the_archive()
     {
-        var entry = Assert.Single(PluginStore.ParseElgatoArchiveCatalog("""
+        var entry = Expect.Single(PluginStore.ParseElgatoArchiveCatalog("""
             [ { "id": "com.barraider.soundpad", "name": "Soundpad", "icon": "https://appstore.elgato.com/streamDeckPlugin/x.png" } ]
             """));
-        Assert.Equal("https://plugins.amankhanna.me/icons/com.barraider.soundpad.png", entry.IconUrl);
+        Assert.That(entry.IconUrl, Is.EqualTo("https://plugins.amankhanna.me/icons/com.barraider.soundpad.png"));
     }
 
-    [Fact]
+    [Test]
     public async Task Finds_the_readme_under_its_usual_names()
     {
         var requested = new List<string>();
@@ -86,27 +83,27 @@ public sealed class StoreMediaTests : IDisposable
 
         var readme = await media.GetReadmeAsync(Entry(repository: "https://github.com/o/r"));
 
-        Assert.NotNull(readme);
-        Assert.Equal("# Hello", readme.Markdown);
-        Assert.Equal("https://raw.githubusercontent.com/o/r/HEAD/", readme.ImageBase.AbsoluteUri);
-        Assert.Equal("https://github.com/o/r/blob/HEAD/", readme.LinkBase.AbsoluteUri);
-        Assert.Equal(["https://raw.githubusercontent.com/o/r/HEAD/README.md", "https://raw.githubusercontent.com/o/r/HEAD/readme.md"], requested);
+        Assert.That(readme, Is.Not.Null);
+        Assert.That(readme.Markdown, Is.EqualTo("# Hello"));
+        Assert.That(readme.ImageBase.AbsoluteUri, Is.EqualTo("https://raw.githubusercontent.com/o/r/HEAD/"));
+        Assert.That(readme.LinkBase.AbsoluteUri, Is.EqualTo("https://github.com/o/r/blob/HEAD/"));
+        Assert.That(requested, Is.EqualTo(new[] { "https://raw.githubusercontent.com/o/r/HEAD/README.md", "https://raw.githubusercontent.com/o/r/HEAD/readme.md" }));
 
         // Asked again: from memory.
         await media.GetReadmeAsync(Entry(repository: "https://github.com/o/r"));
-        Assert.Equal(2, requested.Count);
+        Assert.That(requested.Count, Is.EqualTo(2));
     }
 
-    [Fact]
+    [Test]
     public async Task No_repository_or_no_readme_gives_null()
     {
         var media = new StoreMedia(new HttpClient(new FakeHandler(_ => null)), _cache);
 
-        Assert.Null(await media.GetReadmeAsync(Entry(repository: "https://example.com")));
-        Assert.Null(await media.GetReadmeAsync(Entry(repository: "https://github.com/o/empty")));
+        Assert.That(await media.GetReadmeAsync(Entry(repository: "https://example.com")), Is.Null);
+        Assert.That(await media.GetReadmeAsync(Entry(repository: "https://github.com/o/empty")), Is.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task Images_are_cached_on_disk()
     {
         var downloads = 0;
@@ -117,27 +114,27 @@ public sealed class StoreMediaTests : IDisposable
             return png;
         });
 
-        Assert.Equal(png, await new StoreMedia(new HttpClient(handler), _cache).GetImageAsync("https://example.com/icon.png"));
+        Assert.That(await new StoreMedia(new HttpClient(handler), _cache).GetImageAsync("https://example.com/icon.png"), Is.EqualTo(png));
 
         // A new session (a new StoreMedia) reads the file instead of downloading again.
-        Assert.Equal(png, await new StoreMedia(new HttpClient(handler), _cache).GetImageAsync("https://example.com/icon.png"));
-        Assert.Equal(1, downloads);
+        Assert.That(await new StoreMedia(new HttpClient(handler), _cache).GetImageAsync("https://example.com/icon.png"), Is.EqualTo(png));
+        Assert.That(downloads, Is.EqualTo(1));
     }
 
-    [Fact]
+    [Test]
     public async Task Missing_images_and_local_files_are_handled()
     {
         var media = new StoreMedia(new HttpClient(new FakeHandler(_ => null)), _cache);
-        Assert.Null(await media.GetImageAsync("https://example.com/missing.png"));
-        Assert.Null(await media.GetImageAsync("javascript:alert(1)"));
-        Assert.Null(await media.GetImageAsync(null));
+        Assert.That(await media.GetImageAsync("https://example.com/missing.png"), Is.Null);
+        Assert.That(await media.GetImageAsync("javascript:alert(1)"), Is.Null);
+        Assert.That(await media.GetImageAsync(null), Is.Null);
 
         var local = Path.Combine(_cache, "local.png");
         await File.WriteAllBytesAsync(local, [1, 2, 3]);
-        Assert.Equal([1, 2, 3], await media.GetImageAsync(local));
+        Assert.That(await media.GetImageAsync(local), Is.EqualTo(new[] { 1, 2, 3 }));
     }
 
-    [Fact]
+    [Test]
     public void Installed_plugins_report_their_icon()
     {
         var root = Directory.CreateTempSubdirectory("deckhost-icon-catalog").FullName;
@@ -151,8 +148,8 @@ public sealed class StoreMediaTests : IDisposable
 
             var catalog = new PluginCatalog(root, [], [], []);
             catalog.Load();
-            var entry = Assert.Single(catalog.Entries, entry => entry.Id == "test.plugin");
-            Assert.Equal(Path.Combine(plugin, "icon.png"), entry.IconPath);
+            var entry = Expect.Single(catalog.Entries, entry => entry.Id == "test.plugin");
+            Assert.That(entry.IconPath, Is.EqualTo(Path.Combine(plugin, "icon.png")));
         }
         finally
         {
@@ -160,25 +157,24 @@ public sealed class StoreMediaTests : IDisposable
         }
     }
 
-    [Theory]
-    [InlineData("docs/shot.png", "https://raw.githubusercontent.com/o/r/HEAD/docs/shot.png")]
-    [InlineData("./img/a.svg", "https://raw.githubusercontent.com/o/r/HEAD/img/a.svg")]
-    [InlineData("/assets/logo.png", "https://raw.githubusercontent.com/o/r/HEAD/assets/logo.png")]
-    [InlineData("https://img.shields.io/badge/x-y-blue", "https://img.shields.io/badge/x-y-blue")]
-    [InlineData("#installation", null)]
-    [InlineData("javascript:alert(1)", null)]
-    [InlineData("", null)]
+    [TestCase("docs/shot.png", "https://raw.githubusercontent.com/o/r/HEAD/docs/shot.png")]
+    [TestCase("./img/a.svg", "https://raw.githubusercontent.com/o/r/HEAD/img/a.svg")]
+    [TestCase("/assets/logo.png", "https://raw.githubusercontent.com/o/r/HEAD/assets/logo.png")]
+    [TestCase("https://img.shields.io/badge/x-y-blue", "https://img.shields.io/badge/x-y-blue")]
+    [TestCase("#installation", null)]
+    [TestCase("javascript:alert(1)", null)]
+    [TestCase("", null)]
     public void Readme_urls_resolve_against_the_repository(string url, string? expected) =>
-        Assert.Equal(expected, MarkdownView.Resolve(url, new Uri("https://raw.githubusercontent.com/o/r/HEAD/")));
+        Assert.That(MarkdownView.Resolve(url, new Uri("https://raw.githubusercontent.com/o/r/HEAD/")), Is.EqualTo(expected));
 
-    [Fact]
+    [Test]
     public void Root_relative_links_stay_in_the_repository()
     {
-        Assert.Equal("https://github.com/o/r/blob/HEAD/LICENSE", MarkdownView.Resolve("/LICENSE", new Uri("https://github.com/o/r/blob/HEAD/plugins/x/")));
-        Assert.Equal("https://github.com/o/r/blob/HEAD/plugins/x/docs/setup.md", MarkdownView.Resolve("docs/setup.md", new Uri("https://github.com/o/r/blob/HEAD/plugins/x/")));
+        Assert.That(MarkdownView.Resolve("/LICENSE", new Uri("https://github.com/o/r/blob/HEAD/plugins/x/")), Is.EqualTo("https://github.com/o/r/blob/HEAD/LICENSE"));
+        Assert.That(MarkdownView.Resolve("docs/setup.md", new Uri("https://github.com/o/r/blob/HEAD/plugins/x/")), Is.EqualTo("https://github.com/o/r/blob/HEAD/plugins/x/docs/setup.md"));
     }
 
-    [Fact]
+    [Test]
     public void Reads_images_and_text_from_readme_html()
     {
         const string html = """
@@ -190,8 +186,8 @@ public sealed class StoreMediaTests : IDisposable
             <h3>Hello &amp; welcome</h3><br/>to the plugin
             """;
 
-        Assert.Equal([("docs/logo.png", 120d), ("https://example.com/b.svg", (double?)null)], MarkdownView.FindHtmlImages(html));
-        Assert.Equal("Hello & welcome\nto the plugin", MarkdownView.HtmlToText(html));
+        Assert.That(MarkdownView.FindHtmlImages(html), Is.EqualTo(new[] { ("docs/logo.png", 120d), ("https://example.com/b.svg", (double?)null) }));
+        Assert.That(MarkdownView.HtmlToText(html), Is.EqualTo("Hello & welcome\nto the plugin"));
     }
 
     private static StoreEntry Entry(string? repository = null, string? page = null) =>

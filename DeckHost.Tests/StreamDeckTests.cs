@@ -28,7 +28,7 @@ public sealed class StreamDeckTests : IDisposable
         }
     }
 
-    [Fact]
+    [Test]
     public void Parses_the_OpenAction_and_Elgato_archive_catalogs()
     {
         var openAction = PluginStore.ParseOpenActionCatalog("""
@@ -40,49 +40,49 @@ public sealed class StreamDeckTests : IDisposable
               { "name": "no id" } ]
             """);
 
-        var open = Assert.Single(openAction);
-        Assert.Equal(("com.elgato.counter", "Counter", PluginStore.OpenActionSource, "https://example.com/counter.streamDeckPlugin"), (open.Id, open.Name, open.Source, open.DownloadUrl));
-        var archived = Assert.Single(elgato);
-        Assert.Equal("https://plugins.amankhanna.me/rezipped/com.elgato.counter.zip", archived.DownloadUrl);
-        Assert.Equal("1.4", archived.Version);
+        var open = Expect.Single(openAction);
+        Assert.That((open.Id, open.Name, open.Source, open.DownloadUrl), Is.EqualTo(("com.elgato.counter", "Counter", PluginStore.OpenActionSource, "https://example.com/counter.streamDeckPlugin")));
+        var archived = Expect.Single(elgato);
+        Assert.That(archived.DownloadUrl, Is.EqualTo("https://plugins.amankhanna.me/rezipped/com.elgato.counter.zip"));
+        Assert.That(archived.Version, Is.EqualTo("1.4"));
     }
 
-    [Fact]
+    [Test]
     public void Merges_dial_feedback_updates()
     {
         static System.Text.Json.Nodes.JsonObject Json(string json) => System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
 
         // Plain values, as most plugins send them.
         var feedback = DialFeedback.Merge(null, Json("""{ "title": "Volume", "value": "42%", "indicator": 42 }"""));
-        Assert.Equal(new DialFeedback("Volume", "42%", 0.42), feedback);
+        Assert.That(feedback, Is.EqualTo(new DialFeedback("Volume", "42%", 0.42)));
 
         // A partial update keeps the rest; items may also be objects with a value and layout details.
         feedback = DialFeedback.Merge(feedback, Json("""{ "value": { "value": 55, "color": "#fff" }, "indicator": { "value": "130" }, "icon": "ignored" }"""));
-        Assert.Equal(new DialFeedback("Volume", "55", 1d), feedback);
+        Assert.That(feedback, Is.EqualTo(new DialFeedback("Volume", "55", 1d)));
 
         // An item set to nothing is cleared.
         feedback = DialFeedback.Merge(feedback, Json("""{ "indicator": null }"""));
-        Assert.Equal(new DialFeedback("Volume", "55", null), feedback);
-        Assert.Equal(feedback, DialFeedback.Merge(feedback, null));
+        Assert.That(feedback, Is.EqualTo(new DialFeedback("Volume", "55", null)));
+        Assert.That(DialFeedback.Merge(feedback, null), Is.EqualTo(feedback));
     }
 
-    [Fact]
+    [Test]
     public void Reads_the_manifest_and_recognizes_html_plugins()
     {
         var directory = WritePlugin("plugin.js");
         var manifest = StreamDeckManifest.Load(directory);
-        Assert.Equal(PluginUuid, manifest.Uuid);
-        Assert.Equal("plugin.js", manifest.CodePath);
-        Assert.Null(manifest.UnsupportedReason);
-        Assert.True(Assert.Single(manifest.Actions).SupportsKeypad);
+        Assert.That(manifest.Uuid, Is.EqualTo(PluginUuid));
+        Assert.That(manifest.CodePath, Is.EqualTo("plugin.js"));
+        Assert.That(manifest.UnsupportedReason, Is.Null);
+        Assert.That(Expect.Single(manifest.Actions).SupportsKeypad, Is.True);
 
         var html = StreamDeckManifest.Load(WritePlugin("index.html", uuid: "com.deckhost.html"));
-        Assert.Null(html.UnsupportedReason);
-        Assert.True(html.IsHtml);
-        Assert.False(manifest.IsHtml);
+        Assert.That(html.UnsupportedReason, Is.Null);
+        Assert.That(html.IsHtml, Is.True);
+        Assert.That(manifest.IsHtml, Is.False);
     }
 
-    [Fact]
+    [Test]
     public void Installs_a_stream_deck_plugin_even_when_wrapped_in_another_archive()
     {
         using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (_, _) => { });
@@ -99,16 +99,16 @@ public sealed class StreamDeckTests : IDisposable
 
         var entry = catalog.Install(outer);
 
-        Assert.Equal(PluginUuid, entry.Id);
-        Assert.Equal(PluginCatalog.StreamDeckSource, entry.Source);
-        Assert.NotNull(entry.Error); // HTML plugin: installed, but can't run.
-        Assert.True(Directory.Exists(Path.Combine(catalog.StreamDeckDirectory, PluginUuid + ".sdPlugin")));
+        Assert.That(entry.Id, Is.EqualTo(PluginUuid));
+        Assert.That(entry.Source, Is.EqualTo(PluginCatalog.StreamDeckSource));
+        Assert.That(entry.Error, Is.Not.Null); // HTML plugin: installed, but can't run.
+        Assert.That(Directory.Exists(Path.Combine(catalog.StreamDeckDirectory, PluginUuid + ".sdPlugin")), Is.True);
 
         catalog.Uninstall(PluginUuid);
-        Assert.False(Directory.Exists(Path.Combine(catalog.StreamDeckDirectory, PluginUuid + ".sdPlugin")));
+        Assert.That(Directory.Exists(Path.Combine(catalog.StreamDeckDirectory, PluginUuid + ".sdPlugin")), Is.False);
     }
 
-    [Fact]
+    [Test]
     public async Task Runs_a_Node_plugin_over_the_Stream_Deck_protocol()
     {
         if (!IsNodeAvailable())
@@ -123,7 +123,7 @@ public sealed class StreamDeckTests : IDisposable
         var plugin = new FakeDevicePlugin();
         runtime.DevicesProvider = () => plugin.Devices;
         var entry = catalog.Install(PackPlugin(WritePlugin("plugin.js", script: TestPluginScript)));
-        Assert.Null(entry.Error);
+        Assert.That(entry.Error, Is.Null);
 
         using var store = new VariableStore();
         await using var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
@@ -132,14 +132,14 @@ public sealed class StreamDeckTests : IDisposable
         await host.StartAsync(CancellationToken.None);
 
         var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
-        Assert.True(await WaitForTitleAsync(action, "Hello"), "willAppear → setTitle: " + string.Join(" | ", logs));
+        Assert.That(await WaitForTitleAsync(action, "Hello"), Is.True, "willAppear → setTitle: " + string.Join(" | ", logs));
 
         host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1));
-        Assert.True(await WaitForTitleAsync(action, "Pressed 1"), "keyDown → setTitle: " + string.Join(" | ", logs));
+        Assert.That(await WaitForTitleAsync(action, "Pressed 1"), Is.True, "keyDown → setTitle: " + string.Join(" | ", logs));
 
         // setSettings is stored and sent back with the next event.
         host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1));
-        Assert.True(await WaitForTitleAsync(action, "Pressed 2"), "settings round trip: " + string.Join(" | ", logs));
+        Assert.That(await WaitForTitleAsync(action, "Pressed 2"), Is.True, "settings round trip: " + string.Join(" | ", logs));
     }
 
     private const string PidTitleScript = """
@@ -170,7 +170,7 @@ public sealed class StreamDeckTests : IDisposable
         return null;
     }
 
-    [Fact]
+    [Test]
     public async Task A_plugin_whose_process_dies_is_restarted_and_its_keys_come_back()
     {
         if (!IsNodeAvailable())
@@ -183,7 +183,7 @@ public sealed class StreamDeckTests : IDisposable
         catalog.Load();
         var plugin = new FakeDevicePlugin();
         runtime.DevicesProvider = () => plugin.Devices;
-        Assert.Null(catalog.Install(PackPlugin(WritePlugin("plugin.js", script: PidTitleScript))).Error);
+        Assert.That(catalog.Install(PackPlugin(WritePlugin("plugin.js", script: PidTitleScript))).Error, Is.Null);
         var changes = 0;
         catalog.Changed += (_, _) => Interlocked.Increment(ref changes);
 
@@ -195,16 +195,16 @@ public sealed class StreamDeckTests : IDisposable
         var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
 
         var first = await WaitForTitleStartingAsync(action, "Hello ");
-        Assert.NotNull(first);
-        Assert.StartsWith("Runs in its own process (pid", catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus);
+        Assert.That(first, Is.Not.Null);
+        Assert.That(catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus, Does.StartWith("Runs in its own process (pid"));
 
         // The plugin's process dies: it's started again and told what's on the device.
         System.Diagnostics.Process.GetProcessById(int.Parse(first!["Hello ".Length..], System.Globalization.CultureInfo.InvariantCulture)).Kill();
 
         var second = await WaitForTitleStartingAsync(action, "Hello ", not: first);
-        Assert.NotNull(second);
-        Assert.Contains("restarted 1×", catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus);
-        Assert.True(changes >= 2);
+        Assert.That(second, Is.Not.Null);
+        Assert.That(catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus, Does.Contain("restarted 1×"));
+        Assert.That(changes >= 2, Is.True);
     }
 
     /// <summary>MiraBox's older StreamDock Node.js template: port, uuid, register event and language by position.</summary>
@@ -219,7 +219,7 @@ public sealed class StreamDeckTests : IDisposable
         };
         """;
 
-    [Fact]
+    [Test]
     public async Task A_plugin_that_reads_its_arguments_by_position_connects_on_the_second_try()
     {
         if (!IsNodeAvailable())
@@ -233,7 +233,7 @@ public sealed class StreamDeckTests : IDisposable
         catalog.Load();
         var plugin = new FakeDevicePlugin();
         runtime.DevicesProvider = () => plugin.Devices;
-        Assert.Null(catalog.Install(PackPlugin(WritePlugin("plugin.js", script: PositionalScript))).Error);
+        Assert.That(catalog.Install(PackPlugin(WritePlugin("plugin.js", script: PositionalScript))).Error, Is.Null);
 
         using var store = new VariableStore();
         await using var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
@@ -242,25 +242,25 @@ public sealed class StreamDeckTests : IDisposable
         await host.StartAsync(CancellationToken.None);
 
         var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
-        Assert.True(await WaitForTitleAsync(action, "Positional"), string.Join(" | ", logs));
+        Assert.That(await WaitForTitleAsync(action, "Positional"), Is.True, string.Join(" | ", logs));
         lock (logs)
         {
-            Assert.Contains(logs, message => message.Contains("older StreamDock", StringComparison.Ordinal));
+            Assert.That(logs.Any(message => message.Contains("older StreamDock", StringComparison.Ordinal)), Is.True);
         }
     }
 
-    [Fact]
+    [Test]
     public void A_StreamDock_knob_action_is_a_dial()
     {
         var knob = new StreamDeckActionManifest("a", "A", null, null, ["Knob", "Information"], [], null, true, true);
         var both = new StreamDeckActionManifest("b", "B", null, null, ["Keypad", "Encoder"], [], null, true, true);
 
-        Assert.True(knob.SupportsEncoder);
-        Assert.Equal("Knob", knob.EncoderController);
-        Assert.Equal("Encoder", both.EncoderController);
+        Assert.That(knob.SupportsEncoder, Is.True);
+        Assert.That(knob.EncoderController, Is.EqualTo("Knob"));
+        Assert.That(both.EncoderController, Is.EqualTo("Encoder"));
     }
 
-    [Fact]
+    [Test]
     public async Task A_plugin_that_keeps_crashing_is_stopped_with_a_message()
     {
         if (!IsNodeAvailable())
@@ -278,13 +278,13 @@ public sealed class StreamDeckTests : IDisposable
             await Task.Delay(50);
         }
 
-        Assert.Contains("stopped 3 times", runtime.ProblemOf(PluginUuid));
-        Assert.Equal(runtime.ProblemOf(PluginUuid), catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus);
+        Assert.That(runtime.ProblemOf(PluginUuid), Does.Contain("stopped 3 times"));
+        Assert.That(catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus, Is.EqualTo(runtime.ProblemOf(PluginUuid)));
 
         // Disabling and enabling starts it fresh.
         catalog.SetEnabled(PluginUuid, false);
         catalog.SetEnabled(PluginUuid, true);
-        Assert.Null(runtime.ProblemOf(PluginUuid));
+        Assert.That(runtime.ProblemOf(PluginUuid), Is.Null);
     }
 
     private const string TestPluginScript = """
