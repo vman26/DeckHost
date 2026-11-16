@@ -20,6 +20,7 @@ public class ArchitectureTests
         typeof(DeckHost.Device.Elgato.ElgatoDevicePlugin).Assembly,
         typeof(DeckHost.Device.Web.WebDeckPlugin).Assembly,
         typeof(DeckHost.Device.Hid.HidDevicePlugin).Assembly,
+        typeof(DeckHost.Device.Simulator.SimulatorDevicePlugin).Assembly,
     ];
 
     private static string[] References(Assembly assembly) =>
