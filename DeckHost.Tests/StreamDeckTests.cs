@@ -207,6 +207,59 @@ public sealed class StreamDeckTests : IDisposable
         Assert.True(changes >= 2);
     }
 
+    /// <summary>MiraBox's older StreamDock Node.js template: port, uuid, register event and language by position.</summary>
+    private const string PositionalScript = """
+        const [port, uuid, registerEvent] = process.argv.slice(2);
+        if (!/^\d+$/.test(port)) process.exit(1);
+        const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+        socket.onopen = () => socket.send(JSON.stringify({ event: registerEvent, uuid }));
+        socket.onmessage = message => {
+          const data = JSON.parse(message.data);
+          if (data.event === 'willAppear') socket.send(JSON.stringify({ event: 'setTitle', context: data.context, payload: { title: 'Positional' } }));
+        };
+        """;
+
+    [Fact]
+    public async Task A_plugin_that_reads_its_arguments_by_position_connects_on_the_second_try()
+    {
+        if (!IsNodeAvailable())
+        {
+            return;
+        }
+
+        var logs = new List<string>();
+        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (_, message) => { lock (logs) { logs.Add(message); } });
+        using var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
+        catalog.Load();
+        var plugin = new FakeDevicePlugin();
+        runtime.DevicesProvider = () => plugin.Devices;
+        Assert.Null(catalog.Install(PackPlugin(WritePlugin("plugin.js", script: PositionalScript))).Error);
+
+        using var store = new VariableStore();
+        await using var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
+        var reference = new ActionReference(PluginUuid, "Test", ActionUuid, "Test action", InputCapabilities.None, OutputCapabilities.None);
+        host.SetProfiles([new DeviceProfile("p1", "P", FakeDevicePlugin.DeviceId, [new ControlBinding("key.0", ProfileActionKind.Single, reference, new ControlAppearance(), [])])]);
+        await host.StartAsync(CancellationToken.None);
+
+        var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
+        Assert.True(await WaitForTitleAsync(action, "Positional"), string.Join(" | ", logs));
+        lock (logs)
+        {
+            Assert.Contains(logs, message => message.Contains("older StreamDock", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void A_StreamDock_knob_action_is_a_dial()
+    {
+        var knob = new StreamDeckActionManifest("a", "A", null, null, ["Knob", "Information"], [], null, true, true);
+        var both = new StreamDeckActionManifest("b", "B", null, null, ["Keypad", "Encoder"], [], null, true, true);
+
+        Assert.True(knob.SupportsEncoder);
+        Assert.Equal("Knob", knob.EncoderController);
+        Assert.Equal("Encoder", both.EncoderController);
+    }
+
     [Fact]
     public async Task A_plugin_that_keeps_crashing_is_stopped_with_a_message()
     {

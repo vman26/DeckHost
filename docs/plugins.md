@@ -10,12 +10,15 @@ Some plugins are **paid**: **Buy** opens the author's page; install the file you
 
 Writing a plugin? See [Writing a plugin](maintainers/plugins.md) and the [plugin catalog](maintainers/plugin-store.md).
 
-## Stream Deck and OpenAction plugins
+## Stream Deck, OpenAction and MiraBox plugins
 
 DeckHost runs Stream Deck plugins in their own processes and speaks their protocol, so they work as in the Elgato app: their actions, their images, and their settings pages, which show next to the editor.
 
 - Native and Node.js plugins run on every system they ship a build for.
 - HTML plugins (that run in a web page) run on Windows.
+- MiraBox StreamDock plugins use the same format: install the file you download from MiraBox's
+  Space with **Install plugin…**. Their knob actions go on knobs; plugins made with MiraBox's older
+  Node.js template are started the way they expect.
 - Settings pages need WebView2 (Windows, built in), WKWebView (macOS) or WebKitGTK (Linux, `libwebkit2gtk-4.1`; else they open in your browser).
 
 ## A plugin's documentation

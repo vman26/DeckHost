@@ -173,5 +173,9 @@ public sealed record StreamDeckActionManifest(
 {
     public bool SupportsKeypad => Controllers.Contains("Keypad", StringComparer.OrdinalIgnoreCase);
 
-    public bool SupportsEncoder => Controllers.Contains("Encoder", StringComparer.OrdinalIgnoreCase);
+    /// <summary>A dial action: Stream Deck's <c>Encoder</c>, or <c>Knob</c> as MiraBox StreamDock plugins say.</summary>
+    public bool SupportsEncoder => Controllers.Contains("Encoder", StringComparer.OrdinalIgnoreCase) || Controllers.Contains("Knob", StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The controller name the plugin uses for a dial (sent back in its events).</summary>
+    public string EncoderController => Controllers.Contains("Encoder", StringComparer.OrdinalIgnoreCase) || !Controllers.Contains("Knob", StringComparer.OrdinalIgnoreCase) ? "Encoder" : "Knob";
 }

@@ -109,7 +109,11 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             startInfo.ArgumentList.Add(programPath);
         }
 
-        foreach (var argument in new[] { "-port", Port.ToString(System.Globalization.CultureInfo.InvariantCulture), "-pluginUUID", manifest.Uuid, "-registerEvent", "registerPlugin", "-info", BuildInfo(manifest).ToJsonString() })
+        var port = Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var arguments = running.PositionalArguments
+            ? new[] { port, manifest.Uuid, "registerPlugin", "en" }
+            : ["-port", port, "-pluginUUID", manifest.Uuid, "-registerEvent", "registerPlugin", "-info", BuildInfo(manifest).ToJsonString()];
+        foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
         }
@@ -164,8 +168,25 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
 
         running.Connection = null;
-        running.Pending.Clear();
         running.Reappear = true;
+        if (!running.Registered)
+        {
+            if (!running.TriedPositional)
+            {
+                // Ended without ever connecting: maybe it reads its arguments by position (MiraBox's
+                // older StreamDock template). One try that way, right away; messages stay queued.
+                running.TriedPositional = true;
+                running.PositionalArguments = true;
+                _log("Info", $"Stream Deck plugin {running.Manifest.Name} ended without connecting; trying the arguments the way older StreamDock plugins read them.");
+                _ = Task.Run(() => Restart(running));
+                return;
+            }
+
+            // That didn't help either: back to Stream Deck's arguments for the usual restarts.
+            running.PositionalArguments = false;
+        }
+
+        running.Pending.Clear();
         if (Environment.TickCount64 - running.StartedAt >= StableRunTime.TotalMilliseconds)
         {
             running.Restarts = 0;
@@ -320,7 +341,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
     internal void Execute(StreamDeckManifest manifest, StreamDeckActionManifest action, ActionContext context)
     {
         var state = GetOrCreateInstance(manifest, action, context.DeviceId, context.ProfileId, context.ControlId, context.Host);
-        var encoder = state.Controller == "Encoder";
+        var encoder = IsDial(state.Controller);
         _log("Debug", $"{manifest.Name}: {context.EventType} on {context.ControlId} → {action.Uuid} (state {state.State}).");
         switch (context.EventType)
         {
@@ -353,7 +374,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             ? ownText
             : null;
 
-        if (state is { Controller: "Encoder", Feedback: { } feedback })
+        if (state is { Feedback: { } feedback } && IsDial(state.Controller))
         {
             // A dial action: what it shows on its touch-strip segment on a Stream Deck +, drawn where
             // DeckHost shows the knob (the touch zone above it).
@@ -491,6 +512,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                 {
                     pluginUuid = uuid;
                     running.Connection = connection;
+                    running.Registered = true;
                     _log("Info", $"Stream Deck plugin {running.Manifest.Name} connected.");
                     foreach (var device in DevicesProvider())
                     {
@@ -713,7 +735,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         _ = int.TryParse(controlId.AsSpan(dot + 1), out var index);
         if (controlId.StartsWith("encoder.", StringComparison.Ordinal))
         {
-            return (0, index, action.SupportsEncoder ? "Encoder" : "Keypad");
+            return (0, index, action.SupportsEncoder ? action.EncoderController : "Keypad");
         }
 
         return controlId.StartsWith("touch.", StringComparison.Ordinal) ? (2, index, "Keypad") : (index / 5, index % 5, "Keypad");
@@ -997,8 +1019,23 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         _ => "application/octet-stream",
     };
 
+    /// <summary>A dial's controller name: Stream Deck's Encoder or MiraBox's Knob.</summary>
+    private static bool IsDial(string controller) => controller is "Encoder" or "Knob";
+
     private sealed class RunningPlugin(StreamDeckManifest manifest)
     {
+        /// <summary>
+        /// Start with the arguments by position (port, uuid, register event, language), as MiraBox's
+        /// older StreamDock Node.js template reads them, instead of Stream Deck's named ones.
+        /// </summary>
+        public bool PositionalArguments { get; set; }
+
+        /// <summary>Tried <see cref="PositionalArguments"/> once after the plugin ended without registering.</summary>
+        public bool TriedPositional { get; set; }
+
+        /// <summary>The plugin connected and registered at least once (its arguments are right).</summary>
+        public bool Registered { get; set; }
+
         public StreamDeckManifest Manifest { get; } = manifest;
 
         public Process? Process { get; set; }
