@@ -76,6 +76,28 @@ public sealed class UpdateCheckerTests : IDisposable
     }
 
     [Test]
+    public void Release_notes_stop_at_the_end_marker()
+    {
+        var body = "### Added\n\n- Knob lights\n\n## Downloads\n\n| a | b |\n\n<!-- deckhost:end-of-notes -->\n\n### Checking the files\n\n<details>PRs</details>";
+
+        var notes = UpdateChecker.UserNotes(body);
+
+        Assert.That(notes, Does.StartWith("### Added"));
+        Assert.That(notes, Does.EndWith("| a | b |"));
+        Assert.That(notes, Does.Not.Contain("Checking the files"));
+        Assert.That(UpdateChecker.UserNotes("  Only notes\n"), Is.EqualTo("Only notes"));
+        Assert.That(UpdateChecker.UserNotes(null), Is.Empty);
+    }
+
+    [Test]
+    public void The_release_notes_script_writes_the_same_marker()
+    {
+        var script = Path.Combine(RepositoryRoot(), "scripts", "release-notes.py");
+
+        Assert.That(File.ReadAllText(script), Does.Contain($"END_MARKER = \"{UpdateChecker.EndOfNotesMarker}\""));
+    }
+
+    [Test]
     public async Task Finds_the_releases_since_the_running_version()
     {
         var checker = new UpdateChecker(new HttpClient(new FakeHandler(request =>
@@ -179,6 +201,9 @@ public sealed class UpdateCheckerTests : IDisposable
     private static ReleaseInfo Release(params (string Name, string Url)[] assets) => new(
         "v1.4.0", SemanticVersion.Parse("1.4.0"), "DeckHost 1.4.0", string.Empty, string.Empty, false, null,
         [.. assets.Select(asset => new ReleaseAsset(asset.Name, asset.Url, 0))]);
+
+    private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
+        Path.GetDirectoryName(Path.GetDirectoryName(path))!;
 
     private sealed class SyncProgress(Action<double> report) : IProgress<double>
     {

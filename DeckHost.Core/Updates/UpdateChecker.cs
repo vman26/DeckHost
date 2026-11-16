@@ -125,6 +125,24 @@ public sealed class UpdateChecker
         return new UpdateCheckResult(current, eligible.FirstOrDefault(), [.. eligible.Where(release => release.Version > current)]);
     }
 
+    /// <summary>
+    /// Marks the end of what users read in a release's notes (scripts/release-notes.py puts it
+    /// after the changelog and the download table; checks and the pull request list follow).
+    /// </summary>
+    public const string EndOfNotesMarker = "<!-- deckhost:end-of-notes -->";
+
+    /// <summary>A release body up to <see cref="EndOfNotesMarker"/> (all of it without one), trimmed.</summary>
+    public static string UserNotes(string? body)
+    {
+        if (string.IsNullOrEmpty(body))
+        {
+            return string.Empty;
+        }
+
+        var end = body.IndexOf(EndOfNotesMarker, StringComparison.Ordinal);
+        return (end >= 0 ? body[..end] : body).Trim();
+    }
+
     internal static IReadOnlyList<ReleaseInfo> ParseReleases(string json)
     {
         var releases = new List<ReleaseInfo>();
@@ -150,7 +168,7 @@ public sealed class UpdateChecker
                 tag,
                 version,
                 Text(release, "name") is { Length: > 0 } name ? name : $"DeckHost {version}",
-                Text(release, "body") ?? string.Empty,
+                UserNotes(Text(release, "body")),
                 Text(release, "html_url") ?? string.Empty,
                 Bool(release, "prerelease") || version.IsPrerelease,
                 DateTimeOffset.TryParse(Text(release, "published_at"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var published) ? published : null,
