@@ -3,7 +3,7 @@
 
   release-notes.py check                       the changelog's format (CI runs this on every PR)
   release-notes.py section <tag>               the changelog section for a tag
-  release-notes.py compose <tag> [--pull-requests FILE]
+  release-notes.py compose <tag> [--pull-requests FILE] [--files DIR]
                                                the full release notes: the section, downloads and
                                                checks, then the pull request list (folded)
 
@@ -89,16 +89,30 @@ def section_for(text, tag):
         f"'## [{version if '-' not in version else base}] - <date>' before tagging.")
 
 
-def compose(text, tag, pull_requests=""):
+def package_names(version, files=()):
+    """The release's package names by system: the real file names when the release files are
+    given (pre-release names carry the commit, DeckHost-1.2.0-rc.1-abc1234-...), else the pattern."""
+    def find(suffix):
+        return next((name for name in sorted(files) if name.startswith("DeckHost-") and name.endswith(suffix)), f"DeckHost-{version}{suffix}")
+    return {
+        "setup": find("-win-x64-setup.exe"),
+        "windows": find("-win-x64.zip"),
+        "linux": find("-linux-x64.tar.gz"),
+        "macos": find("-osx-arm64.zip"),
+    }
+
+
+def compose(text, tag, pull_requests="", files=()):
     version = tag[1:] if tag.startswith("v") else tag
+    names = package_names(version, files)
     parts = [
         section_for(text, tag),
         "## Downloads\n\n"
         "| System | File |\n"
         "|---|---|\n"
-        f"| Windows | `DeckHost-{version}-win-x64-setup.exe` (installer) or `-win-x64.zip` |\n"
-        f"| Linux | `DeckHost-{version}-linux-x64.tar.gz` (run `install.sh` inside) |\n"
-        f"| macOS (Apple silicon) | `DeckHost-{version}-osx-arm64.zip` |\n\n"
+        f"| Windows | `{names['setup']}` (installer) or `{names['windows']}` |\n"
+        f"| Linux | `{names['linux']}` (run `install.sh` inside) |\n"
+        f"| macOS (Apple silicon) | `{names['macos']}` |\n\n"
         "DeckHost already installed? It offers this update by itself.",
         END_MARKER,
         "### Checking the files\n\n"
@@ -122,6 +136,7 @@ def main():
     full = commands.add_parser("compose")
     full.add_argument("tag")
     full.add_argument("--pull-requests", help="a file with the generated pull request list")
+    full.add_argument("--files", help="the folder with the release files, for their real names")
     args = parser.parse_args()
 
     text = Path(args.changelog).read_text(encoding="utf-8")
@@ -135,7 +150,8 @@ def main():
             print(section_for(text, args.tag))
             return 0
         pull_requests = Path(args.pull_requests).read_text(encoding="utf-8") if args.pull_requests else ""
-        sys.stdout.write(compose(text, args.tag, pull_requests))
+        files = [path.name for path in Path(args.files).iterdir()] if args.files else []
+        sys.stdout.write(compose(text, args.tag, pull_requests, files))
         return 0
     except ChangelogError as error:
         print(f"CHANGELOG.md: {error}", file=sys.stderr)

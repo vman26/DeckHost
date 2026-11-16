@@ -323,7 +323,7 @@ jobs:
           # checks, then the pull requests merged since the previous release (grouped by label,
           # .github/release.yml), folded. DeckHost's update screen shows the part before the marker.
           gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body > pull-requests.md
-          python3 scripts/release-notes.py compose "$TAG" --pull-requests pull-requests.md > notes.md
+          python3 scripts/release-notes.py compose "$TAG" --pull-requests pull-requests.md --files artifacts > notes.md
           gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "DeckHost ${TAG#v}" --notes-file notes.md "${prerelease[@]}"
 
       # NuGet Trusted Publishing: no stored key. With the NUGET_USER variable (your nuget.org
