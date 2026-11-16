@@ -844,27 +844,25 @@ The following illustrates the intended structure. It is conceptual and does not 
 }
 ```
 
-The final model must support richer geometry, multiple display regions, nested controls, capability metadata and vendor-specific extensions.
+The final model must support richer geometry, multiple display regions, nested controls, capability metadata and vendor-specific extensions. The canonical shape is `DeviceDefinition` (7.1.8); what it still lacks is listed in 7.1.11.
 
 #### 7.1.8 API and Architectural Responsibilities
 
-The Device Descriptor and Control Topology API should be exposed through the device abstraction layer.
+The Device Descriptor and Control Topology API is exposed through the device abstraction layer in `DeckHost.Contracts`. DeckHost does not introduce a second descriptor model: the contracts it already has are the canonical implementation of this section, and they grow in place (new members are added as optional, versioned properties so installed plugins keep working).
 
-Relevant architectural contracts include:
+| Role | Canonical contract |
+|---|---|
+| Discovers and provides devices (`IDeviceProvider`) | `IDevicePlugin`: `Devices`, `DevicesChanged`, `InitializeAsync` |
+| An active connection (`IDeviceSession`) | A `DeviceDefinition` with `IsConnected`, plus the plugin's `IDeviceOutput` for it; status through `IDevicePluginContext.ReportConnectionStatus` |
+| Identity, metadata, topology (`DeviceDescriptor`) | `DeviceDefinition`: `DescriptorVersion`, `Identity` (`DeviceIdentity`), `Controls`, `Displays`, `Capabilities`, `Limits`, `PhysicalSize` |
+| Device-level operations (`DeviceCapabilities`) | `DeviceCapabilities` flags, queried with `DeviceDefinition.Has()`, next to the optional output interfaces below |
+| One physical control (`DeviceControlDescriptor`) | `PhysicalControl`: `Id`, `Type`, `Shape`, logical `Bounds`, `PhysicalBounds` (mm), `DisplayId`, `Inputs`, `Outputs`, `RenderWidth`/`RenderHeight`, `HardwareId`, `LedIndex`, `DisplayControlId` |
+| A display or region (`DeviceDisplayDescriptor`) | `DeviceDisplay`: `Id`, `Width`, `Height`, `RotationDegrees`, `MaxFramesPerSecond`, `ControlIds` |
+| Normalized input (`IInputEvent`) | `IDevicePluginContext.ReportInputEvent(device, control, InputCapabilities, value)` |
+| Visual output (`IRenderTarget`, `IDeviceRenderer`) | `IDeviceOutput` (`TryPushImage`, `TrySetLight`, `Clear`) and the optional surfaces in 7.1.10; DeckHost renders, the plugin only encodes and sends |
+| Validation | `DeviceDefinition.FindDescriptorProblems()`; the tests run it on every built-in device |
 
-- `IDeviceProvider`: Discovers and provides supported devices.
-- `IDeviceSession`: Represents an active connection to a device.
-- `DeviceDescriptor`: Describes device identity, metadata and topology.
-- `DeviceCapabilities`: Describes supported device-level operations.
-- `DeviceControlDescriptor`: Describes an individual physical control.
-- `DeviceDisplayDescriptor`: Describes a display or display region.
-- `IInputEvent`: Represents normalized hardware input.
-- `IRenderTarget`: Represents a target for visual output.
-- `IDeviceRenderer`: Handles device-specific rendering and output.
-
-The exact interfaces and serialization model must be validated during the hardware integration spike.
-
-The core must own the canonical descriptor model. Device plugins translate vendor-specific SDK structures into this model rather than exposing vendor SDK types directly to the rest of DeckHost.
+The core owns the canonical descriptor model. Device plugins translate vendor-specific SDK structures into this model rather than exposing vendor SDK types directly to the rest of DeckHost. The decision is recorded in ADR 0011.
 
 #### 7.1.9 Design Requirements
 
@@ -880,6 +878,32 @@ The implementation must satisfy these requirements:
 8. Vendor-specific functionality must be accessible through extensible capability contracts without compromising the portable core model.
 9. Descriptor versions must support future schema evolution.
 10. Device plugins must not be able to redefine or override DeckHost's canonical layout model.
+
+#### 7.1.10 Output Surfaces Beyond Buttons
+
+A device is more than buttons and their positions. The descriptor and the output contracts also describe how surfaces relate to each other and what sits behind them. These are part of the canonical model:
+
+- **Linked displays.** A control without a display of its own can name the control whose display belongs to it (`PhysicalControl.DisplayControlId`; on the N4 Pro each knob points at the touch zone above it). DeckHost then shows the knob's action in that zone: the whole zone when it is free, otherwise a strip on the edge nearest the knob. A tap on a zone that only shows the knob counts as the knob's press. The topology therefore carries relationships between controls, not only a list of them.
+- **Screen backdrop.** Devices whose keys sit on one shared screen can show a color behind the key images (`IDeviceBackdropOutput.TrySetBackdrop`). DeckHost sends the profile's background there before the images, so the space between keys matches the profile instead of showing the device's stored idle screen.
+- **Lights as a group.** Devices that set all their LEDs in one transfer implement `IDeviceLightBatchOutput.TrySetLights`, so DeckHost's light animations stay smooth. LEDs are tied to controls through `PhysicalControl.LedIndex`.
+- **Device-driven redraws.** A plugin whose device can overwrite its own screen (the N4 Pro writing its idle image) asks for every image again through `IDevicePluginContext.RequestRedraw`.
+- **Device settings, actions and firmware.** Vendor-specific functionality sits behind optional contracts (`IConfigurableDevicePlugin`, `IDeviceSettingActions`, `IDeviceFirmware`) rather than in the portable model (requirement 8 in 7.1.9).
+
+#### 7.1.11 Future Requirements
+
+What the canonical model does not cover yet. Each item extends the existing contracts; none replaces them.
+
+1. **Physical coordinates in use.** Every built-in device fills `PhysicalBounds` and `PhysicalSize`, and the Layout Studio and layout mapping between devices use them where present.
+2. **Display details.** `DeviceDisplay` gains pixel density, pixel format and color depth, and the host reads `RotationDegrees` instead of each plugin rotating images itself.
+3. **Host adaptation to limits.** DeckHost respects `DeviceLimits` and `DeviceDisplay.MaxFramesPerSecond` (frame pacing per display, no transparency where the device has none) instead of leaving it to the plugin.
+4. **Control-level capabilities.** Capabilities beyond `Inputs`/`Outputs` per control (haptics, a light ring, a per-control brightness) where a device has them on some controls only.
+5. **Whole-display rendering.** Devices that take one frame per display, or a frame region, rather than an image per control (`OutputCapabilities.FullDisplay`, Loupedeck-style screens), with DeckHost composing the frame from the controls on it.
+6. **Touch coordinates.** Touch and multi-touch input with positions inside a control or display, not only a tap on a zone.
+7. **Hardware modes and modules.** Devices that change their controls at runtime (a mode switch, an attached module) describe each mode; DeckHost reconciles assignments by control id without moving them to unrelated controls.
+8. **Nested controls and vendor extensions.** Controls made of parts (a dial with its own ring and screen) and a namespaced extension bag for vendor metadata that the portable core ignores.
+9. **A serialized form.** A JSON form of `DeviceDefinition`, so a device can be described in a file (as the generic HID devices already are) and so simulators and out-of-process device plugins can send it.
+
+The status of each item is tracked in `docs/vision/status.md`.
 
 ### 7.2 Capability System
 

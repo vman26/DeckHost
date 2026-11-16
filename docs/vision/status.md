@@ -72,7 +72,17 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 7.1.4 Capabilities queried before use | 🟡 | `DeviceCapabilities` flags and `Has()`, next to the optional interfaces; the host doesn't adapt to limits (frame rate, transparency) yet |
 | 7.1.5 Topology changes | ✅ | `DevicesChanged` (Web Deck grid size, hot-plug); bindings keyed by control id |
 | 7.1.6 Hardware description apart from user layout | ✅ | |
-| 7.1.8 `IDeviceProvider`, `IDeviceSession`, `DeviceDescriptor`, … | ✅ | Same roles under other names: `IDevicePlugin`, `DeviceDefinition` (+ `DeviceDisplay`, `DeviceCapabilities`), `IDeviceOutput`; `FindDescriptorProblems()` validates |
+| 7.1.8 Canonical contracts | ✅ | The existing contracts are the descriptor (no second model): `IDevicePlugin`, `DeviceDefinition` (+ `DeviceDisplay`, `DeviceCapabilities`), `PhysicalControl`, `IDeviceOutput`; `FindDescriptorProblems()` validates |
+| 7.1.10 Linked displays, backdrop, light batches, device redraws | ✅ | `DisplayControlId`, `IDeviceBackdropOutput`, `IDeviceLightBatchOutput`, `RequestRedraw` |
+| 7.1.11.1 Physical coordinates in use | ⬜ | `PhysicalBounds` optional and unused by the Layout Studio and `LayoutMapper` |
+| 7.1.11.2 Display density, pixel format, host-side rotation | ⬜ | Plugins rotate images themselves |
+| 7.1.11.3 Host adapts to limits (frame rate, transparency) | ⬜ | |
+| 7.1.11.4 Control-level capabilities | ⬜ | Per control only `Inputs`, `Outputs`, `LedIndex` |
+| 7.1.11.5 Whole-display rendering | ⬜ | `OutputCapabilities.FullDisplay` exists; every device gets an image per control |
+| 7.1.11.6 Touch coordinates, multi-touch | ⬜ | Taps on zones and swipes only |
+| 7.1.11.7 Hardware modes and modules | 🟡 | `DevicesChanged` with new controls; no modes described |
+| 7.1.11.8 Nested controls, vendor extensions | ⬜ | |
+| 7.1.11.9 Serialized descriptor | 🟡 | Generic HID devices are described in JSON (`HidDeviceDescription`); `DeviceDefinition` itself has no file form |
 | 7.3 N4 Pro, Elgato family, generic HID, virtual | ✅ | |
 | 7.4 Device-independent profiles | 🟡 | Conventional control ids and `LayoutMapper`; no logical-control layer |
 

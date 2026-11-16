@@ -29,6 +29,9 @@ validated.
 ## Consequences
 - Nothing breaks for existing plugins; a descriptor without the new fields is still valid (version
   1, no displays listed, no capabilities declared).
-- The names differ from the plan's; the plan's status page maps them.
+- The names differ from the plan's. The master plan itself now names these contracts as the
+  canonical implementation (7.1.8), describes the relationships the model already carries (linked
+  displays, backdrop, light batches: 7.1.10) and lists what is still missing as future
+  requirements (7.1.11), each an extension of these types rather than a second model.
 - Capabilities are declared by the plugin, next to the optional interfaces that implement them
   (backdrop, firmware, settings); the host can query either.
