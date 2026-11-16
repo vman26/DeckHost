@@ -68,7 +68,7 @@ public sealed class SimulatorTests : IAsyncDisposable
         var attached = await messages.NextAsync(SimulatorMessage.Attached);
         var settings = await messages.NextAsync(SimulatorMessage.Settings);
 
-        Assert.That(attached.DeviceId, Is.EqualTo("simulator.mirabox.n4pro"));
+        Assert.That((attached.Model, attached.DeviceId), Is.EqualTo(("deckhost.device.mirabox/mirabox.n4pro", "simulator.mirabox.n4pro")));
         Assert.That(attached.Device!.Controls.Select(static control => control.Id), Is.EqualTo(MiraBoxModels.N4Pro.Controls.Select(static control => control.Id)));
         Assert.That((settings.Brightness, settings.Vibrate), Is.EqualTo(((int?)100, (bool?)true)));
         var device = Expect.Single(_plugin.Devices);

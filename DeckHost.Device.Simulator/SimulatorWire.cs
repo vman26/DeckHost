@@ -18,7 +18,7 @@ public sealed record SimulatorLight(string Control, byte R, byte G, byte B);
 /// <list type="table">
 /// <item><term>hello</term><description>simulator → DeckHost: <see cref="Token"/>, <see cref="Name"/>. Answered with <c>models</c>.</description></item>
 /// <item><term>models</term><description>DeckHost → simulator: <see cref="Models"/>.</description></item>
-/// <item><term>attach</term><description>simulator → DeckHost: become <see cref="Model"/>. Answered with <c>attached</c> (<see cref="DeviceId"/>, <see cref="Device"/>, settings) or <c>error</c>.</description></item>
+/// <item><term>attach</term><description>simulator → DeckHost: become <see cref="Model"/>. Answered with <c>attached</c> (<see cref="Model"/>, <see cref="DeviceId"/>, <see cref="Device"/>), then <c>settings</c>; or <c>error</c>.</description></item>
 /// <item><term>input</term><description>simulator → DeckHost: <see cref="Control"/>, <see cref="Event"/>, <see cref="Value"/>.</description></item>
 /// <item><term>image</term><description>DeckHost → simulator: <see cref="Control"/>, <see cref="Width"/>, <see cref="Height"/>, <see cref="Rgba"/> (base64 RGBA8888).</description></item>
 /// <item><term>lights</term><description>DeckHost → simulator: <see cref="Lights"/>.</description></item>

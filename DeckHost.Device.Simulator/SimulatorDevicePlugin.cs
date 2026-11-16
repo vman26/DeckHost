@@ -244,7 +244,7 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
         }
 
         var settings = GetDeviceSettings(device.Id);
-        connection.Send(new SimulatorMessage { Type = SimulatorMessage.Attached, DeviceId = device.Id, Device = device.Current });
+        connection.Send(new SimulatorMessage { Type = SimulatorMessage.Attached, Model = model.Key, DeviceId = device.Id, Device = device.Current });
         connection.Send(SettingsMessage(device, settings));
         _context?.ReportConnectionStatus(device.Id, "Connected", "Simulator window open.");
         DevicesChanged?.Invoke(this, EventArgs.Empty);
