@@ -740,6 +740,24 @@ public sealed class WorkflowTests : IAsyncDisposable
     }
 
     [Test]
+    public async Task ReleaseWorkflowRuns_RunHeldAtABreakpoint_GoesOnToTheEnd()
+    {
+        // Arrange
+        await Start(ThreeSteps());
+        _host.SetWorkflowBreakpoints(Device, "key.0", ["2"]);
+        await _host.WhenIdleAsync();
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Traces().Any(trace => trace.Kind == WorkflowTraceKind.Paused));
+
+        // Act
+        _host.ReleaseWorkflowRuns();
+        await WaitUntil(() => Ran().Count == 3);
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b", "c" }));
+    }
+
+    [Test]
     public async Task A_step_runs_one_node_and_holds_again_and_stop_ends_a_held_run()
     {
         await Start(ThreeSteps());

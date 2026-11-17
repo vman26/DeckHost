@@ -2,6 +2,7 @@ using DeckHost.App.SystemPlugins;
 using DeckHost.App.ViewModels;
 using DeckHost.Contracts.Enums;
 using DeckHost.Contracts.Models;
+using DeckHost.Core.Models;
 using DeckHost.Core.Workflows;
 
 namespace DeckHost.Tests;
@@ -676,5 +677,224 @@ public class WorkflowEditorTests
 
         editor.AddNode(WorkflowNodeKinds.Wait, 0, 0);
         Assert.That(editor.Status, Does.Contain("no longer has this workflow"));
+    }
+
+    private const string TheFirstNode = "n1";
+
+    private static (WorkflowEditorViewModel Editor, WorkflowNode Wait, WorkflowNode After) ChainTriggerWaitWait()
+    {
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        var after = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        editor.Connect(TheFirstNode, WorkflowPorts.Next, wait.Id);
+        editor.Connect(wait.Id, WorkflowPorts.Next, after.Id);
+        return (editor, wait, after);
+    }
+
+    [Test]
+    public void DeleteSelection_MiddleNodeOfAChain_LinksTheNodesAroundIt()
+    {
+        // Arrange
+        var (editor, wait, after) = ChainTriggerWaitWait();
+        editor.SelectNode(wait.Id);
+
+        // Act
+        editor.DeleteSelection();
+
+        // Assert
+        Assert.That(editor.Workflow.Links, Is.EqualTo(new[] { new WorkflowLink(TheFirstNode, WorkflowPorts.Next, after.Id) }));
+    }
+
+    [Test]
+    public void DeleteSelectionAndDisconnect_MiddleNodeOfAChain_LeavesTheGap()
+    {
+        // Arrange
+        var (editor, wait, _) = ChainTriggerWaitWait();
+        editor.SelectNode(wait.Id);
+
+        // Act
+        editor.DeleteSelectionAndDisconnect();
+
+        // Assert
+        Assert.That(editor.Workflow.Links, Is.Empty);
+    }
+
+    [Test]
+    public void DeleteSelection_MiddleNodeOfAChain_UndoesInOneStep()
+    {
+        // Arrange
+        var (editor, wait, _) = ChainTriggerWaitWait();
+        editor.SelectNode(wait.Id);
+        editor.DeleteSelection();
+
+        // Act
+        editor.UndoCommand.Execute(null);
+
+        // Assert
+        Assert.That(editor.Workflow.Links, Has.Count.EqualTo(2));
+    }
+
+    private static (WorkflowEditorViewModel Editor, WorkflowNode Branching, WorkflowNode Yes, WorkflowNode No) IfWithTwoBranchesAfterTheTrigger()
+    {
+        var (editor, _) = Editor();
+        var branching = editor.AddNode(WorkflowNodeKinds.If, 300, 40);
+        var yes = editor.AddNode(WorkflowNodeKinds.Wait, 600, 0);
+        var no = editor.AddNode(WorkflowNodeKinds.Wait, 600, 100);
+        editor.Connect(TheFirstNode, WorkflowPorts.Next, branching.Id);
+        editor.Connect(branching.Id, WorkflowPorts.Yes, yes.Id);
+        editor.Connect(branching.Id, WorkflowPorts.No, no.Id);
+        return (editor, branching, yes, no);
+    }
+
+    [Test]
+    public void DeleteSelection_NodeWithSeveralBranches_AsksInsteadOfRemovingIt()
+    {
+        // Arrange
+        var (editor, branching, _, _) = IfWithTwoBranchesAfterTheTrigger();
+        editor.SelectNode(branching.Id);
+
+        // Act
+        editor.DeleteSelection();
+
+        // Assert
+        Assert.That(editor.HasDeleteChoice, Is.True);
+        Assert.That(editor.Workflow.Find(branching.Id), Is.Not.Null);
+    }
+
+    [Test]
+    public void DeleteAndReconnectFirstPath_NodeWithSeveralBranches_ContinuesWithTheFirstBranch()
+    {
+        // Arrange
+        var (editor, branching, yes, _) = IfWithTwoBranchesAfterTheTrigger();
+        editor.SelectNode(branching.Id);
+        editor.DeleteSelection();
+
+        // Act
+        editor.DeleteAndReconnectFirstPath();
+
+        // Assert
+        Assert.That(editor.Workflow.Links, Is.EqualTo(new[] { new WorkflowLink(TheFirstNode, WorkflowPorts.Next, yes.Id) }));
+    }
+
+    [Test]
+    public void CancelDelete_NodeWithSeveralBranches_KeepsTheNodeAndStopsAsking()
+    {
+        // Arrange
+        var (editor, branching, _, _) = IfWithTwoBranchesAfterTheTrigger();
+        editor.SelectNode(branching.Id);
+        editor.DeleteSelection();
+
+        // Act
+        editor.CancelDelete();
+
+        // Assert
+        Assert.That(editor.HasDeleteChoice, Is.False);
+        Assert.That(editor.Workflow.Find(branching.Id), Is.Not.Null);
+    }
+
+    [Test]
+    public void Arrange_SwitchStoredInAnotherOrder_StacksTheBranchesInPortOrder()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var sw = editor.AddNode(WorkflowNodeKinds.Switch, 300, 40);
+        var elseTarget = editor.AddNode(WorkflowNodeKinds.Wait, 700, 0);
+        var secondTarget = editor.AddNode(WorkflowNodeKinds.Wait, 700, 50);
+        var firstTarget = editor.AddNode(WorkflowNodeKinds.Wait, 700, 100);
+        editor.Connect(sw.Id, WorkflowPorts.Default, elseTarget.Id);
+        editor.Connect(sw.Id, "case:c2", secondTarget.Id);
+        editor.Connect(sw.Id, "case:c1", firstTarget.Id);
+
+        // Act
+        editor.ArrangeCommand.Execute(null);
+
+        // Assert
+        var rows = new[] { firstTarget.Id, secondTarget.Id, elseTarget.Id }.Select(id => editor.Workflow.Find(id)!.Y).ToList();
+        Assert.That(rows, Is.Ordered.Ascending);
+    }
+
+    [Test]
+    public void NewSharedWorkflow_CallNode_CreatesANamedWorkflowAndPointsTheNodeAtIt()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var shared = new List<Workflow>();
+        editor.SharedSource = () => shared;
+        editor.SaveShared = workflow =>
+        {
+            var saved = workflow with { Id = "wf.test" };
+            shared.Add(saved);
+            return (saved.Id, null);
+        };
+        var call = editor.AddNode(WorkflowNodeKinds.Call, 300, 40);
+        editor.SelectNode(call.Id);
+
+        // Act
+        editor.NewSharedWorkflowCommand.Execute(null);
+
+        // Assert
+        Assert.That(Expect.Single(shared).Name, Is.EqualTo("Workflow 1"));
+        Assert.That(editor.Workflow.Find(call.Id)!.EffectiveSettings.Get(WorkflowKeys.Workflow), Is.EqualTo("wf.test"));
+    }
+
+    [Test]
+    public void NextSharedName_ExistingWorkflowOne_IsWorkflowTwo()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        editor.SharedSource = () => [new Workflow { Id = "wf.1", Name = "Workflow 1" }];
+
+        // Act
+        var name = editor.NextSharedName();
+
+        // Assert
+        Assert.That(name, Is.EqualTo("Workflow 2"));
+    }
+
+    [Test]
+    public void Starter_NewWorkflow_RestartsWhenTriggeredAgain()
+    {
+        // Arrange (a new workflow)
+
+        // Act
+        var workflow = WorkflowConverter.Starter();
+
+        // Assert
+        Assert.That(workflow.WhileRunning, Is.EqualTo(WorkflowConcurrency.Restart));
+    }
+
+    private static WorkflowTrace WaitTrace(string nodeId, int runId) =>
+        new("device", "layout", "key.0", runId, nodeId, WorkflowTraceKind.Node, "Waiting 10 s", DateTimeOffset.Now) { Wait = TimeSpan.FromSeconds(10) };
+
+    [Test]
+    public void WaitProgresses_TwoRunsWaitingAtTheSameNode_ShowsEachRun()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        editor.ShowTrace(WaitTrace(wait.Id, 1));
+        editor.ShowTrace(WaitTrace(wait.Id, 2));
+
+        // Act
+        var progresses = editor.WaitProgresses(wait);
+
+        // Assert
+        Assert.That(progresses, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public void WaitProgresses_RunThatWasRestarted_NoLongerWaits()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        editor.ShowTrace(WaitTrace(wait.Id, 1));
+        editor.ShowTrace(new WorkflowTrace("device", "layout", "key.0", 1, null, WorkflowTraceKind.Stopped, "Restarted.", DateTimeOffset.Now));
+
+        // Act
+        var progresses = editor.WaitProgresses(wait);
+
+        // Assert
+        Assert.That(progresses, Is.Empty);
     }
 }

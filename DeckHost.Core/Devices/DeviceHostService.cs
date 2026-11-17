@@ -305,6 +305,14 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         });
     }
 
+    public void ReleaseWorkflowRuns() => Enqueue(() =>
+    {
+        if (_actionRouter is ActionRouter router && router.Workflows.ReleaseAll() > 0)
+        {
+            _dirty.MarkDevices(_devicesById.Keys);
+        }
+    });
+
     public void ContinueWorkflow(int runId) => Enqueue(() =>
     {
         if (_actionRouter is ActionRouter router && router.Workflows.Continue(runId))
@@ -360,7 +368,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     private void OnWorkflowTraced(WorkflowTrace trace)
     {
-        if (trace.Kind is WorkflowTraceKind.Started or WorkflowTraceKind.Finished or WorkflowTraceKind.Stopped or WorkflowTraceKind.Failed)
+        if (trace.Kind is WorkflowTraceKind.Started or WorkflowTraceKind.Finished or WorkflowTraceKind.Stopped or WorkflowTraceKind.Failed or WorkflowTraceKind.Ignored)
         {
             Log(trace.Kind == WorkflowTraceKind.Failed ? "Warning" : "Info", $"Workflow on '{trace.ControlId}' (run {trace.RunId}): {trace.Kind}: {trace.Detail}");
         }

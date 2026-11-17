@@ -69,6 +69,18 @@ public sealed class WorkflowEngine
     /// <summary>Lets a paused run go on until the next breakpoint (or its end).</summary>
     public bool Continue(int runId) => Release(runId, step: false);
 
+    /// <summary>Lets every held run go on (and no run is held again until a breakpoint is set): returns how many were held.</summary>
+    public int ReleaseAll()
+    {
+        var held = _running.Values.SelectMany(static list => list).Where(static run => run.Paused).Select(static run => run.Id).ToList();
+        foreach (var runId in held)
+        {
+            Release(runId, step: false);
+        }
+
+        return held.Count;
+    }
+
     /// <summary>Lets a paused run enter the node it waits in front of, then holds it before the next one.</summary>
     public bool Step(int runId) => Release(runId, step: true);
 

@@ -238,8 +238,8 @@
 							</Border>
 							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
 								<StackPanel Spacing="6">
-									<TextBlock Classes="section" Text="WHILE A RUN IS GOING" />
-									<TextBlock Classes="hint" Text="When the same input comes again before a run is done (it is waiting):" />
+									<TextBlock Classes="section" Text="WHEN TRIGGERED AGAIN WHILE RUNNING" />
+									<TextBlock Classes="hint" TextWrapping="Wrap" Text="When the same input comes again before the run is done (for example it is still in a wait), what should happen?" />
 									<ComboBox ItemsSource="{Binding WhileRunningOptions}" SelectedItem="{Binding WhileRunning, Mode=TwoWay}"
 											  DisplayMemberBinding="{Binding Label}" HorizontalAlignment="Stretch" />
 								</StackPanel>
@@ -343,9 +343,19 @@
 									<StackPanel Orientation="Horizontal" Spacing="8">
 										<Button Content="▶ Run from here" Command="{Binding RunCommand}" IsVisible="{Binding SelectedIsTrigger}" />
 										<Button Content="Open workflow" Command="{Binding OpenCallCommand}" IsVisible="{Binding SelectedIsCall}" />
+										<Button Content="New workflow…" Command="{Binding NewSharedWorkflowCommand}" IsVisible="{Binding SelectedIsCall}" ToolTip.Tip="Make a new shared workflow and call it from here" />
 										<Button Content="Duplicate" Command="{Binding DuplicateSelectionCommand}" />
 										<Button Content="Remove" Command="{Binding DeleteSelectionCommand}" />
 									</StackPanel>
+									<!-- Several branches come out of the node: which one do the previous nodes continue with? -->
+									<Border IsVisible="{Binding HasDeleteChoice}" Classes="card" Padding="10">
+										<StackPanel Spacing="8">
+											<TextBlock TextWrapping="Wrap" Foreground="{DynamicResource C.E2E8F0}" Text="This node continues on several branches. What should the nodes before it do?" />
+											<Button Content="Continue with its first branch" Command="{Binding DeleteAndReconnectFirstPathCommand}" HorizontalAlignment="Stretch" />
+											<Button Content="Remove it and take off its links" Command="{Binding DeleteAndDisconnectCommand}" HorizontalAlignment="Stretch" />
+											<Button Content="Cancel" Command="{Binding CancelDeleteCommand}" HorizontalAlignment="Stretch" />
+										</StackPanel>
+									</Border>
 								</StackPanel>
 							</Border>
 

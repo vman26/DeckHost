@@ -38,7 +38,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     private readonly List<Workflow> _redo = [];
     private readonly Dictionary<string, DateTime> _activeUntil = [];
     private readonly Dictionary<string, DateTime> _failedUntil = [];
-    private readonly Dictionary<string, (DateTime Start, TimeSpan Length)> _waits = [];
+    private readonly Dictionary<(string NodeId, int RunId), (DateTime Start, TimeSpan Length)> _waits = [];
     private readonly DispatcherTimer? _fadeTimer;
     private readonly Workflow _original;
     private Workflow _workflow;
@@ -87,9 +87,9 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         NodePalette = [.. WorkflowNodeTypes.All.Where(static type => type.Kind != WorkflowNodeKinds.Action).Select(static type => new WorkflowPaletteItem(type))];
         WhileRunningOptions =
         [
-            new(WorkflowConcurrency.Parallel, "Start another run next to it"),
-            new(WorkflowConcurrency.Ignore, "Ignore the input until it's done"),
-            new(WorkflowConcurrency.Restart, "Stop it and start again"),
+            new(WorkflowConcurrency.Restart, "Start over: stop the run that is going and start again (a wait begins again)"),
+            new(WorkflowConcurrency.Parallel, "Run in parallel: every press starts its own run (each wait shows)"),
+            new(WorkflowConcurrency.Ignore, "Ignore the press until the run is done (the log says so)"),
             new(WorkflowConcurrency.Stop, "Stop it (the input works as a stop button)"),
         ];
 
@@ -345,11 +345,21 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
 
     public bool IsSelected(WorkflowLink link) => link == _selectedLink;
 
-    /// <summary>How far a waiting node is (0 to 1) while a run waits at it; null when nothing waits there.</summary>
-    public double? WaitProgress(WorkflowNode node) =>
-        _waits.TryGetValue(node.Id, out var wait) && wait.Length > TimeSpan.Zero && (Now() - wait.Start) < wait.Length
-            ? Math.Clamp((Now() - wait.Start) / wait.Length, 0d, 1d)
-            : null;
+    /// <summary>How far a waiting node is (0 to 1) while a run waits at it (the oldest run when several wait); null when nothing waits there.</summary>
+    public double? WaitProgress(WorkflowNode node) => WaitProgresses(node).Cast<double?>().FirstOrDefault();
+
+    /// <summary>How far each run waiting at the node is (0 to 1), oldest first: runs in parallel each show their own wait.</summary>
+    public IReadOnlyList<double> WaitProgresses(WorkflowNode node)
+    {
+        var now = Now();
+        return
+        [
+            .. _waits
+                .Where(pair => pair.Key.NodeId == node.Id && pair.Value.Length > TimeSpan.Zero && now - pair.Value.Start < pair.Value.Length)
+                .OrderBy(static pair => pair.Key.RunId)
+                .Select(pair => Math.Clamp((now - pair.Value.Start) / pair.Value.Length, 0d, 1d)),
+        ];
+    }
 
     public bool IsActive(WorkflowNode node) => _activeUntil.TryGetValue(node.Id, out var until) && until > Now();
 
@@ -444,6 +454,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
 
     public void SelectNode(string? nodeId)
     {
+        DeleteChoiceNodeId = null;
         _selectedLink = null;
         _selectedNodeId = nodeId is not null && _workflow.Find(nodeId) is not null ? nodeId : null;
         RebuildInspector();
@@ -452,6 +463,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
 
     public void SelectLink(WorkflowLink? link)
     {
+        DeleteChoiceNodeId = null;
         _selectedNodeId = null;
         _selectedLink = link is not null && _workflow.Links.Contains(link) ? link : null;
         RebuildInspector();
@@ -729,6 +741,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         return null;
     }
 
+    /// <summary>Removes the selected node or link. A node is taken out of the flow: what led into it is linked to what it led to.</summary>
     [RelayCommand]
     public void DeleteSelection()
     {
@@ -739,15 +752,73 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (SelectedNode is not { } node)
+        {
+            return;
+        }
+
+        if (WorkflowGap.NeedsChoice(_workflow, node.Id))
+        {
+            // Several branches come out of it: ask which one the previous nodes should continue with.
+            DeleteChoiceNodeId = node.Id;
+            return;
+        }
+
+        RemoveNode(node, GapMode.Reconnect);
+    }
+
+    /// <summary>Removes the selected node and its links without linking anything across the gap (Shift+Delete).</summary>
+    [RelayCommand]
+    public void DeleteSelectionAndDisconnect()
+    {
         if (SelectedNode is { } node)
         {
-            Commit(_workflow with
-            {
-                Nodes = [.. _workflow.Nodes.Where(candidate => candidate.Id != node.Id)],
-                Links = [.. _workflow.Links.Where(candidate => candidate.From != node.Id && candidate.To != node.Id)],
-            }, $"Removed {SummaryOf(node)}");
-            SelectNode(null);
+            RemoveNode(node, GapMode.Disconnect);
         }
+        else
+        {
+            DeleteSelection();
+        }
+    }
+
+    /// <summary>Answer to the question after <see cref="DeleteSelection"/>: continue with the first branch.</summary>
+    [RelayCommand]
+    public void DeleteAndReconnectFirstPath()
+    {
+        if (DeleteChoiceNodeId is { } id && _workflow.Find(id) is { } node)
+        {
+            RemoveNode(node, GapMode.FirstPath);
+        }
+    }
+
+    [RelayCommand]
+    public void DeleteAndDisconnect() => DeleteSelectionAndDisconnect();
+
+    [RelayCommand]
+    public void CancelDelete() => DeleteChoiceNodeId = null;
+
+    private string? _deleteChoiceNodeId;
+
+    /// <summary>The node whose removal waits for the user's answer (null: nothing is asked).</summary>
+    public string? DeleteChoiceNodeId
+    {
+        get => _deleteChoiceNodeId;
+        private set
+        {
+            if (SetProperty(ref _deleteChoiceNodeId, value))
+            {
+                OnPropertyChanged(nameof(HasDeleteChoice));
+            }
+        }
+    }
+
+    public bool HasDeleteChoice => _deleteChoiceNodeId is not null;
+
+    private void RemoveNode(WorkflowNode node, GapMode mode)
+    {
+        DeleteChoiceNodeId = null;
+        Commit(WorkflowGap.Remove(_workflow, node.Id, mode), mode == GapMode.Disconnect ? $"Removed {SummaryOf(node)} and its links" : $"Removed {SummaryOf(node)}");
+        SelectNode(null);
     }
 
     /// <summary>Whether the selected node has links to take off.</summary>
@@ -806,49 +877,30 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Lays the nodes out in columns by how far they are from a trigger (rows in link order).</summary>
+    /// <summary>
+    /// Lays the nodes out in columns by how far they are from a trigger. Inside a column the nodes keep the order of the
+    /// flow (<see cref="WorkflowFlowOrder"/>): a Switch's branches in the order of its cases, Else last.
+    /// </summary>
     [RelayCommand]
     private void Arrange()
     {
-        var depth = new Dictionary<string, int>(StringComparer.Ordinal);
-        var order = new List<string>();
-        var queue = new Queue<string>(_workflow.Nodes.Where(static node => node.Kind == WorkflowNodeKinds.Trigger).Select(static node => node.Id));
-        foreach (var id in queue)
-        {
-            depth[id] = 0;
-        }
-
-        // Longest distance from a trigger (the graph has no loops, so this ends).
-        var guard = 0;
-        while (queue.Count > 0 && guard++ < 100_000)
-        {
-            var id = queue.Dequeue();
-            order.Add(id);
-            foreach (var node in _workflow.Nodes.Where(node => _workflow.Links.Any(link => link.From == id && link.To == node.Id)))
-            {
-                var next = depth[id] + 1;
-                if (!depth.TryGetValue(node.Id, out var known) || known < next)
-                {
-                    depth[node.Id] = next;
-                    queue.Enqueue(node.Id);
-                }
-            }
-        }
+        var depth = WorkflowFlowOrder.Depths(_workflow);
+        var order = WorkflowFlowOrder.Order(_workflow).ToList();
+        var unreachedColumn = depth.Count == 0 ? 0 : depth.Values.Max() + 1;
 
         var rows = new Dictionary<int, double>();
-        var placed = new List<WorkflowNode>();
+        var placed = new Dictionary<string, WorkflowNode>(StringComparer.Ordinal);
         foreach (var node in _workflow.Nodes
                      .OrderBy(node => depth.GetValueOrDefault(node.Id, int.MaxValue))
-                     .ThenBy(node => order.LastIndexOf(node.Id) is var index && index >= 0 ? index : int.MaxValue)
-                     .ThenBy(static node => node.Y))
+                     .ThenBy(node => order.IndexOf(node.Id)))
         {
-            var column = depth.TryGetValue(node.Id, out var d) ? d : (depth.Count == 0 ? 0 : depth.Values.Max() + 1);
+            var column = depth.GetValueOrDefault(node.Id, unreachedColumn);
             var y = rows.GetValueOrDefault(column, WorkflowConverter.Top);
-            placed.Add(node with { X = WorkflowConverter.Left + (column * (NodeWidth + 50)), Y = y });
+            placed[node.Id] = node with { X = WorkflowConverter.Left + (column * (NodeWidth + 50)), Y = y };
             rows[column] = y + HeightOf(node) + 30;
         }
 
-        Commit(_workflow with { Nodes = [.. _workflow.Nodes.Select(node => placed.First(candidate => candidate.Id == node.Id))] }, "Arranged");
+        Commit(_workflow with { Nodes = [.. _workflow.Nodes.Select(node => placed[node.Id])] }, "Arranged");
     }
 
     [RelayCommand]
@@ -962,6 +1014,15 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (trace.Kind is WorkflowTraceKind.Finished or WorkflowTraceKind.Stopped)
+        {
+            // A run that ended (or was restarted) no longer waits anywhere.
+            foreach (var key in _waits.Keys.Where(key => key.RunId == trace.RunId).ToList())
+            {
+                _waits.Remove(key);
+            }
+        }
+
         if (trace.NodeId is { } nodeId)
         {
             var map = trace.Kind == WorkflowTraceKind.Failed ? _failedUntil : _activeUntil;
@@ -969,7 +1030,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             if (trace.Wait is { } wait && wait > TimeSpan.Zero)
             {
                 // A wait fills its node over the time it takes instead of just lighting it up.
-                _waits[nodeId] = (Now(), wait);
+                _waits[(nodeId, trace.RunId)] = (Now(), wait);
                 map[nodeId] = Now() + wait + ActiveFor;
             }
 
@@ -1123,6 +1184,8 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         if (_breakpoints is not null)
         {
             _breakpoints.Changed -= OnBreakpointsChanged;
+            _breakpoints.Detach();
+            _breakpoints = null;
         }
     }
 }

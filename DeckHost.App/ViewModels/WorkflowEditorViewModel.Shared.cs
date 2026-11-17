@@ -93,6 +93,52 @@ public sealed partial class WorkflowEditorViewModel
         RefreshShared();
     }
 
+    /// <summary>
+    /// Makes a new, empty shared workflow (a When node, named "Workflow N") and points the selected Call node at it, so a
+    /// workflow can be built right from the node that will call it. <see cref="OpenCall"/> then opens it.
+    /// </summary>
+    [RelayCommand]
+    public void NewSharedWorkflow()
+    {
+        if (SaveShared is null || SelectedNode is not { Kind: WorkflowNodeKinds.Call } call)
+        {
+            return;
+        }
+
+        var name = NextSharedName();
+        var created = new Workflow
+        {
+            Name = name,
+            Nodes = [new WorkflowNode("n1", WorkflowNodeKinds.Trigger, WorkflowConverter.Left, WorkflowConverter.Top)],
+            WhileRunning = WorkflowConcurrency.Restart,
+        };
+        var (id, problem) = SaveShared(created);
+        if (id is null)
+        {
+            Status = problem ?? "Couldn't make a new workflow.";
+            return;
+        }
+
+        var settings = (call.Settings ?? ActionSettings.Empty).With(WorkflowKeys.Workflow, id);
+        Commit(_workflow with { Nodes = [.. _workflow.Nodes.Select(node => node.Id == call.Id ? node with { Settings = settings } : node)] }, $"New workflow {name}");
+        Status = $"Made the shared workflow {name} and set this node to call it. Choose Open workflow to build it.";
+        RefreshShared();
+        SelectNode(call.Id);
+    }
+
+    /// <summary>The first "Workflow N" that no shared workflow has.</summary>
+    internal string NextSharedName()
+    {
+        var names = (SharedSource?.Invoke() ?? []).Select(static workflow => workflow.Name ?? string.Empty).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var number = 1;
+        while (names.Contains($"Workflow {number}"))
+        {
+            number++;
+        }
+
+        return $"Workflow {number}";
+    }
+
     [RelayCommand]
     private void OpenCall()
     {
@@ -128,16 +174,28 @@ public sealed partial class WorkflowEditorViewModel
     /// <summary>Where this control's runs stop (shared by the control's editors).</summary>
     public WorkflowBreakpoints Breakpoints
     {
-        get => _breakpoints ??= new WorkflowBreakpoints(_host);
+        get
+        {
+            if (_breakpoints is null)
+            {
+                Breakpoints = new WorkflowBreakpoints(_host);
+            }
+
+            return _breakpoints!;
+        }
         set
         {
             if (_breakpoints is not null)
             {
                 _breakpoints.Changed -= OnBreakpointsChanged;
+                _breakpoints.Detach();
             }
 
             _breakpoints = value;
             _breakpoints.Changed += OnBreakpointsChanged;
+
+            // Runs only stop at the points while an editor is open to see and continue them.
+            _breakpoints.Attach();
         }
     }
 

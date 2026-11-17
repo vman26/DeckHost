@@ -55,25 +55,25 @@ Variables are stored as text and read back by what they look like: `true` / `fal
 
 ## Shared workflows
 
-A workflow you want to use from several controls can be kept once. Give it a name in the box above the canvas and click **Save as shared**; it then shows in the **Shared workflows** list (with what uses it) and in the **Call workflow** node's list. **Open** edits it in an editor of its own: every change is kept and applies wherever it is called. A shared workflow can't be deleted while a control or another shared workflow calls it. Exporting a profile takes the shared workflows it calls along (with new ids, so an import never replaces yours).
+A workflow you want to use from several controls can be kept once. Give it a name in the box above the canvas and click **Save as shared**; it then shows in the **Shared workflows** list (with what uses it) and in the **Call workflow** node's list. On a **Call workflow** node, **New workflow…** makes an empty shared workflow and points the node at it. **Open** edits it in an editor of its own: every change is kept and applies wherever it is called. A shared workflow can't be deleted while a control or another shared workflow calls it. Exporting a profile takes the shared workflows it calls along (with new ids, so an import never replaces yours).
 
 ## Debugging
 
 - Select a node and press **F9** (or right-click → **Add breakpoint**) to put a red dot on it. A run that gets there stops in front of the node and the node gets an amber border; the Run log says which run is held.
 - **Continue** lets it go on until the next breakpoint; **Step** runs the next node and holds the run again. A run that is held keeps its waits: a Wait that ends meanwhile only continues once you release it. **Stop** ends a held run.
-- Breakpoints belong to the control, so a breakpoint inside a shared workflow stops the runs of the control that called it. They aren't saved with the workflow and are gone when DeckHost closes.
+- Breakpoints belong to the control, so a breakpoint inside a shared workflow stops the runs of the control that called it. They aren't saved with the workflow and are gone when DeckHost closes. **Debugging only works while a workflow editor is open:** the points are kept, but when you close the last editor they stop holding runs, and a run that was held goes on at once; opening an editor switches them on again.
 - With nothing selected, **Variables right now** shows the state at the point where the run is held.
 
 ## While a run is going
 
-When the same input comes again before its run is done (a wait), the workflow can **start another run** next to it (the default), **ignore** the input, **stop the run and start again**, or **stop the run**, which makes the key a stop button.
+When the same input comes again before its run is done (for example it is still in a wait), the workflow can **start over** (stop the run and start again, so a wait begins again; the default for new workflows), **run in parallel** (every press starts its own run, and each run's wait shows on the node), **ignore** the press until the run is done (the log says so), or **stop the run**, which makes the key a stop button. Choose it in the editor with nothing selected, under **When triggered again while running**. Workflows made before this keep the setting they had.
 
 ## The editor
 
-- Click a node to set it up on the right; click a link to select it. **Delete** removes, **Ctrl+D** duplicates, **Ctrl+Z / Ctrl+Y** undo and redo. Right-click a node for Duplicate, Take off its links and Remove, a link for Remove link, or the background for Fit, Arrange and Undo.
+- Click a node to set it up on the right; click a link to select it. **Delete** takes a node out of the flow (what led into it is linked to what it led to; when it continues on several branches DeckHost asks which one to keep, and **Shift+Delete** removes it and its links without linking anything), **Ctrl+D** duplicates, **Ctrl+Z / Ctrl+Y** undo and redo. Right-click a node for Duplicate, Take off its links and Remove, a link for Remove link, or the background for Fit, Arrange and Undo.
 - Drop a node onto a link, from the lists or by dragging one that isn't linked yet, and the link opens up and the node goes in between (one undo step). The node after it and everything that follows move to the right to make room, so nothing ends up on top of anything else. Stop and When nodes can't go into a link.
 - The actions on the left are grouped by plugin like in the main window; the search opens every group with a match.
-- **Arrange** lays the nodes out from left to right; **Fit** shows them all. Drag the background to pan, and use Ctrl + the mouse wheel to zoom.
+- **Arrange** lays the nodes out from left to right, keeping the order of the flow: a Switch's branches stay in the order of its cases, Else last. **Fit** shows them all. Drag the background to pan, and use Ctrl + the mouse wheel to zoom.
 - With nothing selected, **Variables right now** lists the variables that are set (it follows the runs) and sets one to try the workflow with it.
 - **Run** starts the workflow as if the control was used; **Stop** stops every run. Each step lights up on the canvas and appears in the run log.
 - Links can't form a loop (use Repeat) and can't lead into a When node.

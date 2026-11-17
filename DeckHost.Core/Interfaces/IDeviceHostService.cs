@@ -84,6 +84,11 @@ public interface IDeviceHostService : IAsyncDisposable
     {
     }
 
+    /// <summary>Lets every run that is held at a breakpoint or a step go on (the workflow editor closed, so nobody can continue them).</summary>
+    void ReleaseWorkflowRuns()
+    {
+    }
+
     /// <summary>Lets a paused run go on until the next breakpoint.</summary>
     void ContinueWorkflow(int runId)
     {

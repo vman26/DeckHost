@@ -76,6 +76,11 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Changed
 
+- Workflows: debugging only works while a workflow editor is open (a held run goes on when the last editor closes);
+  deleting a node links what led into it to what it led to (and asks when it has several branches); Arrange keeps
+  a Switch's branches in the order of its cases; a Call workflow node can create a new shared workflow; new workflows
+  start over when triggered again while running, and runs in parallel each show their own wait.
+
 - DeckHost is one public repository under GPL-3.0-or-later; issues, releases and source are in the
   same place.
 - Devices describe themselves in more detail (identity, displays, capabilities, limits), the basis

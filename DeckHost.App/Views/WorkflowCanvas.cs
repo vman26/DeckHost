@@ -267,9 +267,10 @@ public sealed class WorkflowCanvas : Control
             context.FillRectangle(new SolidColorBrush(accent, 0.22), header);
 
             // A run waiting here fills the node from the left over the time the wait takes.
-            if (vm.WaitProgress(node) is { } progress)
+            // Runs in parallel each fill the node on their own: one fill per run, the newest drawn over the older ones.
+            foreach (var progress in vm.WaitProgresses(node))
             {
-                context.FillRectangle(new SolidColorBrush(accent, 0.40), new Rect(node.X, node.Y, width * progress, height));
+                context.FillRectangle(new SolidColorBrush(accent, 0.28), new Rect(node.X, node.Y, width * progress, height));
                 context.FillRectangle(new SolidColorBrush(accent), new Rect(node.X + (width * progress) - 1.5, node.Y, 3, height));
             }
         }
@@ -710,7 +711,15 @@ public sealed class WorkflowCanvas : Control
         switch (e.Key)
         {
             case Key.Delete or Key.Back when vm.HasSelection:
-                vm.DeleteSelection();
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                {
+                    vm.DeleteSelectionAndDisconnect();
+                }
+                else
+                {
+                    vm.DeleteSelection();
+                }
+
                 e.Handled = true;
                 break;
             case Key.Escape when _drag != Drag.None:
@@ -822,6 +831,7 @@ public sealed class WorkflowCanvas : Control
             items.Add(Item("Take off its links", () => vm.DisconnectSelection(), enabled: vm.SelectedHasLinks));
             items.Add(new Separator());
             items.Add(Item("Remove", () => vm.DeleteSelection(), "Delete"));
+            items.Add(Item("Remove and take off its links", () => vm.DeleteSelectionAndDisconnect(), "Shift+Delete"));
         }
         else if (link is not null)
         {
