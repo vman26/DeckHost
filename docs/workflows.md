@@ -12,10 +12,10 @@ A run starts at a **When** node and follows the links from left to right. A node
 |---|---|
 | **When** | Starts the workflow: the control is pressed, released, tapped, double pressed, held down, turned left or right, or swiped left or right. A workflow can have several. |
 | **Action** | Runs an action, with its own settings. Drop an action from the list on the left onto the canvas. |
-| **Wait** | Waits, then continues. The device keeps working. |
+| **Wait** | Waits, then continues. The device keeps working. While a run waits the node fills up over the time it takes. |
 | **If** | Continues at **Yes** or **No**: a variable (equal to, greater than, containing, empty, …), the app in front (part of its name), or the time of day (also past midnight, 22:00–06:00). |
 | **Toggle** | Takes **1st** and **2nd** in turn: on, then off. |
-| **Repeat** | Runs **Each time** a number of times, one round after the other, then **Done**. |
+| **Repeat** | Runs **Each time** one round after the other, then **Done**. How many rounds: a fixed number, as many as a variable says, **while** a variable has a value, or **until** it does. An optional pause between rounds turns it into a timer (a condition that never changes stops after 10,000 rounds). |
 | **Set variable** | Sets, adds to, subtracts from, flips (true/false) or clears a variable. |
 | **Stop** | Ends the run, including branches that are still waiting. |
 
@@ -27,8 +27,14 @@ When the same input comes again before its run is done (a wait), the workflow ca
 
 ## The editor
 
-- Click a node to set it up on the right; click a link to select it. **Delete** removes, **Ctrl+D** duplicates, **Ctrl+Z / Ctrl+Y** undo and redo.
+- Click a node to set it up on the right; click a link to select it. **Delete** removes, **Ctrl+D** duplicates, **Ctrl+Z / Ctrl+Y** undo and redo. Right-click a node for Duplicate, Take off its links and Remove, a link for Remove link, or the background for Fit, Arrange and Undo.
+- Drop a node onto a link, from the lists or by dragging one that isn't linked yet, and the link opens up and the node goes in between (one undo step). Stop and When nodes can't go into a link.
+- The actions on the left are grouped by plugin like in the main window; the search opens every group with a match.
 - **Arrange** lays the nodes out from left to right; **Fit** shows them all. Drag the background to pan, and use Ctrl + the mouse wheel to zoom.
 - **Run** starts the workflow as if the control was used; **Stop** stops every run. Each step lights up on the canvas and appears in the run log.
 - Links can't form a loop (use Repeat) and can't lead into a When node.
 - Every change reaches the device right away; **Revert** puts back the workflow as it was when you opened the editor.
+
+## Name and share a workflow
+
+Give a workflow a name in the box above the canvas; it shows in the editor's title. **Export…** saves it as a `.deckhostworkflow` file and **Import…** replaces the workflow you have open with one from a file (Undo brings yours back). The file holds the nodes, their settings and the links, and DeckHost checks it before using it: unknown nodes, links that lead nowhere or form a loop, and oversized files are refused. An action node needs its plugin installed on the machine that imports it; without it the node stays and is skipped when the workflow runs.

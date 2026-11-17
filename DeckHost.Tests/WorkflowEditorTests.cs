@@ -66,6 +66,67 @@ public class WorkflowEditorTests
     }
 
     [Test]
+    public void A_node_can_be_moved_and_put_into_a_link_as_one_undo_step()
+    {
+        var (editor, _) = Editor();
+        var first = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        var last = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        editor.Connect(first.Id, WorkflowPorts.Next, last.Id);
+        var link = Expect.Single(editor.Workflow.Links);
+        var loose = editor.AddNode(WorkflowNodeKinds.Wait, 450, 200);
+
+        Assert.That(editor.InsertIntoLink(loose.Id, link, 440, 60), Is.Null);
+
+        var placed = editor.Workflow.Find(loose.Id)!;
+        Assert.That((placed.X, placed.Y), Is.EqualTo((440d, 60d)));
+        editor.UndoCommand.Execute(null);
+        var back = editor.Workflow.Find(loose.Id)!;
+        Assert.That((back.X, back.Y), Is.EqualTo((450d, 200d)), "the same step puts it back where it was");
+        Assert.That(Expect.Single(editor.Workflow.Links), Is.EqualTo(link));
+    }
+
+    [Test]
+    public void Taking_the_links_off_a_node_keeps_the_node_and_its_neighbours()
+    {
+        var (editor, _) = Editor();
+        var first = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        var middle = editor.AddNode(WorkflowNodeKinds.Wait, 450, 40);
+        var last = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        editor.Connect(first.Id, WorkflowPorts.Next, middle.Id);
+        editor.Connect(middle.Id, WorkflowPorts.Next, last.Id);
+        editor.SelectNode(middle.Id);
+        Assert.That(editor.SelectedHasLinks, Is.True);
+
+        editor.DisconnectSelection();
+
+        Assert.That(editor.Workflow.Links, Is.Empty);
+        Assert.That(editor.Workflow.Nodes.Select(static node => node.Id), Does.Contain(middle.Id).And.Contain(first.Id).And.Contain(last.Id));
+        Assert.That(editor.SelectedHasLinks, Is.False);
+        editor.UndoCommand.Execute(null);
+        Assert.That(editor.Workflow.Links, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public void Actions_are_grouped_by_plugin_and_a_search_opens_the_matching_groups()
+    {
+        var (editor, _) = Editor();
+        Assert.That(editor.ActionGroups, Is.Not.Empty);
+        Assert.That(editor.ActionGroups.Select(static group => group.PluginId), Is.Unique);
+        Assert.That(editor.ActionGroups.Sum(static group => group.Actions.Count), Is.EqualTo(editor.AvailableActions.Count));
+        Assert.That(editor.ActionGroups.Any(static group => group.IsExpanded), Is.False, "collapsed like the main window until opened");
+
+        var name = editor.AvailableActions[0].Name;
+        editor.ActionSearch = name;
+
+        Assert.That(editor.ActionGroups, Is.Not.Empty);
+        Assert.That(editor.ActionGroups.All(static group => group.IsExpanded), Is.True);
+        Assert.That(editor.ActionGroups.SelectMany(static group => group.Actions).Any(action => action.Name == name), Is.True);
+
+        editor.ActionSearch = "no action is called this";
+        Assert.That(editor.ActionGroups, Is.Empty);
+    }
+
+    [Test]
     public void A_node_with_links_or_a_node_without_a_way_through_cannot_be_put_into_a_link()
     {
         var (editor, _) = Editor();

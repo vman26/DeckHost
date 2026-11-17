@@ -51,6 +51,7 @@ public sealed class WorkflowCanvas : Control
     private string? _linkPort;
     private Point _linkEnd;              // canvas
     private string? _hoverNodeId;
+    private WorkflowLink? _insertLink;   // the link a dragged or dropped node would go into
 
     private enum Drag
     {
@@ -66,6 +67,7 @@ public sealed class WorkflowCanvas : Control
         ClipToBounds = true;
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         AddHandler(DragDrop.DropEvent, OnDrop);
     }
 
@@ -159,7 +161,7 @@ public sealed class WorkflowCanvas : Control
             {
                 if (nodes.TryGetValue(link.From, out var from) && nodes.TryGetValue(link.To, out var to))
                 {
-                    DrawLink(context, vm, link, from, to);
+                    DrawLink(context, vm, link, from, to, link == _insertLink);
                 }
             }
 
@@ -208,7 +210,7 @@ public sealed class WorkflowCanvas : Control
         }
     }
 
-    private static void DrawLink(DrawingContext context, WorkflowEditorViewModel vm, WorkflowLink link, WorkflowNode from, WorkflowNode to)
+    private static void DrawLink(DrawingContext context, WorkflowEditorViewModel vm, WorkflowLink link, WorkflowNode from, WorkflowNode to, bool target)
     {
         var (x1, y1) = WorkflowEditorViewModel.OutputPoint(from, link.Port);
         var (x2, y2) = WorkflowEditorViewModel.InputPoint(to);
@@ -216,8 +218,14 @@ public sealed class WorkflowCanvas : Control
         var active = vm.IsActive(link);
         var selected = vm.IsSelected(link);
         var pen = new Pen(
-            new SolidColorBrush(active ? Color.Parse("#FDE047") : selected ? Colors.White : color),
-            selected || active ? 3.5 : 2.2);
+            new SolidColorBrush(active ? Color.Parse("#FDE047") : selected || target ? Colors.White : color),
+            selected || active || target ? 3.5 : 2.2);
+        if (target)
+        {
+            // The link a dropped node would be put into: a soft halo under it.
+            context.DrawGeometry(null, new Pen(new SolidColorBrush(Colors.White, 0.25), 12), Curve(new Point(x1, y1), new Point(x2, y2)));
+        }
+
         context.DrawGeometry(null, pen, Curve(new Point(x1, y1), new Point(x2, y2)));
 
         // An arrow head at the input.
@@ -255,6 +263,13 @@ public sealed class WorkflowCanvas : Control
         using (context.PushClip(new RoundedRect(rect, 10)))
         {
             context.FillRectangle(new SolidColorBrush(accent, 0.22), header);
+
+            // A run waiting here fills the node from the left over the time the wait takes.
+            if (vm.WaitProgress(node) is { } progress)
+            {
+                context.FillRectangle(new SolidColorBrush(accent, 0.40), new Rect(node.X, node.Y, width * progress, height));
+                context.FillRectangle(new SolidColorBrush(accent), new Rect(node.X + (width * progress) - 1.5, node.Y, 3, height));
+            }
         }
 
         if (IconOf(type.Icon) is { } icon)
@@ -412,6 +427,47 @@ public sealed class WorkflowCanvas : Control
         return null;
     }
 
+    /// <summary>The link whose curve runs through a rectangle (the one nearest its center), for dropping a node into it.</summary>
+    private WorkflowLink? LinkThrough(Rect area)
+    {
+        if (_viewModel is null)
+        {
+            return null;
+        }
+
+        WorkflowLink? best = null;
+        var bestDistance = double.MaxValue;
+        var middle = area.Center;
+        foreach (var link in _viewModel.Workflow.Links)
+        {
+            if (_viewModel.Workflow.Find(link.From) is not { } from || _viewModel.Workflow.Find(link.To) is not { } to)
+            {
+                continue;
+            }
+
+            var (x1, y1) = WorkflowEditorViewModel.OutputPoint(from, link.Port);
+            var (x2, y2) = WorkflowEditorViewModel.InputPoint(to);
+            var bend = Math.Max(40, Math.Abs(x2 - x1) / 2);
+            for (var i = 0; i <= 40; i++)
+            {
+                var point = Bezier(new Point(x1, y1), new Point(x1 + bend, y1), new Point(x2 - bend, y2), new Point(x2, y2), i / 40.0);
+                if (!area.Contains(point))
+                {
+                    continue;
+                }
+
+                var distance = ((point.X - middle.X) * (point.X - middle.X)) + ((point.Y - middle.Y) * (point.Y - middle.Y));
+                if (distance < bestDistance)
+                {
+                    best = link;
+                    bestDistance = distance;
+                }
+            }
+        }
+
+        return best;
+    }
+
     private static Point Bezier(Point p0, Point p1, Point p2, Point p3, double t)
     {
         var u = 1 - t;
@@ -439,6 +495,25 @@ public sealed class WorkflowCanvas : Control
         if (point.Properties.IsMiddleButtonPressed || (point.Properties.IsLeftButtonPressed && e.KeyModifiers.HasFlag(KeyModifiers.Shift)))
         {
             StartPan(e);
+            return;
+        }
+
+        if (point.Properties.IsRightButtonPressed)
+        {
+            // Select what is under the pointer and offer what can be done with it.
+            WorkflowNode? onNode = NodeAt(canvas);
+            WorkflowLink? onLink = onNode is null ? LinkAt(canvas) : null;
+            if (onNode is not null)
+            {
+                vm.SelectNode(onNode.Id);
+            }
+            else if (onLink is not null)
+            {
+                vm.SelectLink(onLink);
+            }
+
+            ShowMenu(onNode, onLink);
+            e.Handled = true;
             return;
         }
 
@@ -493,6 +568,11 @@ public sealed class WorkflowCanvas : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        if (_viewModel is not { } vm)
+        {
+            return;
+        }
+
         var screen = e.GetPosition(this);
         var canvas = ToCanvas(screen);
         switch (_drag)
@@ -503,6 +583,9 @@ public sealed class WorkflowCanvas : Control
                 break;
             case Drag.Node:
                 _dragNodeDelta = (screen - _dragStart) / _zoom;
+                _insertLink = _dragNodeId is { } moving && vm.CanInsertIntoLink(moving) && vm.Workflow.Find(moving) is { } shown
+                    ? LinkThrough(new Rect(_dragNodeOrigin.X + _dragNodeDelta.X, _dragNodeOrigin.Y + _dragNodeDelta.Y, WorkflowEditorViewModel.NodeWidth, WorkflowEditorViewModel.HeightOf(shown)))
+                    : null;
                 InvalidateVisual();
                 break;
             case Drag.Link:
@@ -536,7 +619,19 @@ public sealed class WorkflowCanvas : Control
             case Drag.Node when _dragNodeId is { } id:
                 if (Math.Abs(_dragNodeDelta.X) > 0.5 || Math.Abs(_dragNodeDelta.Y) > 0.5)
                 {
-                    vm.MoveNode(id, _dragNodeOrigin.X + _dragNodeDelta.X, _dragNodeOrigin.Y + _dragNodeDelta.Y);
+                    var (nx, ny) = (_dragNodeOrigin.X + _dragNodeDelta.X, _dragNodeOrigin.Y + _dragNodeDelta.Y);
+                    if (_insertLink is { } into)
+                    {
+                        // Moved and put into the link: one undo step.
+                        if (vm.InsertIntoLink(id, into, nx, ny) is { } why)
+                        {
+                            Message?.Invoke(this, why);
+                        }
+                    }
+                    else
+                    {
+                        vm.MoveNode(id, nx, ny);
+                    }
                 }
 
                 break;
@@ -556,6 +651,7 @@ public sealed class WorkflowCanvas : Control
         _linkFrom = null;
         _linkPort = null;
         _hoverNodeId = null;
+        _insertLink = null;
         InvalidateVisual();
     }
 
@@ -565,6 +661,7 @@ public sealed class WorkflowCanvas : Control
         if (_drag != Drag.None)
         {
             _drag = Drag.None;
+            _insertLink = null;
             InvalidateVisual();
         }
     }
@@ -607,6 +704,7 @@ public sealed class WorkflowCanvas : Control
                 break;
             case Key.Escape when _drag != Drag.None:
                 _drag = Drag.None;
+                _insertLink = null;
                 InvalidateVisual();
                 e.Handled = true;
                 break;
@@ -628,17 +726,42 @@ public sealed class WorkflowCanvas : Control
 
     // ---------------------------------------------------------------- dropping actions
 
+    /// <summary>The rectangle a node dropped at a pointer position takes (it is centered on the pointer).</summary>
+    private Rect DropArea(Point canvas) =>
+        new(canvas.X - (WorkflowEditorViewModel.NodeWidth / 2), canvas.Y - 20, WorkflowEditorViewModel.NodeWidth, WorkflowEditorViewModel.HeaderHeight + WorkflowEditorViewModel.SummaryHeight + 6);
+
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = e.DataTransfer.TryGetValue(DragFormats.Action) is not null || e.DataTransfer.TryGetValue(DragFormats.WorkflowNode) is not null
-            ? DragDropEffects.Copy
-            : DragDropEffects.None;
+        var kind = e.DataTransfer.TryGetValue(DragFormats.WorkflowNode);
+        var action = e.DataTransfer.TryGetValue(DragFormats.Action);
+        e.DragEffects = action is not null || kind is not null ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
+
+        // A node that can pass a run on lights the link it would be put into.
+        var link = (kind is null || WorkflowEditorViewModel.CanBeInserted(kind)) && (kind is not null || action is not null)
+            ? LinkThrough(DropArea(ToCanvas(e.GetPosition(this))))
+            : null;
+        if (link != _insertLink)
+        {
+            _insertLink = link;
+            InvalidateVisual();
+        }
+    }
+
+    private void OnDragLeave(object? sender, DragEventArgs e)
+    {
+        if (_insertLink is not null)
+        {
+            _insertLink = null;
+            InvalidateVisual();
+        }
     }
 
     private void OnDrop(object? sender, DragEventArgs e)
     {
         e.Handled = true;
+        var into = _insertLink;
+        _insertLink = null;
         if (_viewModel is not { } vm)
         {
             return;
@@ -649,14 +772,65 @@ public sealed class WorkflowCanvas : Control
         var y = at.Y - 20;
         if (e.DataTransfer.TryGetValue(DragFormats.WorkflowNode) is { } kind)
         {
-            vm.AddNode(kind, x, y);
+            vm.AddNode(kind, x, y, into);
         }
         else if (e.DataTransfer.TryGetValue(DragFormats.Action) is { } action &&
                  vm.AvailableActions.FirstOrDefault(item => ReferenceEquals(item.Action, action)) is { } item)
         {
-            vm.AddAction(item, x, y);
+            vm.AddAction(item, x, y, into);
         }
 
+        InvalidateVisual();
         Focus();
+    }
+
+    // ---------------------------------------------------------------- context menus
+
+    private void ShowMenu(WorkflowNode? node, WorkflowLink? link)
+    {
+        if (_viewModel is not { } vm)
+        {
+            return;
+        }
+
+        var items = new List<Control>();
+        if (node is not null)
+        {
+            if (node.Kind == WorkflowNodeKinds.Trigger)
+            {
+                items.Add(Item("▶ Run from here", () => vm.RunCommand.Execute(null)));
+                items.Add(new Separator());
+            }
+
+            items.Add(Item("Duplicate", () => vm.DuplicateSelection(), "Ctrl+D"));
+            items.Add(Item("Take off its links", () => vm.DisconnectSelection(), enabled: vm.SelectedHasLinks));
+            items.Add(new Separator());
+            items.Add(Item("Remove", () => vm.DeleteSelection(), "Delete"));
+        }
+        else if (link is not null)
+        {
+            items.Add(Item("Remove link", () => vm.DeleteSelection(), "Delete"));
+        }
+        else
+        {
+            items.Add(Item("Fit to view", FitToView));
+            items.Add(Item("Arrange", () => vm.ArrangeCommand.Execute(null)));
+            items.Add(Item("Undo", () => vm.UndoCommand.Execute(null), "Ctrl+Z", vm.CanUndo));
+            items.Add(Item("Redo", () => vm.RedoCommand.Execute(null), "Ctrl+Y", vm.CanRedo));
+        }
+
+        new ContextMenu { ItemsSource = items }.Open(this);
+    }
+
+    private static MenuItem Item(string header, Action click, string? gesture = null, bool enabled = true)
+    {
+        var item = new MenuItem { Header = header, IsEnabled = enabled };
+        if (gesture is not null)
+        {
+            item.InputGesture = KeyGesture.Parse(gesture);
+        }
+
+        item.Click += (_, _) => click();
+        return item;
     }
 }

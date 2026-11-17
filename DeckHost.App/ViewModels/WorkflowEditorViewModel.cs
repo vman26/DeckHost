@@ -82,6 +82,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             .Where(action => action.CanBeMultiActionStep && action.ShowInPalette && action.FitsControl(control))
             .OrderBy(static action => action.PluginName)
             .ThenBy(static action => action.Name)];
+        RefreshActionGroups();
         NodePalette = [.. WorkflowNodeTypes.All.Where(static type => type.Kind != WorkflowNodeKinds.Action).Select(static type => new WorkflowPaletteItem(type))];
         WhileRunningOptions =
         [
@@ -163,6 +164,45 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     public event EventHandler? Changed;
 
     public IReadOnlyList<ActionItemViewModel> AvailableActions { get; }
+
+    /// <summary>The actions grouped by plugin, like the main window's list (collapsed until opened; a search opens every match).</summary>
+    public ObservableCollection<PluginActionGroupViewModel> ActionGroups { get; } = [];
+
+    private string _actionSearch = string.Empty;
+    private readonly Dictionary<string, bool> _openGroups = new(StringComparer.OrdinalIgnoreCase);
+
+    public string ActionSearch
+    {
+        get => _actionSearch;
+        set
+        {
+            if (SetProperty(ref _actionSearch, value ?? string.Empty))
+            {
+                RefreshActionGroups();
+            }
+        }
+    }
+
+    private void RefreshActionGroups()
+    {
+        var query = _actionSearch.Trim();
+        foreach (var existing in ActionGroups)
+        {
+            _openGroups[existing.PluginId] = existing.IsExpanded;
+        }
+
+        var shown = query.Length == 0
+            ? AvailableActions
+            : [.. AvailableActions.Where(action =>
+                action.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                action.PluginName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (action.Description?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false))];
+        ActionGroups.Clear();
+        foreach (var group in shown.GroupBy(static action => (action.PluginId, action.PluginName)))
+        {
+            ActionGroups.Add(new PluginActionGroupViewModel(group.Key.PluginId, group.Key.PluginName, group, null, query.Length > 0 || _openGroups.GetValueOrDefault(group.Key.PluginId)));
+        }
+    }
 
     public IReadOnlyList<WorkflowPaletteItem> NodePalette { get; }
 
@@ -451,8 +491,8 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         _workflow.Find(nodeId) is { } node && CanBeInserted(node.Kind) &&
         !_workflow.Links.Any(link => link.From == nodeId || link.To == nodeId);
 
-    /// <summary>Puts a node that isn't linked yet into the middle of a link, as one undo step. Returns why not when it can't.</summary>
-    public string? InsertIntoLink(string nodeId, WorkflowLink link)
+    /// <summary>Puts a node that isn't linked yet into the middle of a link, as one undo step (optionally moving it there). Returns why not when it can't.</summary>
+    public string? InsertIntoLink(string nodeId, WorkflowLink link, double? x = null, double? y = null)
     {
         if (_workflow.Find(nodeId) is not { } node)
         {
@@ -474,7 +514,12 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             return "Only a node that isn't linked yet can be dropped onto a link.";
         }
 
-        Commit(_workflow with { Links = Splice(_workflow.Links, link, node) }, $"Put {SummaryOf(node)} into a link");
+        var placed = x is { } px && y is { } py ? node with { X = Math.Max(0, Snap(px)), Y = Math.Max(0, Snap(py)) } : node;
+        Commit(_workflow with
+        {
+            Nodes = [.. _workflow.Nodes.Select(candidate => candidate.Id == nodeId ? placed : candidate)],
+            Links = Splice(_workflow.Links, link, node),
+        }, $"Put {SummaryOf(node)} into a link");
         SelectNode(nodeId);
         return null;
     }
@@ -589,8 +634,23 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Whether the selected node has links to take off.</summary>
+    public bool SelectedHasLinks => SelectedNode is { } node && _workflow.Links.Any(link => link.From == node.Id || link.To == node.Id);
+
+    /// <summary>Takes every link off the selected node; the node stays.</summary>
     [RelayCommand]
-    private void DuplicateSelection()
+    public void DisconnectSelection()
+    {
+        if (SelectedNode is not { } node || !SelectedHasLinks)
+        {
+            return;
+        }
+
+        Commit(_workflow with { Links = [.. _workflow.Links.Where(link => link.From != node.Id && link.To != node.Id)] }, $"Unlinked {SummaryOf(node)}");
+    }
+
+    [RelayCommand]
+    public void DuplicateSelection()
     {
         if (SelectedNode is not { } node)
         {

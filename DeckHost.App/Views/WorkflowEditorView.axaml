@@ -134,9 +134,14 @@
 	<Grid RowDefinitions="Auto,*,Auto">
 		<!-- Toolbar -->
 		<Border Padding="14,8" Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="0,0,0,1">
-			<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-				<TextBlock Text="{Binding Overview}" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" TextWrapping="Wrap" />
-				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+			<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+				<TextBox Width="220" Text="{Binding WorkflowName, Mode=TwoWay}" PlaceholderText="Name this workflow" VerticalAlignment="Center"
+						 ToolTip.Tip="A name for the workflow; it shows in the title and is the file name when you export it" />
+				<TextBlock Grid.Column="1" Text="{Binding Overview}" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" TextWrapping="Wrap" />
+				<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+					<Button Content="Export…" Click="Export_OnClick" ToolTip.Tip="Save this workflow as a file to share or keep" />
+					<Button Content="Import…" Click="Import_OnClick" ToolTip.Tip="Replace this workflow with one from a file (Undo brings yours back)" />
+					<Border Width="1" Background="{DynamicResource C.334155}" Margin="4,2" />
 					<Button Content="↶ Undo" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" ToolTip.Tip="Undo (Ctrl+Z)" />
 					<Button Content="↷ Redo" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" ToolTip.Tip="Redo (Ctrl+Y)" />
 					<Button Content="Arrange" Command="{Binding ArrangeCommand}" ToolTip.Tip="Lay the nodes out from left to right" />
@@ -171,26 +176,45 @@
 					</ItemsControl>
 					<StackPanel Grid.Row="2" Spacing="6" Margin="0,14,0,6">
 						<TextBlock Classes="section" Text="ACTIONS" Margin="2,0,0,0" />
-						<TextBox Name="ActionSearch" PlaceholderText="Search actions" TextChanged="ActionSearch_OnTextChanged" />
+						<TextBox Name="ActionSearch" PlaceholderText="Search actions" Text="{Binding ActionSearch, Mode=TwoWay}" />
 					</StackPanel>
-					<ListBox Grid.Row="3" Name="ActionList" Background="Transparent" ItemsSource="{Binding AvailableActions}">
-						<ListBox.ItemTemplate>
-							<DataTemplate x:DataType="vm:ActionItemViewModel">
-								<Border Background="Transparent" PointerPressed="PaletteAction_OnPointerPressed" ToolTip.Tip="{Binding Summary}">
-									<StackPanel Orientation="Horizontal" Spacing="8">
-										<Grid Width="16" Height="16">
-											<Viewbox IsVisible="{Binding Icon.HasGeometry}"><Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas></Viewbox>
-											<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" />
-										</Grid>
-										<StackPanel>
-											<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" />
-											<TextBlock Text="{Binding PluginName}" FontSize="11" Foreground="{DynamicResource C.64748B}" />
-										</StackPanel>
+					<ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled">
+						<ItemsControl ItemsSource="{Binding ActionGroups}">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:PluginActionGroupViewModel">
+									<StackPanel>
+										<ToggleButton Classes="groupHeader" IsChecked="{Binding IsExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+											<Grid ColumnDefinitions="14,22,*,Auto" ColumnSpacing="6">
+												<TextBlock Text="›" FontSize="16" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}" />
+												<TextBlock Text="⌄" FontSize="14" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Top" IsVisible="{Binding IsExpanded}" />
+												<Panel Grid.Column="1" Width="22" Height="22">
+													<Viewbox IsVisible="{Binding Icon.HasGeometry}"><Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas></Viewbox>
+													<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" Stretch="Uniform" />
+												</Panel>
+												<TextBlock Grid.Column="2" Text="{Binding PluginName}" FontWeight="SemiBold" Foreground="{DynamicResource C.F1F5F9}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+												<TextBlock Grid.Column="3" Text="{Binding Actions.Count}" FontSize="11" Foreground="{DynamicResource C.64748B}" VerticalAlignment="Center" />
+											</Grid>
+										</ToggleButton>
+										<ItemsControl ItemsSource="{Binding Actions}" IsVisible="{Binding IsExpanded}" Margin="14,0,0,6">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate x:DataType="vm:ActionItemViewModel">
+													<Border Classes="paletteItem" Margin="0,2" ToolTip.Tip="{Binding Summary}" PointerPressed="PaletteAction_OnPointerPressed">
+														<StackPanel Orientation="Horizontal" Spacing="8">
+															<Panel Width="16" Height="16">
+																<Viewbox IsVisible="{Binding Icon.HasGeometry}"><Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas></Viewbox>
+																<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" />
+															</Panel>
+															<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+														</StackPanel>
+													</Border>
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
 									</StackPanel>
-								</Border>
-							</DataTemplate>
-						</ListBox.ItemTemplate>
-					</ListBox>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</ScrollViewer>
 				</Grid>
 			</Border>
 

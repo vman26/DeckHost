@@ -39,6 +39,11 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   install the plugin like any other and the devices it finds appear in the device picker, with
   their keys and knobs, images, brightness and input.
 
+- Workflow editor: drop a node onto a link to put it in between, right-click nodes and links for a
+  menu, the actions are grouped by plugin, a Wait fills up while it waits, Repeat can run a number
+  of times from a variable or while/until a variable has a value (with a pause between rounds), and
+  a workflow can be named, exported to a `.deckhostworkflow` file and imported.
+
 ### Changed
 
 - DeckHost is one public repository under GPL-3.0-or-later; issues, releases and source are in the
