@@ -10,6 +10,17 @@ namespace DeckHost.Tests;
 public sealed class KeyLogicTests : IAsyncDisposable
 {
     private const string Device = FakeDevicePlugin.DeviceId;
+    private const string PluginId = "p";
+    private const string Key = "key.0";
+    private const string Scaffold = "scaffold";
+    private const string A = "a";
+    private const string B = "b";
+    private const string C = "c";
+    private const int LongDelayMilliseconds = 250;
+    private const int SomeDelayMilliseconds = 1500;
+    private const int EditorDelayMilliseconds = 750;
+    private const int FirstDelayMilliseconds = 200;
+    private const int TheWaitWasAtLeast = 240;
     private readonly VariableStore _store = new();
     private readonly RecordingAction _a = new("a");
     private readonly RecordingAction _b = new("b");
@@ -35,7 +46,7 @@ public sealed class KeyLogicTests : IAsyncDisposable
             };
         }
 
-        _host = new DeviceHostService([new FakeDevicePlugin()], [new TestApplicationPlugin("p", _a, _b, _c, _scaffold)], _store);
+        _host = new DeviceHostService([new FakeDevicePlugin()], [new TestApplicationPlugin(PluginId, _a, _b, _c, _scaffold)], _store);
     }
 
     public async ValueTask DisposeAsync()
@@ -45,7 +56,7 @@ public sealed class KeyLogicTests : IAsyncDisposable
     }
 
     private static MultiActionStep Step(int order, string actionId, string? group = null, int delayMs = 0) =>
-        new(order, Bindings.Reference("p", actionId)) { Group = group, DelayMs = delayMs };
+        new(order, Bindings.Reference(PluginId, actionId)) { Group = group, DelayMs = delayMs };
 
     private async Task Start(ControlBinding binding)
     {
@@ -56,7 +67,7 @@ public sealed class KeyLogicTests : IAsyncDisposable
 
     private async Task Input(InputCapabilities type)
     {
-        _host.SimulateInput(new DeviceInputEvent(Device, "key.0", type, type == InputCapabilities.Release ? 0 : 1));
+        _host.SimulateInput(new DeviceInputEvent(Device, Key, type, type == InputCapabilities.Release ? 0 : 1));
         await _host.WhenIdleAsync();
     }
 
@@ -84,107 +95,227 @@ public sealed class KeyLogicTests : IAsyncDisposable
         }
     }
 
-    [Fact]
-    public async Task A_multi_action_switch_alternates_between_its_sets()
+    private static ControlBinding SwitchBinding() => new(Key, ProfileActionKind.MultiActionSwitch, Bindings.Reference(PluginId, Scaffold), new ControlAppearance(),
+        [Step(0, A, StepGroups.First), Step(1, B, StepGroups.Second), Step(2, C, StepGroups.First)]);
+
+    private static ControlBinding KeyLogicBinding(params MultiActionStep[] steps) =>
+        new(Key, ProfileActionKind.KeyLogic, Bindings.Reference(PluginId, Scaffold), new ControlAppearance(), steps);
+
+    private static ControlBinding PressDoublePressAndHold() =>
+        KeyLogicBinding(Step(0, A, StepGroups.Press), Step(1, B, StepGroups.DoublePress), Step(2, C, StepGroups.Hold));
+
+    private async Task WaitOutTheDoublePressWindow()
     {
-        await Start(new ControlBinding("key.0", ProfileActionKind.MultiActionSwitch, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
-            [Step(0, "a", StepGroups.First), Step(1, "b", StepGroups.Second), Step(2, "c", StepGroups.First)]));
-
-        await Click();
-        await Click();
-        await Click();
-
-        Assert.Equal(["a", "c", "b", "a", "c"], Ran());
-        Assert.True(_store.TryGetValue<string>(DeckHost.Contracts.VariableKeys.For(Device, "key.0", DeckHost.Contracts.VariableKeys.SwitchState), out var next));
-        Assert.Equal(StepGroups.Second, next);
-    }
-
-    [Fact]
-    public async Task Key_logic_tells_a_press_a_double_press_and_a_hold_apart()
-    {
-        await Start(new ControlBinding("key.0", ProfileActionKind.KeyLogic, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
-            [Step(0, "a", StepGroups.Press), Step(1, "b", StepGroups.DoublePress), Step(2, "c", StepGroups.Hold)]));
-
-        await Click();
-        await WaitFor(1);
-        Assert.Equal(["a"], Ran()); // after the double-press window
-
-        await Click();
-        await Click();
         await Task.Delay(DeviceHostService.DoublePressWindow * 2);
         await _host.WhenIdleAsync();
-        Assert.Equal(["a", "b"], Ran()); // the double press, not two presses
+    }
 
+    [Test]
+    public async Task Click_MultiActionSwitchThreeTimes_AlternatesBetweenItsSets()
+    {
+        // Arrange
+        await Start(SwitchBinding());
+
+        // Act
+        await Click();
+        await Click();
+        await Click();
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { A, C, B, A, C }));
+    }
+
+    [Test]
+    public async Task Click_MultiActionSwitchThreeTimes_RemembersTheSetToRunNext()
+    {
+        // Arrange
+        await Start(SwitchBinding());
+
+        // Act
+        await Click();
+        await Click();
+        await Click();
+
+        // Assert
+        Assert.That(_store.TryGetValue<string>(DeckHost.Contracts.VariableKeys.For(Device, Key, DeckHost.Contracts.VariableKeys.SwitchState), out var next), Is.True);
+        Assert.That(next, Is.EqualTo(StepGroups.Second));
+    }
+
+    [Test]
+    public async Task Click_KeyLogicSinglePress_RunsThePressStepsAfterTheDoublePressWindow()
+    {
+        // Arrange
+        await Start(PressDoublePressAndHold());
+
+        // Act
+        await Click();
+        await WaitFor(1);
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { A }));
+    }
+
+    [Test]
+    public async Task Click_KeyLogicClickedTwiceQuickly_RunsTheDoublePressStepsAndNotTwoPresses()
+    {
+        // Arrange
+        await Start(PressDoublePressAndHold());
+
+        // Act
+        await Click();
+        await Click();
+        await WaitOutTheDoublePressWindow();
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { B }));
+    }
+
+    [Test]
+    public async Task Input_KeyLogicHeld_RunsTheHoldStepsAndNoPressAfterIt()
+    {
+        // Arrange
+        await Start(PressDoublePressAndHold());
+
+        // Act
         await Input(InputCapabilities.Press);
         await Input(InputCapabilities.LongPress);
         await Input(InputCapabilities.Release);
-        await Task.Delay(DeviceHostService.DoublePressWindow * 2);
-        await _host.WhenIdleAsync();
-        Assert.Equal(["a", "b", "c"], Ran()); // the hold, and no press after it
+        await WaitOutTheDoublePressWindow();
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { C }));
     }
 
-    [Fact]
-    public async Task Key_logic_without_double_press_steps_runs_a_press_at_once()
+    [Test]
+    public async Task Click_KeyLogicWithoutDoublePressSteps_RunsAPressAtOnce()
     {
-        await Start(new ControlBinding("key.0", ProfileActionKind.KeyLogic, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
-            [Step(0, "a", StepGroups.Press)]));
+        // Arrange
+        await Start(KeyLogicBinding(Step(0, A, StepGroups.Press)));
 
+        // Act
         await Click();
 
-        Assert.Equal(["a"], Ran());
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { A }));
     }
 
-    [Fact]
-    public async Task Steps_wait_without_blocking_the_device()
+    private static ControlBinding MultiActionWithAWait() => new(Key, ProfileActionKind.MultiAction, Bindings.Reference(PluginId, Scaffold), new ControlAppearance(),
+        [Step(0, A), Step(1, B, delayMs: LongDelayMilliseconds), Step(2, C)]);
+
+    [Test]
+    public async Task Input_MultiActionWithAWaitingStep_RunsTheFirstStepAndLeavesTheRestWaiting()
     {
-        await Start(new ControlBinding("key.0", ProfileActionKind.MultiAction, Bindings.Reference("p", "scaffold"), new ControlAppearance(),
-            [Step(0, "a"), Step(1, "b", delayMs: 250), Step(2, "c")]));
+        // Arrange
+        await Start(MultiActionWithAWait());
+
+        // Act
+        await Input(InputCapabilities.Press);
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { A }));
+    }
+
+    [Test]
+    public async Task Input_MultiActionWithAWaitingStep_RunsTheRestAfterTheWait()
+    {
+        // Arrange
+        await Start(MultiActionWithAWait());
         var started = DateTime.UtcNow;
 
+        // Act
         await Input(InputCapabilities.Press);
-        Assert.Equal(["a"], Ran()); // the rest waits; the worker is free meanwhile
-
         await WaitFor(3);
-        Assert.Equal(["a", "b", "c"], Ran());
-        Assert.True(DateTime.UtcNow - started >= TimeSpan.FromMilliseconds(240));
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { A, B, C }));
+        Assert.That(DateTime.UtcNow - started, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(TheWaitWasAtLeast)));
     }
 
-    [Fact]
-    public void Sets_and_waits_survive_saving()
+    [Test]
+    public void Deserialize_StepSavedWithASetAndAWait_KeepsBoth()
     {
-        var step = Step(3, "a", StepGroups.Hold, 1500);
-        var loaded = System.Text.Json.JsonSerializer.Deserialize<MultiActionStep>(System.Text.Json.JsonSerializer.Serialize(step))!;
+        // Arrange
+        var step = Step(3, A, StepGroups.Hold, SomeDelayMilliseconds);
+        var json = System.Text.Json.JsonSerializer.Serialize(step);
 
-        Assert.Equal((StepGroups.Hold, 1500), (loaded.Group, loaded.DelayMs));
-        Assert.Equal(StepGroups.First, StepGroups.Of(Step(0, "a"), ProfileActionKind.MultiActionSwitch)); // a converted Multi Action's steps
-        Assert.Null(StepGroups.Of(Step(0, "a", StepGroups.Hold), ProfileActionKind.MultiAction));
+        // Act
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<MultiActionStep>(json)!;
+
+        // Assert
+        Assert.That((loaded.Group, loaded.DelayMs), Is.EqualTo((StepGroups.Hold, SomeDelayMilliseconds)));
     }
 
-    [Fact]
-    public void The_editor_keeps_each_steps_set_and_wait()
+    [Test]
+    public void Of_StepOfAConvertedMultiActionWithoutASet_IsInTheFirstSetOfTheSwitch()
+    {
+        // Arrange
+        var step = Step(0, A);
+
+        // Act
+        var group = StepGroups.Of(step, ProfileActionKind.MultiActionSwitch);
+
+        // Assert
+        Assert.That(group, Is.EqualTo(StepGroups.First));
+    }
+
+    [Test]
+    public void Of_StepWithASetInAPlainMultiAction_IsInNoSet()
+    {
+        // Arrange
+        var step = Step(0, A, StepGroups.Hold);
+
+        // Act
+        var group = StepGroups.Of(step, ProfileActionKind.MultiAction);
+
+        // Assert
+        Assert.That(group, Is.Null);
+    }
+
+    private static ControlCustomizationViewModel KeyLogicEditor()
     {
         var builtIns = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
         var items = builtIns.SelectMany(plugin => plugin.Actions.Select(action => ActionItemViewModel.Create(plugin.Id, plugin.Name, action))).ToList();
         var keyLogic = items.First(item => item.Name == "Key Logic");
         var mute = items.First(item => item.Name == "Mute");
         var stop = items.First(item => item.Name == "Stop");
-        var control = new ControlItemViewModel(new PhysicalControl("key.0", "Key 1", ControlType.Key, new Rect(0, 0, 10, 10),
+        var control = new ControlItemViewModel(new PhysicalControl(Key, "Key 1", ControlType.Key, new Rect(0, 0, 10, 10),
             InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.LongPress, OutputCapabilities.ColorImage));
-        var model = new ControlBinding("key.0", ProfileActionKind.KeyLogic, keyLogic.ToActionReference(), new ControlAppearance(),
+        var model = new ControlBinding(Key, ProfileActionKind.KeyLogic, keyLogic.ToActionReference(), new ControlAppearance(),
         [
-            new MultiActionStep(0, mute.ToActionReference()) { Group = StepGroups.Hold, DelayMs = 200 },
+            new MultiActionStep(0, mute.ToActionReference()) { Group = StepGroups.Hold, DelayMs = FirstDelayMilliseconds },
             new MultiActionStep(1, stop.ToActionReference()) { Group = StepGroups.Press },
         ]);
-        var editor = new ControlCustomizationViewModel(control,
+        return new ControlCustomizationViewModel(control,
             new ControlBindingViewModel(model, keyLogic, [new StepItemViewModel(mute, ActionSettings.Empty), new StepItemViewModel(stop, ActionSettings.Empty)]),
             items, null);
+    }
 
-        Assert.Equal(["Press", "Double press", "Hold"], editor.StepGroupOptions.Select(option => option.Label));
+    [Test]
+    public void StepGroupOptions_KeyLogicEditor_OffersPressDoublePressAndHold()
+    {
+        // Arrange
+        var editor = KeyLogicEditor();
+
+        // Act
+        var labels = editor.StepGroupOptions.Select(option => option.Label);
+
+        // Assert
+        Assert.That(labels, Is.EqualTo(new[] { "Press", "Double press", "Hold" }));
+    }
+
+    [Test]
+    public void BuildBinding_StepGivenAnotherSetAndWait_KeepsEachStepsSetAndWait()
+    {
+        // Arrange
+        var editor = KeyLogicEditor();
         editor.Steps[1].Group = editor.StepGroupOptions[1];
-        editor.Steps[1].DelayMilliseconds = 750;
+        editor.Steps[1].DelayMilliseconds = EditorDelayMilliseconds;
+
+        // Act
         var built = editor.BuildBinding()!;
 
-        Assert.Equal(ProfileActionKind.KeyLogic, built.ActionKind);
-        Assert.Equal([(StepGroups.Hold, 200), (StepGroups.DoublePress, 750)], built.Steps.Select(step => (step.Group, step.DelayMs)));
+        // Assert
+        Assert.That(built.ActionKind, Is.EqualTo(ProfileActionKind.KeyLogic));
+        Assert.That(built.Steps.Select(step => (step.Group, step.DelayMs)), Is.EqualTo(new[] { (StepGroups.Hold, FirstDelayMilliseconds), (StepGroups.DoublePress, EditorDelayMilliseconds) }));
     }
 }

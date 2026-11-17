@@ -1,0 +1,21 @@
+<UserControl
+		xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		xmlns:local="using:DeckHost.App.Views"
+		x:Class="DeckHost.App.Views.BackgroundPreviewView"
+		x:DataType="vm:BackgroundPreviewViewModel">
+
+	<!-- A small device showing the background as the device does (Background Studio). -->
+	<Grid>
+		<Viewbox Stretch="Uniform" StretchDirection="DownOnly" MaxHeight="170" HorizontalAlignment="Left" IsVisible="{Binding HasDevice}">
+			<Panel Width="{Binding Geometry.Width}" Height="{Binding Geometry.Height}">
+				<local:DeviceBodyView Geometry="{Binding Geometry}" Screen="{Binding Screen}"
+									  Body="{DynamicResource C.1B1E25}" Edge="{DynamicResource C.2C313C}" />
+				<local:BackgroundTilesView Tiles="{Binding Tiles}" />
+			</Panel>
+		</Viewbox>
+		<TextBlock FontSize="12" Foreground="{DynamicResource C.64748B}" IsVisible="{Binding !HasDevice}"
+				   Text="Connect a device (or start the simulator) to preview the background." />
+	</Grid>
+</UserControl>

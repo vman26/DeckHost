@@ -6,39 +6,61 @@ Push a tag; the tag is the version (`v1.4.0`, or `v1.4.0-rc.1` for a pre-release
 
 Versions come from git (GitVersion, git-flow): `develop` builds alpha versions of the next minor, `release/x.y.z` builds release candidates, `hotfix/*` betas of the next patch.
 
+## Release notes
+
+The notes come from [`CHANGELOG.md`](https://github.com/vman26/DeckHost/blob/develop/CHANGELOG.md),
+written for users ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)): every pull request that
+changes something people notice adds a line under `## [Unreleased]`, in Added, Changed, Deprecated,
+Removed, Fixed or Security. CI checks the format (`python3 scripts/release-notes.py check`).
+
+Before tagging:
+
+- **A release** (`v1.4.0`): on the release branch, rename `## [Unreleased]` to
+  `## [1.4.0] - 2026-12-01`, add a new empty `## [Unreleased]` above it and update the links at the
+  bottom.
+- **A release candidate** (`v1.4.0-rc.1`) uses the `[1.4.0]` section when there is one, else
+  `[Unreleased]`. A section of its own (`## [1.4.0-rc.1]`) wins when you want different notes.
+
+The release workflow checks this before it builds anything (a stable tag without its section, or
+an empty section, stops the release), then publishes `scripts/release-notes.py compose <tag>`:
+
+1. the changelog section,
+2. the download table,
+3. how to check the files (checksums, build provenance), and
+4. the pull requests since the previous release, folded and grouped by label (`.github/release.yml`;
+   label a pull request `skip-changelog` to leave it out).
+
+DeckHost's update screen shows the notes up to the `<!-- deckhost:end-of-notes -->` marker after
+the download table, so people see what changed, not the checks for maintainers. Try it locally:
+`python3 scripts/release-notes.py compose v1.4.0`.
+
 ## Where releases, docs and reports go
 
-With a public repository (the default), everything happens here: releases, the in-app update check,
-the documentation (GitHub Pages, **Settings → Pages → Source: GitHub Actions**) and problem reports.
-Nothing else to set up.
+Everything happens in this repository: releases, the in-app update check (it reads the public
+releases without signing in), the documentation (GitHub Pages, **Settings → Pages → Source: GitHub
+Actions**) and problem reports.
 
-## Optional: a private source repository
+DeckHost's **Report a problem** (and the offer after a crash) opens a new issue here, filled in by
+the app. The user reads it and sends it themselves; nothing is sent automatically. A fork can point
+its builds at its own releases with the build property `DeckHostUpdateRepository` (the release
+workflow sets it to the repository it runs in).
 
-The updater reads releases without signing in, so they must be public. If you keep the source private:
+## The NuGet package
 
-1. Create a public repository for releases, for example `vman26/DeckHost-releases`, with one commit (a README).
-2. Create a fine-grained token: resource owner you, **only** that repository, **Contents: Read and write**, with an expiry date. Add it to the source repository as the Actions **secret** `RELEASES_TOKEN`.
-3. Add the Actions **variable** `RELEASES_REPO` = `vman26/DeckHost-releases`.
+Each release also packs the plugin API (`DeckHost.Contracts`) and the plugin template
+(`DeckHost.Templates`) as NuGet packages, attached to the release. They go to nuget.org with
+**Trusted Publishing**: no API key is stored; the release workflow trades its GitHub sign-in (OIDC)
+for a key that lasts only that run. Set it up once:
 
-Each release then goes to both repositories, and the apps check the releases repository. The **docs** workflow publishes this documentation to the releases repository's `gh-pages` branch: turn on **Settings → Pages → Deploy from a branch → gh-pages** there once. The documentation is then at `https://vman26.github.io/DeckHost-releases/`, which is where DeckHost's **Help** links.
+1. On nuget.org: your profile → **Trusted Publishing** → add a policy for GitHub Actions with
+   repository owner `vman26`, repository `DeckHost` and workflow file `release.yml` (no environment).
+2. In this repository: Settings → Secrets and variables → Actions → **Variables** → `NUGET_USER` =
+   your nuget.org username (a variable, not a secret: it's not sensitive).
 
-## Problem reports
-
-DeckHost's **Report a problem** (and the offer after a crash) opens a new issue, filled in by the app, in the repository it checks for updates: the public releases repository when `RELEASES_REPO` is set, else this one. The user reads it and sends it themselves; nothing is sent automatically.
-
-With a private source repository, the **sync issues** workflow links the two (every hour, and right away on comments here):
-
-- every new public issue gets a copy here, labeled `public-report`, with a link back; the public one gets the label `tracked`;
-- comments on the public issue are copied to the copy;
-- a comment here that starts with `/public` is posted to the public issue (without the `/public`), so you answer from here;
-- closing the copy as **completed** thanks the reporter and closes the public issue; when the reporter closes it, the copy says so.
-
-Nothing else from this repository reaches the public one. Setup, once:
-
-1. Turn on **Issues** in the releases repository (Settings → General → Features).
-2. Give the `RELEASES_TOKEN` token **Issues: Read and write** on the releases repository, next to Contents.
-3. Copy `packaging/releases-repo/` (README and `.github/ISSUE_TEMPLATE/`) into the releases repository: issue forms for problems and ideas, with a link to the documentation.
-4. Run **sync issues** by hand once (Actions → sync issues → Run workflow, with **dry run** to see what it would do).
+The next tagged release pushes both packages (a version that's already there is skipped). Without
+`NUGET_USER` the packages are only attached to the release. Plugin authors then reference
+`DeckHost.Contracts` (`ExcludeAssets="runtime"`, DeckHost supplies it) and install the template with
+`dotnet new install DeckHost.Templates`.
 
 ## Code signing
 
@@ -50,11 +72,11 @@ Without signing the packages still work: Windows SmartScreen warns, and macOS as
 |---|---|---|---|
 | **Azure Artifact Signing** (Windows) | about 10 USD/month | organizations in the US, Canada, EU, UK and several other countries; individual developers only in the US and Canada | `scripts/setup-azure-signing.sh` sets it up; Microsoft renews the certificates, nothing expires on you except the app secret (2 years) |
 | A **code-signing certificate** from a CA (Windows) | 150–400 USD/year | anyone, also individuals in Europe (Certum, Sectigo, SSL.com, …) | the `.pfx` secrets below; cloud-only certificates need the CA's tool |
-| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository: DeckHost qualifies once it's public | their GitHub action, added to the release workflow after they approve the project ([checklist](going-public.md#step-4-release-and-announce)) |
+| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository, like DeckHost | their GitHub action, added to the release workflow after they approve the project ([checklist](going-public.md#release-and-announce)) |
 | **Apple Developer ID** (macOS) | 99 USD/year | anyone with an Apple Developer account | the macOS secrets below; signing and notarizing are automatic |
-| **Build provenance** (all files) | free | public source repositories (private ones need GitHub Enterprise Cloud) | on by itself: the release job attests every file (`gh attestation verify <file> --repo <owner/repo>`) |
+| **Build provenance** (all files) | free | public source repositories | on by itself: the release job attests every file (`gh attestation verify <file> --repo <owner/repo>`) |
 
-For DeckHost as a public open-source project: SignPath Foundation for Windows (free) and the Apple Developer Program for macOS. With a private source repository instead: a CA certificate for Windows (or Artifact Signing through a registered business).
+For DeckHost: SignPath Foundation for Windows (free for open source) and the Apple Developer Program for macOS.
 
 ### Windows: Azure Artifact Signing
 
@@ -100,3 +122,5 @@ With the certificate, `scripts/package.sh` signs every file for the hardened run
 ### Linux
 
 Linux packages aren't signed; `SHA256SUMS.txt` lets users check a download.
+
+The AppImage is built on the same job from the published folder (`scripts/package-appimage.sh`), with `appimagetool` downloaded by `scripts/get-appimagetool.sh`: a pinned version whose SHA-256 is recorded in the script (change both together after reading the release page). The job runs `--check-native` from the finished file, so a bridge that doesn't load inside the image fails the release. The glibc floor is the Ubuntu 22.04 runner's. The tar.gz stays the package of the in-app updater (`UpdateChecker.SelectAsset` offers the AppImage only to an AppImage, detected through `APPIMAGE`). Flatpak isn't built (it needs offline NuGet sources, OpenCV as its own module and holes in the sandbox for the host tools).

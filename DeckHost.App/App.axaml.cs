@@ -49,8 +49,12 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // An exception nobody catches on the UI thread (a web view that can't start) is reported, not fatal.
+            Platform.CrashReporter.InstallDispatcherSafetyNet();
+
             var services = ConfigureServices();
             Ioc.Default.ConfigureServices(services);
+            ViewModels.VariableSuggestions.Source = services.GetRequiredService<IDeviceHostService>().Variables;
 
             var logger = services.GetRequiredService<ILogger<App>>();
             var deviceHostService = services.GetRequiredService<DeviceHostService>();
@@ -68,16 +72,22 @@ public partial class App : Application
             var mainWindow = new MainWindow { DataContext = mainViewModel };
             var settings = Platform.AppSettings.Load();
             var exiting = false;
+            var osShutdown = false;
             AppSettingsViewModel.Changed += changed => settings = changed;
 
             // DeckHost keeps running in the tray: the device works without the window.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             mainWindow.Closing += (_, e) =>
             {
-                if (!exiting && settings.KeepsRunningInTray)
+                if (KeepsWindowOnClose(e.CloseReason, exiting, settings.KeepsRunningInTray))
                 {
                     e.Cancel = true;
                     mainWindow.Hide();
+                }
+                else if (e.CloseReason is WindowCloseReason.OSShutdown or WindowCloseReason.ApplicationShutdown)
+                {
+                    exiting = true;
+                    osShutdown = e.CloseReason == WindowCloseReason.OSShutdown;
                 }
             };
             mainWindow.Closed += (_, _) => desktop.Shutdown();
@@ -98,6 +108,22 @@ public partial class App : Application
                 exiting = true;
                 desktop.Shutdown();
             }
+
+            // The safety net's notice, and the way out of safe mode: forget the failures and start again.
+            Platform.CrashReporter.Recovered += _ => Avalonia.Threading.Dispatcher.UIThread.Post(mainViewModel.ShowRecoveredNotice);
+            mainViewModel.RestartNormallyRequested += () =>
+            {
+                Platform.CrashReporter.Guard?.ClearFailures();
+                if (Environment.ProcessPath is { } executable)
+                {
+                    var start = new System.Diagnostics.ProcessStartInfo(executable) { UseShellExecute = false };
+                    start.ArgumentList.Add("--after-exit");
+                    start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    System.Diagnostics.Process.Start(start)?.Dispose();
+                }
+
+                ExitApplication();
+            };
 
             var updates = services.GetRequiredService<UpdateViewModel>();
             updates.RestartRequested += () =>
@@ -122,6 +148,7 @@ public partial class App : Application
                 });
             ListenForActivation(ShowMainWindow);
             updates.StartAutomaticChecks();
+            services.GetRequiredService<PluginUpdatesViewModel>().StartAutomaticChecks();
 
             if (Program.StartedAtLogin && settings.StartMinimized)
             {
@@ -140,6 +167,9 @@ public partial class App : Application
                 {
                     startPagesShown = true;
                     mainWindow.ShowStartPages();
+
+                    // Staying up for a while is what makes a run "healthy" (safe mode counts runs that didn't).
+                    Avalonia.Threading.DispatcherTimer.RunOnce(() => Platform.CrashReporter.Guard?.MarkHealthy(), Platform.StartupGuard.HealthyAfter);
                 }
             };
 
@@ -148,14 +178,20 @@ public partial class App : Application
 
             desktop.Exit += (_, _) =>
             {
+                Platform.CrashReporter.Guard?.MarkCleanExit();
                 mainViewModel.FlushPendingSave();
 
                 // Blanks the device, stops the SDK threads and unloads the native bridge.
                 // The host's worker never needs the UI thread, so waiting here cannot deadlock.
-                deviceHostService.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+                // When Windows is shutting down it won't wait long for us: blank the device quickly.
+                deviceHostService.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(osShutdown ? 2 : 5));
                 pluginCatalog.Dispose();
+
+                // A downloaded update (Install updates automatically) installs now; its installer
+                // waits for this process to end and doesn't start DeckHost again.
+                updates.InstallPendingOnExit();
                 logger.LogInformation("DeckHost stopped.");
-                services.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+                services.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(osShutdown ? 2 : 5));
                 NLog.LogManager.Shutdown();
             };
         }
@@ -232,6 +268,14 @@ public partial class App : Application
     /// The composition root. Everything is a singleton except the view models of windows that can
     /// be opened more than once. Device plugins are the only place that knows about hardware.
     /// </summary>
+    /// <summary>
+    /// Whether closing the main window only hides it (DeckHost stays in the tray). Only the user's own
+    /// close does: when Windows shuts down or signs out, or the application itself shuts down,
+    /// refusing the close made Windows wait for DeckHost ("preventing shutdown").
+    /// </summary>
+    internal static bool KeepsWindowOnClose(WindowCloseReason reason, bool exiting, bool keepsRunningInTray) =>
+        !exiting && keepsRunningInTray && reason is not (WindowCloseReason.OSShutdown or WindowCloseReason.ApplicationShutdown);
+
     private static ServiceProvider ConfigureServices()
     {
         var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost");
@@ -255,13 +299,25 @@ public partial class App : Application
         services.AddSingleton<DeckHost.Device.Web.WebDeckPlugin>();
         services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Web.WebDeckPlugin>());
 
+        // Devices of OpenAction device plugins (OpenDeck's Mirabox, Ajazz, ... plugins): the runtime
+        // runs the plugin, this turns the devices it registers into DeckHost devices.
+        services.AddSingleton(provider => new OpenActionDevicePlugin(provider.GetRequiredService<StreamDeckRuntime>(), Path.Combine(appData, "devices")));
+        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<OpenActionDevicePlugin>());
+
+        // The device simulator (DeckHost --simulator) connects here and can be any model the other
+        // device plugins describe; they are asked when a simulator connects, not now. Only listens
+        // with DeckHost settings → Developer → Device simulator on.
+        services.AddSingleton(provider => new DeckHost.Device.Simulator.SimulatorDevicePlugin(appData, () => provider.GetServices<IDevicePlugin>(), Platform.AppSettings.Load().DeviceSimulator));
+        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Simulator.SimulatorDevicePlugin>());
+
         // Runtime
         services.AddSingleton<VariableStore>();
         services.AddSingleton<IVariableStore>(provider => provider.GetRequiredService<VariableStore>());
         services.AddSingleton(provider => new DeviceHostService(
             provider.GetServices<IDevicePlugin>(),
             [],
-            provider.GetRequiredService<IVariableStore>()));
+            provider.GetRequiredService<IVariableStore>(),
+            new DeviceRoster(Path.Combine(appData, "devices", "roster.json"))));
         services.AddSingleton<IDeviceHostService>(provider => provider.GetRequiredService<DeviceHostService>());
 
         // Plugins: Stream Deck SDK plugins run in their own processes via this runtime.
@@ -284,7 +340,7 @@ public partial class App : Application
                     }
                 });
             runtime.DevicesProvider = () => provider.GetRequiredService<IDeviceHostService>().Devices;
-            if (Platform.WebView2PluginHost.IsSupported)
+            if (Platform.WebView2PluginHost.IsSupported && Platform.WebViewSupport.IsAvailable)
             {
                 // HTML-based Stream Deck plugins run in hidden WebView2 pages.
                 runtime.HtmlPluginHost = new Platform.WebView2PluginHost();
@@ -300,7 +356,11 @@ public partial class App : Application
                 provider.GetServices<IDevicePlugin>(),
                 SystemPluginSet.Create(),
                 SystemPluginSet.RequiredPluginIds,
-                provider.GetRequiredService<StreamDeckRuntime>());
+                provider.GetRequiredService<StreamDeckRuntime>())
+            {
+                // Safe mode: only the built-in plugins, so whatever crashed DeckHost can't run again.
+                LoadsExtraPlugins = !Platform.SafeMode.IsOn,
+            };
 
             // DeckHost plugins run in their own process (this program with --plugin-host), unless
             // the user moved one inside DeckHost on the Plugins page.
@@ -336,12 +396,29 @@ public partial class App : Application
             provider.GetRequiredService<ProfileStore>(),
             provider.GetRequiredService<IPluginStateTransfer>()));
         services.AddSingleton(provider => new Core.Firmware.FirmwareService(provider.GetServices<IDevicePlugin>(), provider.GetRequiredService<IDeviceHostService>()));
+        services.AddSingleton(provider => new PluginDocsService(provider.GetRequiredService<PluginCatalog>()));
         services.AddSingleton(provider => new DeviceSettingsService(provider.GetServices<IDevicePlugin>(), () => provider.GetRequiredService<MainViewModel>(), provider.GetRequiredService<Core.Firmware.FirmwareService>()));
+        services.AddSingleton(provider =>
+        {
+            // The user's store sources can change while DeckHost runs: read them for every check.
+            var store = new PluginStore(PluginStore.CreateHttpClient());
+            var updater = new PluginUpdater(provider.GetRequiredService<PluginCatalog>(), store, Path.Combine(Path.GetTempPath(), "DeckHost", "downloads"));
+            return new PluginUpdatesViewModel(
+                () =>
+                {
+                    store.DeckHostCatalogUrls = PluginStoreViewModel.LoadCatalogUrls();
+                    return updater.CheckAsync();
+                },
+                (update, progress) => updater.InstallAsync(update, progress),
+                Platform.AppSettings.Load,
+                Platform.AppSettings.Save);
+        });
         services.AddTransient(provider => new PluginManagerViewModel(
             provider.GetRequiredService<PluginCatalog>(),
             provider.GetRequiredService<IDeviceHostService>(),
-            provider.GetRequiredService<DeviceSettingsService>()));
-        services.AddTransient(provider => new ProfileManagerViewModel(provider.GetRequiredService<MainViewModel>()));
+            provider.GetRequiredService<DeviceSettingsService>(),
+            provider.GetRequiredService<PluginUpdatesViewModel>()));
+        services.AddTransient(provider => new ProfileManagerViewModel(provider.GetRequiredService<MainViewModel>(), provider.GetService<VariableStore>()));
 
         // Updates: GitHub releases of DeckHost.
         services.AddSingleton(_ => new UpdateViewModel(

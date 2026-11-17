@@ -20,6 +20,11 @@
 			<Setter Property="CornerRadius" Value="12" />
 			<Setter Property="Padding" Value="14" />
 		</Style>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="{DynamicResource C.64748B}" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
 		<Style Selector="Border.badge">
 			<Setter Property="CornerRadius" Value="999" />
 			<Setter Property="Padding" Value="8,2" />
@@ -45,6 +50,12 @@
 						<StackPanel Orientation="Horizontal" Spacing="8">
 							<TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
 							<TextBlock Text="{Binding Version}" Foreground="{DynamicResource C.64748B}" VerticalAlignment="Center" />
+								<Border Classes="badge" Background="{DynamicResource C.134E4A}" IsVisible="{Binding IsDevicePlugin}" ToolTip.Tip="A device plugin: connects hardware">
+									<TextBlock Text="{Binding KindLabel}" FontSize="11" Foreground="{DynamicResource C.99F6E4}" />
+								</Border>
+								<Border Classes="badge" Background="{DynamicResource C.312E81}" IsVisible="{Binding !IsDevicePlugin}" ToolTip.Tip="An action plugin: adds actions">
+									<TextBlock Text="{Binding KindLabel}" FontSize="11" Foreground="{DynamicResource C.C7D2FE}" />
+								</Border>
 								<Border Classes="badge" Background="{DynamicResource C.1E3A8A}" IsVisible="{Binding IsSystem}">
 									<TextBlock Text="System" FontSize="11" Foreground="{DynamicResource C.BFDBFE}" />
 								</Border>
@@ -87,6 +98,17 @@
 						<Border Classes="badge" Background="{DynamicResource C.1E293B}" IsVisible="{Binding IsLocked}" HorizontalAlignment="Right">
 							<TextBlock Text="{Binding LockedReason}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
 						</Border>
+						<Button Content="{Binding UpdateLabel}"
+								Classes="accent"
+								IsVisible="{Binding HasUpdate}"
+								HorizontalAlignment="Right"
+								ToolTip.Tip="Install the newer version from the store (this one is kept, so you can go back)"
+								Command="{Binding $parent[UserControl].((vm:PluginManagerViewModel)DataContext).Updates.UpdateCommand}"
+								CommandParameter="{Binding Update}" />
+						<Button Content="Documentation"
+								HorizontalAlignment="Right"
+								ToolTip.Tip="What the plugin does, its actions, links and README"
+								Click="Documentation_OnClick" />
 						<Button Content="Open folder"
 								IsVisible="{Binding HasInstallDirectory}"
 								HorizontalAlignment="Right"
@@ -167,6 +189,10 @@
 										<Button Grid.Column="1" Content="Settings…" IsVisible="{Binding HasSettings}" Click="DeviceSettings_OnClick"
 												ToolTip.Tip="This device's settings (what it offers: brightness, lights, idle screen, pairing, firmware, …)" />
 									</Grid>
+									<TextBlock Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap"
+											   Text="{Binding IdentityText}" IsVisible="{Binding HasIdentityText}" />
+									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
+											   Text="{Binding CapabilitiesText}" IsVisible="{Binding HasCapabilitiesText}" />
 									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
 											   Text="{Binding FirmwareText}" IsVisible="{Binding HasFirmwareText}" />
 								</StackPanel>
@@ -175,7 +201,18 @@
 					</ItemsControl.ItemTemplate>
 				</ItemsControl>
 
-				<TextBlock Classes="section" Text="SYSTEM PLUGINS" Margin="0,8,0,0" />
+				<TextBlock Classes="section" Text="DEVICE PLUGINS" Margin="0,8,0,0" />
+				<TextBlock Classes="hint" Text="They connect hardware and the Web Deck: what DeckHost can talk to." Margin="0,-6,0,0" />
+				<ItemsControl ItemsSource="{Binding DevicePlugins}">
+					<ItemsControl.ItemsPanel>
+						<ItemsPanelTemplate>
+							<StackPanel Spacing="8" />
+						</ItemsPanelTemplate>
+					</ItemsControl.ItemsPanel>
+				</ItemsControl>
+
+				<TextBlock Classes="section" Text="ACTION PLUGINS: BUILT IN" Margin="0,8,0,0" />
+				<TextBlock Classes="hint" Text="They add what keys, knobs and touch zones can do." Margin="0,-6,0,0" />
 				<ItemsControl ItemsSource="{Binding SystemPlugins}">
 					<ItemsControl.ItemsPanel>
 						<ItemsPanelTemplate>
@@ -184,7 +221,24 @@
 					</ItemsControl.ItemsPanel>
 				</ItemsControl>
 
-				<TextBlock Classes="section" Text="INSTALLED PLUGINS" Margin="0,8,0,0" />
+				<TextBlock Classes="section" Text="ACTION PLUGINS: INSTALLED" Margin="0,8,0,0" />
+				<!-- Plugin updates from the store catalogs. -->
+				<Border Classes="card" IsVisible="{Binding HasUpdatesPanel}">
+					<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" DataContext="{Binding Updates}" x:DataType="vm:PluginUpdatesViewModel">
+						<StackPanel Spacing="6">
+							<TextBlock Text="Plugin updates" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+							<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
+							<CheckBox IsChecked="{Binding InstallAutomatically, Mode=TwoWay}"
+									  Content="Install plugin updates automatically"
+									  ToolTip.Tip="DeckHost checks the store a minute after it starts and every 6 hours. Each update keeps the previous version, so you can go back." />
+						</StackPanel>
+						<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+							<Button Content="Check for updates" Command="{Binding CheckCommand}" IsEnabled="{Binding IsIdle}" HorizontalAlignment="Right" />
+							<Button Content="{Binding UpdateAllLabel}" Classes="accent" IsVisible="{Binding HasUpdates}" IsEnabled="{Binding IsIdle}"
+									Command="{Binding UpdateAllCommand}" HorizontalAlignment="Right" />
+						</StackPanel>
+					</Grid>
+				</Border>
 				<Border Classes="card" IsVisible="{Binding HasNoInstalledPlugins}">
 					<StackPanel Spacing="4">
 						<TextBlock Text="No plugins installed yet." FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
@@ -224,6 +278,29 @@
 					</Grid>
 					<StackPanel Grid.Row="1" Spacing="6">
 						<TextBlock Text="{Binding Summary}" Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap" />
+						<WrapPanel>
+							<TextBlock Text="Also browse:" Foreground="{DynamicResource C.94A3B8}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,6" />
+							<ItemsControl ItemsSource="{Binding OtherStores}">
+								<ItemsControl.ItemsPanel>
+									<ItemsPanelTemplate>
+										<WrapPanel />
+									</ItemsPanelTemplate>
+								</ItemsControl.ItemsPanel>
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="vm:PluginDocsLink">
+										<Button Content="{Binding Label}" Margin="0,0,8,6" Padding="10,3" FontSize="12" ToolTip.Tip="{Binding Url}"
+												Command="{Binding $parent[ItemsControl].((vm:PluginStoreViewModel)DataContext).OpenStoreCommand}"
+												CommandParameter="{Binding Url}" />
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+							<TextBlock Text="Download a plugin there, then install the file with Install plugin… at the top." Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,0,6" />
+						</WrapPanel>
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+							<TextBox Text="{Binding GitHubUrl, Mode=TwoWay}" PlaceholderText="Install from GitHub: https://github.com/owner/plugin"
+									 ToolTip.Tip="A GitHub repository whose releases have a plugin file (.streamDeckPlugin, .dhplugin or .zip): its newest release is installed" />
+							<Button Grid.Column="1" Content="Install from GitHub" Command="{Binding InstallFromGitHubCommand}" />
+						</Grid>
 						<Expander Header="Sources" HorizontalAlignment="Stretch">
 							<StackPanel Spacing="8">
 								<TextBlock Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap"
@@ -237,6 +314,8 @@
 						</Expander>
 					</StackPanel>
 					<ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+						<StackPanel Spacing="8">
+						<TextBlock Classes="hint" Margin="2,0" IsVisible="{Binding !HasMore}" Text="{Binding MatchCount, StringFormat='{}{0} matching'}" />
 						<ItemsControl ItemsSource="{Binding Items}">
 							<ItemsControl.ItemsPanel>
 								<ItemsPanelTemplate>
@@ -294,6 +373,8 @@
 								</DataTemplate>
 							</ItemsControl.ItemTemplate>
 						</ItemsControl>
+						<Button Content="{Binding ShowMoreLabel}" Command="{Binding ShowMoreCommand}" IsVisible="{Binding HasMore}" HorizontalAlignment="Center" Margin="0,4,0,12" />
+						</StackPanel>
 					</ScrollViewer>
 				</Grid>
 			</TabItem>

@@ -1,0 +1,139 @@
+<UserControl
+		xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		xmlns:local="using:DeckHost.App.Views"
+		x:Class="DeckHost.App.Views.BackgroundLayersEditor"
+		x:DataType="vm:BackgroundLayersViewModel">
+
+	<!-- The Background Studio: the layers of one background, bottom to top. -->
+	<StackPanel Spacing="8">
+		<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+			<StackPanel>
+				<TextBlock Text="Layers" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+				<TextBlock FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap"
+						   Text="Drawn over the color and image above, bottom to top. A layer can follow a variable: the CPU load (system.cpu), the memory load (system.memory) or any variable a workflow sets (vars.name)." />
+			</StackPanel>
+			<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+				<Button Content="+ Solid" Command="{Binding AddSolidCommand}" />
+				<Button Content="+ Gradient" Command="{Binding AddGradientCommand}" />
+				<Button Content="+ Radial" Command="{Binding AddRadialCommand}" ToolTip.Tip="A gradient from a center point outwards" />
+				<Button Content="+ Image" Command="{Binding AddImageCommand}" />
+				<Button Content="+ CPU glow" Command="{Binding AddCpuGlowCommand}" ToolTip.Tip="A red layer that gets stronger as the CPU gets busier" />
+			</StackPanel>
+		</Grid>
+
+		<TextBlock FontSize="12" Foreground="{DynamicResource C.64748B}" IsVisible="{Binding !HasRows}" Text="No layers yet." />
+
+		<ItemsControl ItemsSource="{Binding Rows}">
+			<ItemsControl.ItemsPanel>
+				<ItemsPanelTemplate>
+					<StackPanel Spacing="8" />
+				</ItemsPanelTemplate>
+			</ItemsControl.ItemsPanel>
+			<ItemsControl.ItemTemplate>
+				<DataTemplate x:DataType="vm:BackgroundLayerRowViewModel">
+					<Border Background="{DynamicResource C.111827}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="1" CornerRadius="10" Padding="12">
+						<StackPanel Spacing="8">
+							<Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+								<TextBlock Text="{Binding KindLabel}" FontWeight="SemiBold" Foreground="{DynamicResource C.F1F5F9}" VerticalAlignment="Center" TextWrapping="Wrap" />
+								<CheckBox Grid.Column="1" Content="Show" IsChecked="{Binding Visible, Mode=TwoWay}" />
+								<Button Grid.Column="2" Content="↑" Padding="8,2" Click="LayerUp_OnClick" ToolTip.Tip="Move down in the picture (drawn earlier)" />
+								<Button Grid.Column="3" Content="↓" Padding="8,2" Click="LayerDown_OnClick" ToolTip.Tip="Move up in the picture (drawn later)" />
+								<Button Grid.Column="4" Content="✕" Padding="8,2" Click="LayerRemove_OnClick" ToolTip.Tip="Remove this layer" />
+							</Grid>
+
+							<StackPanel Spacing="8" IsVisible="{Binding IsKnown}">
+								<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+									<TextBlock Text="Opacity" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+									<Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding OpacityPercent, Mode=TwoWay}" />
+									<TextBlock Grid.Column="2" Text="{Binding OpacityPercent, StringFormat={}{0:0} %}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
+								</Grid>
+
+								<StackPanel Spacing="4" IsVisible="{Binding HasColor}">
+									<TextBlock Text="{Binding ColorLabel}" Foreground="{DynamicResource C.CBD5E1}" />
+									<local:ColorField Hex="{Binding Color, Mode=TwoWay}" AllowOpacity="True" DefaultHex="#1E293B" Width="320" HorizontalAlignment="Left" />
+								</StackPanel>
+								<StackPanel Spacing="8" IsVisible="{Binding IsGradient}">
+									<TextBlock Text="Colors (each starts where its % says)" Foreground="{DynamicResource C.CBD5E1}" />
+									<ItemsControl ItemsSource="{Binding Stops}">
+										<ItemsControl.ItemsPanel>
+											<ItemsPanelTemplate>
+												<StackPanel Spacing="6" />
+											</ItemsPanelTemplate>
+										</ItemsControl.ItemsPanel>
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="vm:GradientStopRowViewModel">
+												<Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+													<local:ColorField Hex="{Binding Color, Mode=TwoWay}" AllowOpacity="True" DefaultHex="#7C3AED" Width="210" />
+													<NumericUpDown Grid.Column="1" Minimum="0" Maximum="100" Increment="5" FormatString="0" Value="{Binding PositionPercent, Mode=TwoWay}" Width="96" ToolTip.Tip="Where this color starts along the gradient (%)" />
+													<Button Grid.Column="2" Content="↑" Padding="8,2" Click="StopUp_OnClick" ToolTip.Tip="Trade places with the color before it" />
+													<Button Grid.Column="3" Content="↓" Padding="8,2" Click="StopDown_OnClick" ToolTip.Tip="Trade places with the color after it" />
+													<Button Grid.Column="4" Content="✕" Padding="8,2" Click="StopRemove_OnClick" ToolTip.Tip="Remove this color (two are kept)" />
+												</Grid>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+									<Button Content="+ Add a color" Click="StopAdd_OnClick" HorizontalAlignment="Left" />
+									<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" IsVisible="{Binding IsLinearGradient}">
+										<TextBlock Text="Direction" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+										<Slider Grid.Column="1" Minimum="0" Maximum="360" Value="{Binding Angle, Mode=TwoWay}" />
+										<TextBlock Grid.Column="2" Text="{Binding Angle, StringFormat={}{0:0}°}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
+									</Grid>
+									<StackPanel Spacing="6" IsVisible="{Binding IsRadial}">
+										<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+											<TextBlock Text="Center across" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+											<Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding CenterXPercent, Mode=TwoWay}" />
+											<TextBlock Grid.Column="2" Text="{Binding CenterXPercent, StringFormat={}{0:0} %}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
+										</Grid>
+										<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+											<TextBlock Text="Center down" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+											<Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding CenterYPercent, Mode=TwoWay}" />
+											<TextBlock Grid.Column="2" Text="{Binding CenterYPercent, StringFormat={}{0:0} %}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
+										</Grid>
+										<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+											<TextBlock Text="Size" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+											<Slider Grid.Column="1" Minimum="10" Maximum="200" Value="{Binding RadiusPercent, Mode=TwoWay}" />
+											<TextBlock Grid.Column="2" Text="{Binding RadiusPercent, StringFormat={}{0:0} %}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
+										</Grid>
+									</StackPanel>
+								</StackPanel>
+								<StackPanel Spacing="4" IsVisible="{Binding IsImage}">
+									<TextBlock Text="Image (PNG, JPG, SVG or animated GIF)" Foreground="{DynamicResource C.CBD5E1}" />
+									<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+										<TextBox Text="{Binding ImagePath, Mode=TwoWay}" PlaceholderText="Image file" />
+										<Button Grid.Column="1" Content="Browse…" Click="LayerBrowse_OnClick" />
+									</Grid>
+								</StackPanel>
+
+								<CheckBox Content="Follows a variable" IsChecked="{Binding IsBound, Mode=TwoWay}" />
+								<StackPanel Spacing="8" IsVisible="{Binding IsBound}" Margin="22,0,0,0">
+									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+										<TextBlock Text="Variable" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+										<local:VariableNameBox Grid.Column="1" Text="{Binding Variable, Mode=TwoWay}" Items="{Binding Suggestions}" Watermark="system.cpu, system.memory or vars.name" />
+									</Grid>
+									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+										<TextBlock Text="Changes" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+										<ComboBox Grid.Column="1" ItemsSource="{x:Static vm:BackgroundLayerRowViewModel.TargetOptions}" SelectedItem="{Binding Target, Mode=TwoWay}"
+												  DisplayMemberBinding="{Binding Label}" HorizontalAlignment="Stretch" />
+									</Grid>
+									<Grid ColumnDefinitions="Auto,100,Auto,100" ColumnSpacing="10">
+										<TextBlock Text="From" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+										<TextBox Grid.Column="1" Text="{Binding Min, Mode=TwoWay}" />
+										<TextBlock Grid.Column="2" Text="to" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+										<TextBox Grid.Column="3" Text="{Binding Max, Mode=TwoWay}" />
+									</Grid>
+									<StackPanel Spacing="6" IsVisible="{Binding TargetIsColor}">
+										<TextBlock Text="{Binding BoundColorsHint}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" />
+										<local:ColorField Hex="{Binding FromColor, Mode=TwoWay}" AllowOpacity="True" DefaultHex="#000000" Placeholder="Color at the low end" Width="320" HorizontalAlignment="Left" />
+										<local:ColorField Hex="{Binding BoundToColor, Mode=TwoWay}" AllowOpacity="True" DefaultHex="#FF0000" Placeholder="Color at the high end" Width="320" HorizontalAlignment="Left" />
+									</StackPanel>
+								</StackPanel>
+							</StackPanel>
+						</StackPanel>
+					</Border>
+				</DataTemplate>
+			</ItemsControl.ItemTemplate>
+		</ItemsControl>
+	</StackPanel>
+</UserControl>

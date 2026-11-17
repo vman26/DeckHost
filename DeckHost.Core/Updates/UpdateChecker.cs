@@ -125,6 +125,24 @@ public sealed class UpdateChecker
         return new UpdateCheckResult(current, eligible.FirstOrDefault(), [.. eligible.Where(release => release.Version > current)]);
     }
 
+    /// <summary>
+    /// Marks the end of what users read in a release's notes (scripts/release-notes.py puts it
+    /// after the changelog and the download table; checks and the pull request list follow).
+    /// </summary>
+    public const string EndOfNotesMarker = "<!-- deckhost:end-of-notes -->";
+
+    /// <summary>A release body up to <see cref="EndOfNotesMarker"/> (all of it without one), trimmed.</summary>
+    public static string UserNotes(string? body)
+    {
+        if (string.IsNullOrEmpty(body))
+        {
+            return string.Empty;
+        }
+
+        var end = body.IndexOf(EndOfNotesMarker, StringComparison.Ordinal);
+        return (end >= 0 ? body[..end] : body).Trim();
+    }
+
     internal static IReadOnlyList<ReleaseInfo> ParseReleases(string json)
     {
         var releases = new List<ReleaseInfo>();
@@ -150,7 +168,7 @@ public sealed class UpdateChecker
                 tag,
                 version,
                 Text(release, "name") is { Length: > 0 } name ? name : $"DeckHost {version}",
-                Text(release, "body") ?? string.Empty,
+                UserNotes(Text(release, "body")),
                 Text(release, "html_url") ?? string.Empty,
                 Bool(release, "prerelease") || version.IsPrerelease,
                 DateTimeOffset.TryParse(Text(release, "published_at"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var published) ? published : null,
@@ -162,11 +180,18 @@ public sealed class UpdateChecker
 
     /// <summary>
     /// The package for a platform (<c>win-x64</c>, <c>linux-x64</c>, <c>osx-arm64</c>, ...):
-    /// Windows' setup program, else its zip; the Linux tar.gz; the macOS zip.
+    /// Windows' setup program, else its zip; the Linux tar.gz (the AppImage, when
+    /// <paramref name="appImage"/> says DeckHost runs from one and the release has it); the macOS zip.
     /// </summary>
-    public static ReleaseAsset? SelectAsset(ReleaseInfo release, string runtimeIdentifier)
+    public static ReleaseAsset? SelectAsset(ReleaseInfo release, string runtimeIdentifier, bool appImage = false)
     {
         ArgumentNullException.ThrowIfNull(release);
+        if (appImage && runtimeIdentifier == "linux-x64" &&
+            release.Assets.FirstOrDefault(asset => asset.Name.EndsWith("-linux-x86_64.AppImage", StringComparison.OrdinalIgnoreCase)) is { } image)
+        {
+            return image;
+        }
+
         var suffixes = runtimeIdentifier.StartsWith("win", StringComparison.Ordinal)
             ? new[] { $"-{runtimeIdentifier}-setup.exe", $"-{runtimeIdentifier}.zip" }
             : runtimeIdentifier.StartsWith("osx", StringComparison.Ordinal)

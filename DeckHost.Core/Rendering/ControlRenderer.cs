@@ -38,18 +38,20 @@ internal static class ControlRenderer
         ProfileBackground? profileBackground,
         Rect layoutBounds,
         Rect controlBounds,
+        LinkedBinding? linked = null) =>
+        Draw(context, binding, action, profileBackground is null ? [] : BackgroundLayers.Resolve(profileBackground, context.Variables), layoutBounds, controlBounds, linked);
+
+    /// <summary>Draws a control with a background already resolved (the host resolves it once for every control it draws).</summary>
+    public static void Draw(
+        SkiaRenderContext context,
+        ControlBinding? binding,
+        IDeckAction? action,
+        IReadOnlyList<ResolvedLayer> background,
+        Rect layoutBounds,
+        Rect controlBounds,
         LinkedBinding? linked = null)
     {
-        context.Clear(BackgroundColor);
-
-        if (profileBackground is not null)
-        {
-            context.FillColor(profileBackground.Color);
-            if (!string.IsNullOrWhiteSpace(profileBackground.ImagePath))
-            {
-                context.DrawLayoutSlice(profileBackground.ImagePath, layoutBounds, controlBounds);
-            }
-        }
+        DrawBackground(context, background, layoutBounds, controlBounds);
 
         if (linked is null)
         {
@@ -79,6 +81,16 @@ internal static class ControlRenderer
             region.FillRoundedRect(0, linked.StripAtTop ? region.Height - 1 : 0, region.Width, 1, 0, LinkedStripEdgeColor);
             DrawBinding(region, linked.Binding, linked.Action);
         });
+    }
+
+    /// <summary>The base color and the background's layers: what is under a control's content (also what the Studio preview shows).</summary>
+    internal static void DrawBackground(SkiaRenderContext context, IReadOnlyList<ResolvedLayer> background, Rect layoutBounds, Rect controlBounds)
+    {
+        context.Clear(BackgroundColor);
+        if (background.Count > 0)
+        {
+            context.DrawBackgroundLayers(background, layoutBounds, controlBounds);
+        }
     }
 
     /// <summary>
@@ -130,7 +142,18 @@ internal static class ControlRenderer
 
         if (action is not null)
         {
+            // The user's own text shows on every action: an action that draws its own picture
+            // without it (a plugin, a readout) gets it as a label at the bottom, in the text style.
+            var ownText = string.IsNullOrWhiteSpace(binding.Appearance.Text) ? null : binding.Appearance.Text;
+            context.ExpectedText = ownText;
             action.Render(context);
+            var drawn = context.ExpectedTextDrawn;
+            context.ExpectedText = null;
+            if (ownText is not null && !drawn)
+            {
+                context.DrawLabel(ownText, TextVerticalAlignment.Bottom, Math.Max(10f, context.Height * 0.14f));
+            }
+
             return;
         }
 

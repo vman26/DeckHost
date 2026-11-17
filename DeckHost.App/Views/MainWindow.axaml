@@ -100,6 +100,27 @@
 	</Window.DataTemplates>
 
 	<Panel>
+		<!-- Notices over the workspace: safe mode (always) and "recovered from an error" (until dismissed). -->
+		<StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,66,0,0" Spacing="8" ZIndex="50">
+			<Border IsVisible="{Binding IsSafeMode}" Padding="14,8" CornerRadius="12" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.FBBF24}" BorderThickness="1" MaxWidth="760">
+				<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+					<TextBlock Text="{Binding SafeModeText}" TextWrapping="Wrap" Foreground="{DynamicResource C.FDE68A}" VerticalAlignment="Center" />
+					<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+						<Button Content="Restart normally" Classes="accent" Click="RestartNormally_OnClick" />
+						<Button Content="Crash report" Click="OpenSupport_OnClick" />
+					</StackPanel>
+				</Grid>
+			</Border>
+			<Border IsVisible="{Binding HasRecoveredNotice}" Padding="14,8" CornerRadius="12" Background="{DynamicResource C.1E293B}" BorderBrush="{DynamicResource C.475569}" BorderThickness="1" MaxWidth="760">
+				<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+					<TextBlock Text="{Binding RecoveredNotice}" TextWrapping="Wrap" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" />
+					<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+						<Button Content="Report…" Click="OpenSupport_OnClick" />
+						<Button Content="✕" Click="DismissRecovered_OnClick" />
+					</StackPanel>
+				</Grid>
+			</Border>
+		</StackPanel>
 		<Grid RowDefinitions="Auto,*">
 			<!-- Header: menu, device and profile, update notice, tools. -->
 			<Border Padding="16,10" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="0,0,0,1">
@@ -109,9 +130,12 @@
 							<Flyout Placement="BottomEdgeAlignedLeft">
 								<StackPanel Width="250" Spacing="8" Margin="6">
 									<Button Content="Profiles" HorizontalAlignment="Stretch" Click="OpenProfileManager_OnClick" />
+									<Button Content="Variables" HorizontalAlignment="Stretch" Click="OpenVariables_OnClick" ToolTip.Tip="CPU, memory, the app in front and the variables your workflows set" />
 									<Button Content="Plugins and store" HorizontalAlignment="Stretch" Click="OpenPluginManager_OnClick" />
+									<Button Content="{Binding DevicesMenuText}" HorizontalAlignment="Stretch" Click="OpenDevices_OnClick" ToolTip.Tip="Remove devices, and add the ones DeckHost found" />
 									<Button Content="Device settings" HorizontalAlignment="Stretch" Click="OpenDeviceSettings_OnClick" />
 									<Button Content="Add a USB device" HorizontalAlignment="Stretch" Click="OpenDeviceCreator_OnClick" ToolTip.Tip="Make a button box, pedal, jog wheel or other USB device into a deck" />
+									<Button Content="Device simulator" HorizontalAlignment="Stretch" Click="OpenSimulator_OnClick" IsVisible="{Binding ShowDeviceSimulator}" ToolTip.Tip="Open a window that acts like any device DeckHost supports, without the hardware" />
 									<Button Content="DeckHost settings" HorizontalAlignment="Stretch" Click="OpenAppSettings_OnClick" />
 									<Button Content="Help and support" HorizontalAlignment="Stretch" Click="OpenSupport_OnClick" />
 									<Button Content="Welcome tour" HorizontalAlignment="Stretch" Click="OpenWelcome_OnClick" />
@@ -194,6 +218,7 @@
 					</Border>
 
 					<StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+						<Button Classes="accent" IsVisible="{Binding HasDiscoveredDevices}" Content="{Binding DiscoveredDevicesText}" Click="OpenDevices_OnClick" Margin="0,0,8,0" ToolTip.Tip="DeckHost found a device that isn't in the list yet" />
 						<Button Classes="tool" ToolTip.Tip="{Binding UndoTip}" IsEnabled="{Binding CanUndo}" Command="{Binding UndoCommand}">
 							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M9 4 3 10l6 6v-4.5h5a4.5 4.5 0 0 1 0 9h-3V23h3a7 7 0 0 0 0-14H9Z" /></Canvas></Viewbox>
 						</Button>
@@ -221,13 +246,23 @@
 				<Grid RowDefinitions="400,5,*" MinWidth="560">
 					<!-- The device, at a fixed size: opening plugins or the editor doesn't resize it. -->
 					<Grid Background="{DynamicResource C.111318}">
+						<Grid.ContextMenu>
+							<ContextMenu>
+								<MenuItem Header="Add a USB device…" Click="OpenDeviceCreator_OnClick"
+										  ToolTip.Tip="Make a button box, pedal, jog wheel or other USB device into a deck" />
+								<MenuItem Header="Device settings" Click="OpenDeviceSettings_OnClick" />
+							</ContextMenu>
+						</Grid.ContextMenu>
 						<Viewbox Stretch="Uniform" StretchDirection="Both" Margin="24,16,24,64" HorizontalAlignment="Center" VerticalAlignment="Center">
-							<Border Padding="18" Background="{DynamicResource C.0B0D12}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1" CornerRadius="24">
-								<!-- The background is the color the device shows between its controls for this profile. -->
+							<Panel Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}">
+								<!-- The device as the simulator draws it: its body, and its screens in the profile's background color. -->
+								<local:DeviceBodyView Geometry="{Binding CanvasGeometry}"
+													  Screen="{Binding CanvasBackground}"
+													  Body="{DynamicResource C.1B1E25}"
+													  Edge="{DynamicResource C.2C313C}" />
 								<ItemsControl ItemsSource="{Binding ControlItems}"
 											  Width="{Binding CanvasWidth}"
-											  Height="{Binding CanvasHeight}"
-											  Background="{Binding CanvasBackground}">
+											  Height="{Binding CanvasHeight}">
 									<ItemsControl.ItemsPanel>
 										<ItemsPanelTemplate>
 											<Canvas Background="Transparent" />
@@ -252,12 +287,17 @@
 													ToolTip.Tip="{Binding ToolTipText}">
 												<Border.ContextMenu>
 													<ContextMenu DataContext="{Binding}">
-														<MenuItem Header="Customize"
-																  IsEnabled="{Binding SupportsCustomization}"
-																  Click="ControlCustomize_OnClick" />
+														<MenuItem Header="Try it"
+																  IsEnabled="{Binding HasAssignment}"
+																  ToolTip.Tip="Runs its action as if the control was pressed (or swiped), like a double-click"
+																  Click="ControlTry_OnClick" />
 														<MenuItem Header="Remove Assignment"
 																  IsEnabled="{Binding HasAssignment}"
 																  Click="ControlRemove_OnClick" />
+														<Separator />
+														<MenuItem Header="Plugin documentation"
+																  IsEnabled="{Binding HasAssignment}"
+																  Click="ControlDocs_OnClick" />
 													</ContextMenu>
 												</Border.ContextMenu>
 												<Border.RenderTransform>
@@ -314,7 +354,7 @@
 										</DataTemplate>
 									</ItemsControl.ItemTemplate>
 								</ItemsControl>
-							</Border>
+							</Panel>
 						</Viewbox>
 						<!-- Pages of the profile (and where an open folder is), like the Stream Deck app's page dots. -->
 						<StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="20,0,20,6" Spacing="4">
@@ -363,7 +403,8 @@
 					<Border Grid.Row="2" Background="{DynamicResource C.16181E}">
 						<Panel>
 							<ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasEditor}">
-								<ContentControl Content="{Binding Editor}" />
+								<!-- Filled in code: a new view per control (see ShowEditor). -->
+								<ContentControl x:Name="EditorHost" />
 							</ScrollViewer>
 							<TextBlock IsVisible="{Binding !HasEditor}"
 									   Text="Select a control to configure its action."
@@ -427,19 +468,27 @@
 
 				<!-- Actions, grouped by plugin. Drag one onto a control (or into a Multi Action's steps). -->
 				<Border Grid.Column="2" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1,0,0,0">
-					<Grid RowDefinitions="Auto,*">
-						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="12,12,12,8">
+					<Grid RowDefinitions="Auto,Auto,*">
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="12,12,12,4">
 							<TextBox PlaceholderText="Search actions" Text="{Binding SearchText, Mode=TwoWay}" />
 							<Button Grid.Column="1" Classes="tool" ToolTip.Tip="Get more plugins" Click="OpenPluginManager_OnClick">
 								<Viewbox Width="18" Height="18"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7Z" /></Canvas></Viewbox>
 							</Button>
 						</Grid>
-						<ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+						<CheckBox Grid.Row="1" Margin="12,0,12,6" Content="Only actions that fit the selected control" FontSize="12"
+								  IsChecked="{Binding OnlyCompatibleActions, Mode=TwoWay}"
+								  ToolTip.Tip="Hide the actions the selected control can't use. Without this they are only dimmed." />
+						<ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
 							<ItemsControl ItemsSource="{Binding ActionGroups}" Margin="6,0,6,12">
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:PluginActionGroupViewModel">
 										<StackPanel>
 											<ToggleButton Classes="groupHeader" IsChecked="{Binding IsExpanded, Mode=TwoWay}">
+												<ToggleButton.ContextMenu>
+													<ContextMenu>
+														<MenuItem Header="Plugin documentation" Click="GroupDocs_OnClick" />
+													</ContextMenu>
+												</ToggleButton.ContextMenu>
 												<Grid ColumnDefinitions="14,26,*,Auto" ColumnSpacing="8">
 													<TextBlock Text="›" FontSize="16" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}" />
 													<TextBlock Text="⌄" FontSize="14" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Top" IsVisible="{Binding IsExpanded}" />
@@ -460,8 +509,14 @@
 																Padding="10,7"
 																CornerRadius="8"
 																Cursor="Hand"
-																ToolTip.Tip="{Binding Summary}"
+																Opacity="{Binding ListOpacity}"
+																ToolTip.Tip="{Binding ListToolTip}"
 																PointerPressed="ActionCard_OnPointerPressed">
+															<Border.ContextMenu>
+																<ContextMenu>
+																	<MenuItem Header="Plugin documentation" Click="ActionDocs_OnClick" />
+																</ContextMenu>
+															</Border.ContextMenu>
 															<Grid ColumnDefinitions="22,*" ColumnSpacing="10">
 																<Panel Width="22" Height="22">
 																	<Viewbox IsVisible="{Binding Icon.HasGeometry}">
@@ -493,6 +548,12 @@
 								<StackPanel Orientation="Horizontal" Spacing="6">
 									<Viewbox Width="16" Height="16"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M15.5 4L17 5.5L10.5 12L17 18.5L15.5 20L7.5 12Z" /></Canvas></Viewbox>
 									<TextBlock Text="Back" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+								</StackPanel>
+							</Button>
+							<Button Classes="tool" Click="PageHome_OnClick" ToolTip.Tip="Back to the layout (Ctrl+Home)">
+								<StackPanel Orientation="Horizontal" Spacing="6">
+									<Viewbox Width="16" Height="16"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M12 3 2 12h3v8h5v-6h4v6h5v-8h3Z" /></Canvas></Viewbox>
+									<TextBlock Text="Layout" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
 								</StackPanel>
 							</Button>
 							<TextBlock x:Name="PageTitle" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" VerticalAlignment="Center" />

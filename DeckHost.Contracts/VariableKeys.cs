@@ -35,6 +35,16 @@ public static class VariableKeys
     /// <summary><c>vars.{name}</c>: a variable that workflows set and check (names ignore case).</summary>
     public static string UserVariable(string name) => $"vars.{name.Trim().ToLowerInvariant()}";
 
+    /// <summary>
+    /// <c>vars.profile|{profileId}|{name}</c>: a variable that only the workflows of one profile share. The
+    /// <c>|</c> keeps the parts apart (device and profile ids contain dots) and the key still starts with
+    /// <c>vars.</c>, like every variable workflows set.
+    /// </summary>
+    public static string ProfileVariable(string profileId, string name) => $"vars.profile|{profileId}|{name.Trim().ToLowerInvariant()}";
+
+    /// <summary><c>vars.control|{deviceId}|{controlId}|{name}</c>: a variable that belongs to one control's workflow.</summary>
+    public static string ControlVariable(string deviceId, string controlId, string name) => $"vars.control|{deviceId}|{controlId}|{name.Trim().ToLowerInvariant()}";
+
     /// <summary><c>devices.{deviceId}.</c></summary>
     public static string Device(string deviceId) => $"devices.{deviceId}.";
 

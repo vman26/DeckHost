@@ -1,0 +1,62 @@
+<UserControl
+		xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		x:Class="DeckHost.App.Views.VariablesView"
+		x:DataType="vm:VariablesViewModel">
+
+	<UserControl.Styles>
+		<Style Selector="TextBlock.hint">
+			<Setter Property="FontSize" Value="12" />
+			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+		</Style>
+		<Style Selector="Border.card">
+			<Setter Property="Background" Value="{DynamicResource C.0F172A}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource C.1E293B}" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="12" />
+			<Setter Property="Padding" Value="14" />
+		</Style>
+	</UserControl.Styles>
+
+	<ScrollViewer HorizontalScrollBarVisibility="Disabled">
+		<StackPanel Margin="20" Spacing="14">
+			<StackPanel Spacing="4">
+				<TextBlock Text="Variables" FontSize="24" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
+				<TextBlock Classes="hint" Text="Values that actions, workflows and backgrounds can read: DeckHost's own (CPU, memory, the app in front) and the ones you make. A variable's type comes from its value." />
+			</StackPanel>
+
+			<Border Classes="card">
+				<StackPanel Spacing="8">
+					<TextBlock Text="New variable" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+					<Grid ColumnDefinitions="2*,Auto,2*,Auto" ColumnSpacing="8">
+						<TextBox Text="{Binding NewName}" PlaceholderText="Name" />
+						<ComboBox Grid.Column="1" ItemsSource="{x:Static vm:VariablesViewModel.Types}" SelectedItem="{Binding NewType}" MinWidth="120" />
+						<TextBox Grid.Column="2" Text="{Binding NewValue}" PlaceholderText="Value" />
+						<Button Grid.Column="3" Content="Create" Classes="accent" Command="{Binding CreateCommand}" />
+					</Grid>
+					<TextBlock Classes="hint" Text="{Binding Status}" IsVisible="{Binding Status.Length}" />
+				</StackPanel>
+			</Border>
+
+			<Border Classes="card">
+				<ItemsControl ItemsSource="{Binding Rows}">
+					<ItemsControl.ItemTemplate>
+						<DataTemplate x:DataType="vm:VariableItemViewModel">
+							<Grid ColumnDefinitions="2*,110,90,2*,Auto,Auto" ColumnSpacing="8" Margin="0,4">
+								<TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource C.E2E8F0}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
+								<TextBlock Grid.Column="1" Text="{Binding ScopeLabel}" Classes="hint" VerticalAlignment="Center" />
+								<TextBlock Grid.Column="2" Text="{Binding Type}" Classes="hint" VerticalAlignment="Center" />
+								<TextBlock Grid.Column="3" Text="{Binding Value}" IsVisible="{Binding !IsUser}" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" TextTrimming="CharacterEllipsis" />
+								<TextBox Grid.Column="3" Text="{Binding EditValue}" IsVisible="{Binding IsUser}" />
+								<Button Grid.Column="4" Content="Save" IsVisible="{Binding IsUser}" IsEnabled="{Binding IsChanged}" Command="{Binding SaveCommand}" />
+								<Button Grid.Column="5" Content="Remove" IsVisible="{Binding IsUser}" Command="{Binding DeleteCommand}" />
+							</Grid>
+						</DataTemplate>
+					</ItemsControl.ItemTemplate>
+				</ItemsControl>
+			</Border>
+		</StackPanel>
+	</ScrollViewer>
+</UserControl>

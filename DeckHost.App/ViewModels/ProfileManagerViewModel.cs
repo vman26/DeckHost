@@ -21,13 +21,38 @@ public partial class ProfileManagerViewModel : ViewModelBase
     private string? _selectedRunningApp;
     private bool _confirmingDelete;
 
-    public ProfileManagerViewModel(MainViewModel main)
+    public ProfileManagerViewModel(MainViewModel main, Core.State.VariableStore? variables = null)
     {
         _main = main;
         _main.PropertyChanged += OnMainPropertyChanged;
         _editingProfile = main.SelectedRootProfile ?? main.Profiles.FirstOrDefault();
+        ProfileLayers = new BackgroundLayersViewModel(_editingProfile?.BackgroundLayers, layers =>
+        {
+            if (EditingProfile is { } profile)
+            {
+                profile.BackgroundLayers = layers;
+                _main.NotifyProfilesEdited();
+            }
+        });
+        DefaultLayers = new BackgroundLayersViewModel(main.DefaultBackgroundLayers, layers => _main.DefaultBackgroundLayers = layers);
+        ProfilePreview = new BackgroundPreviewViewModel(variables,
+            () => EditingProfile is { } profile ? _main.DeviceOf(profile.DeviceId) : _main.SelectedDevice,
+            () => EditingProfile is { } profile ? _main.EffectiveBackground(profile) : null);
+        DefaultPreview = new BackgroundPreviewViewModel(variables, () => _main.SelectedDevice, () => _main.DefaultBackground);
         RefreshRunningApps();
     }
+
+    /// <summary>The edited profile's background on its device, as the device shows it.</summary>
+    public BackgroundPreviewViewModel ProfilePreview { get; }
+
+    /// <summary>The default background on the device being edited.</summary>
+    public BackgroundPreviewViewModel DefaultPreview { get; }
+
+    /// <summary>The layers over the edited profile's background color and image (Background Studio).</summary>
+    public BackgroundLayersViewModel ProfileLayers { get; }
+
+    /// <summary>The layers of the default background for all profiles.</summary>
+    public BackgroundLayersViewModel DefaultLayers { get; }
 
     public ObservableCollection<ProfileItemViewModel> Profiles => _main.Profiles;
 
@@ -44,6 +69,9 @@ public partial class ProfileManagerViewModel : ViewModelBase
                 OnPropertyChanged(nameof(EditingName));
                 OnPropertyChanged(nameof(EditingBackgroundColor));
                 OnPropertyChanged(nameof(EditingBackgroundImage));
+                OnPropertyChanged(nameof(EditingOverridesBackground));
+                ProfileLayers.Load(value?.BackgroundLayers);
+                ProfilePreview?.Invalidate();
                 OnPropertyChanged(nameof(BackgroundColorError));
                 OnPropertyChanged(nameof(HasBackgroundColorError));
                 OnPropertyChanged(nameof(HasEditingProfile));
@@ -54,6 +82,69 @@ public partial class ProfileManagerViewModel : ViewModelBase
     }
 
     public bool HasEditingProfile => EditingProfile is not null;
+
+    /// <summary>The parts of the Profile Manager: the profiles, the default background for all of them, and the backups.</summary>
+    public enum ManagerSection
+    {
+        Profiles,
+        DefaultBackground,
+        Backups,
+    }
+
+    private ManagerSection _section;
+
+    public ManagerSection Section
+    {
+        get => _section;
+        set
+        {
+            if (SetProperty(ref _section, value))
+            {
+                OnPropertyChanged(nameof(IsProfilesSection));
+                OnPropertyChanged(nameof(IsDefaultSection));
+                OnPropertyChanged(nameof(IsBackupsSection));
+                if (value == ManagerSection.Backups)
+                {
+                    RefreshBackups();
+                }
+
+                DefaultPreview.Invalidate();
+            }
+        }
+    }
+
+    public bool IsProfilesSection => _section == ManagerSection.Profiles;
+
+    public bool IsDefaultSection => _section == ManagerSection.DefaultBackground;
+
+    public bool IsBackupsSection => _section == ManagerSection.Backups;
+
+    [RelayCommand]
+    private void ShowProfiles() => Section = ManagerSection.Profiles;
+
+    [RelayCommand]
+    private void ShowDefaultBackground() => Section = ManagerSection.DefaultBackground;
+
+    [RelayCommand]
+    private void ShowBackups() => Section = ManagerSection.Backups;
+
+    /// <summary>Whether the edited profile uses a background of its own instead of the default. Off keeps what was set, unused.</summary>
+    public bool EditingOverridesBackground
+    {
+        get => EditingProfile?.OverridesBackground ?? false;
+        set
+        {
+            if (EditingProfile is null || value == EditingProfile.OverridesBackground)
+            {
+                return;
+            }
+
+            EditingProfile.OverridesBackground = value;
+            OnPropertyChanged();
+            _main.NotifyProfilesEdited();
+            ProfilePreview.Invalidate();
+        }
+    }
 
     public string EditingName
     {
@@ -214,7 +305,12 @@ public partial class ProfileManagerViewModel : ViewModelBase
         set => SetProperty(ref _selectedRunningApp, value);
     }
 
-    public void Detach() => _main.PropertyChanged -= OnMainPropertyChanged;
+    public void Detach()
+    {
+        _main.PropertyChanged -= OnMainPropertyChanged;
+        ProfilePreview.Dispose();
+        DefaultPreview.Dispose();
+    }
 
     private string _message = string.Empty;
 
@@ -437,6 +533,13 @@ public partial class ProfileManagerViewModel : ViewModelBase
                 break;
             case nameof(MainViewModel.SelectedProfile):
                 OnPropertyChanged(nameof(IsEditingActiveProfile));
+                break;
+            case nameof(MainViewModel.CanvasBackground):
+            case nameof(MainViewModel.SelectedDevice):
+            case nameof(MainViewModel.CanvasGeometry):
+                // Every edit of a background reaches the host through the main view model (CanvasBackground), and so does the device.
+                ProfilePreview.Invalidate();
+                DefaultPreview.Invalidate();
                 break;
         }
     }

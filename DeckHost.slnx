@@ -21,6 +21,8 @@
   <Project Path="DeckHost.Device.Elgato/DeckHost.Device.Elgato.csproj" />
   <Project Path="DeckHost.Device.Hid/DeckHost.Device.Hid.csproj" />
   <Project Path="DeckHost.Device.MiraBox/DeckHost.Device.MiraBox.csproj" />
+  <Project Path="DeckHost.Device.Simulator/DeckHost.Device.Simulator.csproj" />
   <Project Path="DeckHost.Device.Web/DeckHost.Device.Web.csproj" />
   <Project Path="DeckHost.Tests/DeckHost.Tests.csproj" />
+  <Project Path="DeckHost.UiTests/DeckHost.UiTests.csproj" />
 </Solution>

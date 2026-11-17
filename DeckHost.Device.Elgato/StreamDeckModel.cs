@@ -74,6 +74,44 @@ public sealed record StreamDeckModel(
     /// the touch strip as four zones (touch.0–3, one above each dial), a swipe over it
     /// (touch.swipe) and the dials (encoder.0–3), each linked to its zone.
     /// </summary>
+    /// <summary>Display ids in the descriptor: the key screens and the + touch strip.</summary>
+    public const string KeysDisplayId = "keys";
+
+    public const string StripDisplayId = "strip";
+
+    /// <summary>The device's descriptor (master plan 7.1): controls, identity, displays and capabilities.</summary>
+    public DeviceDefinition Describe(string deviceId, bool isConnected, string? serial, string? firmware, string? detail)
+    {
+        var controls = Controls();
+        var displays = new List<DeviceDisplay>();
+        if (HasDisplays)
+        {
+            displays.Add(new DeviceDisplay(KeysDisplayId, Columns * KeyImageSize, Rows * KeyImageSize)
+            {
+                RotationDegrees = FlipKeyImages ? 180 : 0,
+                ControlIds = [.. controls.Where(static control => control.DisplayId == KeysDisplayId).Select(static control => control.Id)],
+            });
+        }
+
+        if (Dials > 0)
+        {
+            displays.Add(new DeviceDisplay(StripDisplayId, TouchStripWidth, TouchStripHeight)
+            {
+                ControlIds = [.. controls.Where(static control => control.DisplayId == StripDisplayId).Select(static control => control.Id)],
+            });
+        }
+
+        return new DeviceDefinition(deviceId, Name, controls, isConnected, detail)
+        {
+            Identity = new DeviceIdentity("Elgato", Name, serial, FirmwareVersion: firmware, Connection: "USB"),
+            Displays = displays,
+            Capabilities = (HasDisplays ? DeviceCapabilities.Images | DeviceCapabilities.Brightness : DeviceCapabilities.None)
+                | (Dials > 0 ? DeviceCapabilities.Touch : DeviceCapabilities.None)
+                | DeviceCapabilities.Firmware | DeviceCapabilities.Settings,
+            Limits = Generation == 1 ? new DeviceLimits { Notes = ["Key images are sent as bitmaps, one key at a time."] } : null,
+        };
+    }
+
     public IReadOnlyList<PhysicalControl> Controls()
     {
         const int Key = 72;
@@ -93,7 +131,10 @@ public sealed record StreamDeckModel(
                 HasDisplays ? OutputCapabilities.ColorImage | OutputCapabilities.Text : OutputCapabilities.None,
                 HasDisplays ? KeyImageSize : 0,
                 HasDisplays ? KeyImageSize : 0,
-                HardwareId: index.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                HardwareId: index.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            {
+                DisplayId = HasDisplays ? KeysDisplayId : null,
+            });
         }
 
         if (Dials == 0)
@@ -114,7 +155,10 @@ public sealed record StreamDeckModel(
                 InputCapabilities.Press | InputCapabilities.Release,
                 OutputCapabilities.ColorImage | OutputCapabilities.Text,
                 TouchStripWidth / Dials,
-                TouchStripHeight));
+                TouchStripHeight)
+            {
+                DisplayId = StripDisplayId,
+            });
         }
 
         controls.Add(new PhysicalControl("touch.swipe", "Touch Strip Swipe", ControlType.TouchSurface, new Rect(0, top + 48, width, 12), InputCapabilities.Swipe, OutputCapabilities.None));
@@ -127,7 +171,10 @@ public sealed record StreamDeckModel(
                 new Rect((dial * (zoneWidth + 6)) + ((zoneWidth - 56) / 2), top + 72, 56, 56),
                 InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.Rotate,
                 OutputCapabilities.None,
-                DisplayControlId: $"touch.{dial}"));
+                DisplayControlId: $"touch.{dial}")
+            {
+                Shape = ControlShape.Round,
+            });
         }
 
         return controls;

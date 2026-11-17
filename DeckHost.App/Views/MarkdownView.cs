@@ -121,6 +121,15 @@ public sealed partial class MarkdownView : UserControl
             return null;
         }
 
+        // A README in a plugin's folder: its pictures from that folder, nothing outside it.
+        if (baseUri.IsFile)
+        {
+            return !url.StartsWith('/') && Uri.TryCreate(baseUri, url, out var local) && local.IsFile &&
+                   local.LocalPath.StartsWith(baseUri.LocalPath, StringComparison.OrdinalIgnoreCase)
+                ? local.AbsoluteUri
+                : null;
+        }
+
         // "/docs/x.png" is relative to the repository root, not the host: keep the base's first
         // segments (owner/repository/reference on GitHub).
         if (url.StartsWith('/'))

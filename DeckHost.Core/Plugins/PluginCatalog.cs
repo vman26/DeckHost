@@ -39,7 +39,16 @@ public sealed record PluginEntry(
     string? PreviousVersion = null,
     IReadOnlyList<string>? Warnings = null,
     bool? RunsInOwnProcess = null,
-    string? ProcessStatus = null);
+    string? ProcessStatus = null,
+    string? Url = null,
+    string? Repository = null)
+{
+    /// <summary>The plugin's README file in its folder (README.md, any case), or null.</summary>
+    public string? ReadmePath => InstallDirectory is { } directory && Directory.Exists(directory)
+        ? Directory.EnumerateFiles(directory).FirstOrDefault(static path =>
+            Path.GetFileName(path).Equals("README.md", StringComparison.OrdinalIgnoreCase))
+        : null;
+}
 
 /// <summary>
 /// Keeps track of all plugins:
@@ -186,6 +195,12 @@ public sealed class PluginCatalog : IDisposable
     }
 
     /// <summary>Finishes pending removals and loads (and starts) the enabled installed plugins.</summary>
+    /// <summary>
+    /// False in safe mode: the installed packages, Stream Deck and OpenAction plugins are neither loaded nor started
+    /// (whatever crashed DeckHost can't run again), and their saved state is left as it is.
+    /// </summary>
+    public bool LoadsExtraPlugins { get; init; } = true;
+
     public void Load() => Run(null, LoadCore);
 
     /// <summary>
@@ -278,6 +293,33 @@ public sealed class PluginCatalog : IDisposable
     private IReadOnlyList<IApplicationPlugin> EnabledApplicationPluginsCore =>
         [.. _slots.Where(slot => slot.Instance is not null && !_disabled.Contains(slot.Id)).Select(slot => slot.Instance!)];
 
+    /// <summary>
+    /// What a device plugin supports: its models when it lists them (<see cref="IDeviceModelCatalog"/>),
+    /// else the devices it has now. Several models are summed up, not listed.
+    /// </summary>
+    internal static string DescribeSupport(IDevicePlugin plugin)
+    {
+        IEnumerable<string> names;
+        try
+        {
+            names = (plugin is IDeviceModelCatalog catalog ? catalog.DescribeModels() : plugin.Devices)
+                .Select(static device => device.Identity?.Model ?? device.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            names = plugin.Devices.Select(static device => device.Name).Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var list = names.ToList();
+        return list.Count switch
+        {
+            0 => "Devices you add yourself.",
+            <= 4 => $"Supports {string.Join(", ", list)}.",
+            _ => $"Supports {list.Count} models, such as {string.Join(", ", list.Take(3))}.",
+        };
+    }
+
     private IReadOnlyList<PluginEntry> EntriesCore =>
     [
         .. _devicePlugins.Select(plugin => new PluginEntry(
@@ -285,7 +327,7 @@ public sealed class PluginCatalog : IDisposable
             plugin.Name,
             plugin.GetType().Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
             null,
-            $"Supports {string.Join(", ", plugin.Devices.Select(device => device.Name).Distinct())}.",
+            DescribeSupport(plugin),
             PluginKind.Device,
             IsSystem: true,
             IsEnabled: true,
@@ -310,7 +352,7 @@ public sealed class PluginCatalog : IDisposable
             }
         }
 
-        if (Directory.Exists(InstallDirectory))
+        if (LoadsExtraPlugins && Directory.Exists(InstallDirectory))
         {
             foreach (var directory in Directory.EnumerateDirectories(InstallDirectory).Order(StringComparer.OrdinalIgnoreCase))
             {
@@ -337,7 +379,7 @@ public sealed class PluginCatalog : IDisposable
             }
         }
 
-        if (_streamDeck is not null && Directory.Exists(StreamDeckDirectory))
+        if (LoadsExtraPlugins && _streamDeck is not null && Directory.Exists(StreamDeckDirectory))
         {
             foreach (var directory in Directory.EnumerateDirectories(StreamDeckDirectory, "*.sdPlugin").Order(StringComparer.OrdinalIgnoreCase))
             {
@@ -363,12 +405,22 @@ public sealed class PluginCatalog : IDisposable
             }
         }
 
+        if (!LoadsExtraPlugins)
+        {
+            return;
+        }
+
         TryDeleteDirectory(Path.Combine(_rootDirectory, StagingDirectoryName));
         SaveState();
     }
 
     private PluginEntry InstallCore(string packagePath, string? fallbackId)
     {
+        if (!LoadsExtraPlugins)
+        {
+            throw new PluginException("Safe mode is on: plugins can't be installed until DeckHost is restarted normally.");
+        }
+
         if (!File.Exists(packagePath))
         {
             throw new PluginException($"Package not found: {packagePath}");
@@ -818,7 +870,7 @@ public sealed class PluginCatalog : IDisposable
             slot.Manifest?.Version ?? sd?.Version ?? instance?.Version ?? "?",
             slot.Manifest?.Author ?? sd?.Author ?? instance?.Author,
             slot.Manifest?.Description ?? sd?.Description ?? instance?.Description,
-            PluginKind.Application,
+            sd is { IsDevicePlugin: true } ? PluginKind.Device : PluginKind.Application,
             slot.Kind == SlotKind.System,
             IsEnabled: !_disabled.Contains(slot.Id) && (slot.Error is null || slot.Kind == SlotKind.StreamDeck),
             CanDisable: !slot.IsRequired,
@@ -838,7 +890,9 @@ public sealed class PluginCatalog : IDisposable
             slot.Kind == SlotKind.Package && ProcessLauncher is not null ? !_inProcess.Contains(slot.Id) : null,
             slot.Process is { } process ? process.Problem ?? process.Status
                 : slot.Kind == SlotKind.StreamDeck && _streamDeck is not null && !_disabled.Contains(slot.Id) ? _streamDeck.ProblemOf(slot.Id) ?? _streamDeck.StatusOf(slot.Id)
-                : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost" : null);
+                : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost" : null,
+            slot.Manifest?.Url ?? slot.StreamDeckManifest?.Url,
+            slot.Manifest?.Repository);
     }
 
     /// <summary>Where the version before the last update of a plugin is kept (for a roll back).</summary>
@@ -910,6 +964,11 @@ public sealed class PluginCatalog : IDisposable
 
     private void SaveState()
     {
+        if (!LoadsExtraPlugins)
+        {
+            return;
+        }
+
         try
         {
             Directory.CreateDirectory(_rootDirectory);

@@ -9,6 +9,14 @@ namespace DeckHost.Tests;
 
 public class InlineEditorTests
 {
+    private const string Mute = "Mute";
+    private const string NextTrack = "Next Track";
+    private const string Stop = "Stop";
+    private const string LockComputer = "Lock Computer";
+    private const string MultiAction = "Multi Action";
+    private const string RevertAsked = "revert";
+    private const string RemoveAsked = "remove";
+
     private static readonly IReadOnlyList<ActionItemViewModel> Actions =
         [.. SystemPluginSet.Create().SelectMany(plugin => plugin.Actions.Select(action => ActionItemViewModel.Create(plugin.Id, plugin.Name, action)))];
 
@@ -18,7 +26,7 @@ public class InlineEditorTests
     {
         var control = new ControlItemViewModel(new PhysicalControl("key.0", "Key 1", ControlType.Key, new Rect(0, 0, 10, 10),
             InputCapabilities.Press | InputCapabilities.Release, OutputCapabilities.ColorImage | OutputCapabilities.Text));
-        var multi = Item("Multi Action");
+        var multi = Item(MultiAction);
         var stepItems = steps.Select(name => new StepItemViewModel(Item(name), new ActionSettings([]))).ToList();
         var model = new ControlBinding("key.0", ProfileActionKind.MultiAction, multi.ToActionReference(), new ControlAppearance(),
             [.. stepItems.Select((step, index) => new MultiActionStep(index, step.Action.ToActionReference()))]);
@@ -28,93 +36,173 @@ public class InlineEditorTests
     private static IEnumerable<string> StepNames(ControlCustomizationViewModel editor) =>
         editor.BuildBinding()!.Steps.Select(step => step.Action.ActionName);
 
-    [Fact]
-    public void A_dropped_action_becomes_a_step_where_it_was_dropped()
+    // ---------------------------------------------------------------- dropping actions as steps
+
+    [Test]
+    public void InsertStep_AnActionDroppedBetweenTwoSteps_BecomesTheStepAtThatPlace()
     {
-        var editor = MultiActionEditor("Mute", "Next Track");
+        // Arrange
+        var editor = MultiActionEditor(Mute, NextTrack);
+
+        // Act
+        var inserted = editor.InsertStep(Item(LockComputer).Action, 1);
+
+        // Assert
+        Assert.That(inserted, Is.True);
+        Assert.That(StepNames(editor), Is.EqualTo(new[] { Mute, LockComputer, NextTrack }));
+    }
+
+    [Test]
+    public void InsertStep_AnAction_RaisesChangedOnce()
+    {
+        // Arrange
+        var editor = MultiActionEditor(Mute, NextTrack);
         var changes = 0;
         editor.Changed += (_, _) => changes++;
 
-        Assert.True(editor.CanInsertStep(Item("Lock Computer").Action));
-        Assert.True(editor.InsertStep(Item("Lock Computer").Action, 1));
+        // Act
+        editor.InsertStep(Item(LockComputer).Action, 1);
 
-        Assert.Equal(["Mute", "Lock Computer", "Next Track"], StepNames(editor));
-        Assert.Equal(1, changes);
+        // Assert
+        Assert.That(changes, Is.EqualTo(1));
     }
 
-    [Fact]
-    public void Actions_that_cant_be_steps_are_refused()
+    [Test]
+    public void CanInsertStep_AnActionThatFitsAsAStep_IsTrue()
     {
-        var editor = MultiActionEditor("Mute");
+        // Arrange
+        var editor = MultiActionEditor(Mute);
 
-        Assert.False(editor.CanInsertStep(Item("Multi Action").Action));
-        Assert.False(editor.InsertStep(Item("Multi Action").Action, 0));
-        Assert.Equal(["Mute"], StepNames(editor));
+        // Act
+        var canInsert = editor.CanInsertStep(Item(LockComputer).Action);
+
+        // Assert
+        Assert.That(canInsert, Is.True);
     }
 
-    [Theory]
-    [InlineData(0, 3, new[] { "B", "C", "A" })] // dragged to the end
-    [InlineData(2, 0, new[] { "C", "A", "B" })] // dragged to the top
-    [InlineData(0, 2, new[] { "B", "A", "C" })] // dropped above C
-    [InlineData(1, 1, new[] { "A", "B", "C" })] // dropped where it is
-    [InlineData(1, 2, new[] { "A", "B", "C" })] // just below itself: same place
-    public void A_dragged_step_moves_to_where_it_was_dropped(int from, int to, string[] expected)
+    [Test]
+    public void InsertStep_AnActionThatCantBeAStep_IsRefusedAndNothingChanges()
     {
-        var names = new Dictionary<string, string> { ["A"] = "Mute", ["B"] = "Next Track", ["C"] = "Stop" };
+        // Arrange
+        var editor = MultiActionEditor(Mute);
+
+        // Act
+        var canInsert = editor.CanInsertStep(Item(MultiAction).Action);
+        var inserted = editor.InsertStep(Item(MultiAction).Action, 0);
+
+        // Assert
+        Assert.That(canInsert, Is.False);
+        Assert.That(inserted, Is.False);
+        Assert.That(StepNames(editor), Is.EqualTo(new[] { Mute }));
+    }
+
+    // ---------------------------------------------------------------- reordering
+
+    [TestCase(0, 3, new[] { "B", "C", "A" }, TestName = "MoveStepTo_FirstStepDraggedToTheEnd_MovesItLast")]
+    [TestCase(2, 0, new[] { "C", "A", "B" }, TestName = "MoveStepTo_LastStepDraggedToTheTop_MovesItFirst")]
+    [TestCase(0, 2, new[] { "B", "A", "C" }, TestName = "MoveStepTo_FirstStepDroppedAboveTheThird_MovesItBetween")]
+    [TestCase(1, 1, new[] { "A", "B", "C" }, TestName = "MoveStepTo_StepDroppedWhereItIs_KeepsTheOrder")]
+    [TestCase(1, 2, new[] { "A", "B", "C" }, TestName = "MoveStepTo_StepDroppedJustBelowItself_KeepsTheOrder")]
+    public void MoveStepTo_Scenarios(int from, int to, string[] expected)
+    {
+        // Arrange
+        var names = new Dictionary<string, string> { ["A"] = Mute, ["B"] = NextTrack, ["C"] = Stop };
         var editor = MultiActionEditor(names["A"], names["B"], names["C"]);
 
+        // Act
         editor.MoveStepTo(from, to);
 
-        Assert.Equal(expected.Select(letter => names[letter]), StepNames(editor));
+        // Assert
+        Assert.That(StepNames(editor), Is.EqualTo(expected.Select(letter => names[letter])));
     }
 
-    [Fact]
-    public void The_drop_marker_shows_where_a_step_lands()
-    {
-        var editor = MultiActionEditor("Mute", "Next Track");
+    // ---------------------------------------------------------------- the drop marker
 
+    [Test]
+    public void DropIndex_BeforeTheSecondStep_MarksThatStep()
+    {
+        // Arrange
+        var editor = MultiActionEditor(Mute, NextTrack);
+
+        // Act
         editor.DropIndex = 1;
-        Assert.Equal([false, true], editor.Steps.Select(step => step.IsDropBefore));
-        Assert.False(editor.IsDropAtEnd);
 
-        editor.DropIndex = 2;
-        Assert.All(editor.Steps, step => Assert.False(step.IsDropBefore));
-        Assert.True(editor.IsDropAtEnd);
-
-        editor.DropIndex = null;
-        Assert.False(editor.IsDropAtEnd);
+        // Assert
+        Assert.That(editor.Steps.Select(step => step.IsDropBefore), Is.EqualTo(new[] { false, true }));
+        Assert.That(editor.IsDropAtEnd, Is.False);
     }
 
-    [Fact]
-    public void Revert_and_remove_are_asked_of_the_main_window()
+    [Test]
+    public void DropIndex_AfterTheLastStep_MarksTheEnd()
     {
-        var editor = MultiActionEditor("Mute");
-        var asked = new List<string>();
-        editor.RevertRequested += (_, _) => asked.Add("revert");
-        editor.RemoveRequested += (_, _) => asked.Add("remove");
+        // Arrange
+        var editor = MultiActionEditor(Mute, NextTrack);
 
+        // Act
+        editor.DropIndex = 2;
+
+        // Assert
+        Expect.All(editor.Steps, step => Assert.That(step.IsDropBefore, Is.False));
+        Assert.That(editor.IsDropAtEnd, Is.True);
+    }
+
+    [Test]
+    public void DropIndex_Cleared_MarksNothing()
+    {
+        // Arrange
+        var editor = MultiActionEditor(Mute, NextTrack);
+        editor.DropIndex = 2;
+
+        // Act
+        editor.DropIndex = null;
+
+        // Assert
+        Assert.That(editor.IsDropAtEnd, Is.False);
+    }
+
+    // ---------------------------------------------------------------- revert and remove
+
+    [Test]
+    public void RevertAndRemove_Commands_AreAskedOfTheMainWindow()
+    {
+        // Arrange
+        var editor = MultiActionEditor(Mute);
+        var asked = new List<string>();
+        editor.RevertRequested += (_, _) => asked.Add(RevertAsked);
+        editor.RemoveRequested += (_, _) => asked.Add(RemoveAsked);
+
+        // Act
         editor.RevertCommand.Execute(null);
         editor.RemoveCommand.Execute(null);
 
-        Assert.Equal(["revert", "remove"], asked);
-        Assert.True(editor.HasAssignment);
+        // Assert
+        Assert.That(asked, Is.EqualTo(new[] { RevertAsked, RemoveAsked }));
+        Assert.That(editor.HasAssignment, Is.True);
     }
 
-    [Theory]
-    [InlineData("Play / Pause", Icons.PlayPause)]
-    [InlineData("Clock", Icons.Clock)]
-    [InlineData("Counter", Icons.Counter)]
-    [InlineData("Multi Action", Icons.Stack)]
-    [InlineData("Track Swipe", Icons.Swipe)]
-    public void Actions_have_an_icon_for_the_list(string name, string icon) =>
-        Assert.Equal(icon, Item(name).Action.ListIcon);
+    // ---------------------------------------------------------------- list icons
 
-    [Fact]
-    public void Every_listed_action_draws_a_list_icon_without_a_control()
+    [TestCase("Play / Pause", Icons.PlayPause)]
+    [TestCase("Clock", Icons.Clock)]
+    [TestCase("Counter", Icons.Counter)]
+    [TestCase(MultiAction, Icons.Stack)]
+    [TestCase("Track Swipe", Icons.Swipe)]
+    public void ListIcon_OfAKnownAction_IsItsIcon(string name, string icon)
     {
-        foreach (var action in Actions.Where(action => action.ShowInPalette))
-        {
-            Assert.False(string.IsNullOrEmpty(action.Action.ListIcon), $"{action.Name} has no list icon");
-        }
+        // Act
+        var listIcon = Item(name).Action.ListIcon;
+
+        // Assert
+        Assert.That(listIcon, Is.EqualTo(icon));
+    }
+
+    [Test]
+    public void ListIcon_OfEveryListedAction_IsNotEmpty()
+    {
+        // Act
+        var withoutIcon = Actions.Where(action => action.ShowInPalette && string.IsNullOrEmpty(action.Action.ListIcon)).Select(static action => action.Name).ToList();
+
+        // Assert
+        Assert.That(withoutIcon, Is.Empty, "these actions have no list icon");
     }
 }

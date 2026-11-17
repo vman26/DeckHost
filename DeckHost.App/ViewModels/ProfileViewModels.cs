@@ -14,13 +14,15 @@ public class ProfileItemViewModel : ViewModelBase
     private readonly Dictionary<string, ControlBinding> _unresolvedBindings = new(StringComparer.OrdinalIgnoreCase);
     private string _name;
 
-    public ProfileItemViewModel(string id, string name, string deviceId, IEnumerable<string>? autoSwitchApps = null, ProfileBackground? background = null)
+    public ProfileItemViewModel(string id, string name, string deviceId, IEnumerable<string>? autoSwitchApps = null, ProfileBackground? background = null, bool? overridesBackground = null)
     {
         Id = id;
         _name = name;
         DeviceId = deviceId;
         BackgroundColor = background?.Color ?? string.Empty;
         BackgroundImagePath = background?.ImagePath ?? string.Empty;
+        BackgroundLayers = background?.Layers ?? [];
+        OverridesBackground = overridesBackground ?? background is { IsEmpty: false };
         AutoSwitchApps = new ObservableCollection<string>(autoSwitchApps ?? []);
         AutoSwitchApps.CollectionChanged += (_, _) =>
         {
@@ -94,6 +96,12 @@ public class ProfileItemViewModel : ViewModelBase
     /// <summary>Profile background image or GIF; spans all controls.</summary>
     public string BackgroundImagePath { get; set; }
 
+    /// <summary>Whether the profile uses its own background instead of the default; off keeps the stored background but doesn't use it.</summary>
+    public bool OverridesBackground { get; set; }
+
+    /// <summary>More background layers over the color and image (gradients, pictures, layers that follow a variable).</summary>
+    public IReadOnlyList<BackgroundLayer> BackgroundLayers { get; set; }
+
     /// <summary>Process names that make this profile active while their window has focus.</summary>
     public ObservableCollection<string> AutoSwitchApps { get; }
 
@@ -163,12 +171,13 @@ public class ProfileItemViewModel : ViewModelBase
             .. _unresolvedBindings.Values,
         ],
         AutoSwitchApps.Count == 0 ? null : [.. AutoSwitchApps],
-        string.IsNullOrWhiteSpace(BackgroundColor) && string.IsNullOrWhiteSpace(BackgroundImagePath)
+        string.IsNullOrWhiteSpace(BackgroundColor) && string.IsNullOrWhiteSpace(BackgroundImagePath) && BackgroundLayers.Count == 0
             ? null
-            : new ProfileBackground(NullIfEmpty(BackgroundColor), NullIfEmpty(BackgroundImagePath)))
+            : new ProfileBackground(NullIfEmpty(BackgroundColor), NullIfEmpty(BackgroundImagePath)) { Layers = BackgroundLayers.Count == 0 ? null : [.. BackgroundLayers] })
     {
         ParentId = ParentId,
         Kind = Kind,
+        OverridesBackground = OverridesBackground,
     };
 
     /// <summary>The profile and all its pages and folders, as saved and as the host gets them.</summary>

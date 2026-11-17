@@ -20,6 +20,7 @@ public class ArchitectureTests
         typeof(DeckHost.Device.Elgato.ElgatoDevicePlugin).Assembly,
         typeof(DeckHost.Device.Web.WebDeckPlugin).Assembly,
         typeof(DeckHost.Device.Hid.HidDevicePlugin).Assembly,
+        typeof(DeckHost.Device.Simulator.SimulatorDevicePlugin).Assembly,
     ];
 
     private static string[] References(Assembly assembly) =>
@@ -28,48 +29,112 @@ public class ArchitectureTests
     private static string[] DeckHostReferences(Assembly assembly) =>
         [.. References(assembly).Where(static name => name.StartsWith("DeckHost.", StringComparison.Ordinal)).Order()];
 
-    [Fact]
-    public void Contracts_depends_on_nothing_of_DeckHost_and_on_no_UI_or_drawing_library()
+    private const string ContractsName = "DeckHost.Contracts";
+    private const string UiPrefix = "Avalonia";
+    private const string DrawingPrefix = "SkiaSharp";
+    private const string HidPrefix = "HidSharp";
+
+    private static bool ReferencesUi(Assembly assembly) =>
+        References(assembly).Any(static name => name.StartsWith(UiPrefix, StringComparison.Ordinal));
+
+    public static IEnumerable<Assembly> DevicePluginAssemblies() => DevicePlugins;
+
+    [Test]
+    public void Contracts_References_NothingOfDeckHost()
     {
-        Assert.Empty(DeckHostReferences(Contracts));
-        Assert.DoesNotContain(References(Contracts), static name => name.StartsWith("Avalonia", StringComparison.Ordinal) || name.StartsWith("SkiaSharp", StringComparison.Ordinal));
+        // Act
+        var references = DeckHostReferences(Contracts);
+
+        // Assert
+        Assert.That(references, Is.Empty);
     }
 
-    [Fact]
-    public void Core_depends_only_on_Contracts_and_never_on_a_device_plugin_or_the_UI()
+    [Test]
+    public void Contracts_References_NoUiOrDrawingLibrary()
     {
-        Assert.Equal(["DeckHost.Contracts"], DeckHostReferences(Core));
-        Assert.DoesNotContain(References(Core), static name => name.StartsWith("Avalonia", StringComparison.Ordinal) || name.StartsWith("HidSharp", StringComparison.Ordinal));
+        // Act
+        var referencesUiOrDrawing = References(Contracts).Any(static name => name.StartsWith(UiPrefix, StringComparison.Ordinal) || name.StartsWith(DrawingPrefix, StringComparison.Ordinal));
+
+        // Assert
+        Assert.That(referencesUiOrDrawing, Is.False);
     }
 
-    [Fact]
-    public void Device_plugins_depend_only_on_Contracts()
+    [Test]
+    public void Core_References_OnlyContractsOfDeckHost()
     {
-        foreach (var plugin in DevicePlugins)
-        {
-            Assert.True(DeckHostReferences(plugin).SequenceEqual(["DeckHost.Contracts"]), $"{plugin.GetName().Name} references {string.Join(", ", DeckHostReferences(plugin))}");
-            Assert.DoesNotContain(References(plugin), static name => name.StartsWith("Avalonia", StringComparison.Ordinal));
-        }
+        // Act
+        var references = DeckHostReferences(Core);
+
+        // Assert
+        Assert.That(references, Is.EqualTo(new[] { ContractsName }));
     }
 
-    [Fact]
-    public void Every_device_plugin_implements_IDevicePlugin()
+    [Test]
+    public void Core_References_NeitherTheUiNorAHidLibrary()
     {
-        foreach (var plugin in DevicePlugins)
-        {
-            Assert.Contains(plugin.GetExportedTypes(), static type => typeof(IDevicePlugin).IsAssignableFrom(type) && !type.IsAbstract);
-        }
+        // Act
+        var referencesUiOrHid = References(Core).Any(static name => name.StartsWith(UiPrefix, StringComparison.Ordinal) || name.StartsWith(HidPrefix, StringComparison.Ordinal));
+
+        // Assert
+        Assert.That(referencesUiOrHid, Is.False);
     }
 
-    [Fact]
-    public void The_app_is_the_only_assembly_that_knows_the_device_plugins()
+    [TestCaseSource(nameof(DevicePluginAssemblies))]
+    public void DevicePlugin_References_OnlyContractsOfDeckHost(Assembly plugin)
     {
-        var names = DevicePlugins.Select(static plugin => plugin.GetName().Name).ToHashSet();
-        Assert.Contains(DeckHostReferences(App), name => names.Contains(name));
-        foreach (var assembly in DevicePlugins.Append(Core).Append(Contracts))
-        {
-            Assert.DoesNotContain(DeckHostReferences(assembly), name => names.Contains(name));
-        }
+        // Act
+        var references = DeckHostReferences(plugin);
+
+        // Assert
+        Assert.That(references, Is.EqualTo(new[] { ContractsName }), $"{plugin.GetName().Name} references {string.Join(", ", references)}");
+    }
+
+    [TestCaseSource(nameof(DevicePluginAssemblies))]
+    public void DevicePlugin_References_NoUiLibrary(Assembly plugin)
+    {
+        // Act
+        var referencesUi = ReferencesUi(plugin);
+
+        // Assert
+        Assert.That(referencesUi, Is.False);
+    }
+
+    [TestCaseSource(nameof(DevicePluginAssemblies))]
+    public void DevicePlugin_Exports_ADevicePluginType(Assembly plugin)
+    {
+        // Act
+        var implementsInterface = plugin.GetExportedTypes().Any(static type => typeof(IDevicePlugin).IsAssignableFrom(type) && !type.IsAbstract);
+
+        // Assert
+        Assert.That(implementsInterface, Is.True);
+    }
+
+    private static HashSet<string?> DevicePluginNames() => DevicePlugins.Select(static plugin => plugin.GetName().Name).ToHashSet();
+
+    [Test]
+    public void App_References_TheDevicePlugins()
+    {
+        // Arrange
+        var names = DevicePluginNames();
+
+        // Act
+        var knowsThem = DeckHostReferences(App).Any(name => names.Contains(name));
+
+        // Assert
+        Assert.That(knowsThem, Is.True);
+    }
+
+    [Test]
+    public void ContractsCoreAndTheDevicePlugins_DoNotReferenceADevicePlugin()
+    {
+        // Arrange
+        var names = DevicePluginNames();
+
+        // Act
+        var knowers = DevicePlugins.Append(Core).Append(Contracts).Where(assembly => DeckHostReferences(assembly).Any(name => names.Contains(name))).Select(static assembly => assembly.GetName().Name).ToList();
+
+        // Assert
+        Assert.That(knowers, Is.Empty);
     }
 
     /// <summary>
@@ -79,8 +144,8 @@ public class ArchitectureTests
     /// <c>ContractsApi.txt</c>; additions only need the file updated (run the tests with
     /// <c>UPDATE_API_BASELINE=1</c>).
     /// </summary>
-    [Fact]
-    public void The_plugin_API_only_grows_unless_the_host_API_version_is_bumped()
+    [Test]
+    public void ContractsApi_AfterAChange_OnlyGrowsUnlessTheHostApiVersionIsBumped()
     {
         var current = DescribeApi(Contracts);
         var path = Path.Combine(SourceDirectory(), "ContractsApi.txt");
@@ -102,11 +167,13 @@ public class ArchitectureTests
         var newAbstract = now.Skip(1).Where(line => line.EndsWith(" abstract", StringComparison.Ordinal) && !before.Contains(line) &&
             before.Contains("interface " + line.Trim().Split(' ')[0][..line.Trim().Split(' ')[0].LastIndexOf('.')]));
         var breaking = removed.Concat(newAbstract).ToList();
-        Assert.True(breaking.Count == 0 || versionChanged,
+        Assert.That(
+            breaking.Count == 0 || versionChanged,
+            Is.True,
             "Breaking change to the plugin API: bump PluginManifest.CurrentHostApiVersion, then run the tests with UPDATE_API_BASELINE=1.\n  " + string.Join("\n  ", breaking));
 
         var added = now.Skip(1).Where(line => line.Length > 0 && !before.Contains(line)).ToList();
-        Assert.True(added.Count == 0 && !versionChanged, "The plugin API changed: run the tests once with UPDATE_API_BASELINE=1 to update ContractsApi.txt.\n  " + string.Join("\n  ", added));
+        Assert.That(added.Count == 0 && !versionChanged, Is.True, "The plugin API changed: run the tests once with UPDATE_API_BASELINE=1 to update ContractsApi.txt.\n  " + string.Join("\n  ", added));
     }
 
     /// <summary>One line per public member; interface members without a body are marked "abstract".</summary>

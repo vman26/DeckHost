@@ -10,8 +10,8 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="NUnit" Version="4.3.2" />
+    <PackageReference Include="NUnit3TestAdapter" Version="5.0.0" />
   </ItemGroup>
 
   <!-- SkiaSharp brings its Windows and macOS natives itself; this lets the rendering tests run on Linux too. -->
@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Using Include="Xunit" />
+    <Using Include="NUnit.Framework" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,6 +29,7 @@
     <ProjectReference Include="..\DeckHost.Device.Elgato\DeckHost.Device.Elgato.csproj" />
     <ProjectReference Include="..\DeckHost.Device.Hid\DeckHost.Device.Hid.csproj" />
     <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
+    <ProjectReference Include="..\DeckHost.Device.Simulator\DeckHost.Device.Simulator.csproj" />
     <ProjectReference Include="..\DeckHost.Device.Web\DeckHost.Device.Web.csproj" />
     <!-- For the platform code's pure parts (tool output parsing, key tables, sign-in entries). -->
     <ProjectReference Include="..\DeckHost.App\DeckHost.App.csproj" />

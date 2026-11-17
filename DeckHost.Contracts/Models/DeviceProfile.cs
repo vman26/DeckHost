@@ -24,6 +24,13 @@ namespace DeckHost.Contracts.Models
         [System.Text.Json.Serialization.JsonPropertyName("kind")]
         public string? Kind { get; init; }
 
+        /// <summary>
+        /// Whether this layout uses <see cref="Background"/> instead of the default background for all profiles. Null (files from before
+        /// the checkbox) means yes when it has a background. Off keeps the background stored but unused, so turning it on again brings it back.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("overridesBackground")]
+        public bool? OverridesBackground { get; init; }
+
         public bool IsRoot => Kind is null;
     }
 

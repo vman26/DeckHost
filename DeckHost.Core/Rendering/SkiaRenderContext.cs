@@ -6,6 +6,36 @@ namespace DeckHost.Core.Rendering
 {
     internal sealed class SkiaRenderContext : IRenderContext
     {
+        /// <summary>
+        /// The control's own text (Customize → Text) while the action draws; whether the action drew
+        /// it is in <see cref="ExpectedTextDrawn"/>, so the host can add it when the action doesn't.
+        /// </summary>
+        internal string? ExpectedText
+        {
+            get => _expectedText;
+            set
+            {
+                _expectedText = value;
+                ExpectedTextDrawn = false;
+            }
+        }
+
+        private string? _expectedText;
+
+        internal bool ExpectedTextDrawn { get; private set; }
+
+        private void Note(string text)
+        {
+            if (!ExpectedTextDrawn && ExpectedText is { Length: > 0 } expected &&
+                (text.Contains(expected, StringComparison.Ordinal) || Squash(text).Contains(Squash(expected), StringComparison.Ordinal)))
+            {
+                ExpectedTextDrawn = true;
+            }
+        }
+
+        /// <summary>Lines joined for a strip: compare without line breaks and repeated spaces.</summary>
+        private static string Squash(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
         private const float MinTextSize = 9f;
         private readonly SKCanvas _canvas;
         private readonly SkiaDrawingResources _resources;
@@ -40,6 +70,7 @@ namespace DeckHost.Core.Rendering
 
         public void DrawText(string text, double x, double y, float size, uint argbColor = 0xFFFFFFFF)
         {
+            Note(text ?? string.Empty);
             if (string.IsNullOrEmpty(text))
             {
                 return;
@@ -56,6 +87,7 @@ namespace DeckHost.Core.Rendering
 
         public void DrawCenteredText(string text, double centerX, double centerY, float size, uint argbColor = 0xFFFFFFFF)
         {
+            Note(text ?? string.Empty);
             if (string.IsNullOrEmpty(text))
             {
                 return;
@@ -174,6 +206,7 @@ namespace DeckHost.Core.Rendering
 
         public void DrawRightAlignedText(string text, double right, double baselineY, float size, uint argbColor = 0xFFFFFFFF)
         {
+            Note(text ?? string.Empty);
             if (string.IsNullOrEmpty(text))
             {
                 return;
@@ -223,6 +256,7 @@ namespace DeckHost.Core.Rendering
 
         public void DrawLabel(string text, TextVerticalAlignment defaultVertical = TextVerticalAlignment.Middle, float? defaultSize = null, uint defaultColor = 0xFFFFFFFF)
         {
+            Note(text ?? string.Empty);
             if (string.IsNullOrWhiteSpace(text))
             {
                 return;
@@ -375,6 +409,88 @@ namespace DeckHost.Core.Rendering
             return true;
         }
 
+        /// <summary>Draws the background's layers over this control's part of the layout, bottom to top.</summary>
+        public void DrawBackgroundLayers(IReadOnlyList<ResolvedLayer> layers, Rect layout, Rect control)
+        {
+            foreach (var layer in layers)
+            {
+                switch (layer.Kind)
+                {
+                    case BackgroundLayerKinds.Solid:
+                        FillSolid(layer.Color, layer.Opacity);
+                        break;
+                    case BackgroundLayerKinds.Gradient:
+                        DrawLayoutGradient(layer, layout, control);
+                        break;
+                    case BackgroundLayerKinds.Radial:
+                        DrawLayoutRadialGradient(layer, layout, control);
+                        break;
+                    case BackgroundLayerKinds.Image when !string.IsNullOrWhiteSpace(layer.ImagePath):
+                        DrawLayoutSlice(layer.ImagePath, layout, control, layer.Opacity);
+                        break;
+                }
+            }
+        }
+
+        private void FillSolid(SKColor color, double opacity)
+        {
+            var paint = _resources.FillPaint;
+            paint.Color = color.WithAlpha((byte)Math.Round(color.Alpha * Math.Clamp(opacity, 0, 1)));
+            _canvas.DrawRect(0, 0, Width, Height, paint);
+        }
+
+        /// <summary>A gradient across the whole layout at an angle (0 left to right, 90 top to bottom); this control draws its part.</summary>
+        private void DrawLayoutGradient(ResolvedLayer layer, Rect layout, Rect control)
+        {
+            if (layout.Width <= 0 || layout.Height <= 0 || control.Width <= 0 || control.Height <= 0)
+            {
+                return;
+            }
+
+            var radians = layer.Angle * Math.PI / 180d;
+            var (dx, dy) = (Math.Cos(radians), Math.Sin(radians));
+            var half = ((Math.Abs(layout.Width * dx)) + Math.Abs(layout.Height * dy)) / 2d;
+            var (cx, cy) = (layout.X + (layout.Width / 2d), layout.Y + (layout.Height / 2d));
+
+            var (colors, positions) = GradientShaderColors(layer);
+            using var shader = SKShader.CreateLinearGradient(
+                ToControl(cx - (dx * half), cy - (dy * half), control),
+                ToControl(cx + (dx * half), cy + (dy * half), control),
+                colors,
+                positions,
+                SKShaderTileMode.Clamp);
+            using var paint = new SKPaint { IsAntialias = false, Style = SKPaintStyle.Fill, Shader = shader };
+            _canvas.DrawRect(0, 0, Width, Height, paint);
+        }
+
+        /// <summary>A radial gradient across the whole layout: from its center out to a share of the half diagonal; this control draws its part.</summary>
+        private void DrawLayoutRadialGradient(ResolvedLayer layer, Rect layout, Rect control)
+        {
+            if (layout.Width <= 0 || layout.Height <= 0 || control.Width <= 0 || control.Height <= 0)
+            {
+                return;
+            }
+
+            var center = ToControl(layout.X + (layer.CenterX * layout.Width), layout.Y + (layer.CenterY * layout.Height), control);
+            var radiusInLayout = layer.Radius * 0.5 * Math.Sqrt((layout.Width * layout.Width) + (layout.Height * layout.Height));
+            var radius = (float)Math.Max(radiusInLayout * Width / control.Width, 0.5);
+            var (colors, positions) = GradientShaderColors(layer);
+            using var shader = SKShader.CreateRadialGradient(center, radius, colors, positions, SKShaderTileMode.Clamp);
+            using var paint = new SKPaint { IsAntialias = false, Style = SKPaintStyle.Fill, Shader = shader };
+            _canvas.DrawRect(0, 0, Width, Height, paint);
+        }
+
+        private SKPoint ToControl(double x, double y, Rect control) =>
+            new((float)((x - control.X) * Width / control.Width), (float)((y - control.Y) * Height / control.Height));
+
+        /// <summary>The gradient's colors (with the layer's opacity in their alpha) and where each starts.</summary>
+        private static (SKColor[] Colors, float[] Positions) GradientShaderColors(ResolvedLayer layer)
+        {
+            var alpha = Math.Clamp(layer.Opacity, 0, 1);
+            var stops = layer.Stops ?? new GradientColors([layer.Color, layer.ToColor], [0f, 1f]);
+            return ([.. stops.Colors.Select(color => color.WithAlpha((byte)Math.Round(color.Alpha * alpha)))], stops.Positions);
+        }
+
         /// <summary>Fills the control with a #RRGGBB / #AARRGGBB color. Returns false for an invalid color.</summary>
         public bool FillColor(string? color)
         {
@@ -394,7 +510,7 @@ namespace DeckHost.Core.Rendering
         /// picture spans all controls. <paramref name="layout"/> and <paramref name="control"/>
         /// are in the device's layout coordinates.
         /// </summary>
-        public bool DrawLayoutSlice(string path, Rect layout, Rect control)
+        public bool DrawLayoutSlice(string path, Rect layout, Rect control, double opacity = 1)
         {
             var image = _resources.GetImage(path, Clock);
             if (image is null || layout.Width <= 0 || layout.Height <= 0 || control.Width <= 0 || control.Height <= 0)
@@ -412,7 +528,18 @@ namespace DeckHost.Core.Rendering
                 (float)(control.Width / cover),
                 (float)(control.Height / cover));
 
-            _canvas.DrawImage(image, source, SKRect.Create(0, 0, Width, Height), _resources.ImageSampling, _resources.ImagePaint);
+            var paint = _resources.ImagePaint;
+            var before = paint.Color;
+            paint.Color = before.WithAlpha((byte)Math.Round(before.Alpha * Math.Clamp(opacity, 0, 1)));
+            try
+            {
+                _canvas.DrawImage(image, source, SKRect.Create(0, 0, Width, Height), _resources.ImageSampling, paint);
+            }
+            finally
+            {
+                paint.Color = before;
+            }
+
             return true;
         }
 

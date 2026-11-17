@@ -9,6 +9,12 @@ public interface IActionHost
     /// <summary>Re-renders the device's controls (only changed controls are pushed).</summary>
     void RequestRender(string deviceId);
 
+    /// <summary>
+    /// Re-renders one control (and the display it is shown on, for a knob). Hosts that don't know the
+    /// difference draw the whole device again, which is what <see cref="RequestRender(string)"/> does.
+    /// </summary>
+    void RequestRender(string deviceId, string controlId) => RequestRender(deviceId);
+
     /// <summary>Activates a profile of the device by id or (case-insensitive) name.</summary>
     void ActivateProfile(string deviceId, string profileIdOrName);
 

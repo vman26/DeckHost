@@ -51,7 +51,7 @@ public sealed partial class SupportViewModel : ViewModelBase
 
     public string SystemDescription => $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})";
 
-    /// <summary>The documentation, published next to the releases (GitHub Pages of the releases repository).</summary>
+    /// <summary>The documentation: the GitHub Pages of the repository DeckHost gets its releases from.</summary>
     public static string DocumentationUrl => DocumentationUrlFor(AppInfo.UpdateRepository);
 
     internal static string DocumentationUrlFor(string repository)
@@ -75,8 +75,8 @@ public sealed partial class SupportViewModel : ViewModelBase
     private void ReportNewest() => Report(NewCrashes.FirstOrDefault());
 
     public string NewCrashTitle => NewCrashes.Count == 1
-        ? $"DeckHost closed unexpectedly on {NewCrashes[0].When}."
-        : $"DeckHost closed unexpectedly {NewCrashes.Count} times (last on {NewCrashes.FirstOrDefault()?.When}).";
+        ? $"DeckHost ran into an unexpected problem on {NewCrashes[0].When}."
+        : $"DeckHost ran into an unexpected problem {NewCrashes.Count} times (last on {NewCrashes.FirstOrDefault()?.When}).";
 
     /// <summary>Also put the profiles in the bundle (passwords that actions keep are in there too).</summary>
     public bool IncludeProfiles

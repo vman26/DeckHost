@@ -6,6 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f17">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>DeckHost</title>
 <style>
   :root { color-scheme: dark; --gap: 10px; }
@@ -150,6 +153,8 @@
   }
 
   function connect() {
+    // Installable as an app: only in a secure context (HTTPS, or this computer); the worker keeps the page and never the deck.
+    if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
     socket = new WebSocket(`${scheme}://${location.host}/ws?${query(pairing)}`);
     let opened = false;

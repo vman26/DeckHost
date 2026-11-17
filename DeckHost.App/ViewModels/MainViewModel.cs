@@ -54,6 +54,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         ArgumentNullException.ThrowIfNull(pluginCatalog);
 
         _deviceHostService = deviceHostService;
+        _workflowBreakpoints = new WorkflowBreakpoints(deviceHostService);
+        _systemData = new Platform.SystemDataPublisher(deviceHostService);
         _pluginCatalog = pluginCatalog;
         _profileStore = profileStore;
         _pluginState = pluginState;
@@ -68,6 +70,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         _deviceHostService.RuntimeLogReceived += entry => Dispatcher.UIThread.Post(() => OnRuntimeLogReceived(entry));
         _deviceHostService.ConnectionStatusChanged += status => Dispatcher.UIThread.Post(() => OnConnectionStatusChanged(status));
         _deviceHostService.DevicesChanged += () => Dispatcher.UIThread.Post(OnDevicesChanged);
+        _deviceHostService.RosterChanged += () => Dispatcher.UIThread.Post(RefreshDiscovered);
+        RefreshDiscovered();
         _deviceHostService.ActiveProfileChanged += (deviceId, profileId) => Dispatcher.UIThread.Post(() => OnHostActiveProfileChanged(deviceId, profileId));
         _deviceHostService.ControlFrameRendered += frame => Dispatcher.UIThread.Post(() => OnControlFrameRendered(frame));
         _deviceHostService.InputReceived += input => Dispatcher.UIThread.Post(() => OnInputReceived(input));
@@ -76,7 +80,13 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         RebuildActions();
         LoadProfiles();
-        SelectControl(ControlItems[0].Control);
+
+        // Safe mode starts without an open editor: whatever the first control's editor builds (a plugin's web page) is what crashed.
+        if (!Platform.SafeMode.IsOn)
+        {
+            SelectControl(ControlItems[0].Control);
+        }
+
         SeedRuntimeState();
 
         _foregroundAppWatcher.ForegroundAppChanged += OnForegroundAppChanged;
@@ -144,6 +154,33 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
     }
 
+    private bool _onlyCompatibleActions;
+
+    /// <summary>The action list shows only the actions that fit the selected control (a checkbox in the action bar).</summary>
+    public bool OnlyCompatibleActions
+    {
+        get => _onlyCompatibleActions;
+        set
+        {
+            if (SetProperty(ref _onlyCompatibleActions, value))
+            {
+                RefreshActionGroups();
+                OnlyCompatibleActionsChanged?.Invoke(this, value);
+            }
+        }
+    }
+
+    /// <summary>Raised when the user changes <see cref="OnlyCompatibleActions"/>, so the window can remember it.</summary>
+    public event EventHandler<bool>? OnlyCompatibleActionsChanged;
+
+    /// <summary>Sets <see cref="OnlyCompatibleActions"/> from the saved settings, without telling the window to save it again.</summary>
+    public void LoadOnlyCompatibleActions(bool value)
+    {
+        _onlyCompatibleActions = value;
+        OnPropertyChanged(nameof(OnlyCompatibleActions));
+        RefreshActionGroups();
+    }
+
     public ControlItemViewModel? SelectedControl
     {
         get => _selectedControl;
@@ -151,6 +188,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         {
             if (SetProperty(ref _selectedControl, value))
             {
+                RefreshActionGroups();
                 foreach (var item in ControlItems)
                 {
                     item.IsSelected = item == value;
@@ -198,6 +236,38 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         get => _statusMessage;
         set => SetProperty(ref _statusMessage, value);
     }
+
+    /// <summary>DeckHost started in safe mode (web views and extra plugins are off) after crashing at start.</summary>
+    public bool IsSafeMode => Platform.SafeMode.IsOn;
+
+    public string SafeModeText => $"Safe mode: the built-in browser and extra plugins (Stream Deck, OpenAction, installed ones) are off. {Platform.SafeMode.Reason}";
+
+    private string _recoveredNotice = string.Empty;
+
+    /// <summary>Set when an unexpected error was recovered from (a crash report was written) instead of closing DeckHost.</summary>
+    public string RecoveredNotice
+    {
+        get => _recoveredNotice;
+        private set
+        {
+            if (SetProperty(ref _recoveredNotice, value))
+            {
+                OnPropertyChanged(nameof(HasRecoveredNotice));
+            }
+        }
+    }
+
+    public bool HasRecoveredNotice => RecoveredNotice.Length > 0;
+
+    /// <summary>The user asked to leave safe mode: the host clears what it remembers and starts DeckHost again.</summary>
+    public event Action? RestartNormallyRequested;
+
+    public void RestartNormally() => RestartNormallyRequested?.Invoke();
+
+    public void ShowRecoveredNotice() =>
+        RecoveredNotice = "DeckHost hit an unexpected error and carried on. A report was saved; you can send it from Help and support.";
+
+    public void DismissRecoveredNotice() => RecoveredNotice = string.Empty;
 
     public string ConnectionStatus
     {
@@ -481,9 +551,16 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
     }
 
-    public double CanvasWidth => ControlItems.Count == 0 ? 0d : ControlItems.Max(static control => control.X + control.Width) + 24;
+    /// <summary>Where the device's body, screens and controls are drawn (as in the device simulator).</summary>
+    public Views.DeviceGeometry CanvasGeometry
+    {
+        get => _canvasGeometry;
+        private set => SetProperty(ref _canvasGeometry, value);
+    }
 
-    public double CanvasHeight => ControlItems.Count == 0 ? 0d : ControlItems.Max(static control => control.Y + control.Height) + 24;
+    public double CanvasWidth => CanvasGeometry.Width;
+
+    public double CanvasHeight => CanvasGeometry.Height;
 
     public string SelectedControlName => SelectedControl?.DisplayName ?? "No control selected";
 
@@ -747,6 +824,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     private ControlCustomizationViewModel? _editor;
     private bool _applyingFromEditor;
     private bool _showDebugPanel;
+    private bool _showDeviceSimulator;
+    private Views.DeviceGeometry _canvasGeometry = Views.DeviceGeometry.Empty;
 
     /// <summary>
     /// The editor below the device for the selected control (what the Customize window was). Edits
@@ -765,6 +844,13 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     }
 
     public bool HasEditor => _editor is not null;
+
+    /// <summary>☰ → Device simulator is offered (DeckHost settings → Developer → Device simulator).</summary>
+    public bool ShowDeviceSimulator
+    {
+        get => _showDeviceSimulator;
+        set => SetProperty(ref _showDeviceSimulator, value);
+    }
 
     /// <summary>The debug panel (the selected control's capabilities, the runtime connection and log): DeckHost settings → Show debug panel.</summary>
     public bool ShowDebugPanel
@@ -822,10 +908,17 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             return;
         }
 
+        // Fields that settle when the editor opens (a choice showing its default) aren't an edit.
+        var binding = editor.BuildBinding();
+        if (SelectedProfile is { } layout && SameBinding(layout.GetModel(editor.ControlId), binding))
+        {
+            return;
+        }
+
         _applyingFromEditor = true;
         try
         {
-            ApplyBinding(editor.ControlId, editor.BuildBinding());
+            ApplyBinding(editor.ControlId, binding);
         }
         finally
         {
@@ -901,7 +994,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         var layoutId = layout.Id;
-        return new WorkflowEditorViewModel(
+        return Configure(new WorkflowEditorViewModel(
             device.Id,
             layoutId,
             controlItem.Control,
@@ -909,7 +1002,120 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             binding.Model.Workflow ?? WorkflowConverter.Starter(),
             _actionsByKey.Values,
             workflow => ApplyWorkflow(layoutId, controlId, workflow),
-            _deviceHostService);
+            _deviceHostService), controlId);
+    }
+
+    private readonly WorkflowBreakpoints _workflowBreakpoints;
+    private readonly Platform.SystemDataPublisher _systemData;
+
+    /// <summary>Gives an editor what it needs from the app: the shared workflows, opening one, and the shared breakpoints.</summary>
+    private WorkflowEditorViewModel Configure(WorkflowEditorViewModel editor, string fromControlId)
+    {
+        editor.Breakpoints = _workflowBreakpoints;
+        editor.SharedSource = () => _sharedWorkflows;
+        editor.SaveShared = SaveSharedWorkflow;
+        editor.DeleteShared = DeleteSharedWorkflow;
+        editor.CallersOf = CallersOf;
+        editor.OpenShared = id =>
+        {
+            if (CreateSharedWorkflowEditor(id, fromControlId) is { } shared)
+            {
+                WorkflowEditorRequested?.Invoke(shared);
+            }
+        };
+        editor.RefreshShared();
+        return editor;
+    }
+
+    // ---------------------------------------------------------------- shared workflows
+
+    private readonly List<Workflow> _sharedWorkflows = [];
+
+    /// <summary>The workflows Call nodes can run, by name.</summary>
+    public IReadOnlyList<Workflow> SharedWorkflows => _sharedWorkflows;
+
+    /// <summary>
+    /// Keeps a workflow as a shared one (the file kind: it needs a name). A workflow that already has an
+    /// id replaces that shared workflow; otherwise it gets a new id. Returns the id, or why not.
+    /// </summary>
+    public (string? Id, string? Problem) SaveSharedWorkflow(Workflow workflow)
+    {
+        if (string.IsNullOrWhiteSpace(workflow.Name))
+        {
+            return (null, "Give the workflow a name first: Call nodes list shared workflows by name.");
+        }
+
+        var name = workflow.Name.Trim();
+        var id = workflow.Id ?? $"wf.{Guid.NewGuid():N}"[..11];
+        if (_sharedWorkflows.Any(other => other.Id != id && string.Equals(other.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return (null, $"There is already a shared workflow called {name}.");
+        }
+
+        var shared = workflow with { Id = id, Name = name };
+        var index = _sharedWorkflows.FindIndex(other => other.Id == id);
+        if (index >= 0)
+        {
+            _sharedWorkflows[index] = shared;
+        }
+        else
+        {
+            _sharedWorkflows.Add(shared);
+        }
+
+        SyncProfilesToHost();
+        StatusMessage = $"Saved {name} as a shared workflow.";
+        return (id, null);
+    }
+
+    /// <summary>Who still calls a shared workflow: the layouts' controls and other shared workflows (names).</summary>
+    public IReadOnlyList<string> CallersOf(string id) =>
+    [
+        .. AllLayouts.SelectMany(layout => layout.ToModels().SelectMany(model => model.Bindings)
+            .Where(binding => binding.Workflow is { } workflow && Calls(workflow, id))
+            .Select(binding => $"{layout.Name}: {binding.ControlId}")),
+        .. _sharedWorkflows.Where(other => other.Id != id && Calls(other, id)).Select(static other => other.Name ?? other.Id ?? "a shared workflow"),
+    ];
+
+    private static bool Calls(Workflow workflow, string id) =>
+        workflow.Nodes.Any(node => node.Kind == WorkflowNodeKinds.Call && string.Equals(node.EffectiveSettings.Get(WorkflowKeys.Workflow).Trim(), id, StringComparison.Ordinal));
+
+    /// <summary>Deletes a shared workflow unless something still calls it. Returns why not.</summary>
+    public string? DeleteSharedWorkflow(string id)
+    {
+        var callers = CallersOf(id);
+        if (callers.Count > 0)
+        {
+            return $"It is still called by {string.Join(", ", callers.Take(3))}{(callers.Count > 3 ? ", …" : string.Empty)}.";
+        }
+
+        if (_sharedWorkflows.RemoveAll(workflow => workflow.Id == id) == 0)
+        {
+            return null;
+        }
+
+        SyncProfilesToHost();
+        return null;
+    }
+
+    /// <summary>Opens a shared workflow in the editor (on the control the editor was opened from, whose inputs it offers).</summary>
+    public WorkflowEditorViewModel? CreateSharedWorkflowEditor(string id, string fromControlId)
+    {
+        if (_sharedWorkflows.FirstOrDefault(workflow => workflow.Id == id) is not { } shared ||
+            SelectedDevice is not { } device || !_controlsById.TryGetValue(fromControlId, out var controlItem))
+        {
+            return null;
+        }
+
+        return Configure(new WorkflowEditorViewModel(
+            device.Id,
+            SelectedProfile?.Id ?? string.Empty,
+            controlItem.Control,
+            controlItem.DisplayName,
+            shared,
+            _actionsByKey.Values,
+            edited => SaveSharedWorkflow(edited with { Id = id }).Problem is null,
+            _deviceHostService), fromControlId);
     }
 
     /// <summary>Stores an edited workflow on its control (also when another layout is shown meanwhile).</summary>
@@ -987,7 +1193,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
                 Profiles.Concat(_otherDeviceProfiles).SelectMany(static profile => profile.ToModels()).ToList(),
                 AutoSwitchEnabled,
                 DefaultBackground,
-                _deviceLights.Count == 0 ? null : new Dictionary<string, LightStyle>(_deviceLights, StringComparer.OrdinalIgnoreCase)));
+                _deviceLights.Count == 0 ? null : new Dictionary<string, LightStyle>(_deviceLights, StringComparer.OrdinalIgnoreCase),
+                _sharedWorkflows.Count == 0 ? null : [.. _sharedWorkflows]));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1063,6 +1270,19 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private string _defaultBackgroundColor = string.Empty;
     private string _defaultBackgroundImage = string.Empty;
+    private IReadOnlyList<BackgroundLayer> _defaultBackgroundLayers = [];
+
+    /// <summary>More layers for the default background (over its color and image).</summary>
+    public IReadOnlyList<BackgroundLayer> DefaultBackgroundLayers
+    {
+        get => _defaultBackgroundLayers;
+        set
+        {
+            _defaultBackgroundLayers = value ?? [];
+            OnPropertyChanged();
+            SyncProfilesToHost();
+        }
+    }
 
     /// <summary>Background color for every profile that has none of its own (Profile Manager); empty for DeckHost's dark blue.</summary>
     public string DefaultBackgroundColor
@@ -1097,7 +1317,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         {
             var color = System.Text.RegularExpressions.Regex.IsMatch(_defaultBackgroundColor.Trim(), "^#?[0-9A-Fa-f]{6}$") ? _defaultBackgroundColor.Trim() : null;
             var image = string.IsNullOrWhiteSpace(_defaultBackgroundImage) ? null : _defaultBackgroundImage.Trim();
-            return color is null && image is null ? null : new ProfileBackground(color, image);
+            return color is null && image is null && _defaultBackgroundLayers.Count == 0
+                ? null
+                : new ProfileBackground(color, image) { Layers = _defaultBackgroundLayers.Count == 0 ? null : [.. _defaultBackgroundLayers] };
         }
     }
 
@@ -1130,7 +1352,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     {
         // A duplicate is a full working copy: bindings, appearance, background, app rules and plugin settings.
         var source = copyFrom?.ToModel();
-        var profile = new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], UniqueProfileName(name), SelectedDevice!.Id, source?.AutoSwitchApps, source?.Background);
+        var profile = new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], UniqueProfileName(name), SelectedDevice!.Id, source?.AutoSwitchApps, source?.Background, source?.OverridesBackground);
         if (copyFrom is not null && source is not null)
         {
             // Pages and folders come along with new ids; Folder keys are pointed at the copies.
@@ -1143,7 +1365,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             CopyLayout(copyFrom, profile, ids);
             foreach (var layout in copyFrom.Layouts)
             {
-                var copy = new ProfileItemViewModel(ids[layout.Id], layout.Name, profile.DeviceId, null, layout.ToModel().Background)
+                var copy = new ProfileItemViewModel(ids[layout.Id], layout.Name, profile.DeviceId, null, layout.ToModel().Background, layout.OverridesBackground)
                 {
                     ParentId = layout.ParentId is { } parent && ids.TryGetValue(parent, out var newParent) ? newParent : profile.Id,
                     Kind = layout.Kind,
@@ -1240,7 +1462,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     /// <summary>Writes a profile with its pages, folders and images to a <c>.deckhostprofile</c> file.</summary>
     public void ExportProfile(ProfileItemViewModel profile, string path)
     {
-        Core.Profiles.ProfileBundle.Export([.. profile.RootProfile.ToModels()], path);
+        Core.Profiles.ProfileBundle.Export([.. profile.RootProfile.ToModels()], path, _sharedWorkflows);
         StatusMessage = $"Exported {profile.RootProfile.Name} to {Path.GetFileName(path)}.";
     }
 
@@ -1263,7 +1485,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
         else
         {
-            layouts = Core.Profiles.ProfileBundle.Import(path, SelectedDevice!.Id, ImportedAssetsDirectory);
+            var bundle = Core.Profiles.ProfileBundle.ImportBundle(path, SelectedDevice!.Id, ImportedAssetsDirectory);
+            layouts = bundle.Layouts;
+            _sharedWorkflows.AddRange(bundle.SharedWorkflows);
             summary = $"{layouts.Sum(static layout => layout.Bindings.Count)} control(s) imported.";
             var controls = SelectedDevice.Controls;
             if (layouts.SelectMany(static layout => layout.Bindings).Any(binding => !controls.Any(control => SameId(control.Id, binding.ControlId))))
@@ -1311,7 +1535,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         ProfileItemViewModel? copy = null;
         foreach (var layout in mapped.Layouts)
         {
-            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? name : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background)
+            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? name : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background, layout.OverridesBackground)
             {
                 ParentId = layout.IsRoot ? null : layout.ParentId,
                 Kind = layout.IsRoot ? null : layout.Kind,
@@ -1372,7 +1596,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         ProfileItemViewModel? root = null;
         foreach (var layout in layouts)
         {
-            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? UniqueProfileName(layout.Name) : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background)
+            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? UniqueProfileName(layout.Name) : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background, layout.OverridesBackground)
             {
                 ParentId = layout.IsRoot ? null : layout.ParentId,
                 Kind = layout.IsRoot ? null : layout.Kind,
@@ -1540,7 +1764,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             var children = new List<ProfileItemViewModel>();
             foreach (var profile in document?.Profiles ?? [])
             {
-                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps, profile.Background)
+                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps, profile.Background, profile.OverridesBackground)
                 {
                     ParentId = profile.ParentId,
                     Kind = profile.Kind,
@@ -1610,11 +1834,15 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             _autoSwitchEnabled = document?.AutoSwitchEnabled ?? true;
             _defaultBackgroundColor = document?.DefaultBackground?.Color ?? string.Empty;
             _defaultBackgroundImage = document?.DefaultBackground?.ImagePath ?? string.Empty;
+            _defaultBackgroundLayers = document?.DefaultBackground?.Layers ?? [];
             _deviceLights.Clear();
             foreach (var (deviceId, style) in document?.DeviceLights ?? new Dictionary<string, LightStyle>())
             {
                 _deviceLights[deviceId] = style;
             }
+
+            _sharedWorkflows.Clear();
+            _sharedWorkflows.AddRange((document?.SharedWorkflows ?? []).Where(static workflow => !string.IsNullOrWhiteSpace(workflow.Id)));
 
             if (unresolved > 0)
             {
@@ -1627,7 +1855,10 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
-        _deviceHostService.SetProfiles(EveryLayout.Select(ToHostModel).ToList());
+        _deviceHostService.SetSharedWorkflows([.. _sharedWorkflows]);
+        var hostModels = EveryLayout.Select(ToHostModel).ToList();
+        _deviceHostService.SetProfiles(hostModels);
+        WantBackgroundVariables(hostModels);
         if (SelectedProfile is not null)
         {
             _deviceHostService.SetActiveProfile(SelectedProfile.Id);
@@ -1712,20 +1943,32 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     {
         // Pages and folders look like their profile unless they have a background of their own.
         var model = profile.ToModel();
-        if (model.Background is { IsEmpty: false })
-        {
-            return model;
-        }
-
         var inherited = profile.IsRoot ? null : profile.RootProfile.ToModel().Background;
-        return inherited is { IsEmpty: false } ? model with { Background = inherited }
-            : DefaultBackground is null ? model
-            : model with { Background = DefaultBackground };
+        var effective = DeckHost.App.Profiles.ProfileBackgrounds.Effective(model.Background, inherited, DefaultBackground, model.OverridesBackground ?? true);
+        return ReferenceEquals(effective, model.Background) ? model : model with { Background = effective };
     }
+
+    /// <summary>The background the profile is drawn with (its own, its root's or the default), as the host gets it.</summary>
+    public ProfileBackground? EffectiveBackground(ProfileItemViewModel profile) => ToHostModel(profile).Background;
+
+    /// <summary>The device with this id as the host lists it, else the one being edited when that is it.</summary>
+    internal DeviceDefinition? DeviceOf(string deviceId) =>
+        _deviceHostService.Devices.FirstOrDefault(device => SameId(device.Id, deviceId))
+        ?? (SelectedDevice is { } selected && SameId(selected.Id, deviceId) ? selected : null);
+
+    /// <summary>Starts publishing the system values (CPU, memory) the backgrounds follow: the profiles' and the default's (the Studio previews it).</summary>
+    private void WantBackgroundVariables(IEnumerable<DeviceProfile> hostModels) =>
+        _systemData.Want(hostModels.SelectMany(static profile => Core.Rendering.BackgroundLayers.BoundVariables(profile.Background))
+            .Concat(Core.Rendering.BackgroundLayers.BoundVariables(DefaultBackground)));
+
+    /// <summary>The Variables page is shown (or closed): CPU and memory are published for it.</summary>
+    public void WantSystemValues(bool shown) => _systemData.WantWhileShown(shown);
 
     private void SyncProfilesToHost()
     {
-        _deviceHostService.SetProfiles(EveryLayout.Select(ToHostModel).ToList());
+        var hostModels = EveryLayout.Select(ToHostModel).ToList();
+        _deviceHostService.SetProfiles(hostModels);
+        WantBackgroundVariables(hostModels);
 
         if (SelectedProfile is not null)
         {
@@ -1812,6 +2055,29 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
     }
 
+    private int _discoveredDevices;
+
+    /// <summary>Devices DeckHost found that wait for Add or Keep ignoring (the Devices page).</summary>
+    public bool HasDiscoveredDevices => _discoveredDevices > 0;
+
+    public string DiscoveredDevicesText => _discoveredDevices == 1 ? "1 new device" : $"{_discoveredDevices} new devices";
+
+    public string DevicesMenuText => _discoveredDevices > 0 ? $"Devices ({_discoveredDevices} new)" : "Devices";
+
+    private void RefreshDiscovered()
+    {
+        var count = _deviceHostService.DeviceRoster().Count(static entry => entry.Listing == Core.Devices.DeviceListing.Discovered);
+        if (count == _discoveredDevices)
+        {
+            return;
+        }
+
+        _discoveredDevices = count;
+        OnPropertyChanged(nameof(HasDiscoveredDevices));
+        OnPropertyChanged(nameof(DiscoveredDevicesText));
+        OnPropertyChanged(nameof(DevicesMenuText));
+    }
+
     private void OnDevicesChanged()
     {
         RefreshDeviceList();
@@ -1846,6 +2112,11 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
             OnPropertyChanged(nameof(DeviceName));
         }
+        else if ((_deviceHostService.Devices.FirstOrDefault(static device => device.IsConnected) ?? _deviceHostService.Devices.FirstOrDefault()) is { } remaining)
+        {
+            // The shown device was taken out of the list (the Devices page): show another one.
+            SwitchDevice(remaining);
+        }
 
         RefreshConnectionStatus();
     }
@@ -1874,7 +2145,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         SelectedDevice = device;
         ControlItems.Clear();
         _controlsById.Clear();
-        foreach (var control in device.Controls.Select(static control => new ControlItemViewModel(control)))
+        var geometry = Views.DeviceGeometry.Of(device);
+        CanvasGeometry = geometry;
+        foreach (var control in device.Controls.Select(control => new ControlItemViewModel(control, geometry.Place(control))))
         {
             ControlItems.Add(control);
             _controlsById[control.Id] = control;
@@ -1937,8 +2210,16 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private void RefreshActionGroups()
     {
+        // Actions that don't fit the selected control are dimmed (and hidden when the filter is on).
+        var selected = SelectedControl?.Control;
+        foreach (var action in _actionsByKey.Values)
+        {
+            action.UpdateFit(selected);
+        }
+
         var filteredActions = _actionsByKey.Values
             .Where(action => action.ShowInPalette)
+            .Where(action => !_onlyCompatibleActions || action.IsCompatible)
             .Where(action => string.IsNullOrWhiteSpace(SearchText)
                 || action.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
                 || action.PluginName.Contains(SearchText, StringComparison.OrdinalIgnoreCase)

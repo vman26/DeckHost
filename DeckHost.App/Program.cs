@@ -45,6 +45,18 @@ sealed class Program
             return Core.Plugins.Isolation.PluginProcessServer.Run(args[1..]);
         }
 
+        // "DeckHost --simulator [model]": the device simulator, a window DeckHost sees as a connected
+        // device. Its own process (several can run), no single-instance check.
+        if (args.Length > 0 && string.Equals(args[0], "--simulator", StringComparison.OrdinalIgnoreCase))
+        {
+            Simulator.SimulatorApp.StartModel = args.Length > 1 ? args[1] : null;
+            return AppBuilder.Configure<Simulator.SimulatorApp>()
+                .UsePlatformDetect()
+                .WithInterFont()
+                .LogToTrace()
+                .StartWithClassicDesktopLifetime(args);
+        }
+
         // "DeckHost --check-plugin <package.zip|folder>": checks a DeckHost plugin for its author and
         // loads it in a scratch folder (nothing is installed). Exit code 1 on errors.
         var check = Array.FindIndex(args, static arg => string.Equals(arg, "--check-plugin", StringComparison.OrdinalIgnoreCase));
@@ -64,6 +76,14 @@ sealed class Program
             return CheckPlugin(args[check + 1]);
         }
 
+        // "DeckHost --after-exit <pid>": started by the previous DeckHost (Restart normally); waits for it to end first,
+        // so the single-instance check below doesn't take this one for a second DeckHost.
+        var afterExit = Array.FindIndex(args, static arg => string.Equals(arg, "--after-exit", StringComparison.OrdinalIgnoreCase));
+        if (afterExit >= 0 && afterExit + 1 < args.Length && int.TryParse(args[afterExit + 1], out var previousProcess))
+        {
+            WaitForExit(previousProcess);
+        }
+
         // Only one DeckHost may own the device: a second instance would run every action twice
         // (both read the same key presses, and each starts its own plugin processes).
         using var mutex = new Mutex(initiallyOwned: true, InstanceMutexName, out var isFirstInstance);
@@ -75,6 +95,12 @@ sealed class Program
 
         // A crash leaves a report that the next start offers to send (nothing is sent by itself).
         Platform.CrashReporter.Install();
+
+        // After crashes at start DeckHost comes up in safe mode (no web views, no extra plugins) instead of crashing again.
+        var guard = new Platform.StartupGuard(Platform.CrashReporter.DataDirectory);
+        Platform.CrashReporter.Guard = guard;
+        var decision = guard.BeginRun(forceSafeMode: Array.Exists(args, static arg => string.Equals(arg, Platform.SafeMode.Argument, StringComparison.OrdinalIgnoreCase)));
+        Platform.SafeMode.Set(decision.SafeMode, decision.Reason);
 
         StartedAtLogin = Array.Exists(args, static arg => string.Equals(arg, Platform.AppSettings.StartupArgument, StringComparison.OrdinalIgnoreCase));
 
@@ -88,6 +114,23 @@ sealed class Program
             ListenOnActivationPipe(activateRequested);
         }
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
+
+    /// <summary>Waits (at most half a minute) for another DeckHost process to end.</summary>
+    private static void WaitForExit(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            process.WaitForExit(TimeSpan.FromSeconds(30));
+        }
+        catch (ArgumentException)
+        {
+            // It is gone already.
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("kernel32.dll")]

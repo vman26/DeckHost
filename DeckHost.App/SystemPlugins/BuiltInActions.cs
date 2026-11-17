@@ -109,7 +109,7 @@ internal sealed class ShowVariableAction() : DeckActionBase(
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
-        new(NameKey, "Variable", Placeholder: "e.g. mode"),
+        new(NameKey, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode"),
         new(EmptyKey, "Shown while it's empty", Placeholder: "–"),
     ];
 

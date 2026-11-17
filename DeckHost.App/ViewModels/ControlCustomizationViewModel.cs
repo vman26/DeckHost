@@ -406,7 +406,8 @@ public partial class ControlCustomizationViewModel : ViewModelBase
             var triggers = DeckHost.Core.Workflows.WorkflowEngine.TriggersOf(workflow).Select(WorkflowTriggers.Describe).ToList();
             var actions = workflow.Nodes.Where(static node => node.Kind == WorkflowNodeKinds.Action)
                 .Select(static node => node.Action?.ActionName).OfType<string>().Distinct().ToList();
-            return (triggers.Count == 0 ? "Nothing starts it yet." : $"Starts when {string.Join(" / ", triggers).ToLowerInvariant()}.") +
+            return (string.IsNullOrWhiteSpace(workflow.Name) ? string.Empty : $"{workflow.Name}. ") +
+                   (triggers.Count == 0 ? "Nothing starts it yet." : $"Starts when {string.Join(" / ", triggers).ToLowerInvariant()}.") +
                    (actions.Count == 0 ? " No actions yet." : $" Runs {string.Join(", ", actions.Take(6))}{(actions.Count > 6 ? ", …" : string.Empty)}.") +
                    $" {workflow.Nodes.Count} node{(workflow.Nodes.Count == 1 ? string.Empty : "s")}.";
         }

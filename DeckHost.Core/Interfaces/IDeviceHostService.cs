@@ -71,6 +71,80 @@ public interface IDeviceHostService : IAsyncDisposable
     {
     }
 
+    /// <summary>The variables workflows and actions have set (name and value; names are lower case), for the editor's variable view.</summary>
+    IReadOnlyList<KeyValuePair<string, string>> UserVariables() => [];
+
+    /// <summary>Every variable the app knows: DeckHost's own (<c>system.*</c>) and the ones workflows set, with scope, type and value.</summary>
+    IReadOnlyList<State.VariableInfo> Variables() => [];
+
+    /// <summary>Removes a user variable (<c>vars.*</c>) from the store.</summary>
+    void RemoveVariable(string key)
+    {
+    }
+
+    /// <summary>Every device the plugins report with where it stands: listed, discovered (waiting for a decision) or ignored.</summary>
+    IReadOnlyList<Devices.DeviceRosterEntry> DeviceRoster() => [];
+
+    /// <summary>Raised when <see cref="DeviceRoster"/> changed (a device was discovered, added, removed or ignored).</summary>
+    event Action? RosterChanged
+    {
+        add
+        {
+        }
+
+        remove
+        {
+        }
+    }
+
+    /// <summary>Whether newly plugged-in devices are added by themselves.</summary>
+    bool AutoAddDevices => true;
+
+    /// <summary>Turns adding new devices by themselves on or off.</summary>
+    void SetAutoAddDevices(bool enabled)
+    {
+    }
+
+    /// <summary>Adds a discovered or ignored device to the list.</summary>
+    void AddDevice(string deviceId)
+    {
+    }
+
+    /// <summary>Takes a device out of the list; if it is plugged in it is offered again after it was unplugged and plugged in.</summary>
+    void RemoveDevice(string deviceId)
+    {
+    }
+
+    /// <summary>Keeps a discovered device out of the list.</summary>
+    void IgnoreDevice(string deviceId)
+    {
+    }
+
+    /// <summary>The shared workflows Call nodes can run (replaces the previous list).</summary>
+    void SetSharedWorkflows(IReadOnlyList<Workflow> workflows)
+    {
+    }
+
+    /// <summary>Sets where the runs of a control's workflow stop (see <c>WorkflowEngine.BreakpointKey</c>).</summary>
+    void SetWorkflowBreakpoints(string deviceId, string controlId, IReadOnlyCollection<string> keys)
+    {
+    }
+
+    /// <summary>Lets every run that is held at a breakpoint or a step go on (the workflow editor closed, so nobody can continue them).</summary>
+    void ReleaseWorkflowRuns()
+    {
+    }
+
+    /// <summary>Lets a paused run go on until the next breakpoint.</summary>
+    void ContinueWorkflow(int runId)
+    {
+    }
+
+    /// <summary>Lets a paused run enter its next node, then holds it again.</summary>
+    void StepWorkflow(int runId)
+    {
+    }
+
     /// <summary>Stops every run of the workflow on a control.</summary>
     void StopWorkflows(string deviceId, string controlId)
     {

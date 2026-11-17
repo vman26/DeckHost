@@ -1,0 +1,10 @@
+{
+  "id": "you.plugin.example",
+  "name": "MyPlugin",
+  "version": "1.0.0",
+  "author": "PLUGIN_AUTHOR",
+  "description": "What it does, in a sentence.",
+  "assembly": "MyPlugin.dll",
+  "hostApiVersion": 1,
+  "permissions": []
+}

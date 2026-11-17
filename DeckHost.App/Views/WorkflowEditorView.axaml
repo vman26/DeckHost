@@ -89,6 +89,13 @@
 				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
 			</StackPanel>
 		</DataTemplate>
+		<DataTemplate DataType="vm:VariableSettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<local:VariableNameBox Text="{Binding Value, Mode=TwoWay}" Items="{Binding Suggestions}" Watermark="{Binding Placeholder}" />
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
 		<DataTemplate DataType="vm:HotkeySettingField">
 			<StackPanel Spacing="4">
 				<TextBlock Classes="label" Text="{Binding Label}" />
@@ -134,15 +141,23 @@
 	<Grid RowDefinitions="Auto,*,Auto">
 		<!-- Toolbar -->
 		<Border Padding="14,8" Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="0,0,0,1">
-			<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-				<TextBlock Text="{Binding Overview}" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" TextWrapping="Wrap" />
-				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+			<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+				<TextBox Width="220" Text="{Binding WorkflowName, Mode=TwoWay}" PlaceholderText="Name this workflow" VerticalAlignment="Center"
+						 ToolTip.Tip="A name for the workflow; it shows in the title and is the file name when you export it" />
+				<TextBlock Grid.Column="1" Text="{Binding Overview}" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" TextWrapping="Wrap" />
+				<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+					<Button Content="Export…" Click="Export_OnClick" ToolTip.Tip="Save this workflow as a file to share or keep" />
+					<Button Content="Import…" Click="Import_OnClick" ToolTip.Tip="Replace this workflow with one from a file (Undo brings yours back)" />
+					<Button Content="Save as shared" Command="{Binding SaveAsSharedCommand}" IsVisible="{Binding CanSaveAsShared}" ToolTip.Tip="Keep this workflow (it needs a name) so other workflows can run it with a Call workflow node" />
+					<Border Width="1" Background="{DynamicResource C.334155}" Margin="4,2" />
 					<Button Content="↶ Undo" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" ToolTip.Tip="Undo (Ctrl+Z)" />
 					<Button Content="↷ Redo" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" ToolTip.Tip="Redo (Ctrl+Y)" />
 					<Button Content="Arrange" Command="{Binding ArrangeCommand}" ToolTip.Tip="Lay the nodes out from left to right" />
 					<Button Content="Fit" Click="Fit_OnClick" ToolTip.Tip="Show every node (Ctrl + wheel zooms, drag the background to pan)" />
 					<Button Content="Revert" Command="{Binding RevertAllCommand}" ToolTip.Tip="Put back the workflow as it was when you opened the editor" />
 					<Border Width="1" Background="{DynamicResource C.334155}" Margin="4,2" />
+					<Button Content="⏵ Continue" Classes="accent" Command="{Binding ContinueCommand}" IsVisible="{Binding IsPaused}" ToolTip.Tip="Let the held run go on until the next breakpoint" />
+					<Button Content="⤵ Step" Command="{Binding StepCommand}" IsVisible="{Binding IsPaused}" ToolTip.Tip="Run the next node, then hold again" />
 					<Button Content="▶ Run" Classes="accent" Command="{Binding RunCommand}" ToolTip.Tip="Start the workflow as if the control was used: the selected When node, else the first" />
 					<Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop every run of this workflow" />
 				</StackPanel>
@@ -171,26 +186,45 @@
 					</ItemsControl>
 					<StackPanel Grid.Row="2" Spacing="6" Margin="0,14,0,6">
 						<TextBlock Classes="section" Text="ACTIONS" Margin="2,0,0,0" />
-						<TextBox Name="ActionSearch" PlaceholderText="Search actions" TextChanged="ActionSearch_OnTextChanged" />
+						<TextBox Name="ActionSearch" PlaceholderText="Search actions" Text="{Binding ActionSearch, Mode=TwoWay}" />
 					</StackPanel>
-					<ListBox Grid.Row="3" Name="ActionList" Background="Transparent" ItemsSource="{Binding AvailableActions}">
-						<ListBox.ItemTemplate>
-							<DataTemplate x:DataType="vm:ActionItemViewModel">
-								<Border Background="Transparent" PointerPressed="PaletteAction_OnPointerPressed" ToolTip.Tip="{Binding Summary}">
-									<StackPanel Orientation="Horizontal" Spacing="8">
-										<Grid Width="16" Height="16">
-											<Viewbox IsVisible="{Binding Icon.HasGeometry}"><Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas></Viewbox>
-											<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" />
-										</Grid>
-										<StackPanel>
-											<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" />
-											<TextBlock Text="{Binding PluginName}" FontSize="11" Foreground="{DynamicResource C.64748B}" />
-										</StackPanel>
+					<ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled">
+						<ItemsControl ItemsSource="{Binding ActionGroups}">
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:PluginActionGroupViewModel">
+									<StackPanel>
+										<ToggleButton Classes="groupHeader" IsChecked="{Binding IsExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+											<Grid ColumnDefinitions="14,22,*,Auto" ColumnSpacing="6">
+												<TextBlock Text="›" FontSize="16" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}" />
+												<TextBlock Text="⌄" FontSize="14" Foreground="{DynamicResource C.94A3B8}" VerticalAlignment="Top" IsVisible="{Binding IsExpanded}" />
+												<Panel Grid.Column="1" Width="22" Height="22">
+													<Viewbox IsVisible="{Binding Icon.HasGeometry}"><Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas></Viewbox>
+													<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" Stretch="Uniform" />
+												</Panel>
+												<TextBlock Grid.Column="2" Text="{Binding PluginName}" FontWeight="SemiBold" Foreground="{DynamicResource C.F1F5F9}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+												<TextBlock Grid.Column="3" Text="{Binding Actions.Count}" FontSize="11" Foreground="{DynamicResource C.64748B}" VerticalAlignment="Center" />
+											</Grid>
+										</ToggleButton>
+										<ItemsControl ItemsSource="{Binding Actions}" IsVisible="{Binding IsExpanded}" Margin="14,0,0,6">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate x:DataType="vm:ActionItemViewModel">
+													<Border Classes="paletteItem" Margin="0,2" ToolTip.Tip="{Binding Summary}" PointerPressed="PaletteAction_OnPointerPressed">
+														<StackPanel Orientation="Horizontal" Spacing="8">
+															<Panel Width="16" Height="16">
+																<Viewbox IsVisible="{Binding Icon.HasGeometry}"><Canvas Width="24" Height="24"><Path Data="{Binding Icon.Geometry}" Fill="{Binding Icon.Brush}" /></Canvas></Viewbox>
+																<Image Source="{Binding Icon.Image}" IsVisible="{Binding Icon.HasImage}" />
+															</Panel>
+															<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+														</StackPanel>
+													</Border>
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
 									</StackPanel>
-								</Border>
-							</DataTemplate>
-						</ListBox.ItemTemplate>
-					</ListBox>
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
+					</ScrollViewer>
 				</Grid>
 			</Border>
 
@@ -211,10 +245,56 @@
 							</Border>
 							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
 								<StackPanel Spacing="6">
-									<TextBlock Classes="section" Text="WHILE A RUN IS GOING" />
-									<TextBlock Classes="hint" Text="When the same input comes again before a run is done (it is waiting):" />
+									<TextBlock Classes="section" Text="WHEN TRIGGERED AGAIN WHILE RUNNING" />
+									<TextBlock Classes="hint" TextWrapping="Wrap" Text="When the same input comes again before the run is done (for example it is still in a wait), what should happen?" />
 									<ComboBox ItemsSource="{Binding WhileRunningOptions}" SelectedItem="{Binding WhileRunning, Mode=TwoWay}"
 											  DisplayMemberBinding="{Binding Label}" HorizontalAlignment="Stretch" />
+								</StackPanel>
+							</Border>
+
+							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
+								<StackPanel Spacing="6">
+									<TextBlock Classes="section" Text="SHARED WORKFLOWS" />
+									<TextBlock Classes="hint" IsVisible="{Binding IsShared}" Text="You are editing a shared workflow: every change is kept and applies wherever a Call workflow node runs it." />
+									<TextBlock Classes="hint" IsVisible="{Binding !HasSharedWorkflows}" Text="None yet. Name a workflow, then Save as shared in the toolbar to run it from other workflows with a Call workflow node." />
+									<ItemsControl ItemsSource="{Binding SharedList}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="vm:SharedWorkflowRow">
+												<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,2">
+													<StackPanel>
+														<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" TextTrimming="CharacterEllipsis" />
+														<TextBlock Text="{Binding UsedBy}" FontSize="11" Foreground="{DynamicResource C.64748B}" TextTrimming="CharacterEllipsis" />
+													</StackPanel>
+													<Button Grid.Column="1" Content="Open" Padding="8,2" FontSize="11" Click="OpenShared_OnClick" />
+													<Button Grid.Column="2" Content="Delete" Padding="8,2" FontSize="11" Click="DeleteShared_OnClick" />
+												</Grid>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+								</StackPanel>
+							</Border>
+
+							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
+								<StackPanel Spacing="6">
+									<Grid ColumnDefinitions="*,Auto">
+										<TextBlock Classes="section" Text="VARIABLES RIGHT NOW" VerticalAlignment="Center" />
+										<Button Grid.Column="1" Content="Refresh" Padding="8,2" FontSize="11" Command="{Binding RefreshVariablesCommand}" />
+									</Grid>
+									<TextBlock Classes="hint" Text="None set yet. A Set variable node (or the fields below) creates one." IsVisible="{Binding !HasVariables}" />
+									<ItemsControl ItemsSource="{Binding Variables}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="vm:VariableRow">
+												<TextBlock FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace" FontSize="11" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap">
+													<Run Text="{Binding Name}" FontWeight="SemiBold" /><Run Text=" = " /><Run Text="{Binding Value}" /><Run Text="  " /><Run Text="{Binding Kind}" Foreground="{DynamicResource C.64748B}" FontSize="10" />
+												</TextBlock>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+									<Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="6">
+										<TextBox Text="{Binding NewVariableName, Mode=TwoWay}" PlaceholderText="name" />
+										<TextBox Grid.Column="1" Text="{Binding NewVariableValue, Mode=TwoWay}" PlaceholderText="value" />
+										<Button Grid.Column="2" Content="Set" Command="{Binding SetVariableFromEditorCommand}" ToolTip.Tip="Set the variable to try the workflow with it; an empty value clears it" />
+									</Grid>
 								</StackPanel>
 							</Border>
 
@@ -242,15 +322,47 @@
 												   Text="This action isn't loaded (its plugin is disabled or uninstalled). It is skipped when the workflow runs." />
 									</StackPanel>
 									<ContentControl Content="{Binding NodeSettings}" IsVisible="{Binding HasNodeSettings}" />
+									<StackPanel Spacing="6" IsVisible="{Binding SelectedIsSwitch}">
+										<TextBlock Classes="section" Text="CASES" />
+										<TextBlock Classes="hint" Text="Each case has its own output on the node; the first one that equals the value wins, Else is for none. Moving or renaming a case keeps its links." />
+										<ItemsControl ItemsSource="{Binding Cases}">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate x:DataType="vm:CaseRow">
+													<Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4" Margin="0,2">
+														<TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="equals…" />
+														<Button Grid.Column="1" Content="↑" Padding="8,2" Click="CaseUp_OnClick" ToolTip.Tip="Move up" />
+														<Button Grid.Column="2" Content="↓" Padding="8,2" Click="CaseDown_OnClick" ToolTip.Tip="Move down" />
+														<Button Grid.Column="3" Content="✕" Padding="8,2" Click="CaseRemove_OnClick" ToolTip.Tip="Remove this case and its links" />
+													</Grid>
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
+										<Button Content="Add case" Command="{Binding AddCaseCommand}" IsEnabled="{Binding CanAddCase}" HorizontalAlignment="Left" />
+									</StackPanel>
+									<StackPanel Spacing="6" IsVisible="{Binding HasFailureOptions}">
+										<TextBlock Classes="section" Text="IF IT DID NOT RUN" />
+										<ContentControl Content="{Binding FailureOptions}" />
+									</StackPanel>
 									<StackPanel Spacing="4">
 										<TextBlock Classes="label" Text="Name on the canvas" />
 										<TextBox Text="{Binding NodeTitle, Mode=TwoWay}" PlaceholderText="{Binding NodeTitlePlaceholder}" />
 									</StackPanel>
 									<StackPanel Orientation="Horizontal" Spacing="8">
 										<Button Content="▶ Run from here" Command="{Binding RunCommand}" IsVisible="{Binding SelectedIsTrigger}" />
+										<Button Content="Open workflow" Command="{Binding OpenCallCommand}" IsVisible="{Binding SelectedIsCall}" />
+										<Button Content="New workflow…" Command="{Binding NewSharedWorkflowCommand}" IsVisible="{Binding SelectedIsCall}" ToolTip.Tip="Make a new shared workflow and call it from here" />
 										<Button Content="Duplicate" Command="{Binding DuplicateSelectionCommand}" />
 										<Button Content="Remove" Command="{Binding DeleteSelectionCommand}" />
 									</StackPanel>
+									<!-- Several branches come out of the node: which one do the previous nodes continue with? -->
+									<Border IsVisible="{Binding HasDeleteChoice}" Classes="card" Padding="10">
+										<StackPanel Spacing="8">
+											<TextBlock TextWrapping="Wrap" Foreground="{DynamicResource C.E2E8F0}" Text="This node continues on several branches. What should the nodes before it do?" />
+											<Button Content="Continue with its first branch" Command="{Binding DeleteAndReconnectFirstPathCommand}" HorizontalAlignment="Stretch" />
+											<Button Content="Remove it and take off its links" Command="{Binding DeleteAndDisconnectCommand}" HorizontalAlignment="Stretch" />
+											<Button Content="Cancel" Command="{Binding CancelDeleteCommand}" HorizontalAlignment="Stretch" />
+										</StackPanel>
+									</Border>
 								</StackPanel>
 							</Border>
 

@@ -57,6 +57,27 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
     /// <summary>Raised (on a background thread, with the plugin's UUID) when a plugin stopped, restarted or gave up.</summary>
     public event Action<string>? StatusChanged;
 
+    /// <summary>An OpenAction device plugin (UUID) sent a device message: registerDevice, keyDown, … (the whole message).</summary>
+    public event Action<string, string, JsonObject>? DevicePluginMessage;
+
+    /// <summary>A device plugin connected (its devices may register now).</summary>
+    public event Action<string>? DevicePluginConnected;
+
+    /// <summary>A device plugin's connection ended: its devices are no longer there.</summary>
+    public event Action<string>? DevicePluginDisconnected;
+
+    /// <summary>A device plugin is no longer connected (stopped, ended or closed its socket): its devices are gone.</summary>
+    private void NotifyDevicePluginGone(RunningPlugin running)
+    {
+        if (running.Manifest.IsDevicePlugin)
+        {
+            DevicePluginDisconnected?.Invoke(running.Manifest.Uuid);
+        }
+    }
+
+    /// <summary>Sends a message to an OpenAction device plugin (setImage, setBrightness); queued until it connects.</summary>
+    public void SendToDevicePlugin(string pluginUuid, JsonObject message) => Send(pluginUuid, message);
+
     /// <summary>"Runs in its own process (pid 1234)", "Restarting…"; null for a plugin that isn't running.</summary>
     public string? StatusOf(string pluginUuid) => _plugins.TryGetValue(pluginUuid, out var running) ? running.Status : null;
 
@@ -109,7 +130,11 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             startInfo.ArgumentList.Add(programPath);
         }
 
-        foreach (var argument in new[] { "-port", Port.ToString(System.Globalization.CultureInfo.InvariantCulture), "-pluginUUID", manifest.Uuid, "-registerEvent", "registerPlugin", "-info", BuildInfo(manifest).ToJsonString() })
+        var port = Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var arguments = running.PositionalArguments
+            ? new[] { port, manifest.Uuid, "registerPlugin", "en" }
+            : ["-port", port, "-pluginUUID", manifest.Uuid, "-registerEvent", "registerPlugin", "-info", BuildInfo(manifest).ToJsonString()];
+        foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
         }
@@ -164,8 +189,26 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
 
         running.Connection = null;
-        running.Pending.Clear();
+        NotifyDevicePluginGone(running);
         running.Reappear = true;
+        if (!running.Registered)
+        {
+            if (!running.TriedPositional)
+            {
+                // Ended without ever connecting: maybe it reads its arguments by position (MiraBox's
+                // older StreamDock template). One try that way, right away; messages stay queued.
+                running.TriedPositional = true;
+                running.PositionalArguments = true;
+                _log("Info", $"Stream Deck plugin {running.Manifest.Name} ended without connecting; trying the arguments the way older StreamDock plugins read them.");
+                _ = Task.Run(() => Restart(running));
+                return;
+            }
+
+            // That didn't help either: back to Stream Deck's arguments for the usual restarts.
+            running.PositionalArguments = false;
+        }
+
+        running.Pending.Clear();
         if (Environment.TickCount64 - running.StartedAt >= StableRunTime.TotalMilliseconds)
         {
             running.Restarts = 0;
@@ -222,7 +265,9 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
         if (HtmlPluginHost is not { } host)
         {
-            throw new InvalidOperationException("HTML-based plugins need the Microsoft Edge WebView2 runtime, which isn't available here.");
+            throw new InvalidOperationException(OperatingSystem.IsWindows()
+                ? "HTML-based plugins need the Microsoft Edge WebView2 runtime, which isn't available here."
+                : "This plugin is a web page (an HTML plugin); DeckHost runs those only on Windows for now.");
         }
 
         var page = new Uri($"http://127.0.0.1:{Port}/plugins/{Uri.EscapeDataString(manifest.Uuid)}/{manifest.CodePath!.Replace(Path.DirectorySeparatorChar, '/').TrimStart('/')}");
@@ -281,6 +326,8 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
 
         running.Connection?.Close();
+        running.Connection = null;
+        NotifyDevicePluginGone(running);
         foreach (var key in _instances.Where(pair => string.Equals(pair.Value.PluginUuid, pluginUuid, StringComparison.OrdinalIgnoreCase)).Select(static pair => pair.Key).ToList())
         {
             _instances.TryRemove(key, out _);
@@ -289,11 +336,15 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
     public void Dispose()
     {
-        foreach (var uuid in _plugins.Keys.ToList())
+        // All at once: stopping one after another waits for each process in turn, which added up
+        // to more than Windows gives an application that is closing at shutdown.
+        var running = _plugins.Values.ToList();
+        foreach (var plugin in running.Where(static plugin => plugin.Html is not null))
         {
-            Stop(uuid);
+            Stop(plugin.Manifest.Uuid); // Browser pages belong to the thread that made them.
         }
 
+        Parallel.ForEach(running.Where(static plugin => plugin.Html is null), plugin => Stop(plugin.Manifest.Uuid));
         _server.Dispose();
     }
 
@@ -318,7 +369,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
     internal void Execute(StreamDeckManifest manifest, StreamDeckActionManifest action, ActionContext context)
     {
         var state = GetOrCreateInstance(manifest, action, context.DeviceId, context.ProfileId, context.ControlId, context.Host);
-        var encoder = state.Controller == "Encoder";
+        var encoder = IsDial(state.Controller);
         _log("Debug", $"{manifest.Name}: {context.EventType} on {context.ControlId} → {action.Uuid} (state {state.State}).");
         switch (context.EventType)
         {
@@ -351,7 +402,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             ? ownText
             : null;
 
-        if (state is { Controller: "Encoder", Feedback: { } feedback })
+        if (state is { Feedback: { } feedback } && IsDial(state.Controller))
         {
             // A dial action: what it shows on its touch-strip segment on a Stream Deck +, drawn where
             // DeckHost shows the knob (the touch zone above it).
@@ -489,8 +540,15 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                 {
                     pluginUuid = uuid;
                     running.Connection = connection;
+                    running.Registered = true;
                     _log("Info", $"Stream Deck plugin {running.Manifest.Name} connected.");
-                    foreach (var device in DevicesProvider())
+                    if (running.Manifest.IsDevicePlugin)
+                    {
+                        DevicePluginConnected?.Invoke(uuid);
+                    }
+
+                    // A device plugin drives its own devices; the other devices are none of its business.
+                    foreach (var device in running.Manifest.IsDevicePlugin ? [] : DevicesProvider())
                     {
                         await connection.SendAsync(DeviceDidConnect(device)).ConfigureAwait(false);
                     }
@@ -549,6 +607,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             if (pluginUuid is not null && _plugins.TryGetValue(pluginUuid, out var running) && ReferenceEquals(running.Connection, connection))
             {
                 running.Connection = null;
+                NotifyDevicePluginGone(running);
             }
         }
     }
@@ -613,6 +672,10 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                 break;
             case "openUrl":
                 OpenUrl(payload?["url"]?.GetValue<string>());
+                break;
+            case "registerDevice" or "deregisterDevice" or "rerenderImages" or "keyDown" or "keyUp" or "encoderChange" or "encoderDown" or "encoderUp"
+                when _plugins.TryGetValue(pluginUuid, out var devicePlugin) && devicePlugin.Manifest.IsDevicePlugin:
+                DevicePluginMessage?.Invoke(pluginUuid, eventName, message);
                 break;
             case "logMessage":
                 _log("Debug", $"[{pluginUuid}] {payload?["message"]?.GetValue<string>()}");
@@ -711,7 +774,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         _ = int.TryParse(controlId.AsSpan(dot + 1), out var index);
         if (controlId.StartsWith("encoder.", StringComparison.Ordinal))
         {
-            return (0, index, action.SupportsEncoder ? "Encoder" : "Keypad");
+            return (0, index, action.SupportsEncoder ? action.EncoderController : "Keypad");
         }
 
         return controlId.StartsWith("touch.", StringComparison.Ordinal) ? (2, index, "Keypad") : (index / 5, index % 5, "Keypad");
@@ -770,7 +833,8 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             ["highlightColor"] = "#F7821BFF",
             ["mouseDownColor"] = "#CF6304FF",
         },
-        ["devices"] = new JsonArray([.. DevicesProvider().Select(static device => (JsonNode)DeviceInfo(device))]),
+        // A device plugin gets none: the devices of others aren't its own (it would treat them as connected).
+        ["devices"] = new JsonArray([.. manifest.IsDevicePlugin ? [] : DevicesProvider().Select(static device => (JsonNode)DeviceInfo(device))]),
     };
 
     private static JsonObject DeviceInfo(DeviceDefinition device) => new()
@@ -995,8 +1059,23 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         _ => "application/octet-stream",
     };
 
+    /// <summary>A dial's controller name: Stream Deck's Encoder or MiraBox's Knob.</summary>
+    private static bool IsDial(string controller) => controller is "Encoder" or "Knob";
+
     private sealed class RunningPlugin(StreamDeckManifest manifest)
     {
+        /// <summary>
+        /// Start with the arguments by position (port, uuid, register event, language), as MiraBox's
+        /// older StreamDock Node.js template reads them, instead of Stream Deck's named ones.
+        /// </summary>
+        public bool PositionalArguments { get; set; }
+
+        /// <summary>Tried <see cref="PositionalArguments"/> once after the plugin ended without registering.</summary>
+        public bool TriedPositional { get; set; }
+
+        /// <summary>The plugin connected and registered at least once (its arguments are right).</summary>
+        public bool Registered { get; set; }
+
         public StreamDeckManifest Manifest { get; } = manifest;
 
         public Process? Process { get; set; }
@@ -1056,7 +1135,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
         public (DateTime Until, bool Ok)? Flash { get; set; }
 
-        public void RequestRender() => Host.RequestRender(DeviceId);
+        public void RequestRender() => Host.RequestRender(DeviceId, ControlId);
     }
 
     private sealed class Connection(WebSocket socket)

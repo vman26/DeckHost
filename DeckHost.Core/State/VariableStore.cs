@@ -12,6 +12,10 @@ namespace DeckHost.Core.State
     public sealed class VariableStore : IVariableStore, IDisposable
     {
         private readonly ConcurrentDictionary<string, BehaviorSubject<object?>> _variables = new(StringComparer.Ordinal);
+        private readonly Subject<KeyValuePair<string, object?>> _changes = new();
+
+        /// <summary>Every value published, with its key (what the workflow event triggers listen to).</summary>
+        public IObservable<KeyValuePair<string, object?>> Changes => _changes.AsObservable();
 
         public IObservable<T> Observe<T>(string key)
         {
@@ -27,6 +31,7 @@ namespace DeckHost.Core.State
             // subscribed to a subject that a racing Publish then replaces.
             var subject = GetSubject(key, value);
             subject.OnNext(value);
+            _changes.OnNext(new KeyValuePair<string, object?>(key, value));
         }
 
         public bool TryGetValue<T>(string key, out T value)
@@ -45,8 +50,26 @@ namespace DeckHost.Core.State
         public IReadOnlyList<KeyValuePair<string, object?>> Snapshot(string prefix) =>
             [.. _variables.Where(pair => pair.Key.StartsWith(prefix, StringComparison.Ordinal)).Select(static pair => new KeyValuePair<string, object?>(pair.Key, pair.Value.Value))];
 
+        /// <summary>Takes a variable out of the store (what is listed and followed), telling observers it has no value any more.</summary>
+        public bool Remove(string key)
+        {
+            ArgumentNullException.ThrowIfNull(key);
+            if (!_variables.TryRemove(key, out var subject))
+            {
+                return false;
+            }
+
+            subject.OnNext(null);
+            subject.OnCompleted();
+            subject.Dispose();
+            _changes.OnNext(new KeyValuePair<string, object?>(key, null));
+            return true;
+        }
+
         public void Dispose()
         {
+            _changes.OnCompleted();
+            _changes.Dispose();
             foreach (var variable in _variables.Values)
             {
                 variable.OnCompleted();

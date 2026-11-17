@@ -9,70 +9,112 @@ namespace DeckHost.Tests;
 /// <summary>Icons, key tiles and readouts (the Stream Deck–like look).</summary>
 public class IconTileTests
 {
-    public static TheoryData<string> AllIcons()
-    {
-        var data = new TheoryData<string>();
-        foreach (var field in typeof(Icons).GetFields(BindingFlags.Public | BindingFlags.Static))
-        {
-            data.Add(field.Name);
-        }
+    public static IEnumerable<string> AllIcons() =>
+        typeof(Icons).GetFields(BindingFlags.Public | BindingFlags.Static).Select(static field => field.Name);
 
-        return data;
-    }
+    private const int KeySize = 112;
+    private const int ZoneWidth = 176;
+    private const int ReadingWidth = 176;
+    private const uint RedArgb = 0xFFFF0000;
+    private const uint BlueArgb = 0xFF0000FF;
+    private const uint GreenArgb = 0xFF00FF00;
+    private const int StrongChannel = 150;
+    private const int MinIconExtent = 6;
 
-    [Theory]
-    [MemberData(nameof(AllIcons))]
-    public void Every_icon_parses_and_fits_its_grid(string name)
+    [TestCaseSource(nameof(AllIcons))]
+    public void GetIconPath_EveryIcon_ParsesToAPathLargeEnoughToSee(string name)
     {
+        // Arrange
         var data = (string)typeof(Icons).GetField(name)!.GetValue(null)!;
         using var resources = new SkiaDrawingResources();
+
+        // Act
         var path = resources.GetIconPath(data);
 
-        Assert.NotNull(path);
-        var bounds = path!.Bounds;
-        Assert.True(bounds.Width > 6 && bounds.Height > 6, $"{name}: {bounds}");
-        Assert.True(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= SkiaDrawingResources.IconGrid && bounds.Bottom <= SkiaDrawingResources.IconGrid, $"{name}: {bounds}");
+        // Assert
+        Assert.That(path, Is.Not.Null);
+        Assert.That(path!.Bounds.Width > MinIconExtent && path.Bounds.Height > MinIconExtent, Is.True, $"{name}: {path.Bounds}");
     }
 
-    [Fact]
-    public void A_key_gets_a_gradient_tile_with_a_white_icon()
+    [TestCaseSource(nameof(AllIcons))]
+    public void GetIconPath_EveryIcon_FitsItsGrid(string name)
     {
-        using var bitmap = Render(112, 112, context => context.DrawTile(Icons.Stop, 0xFFFF0000, 0xFF0000FF));
+        // Arrange
+        var data = (string)typeof(Icons).GetField(name)!.GetValue(null)!;
+        using var resources = new SkiaDrawingResources();
 
-        Assert.Equal(SKColors.Black, bitmap.GetPixel(0, 0)); // the tile is inset, with rounded corners
-        Assert.True(bitmap.GetPixel(20, 20).Red > 150, "red at the top left");
-        Assert.True(bitmap.GetPixel(92, 92).Blue > 150, "blue at the bottom right");
-        Assert.Equal(SKColors.White, bitmap.GetPixel(56, 56)); // the icon
+        // Act
+        var bounds = resources.GetIconPath(data)!.Bounds;
+
+        // Assert
+        Assert.That(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= SkiaDrawingResources.IconGrid && bounds.Bottom <= SkiaDrawingResources.IconGrid, Is.True, $"{name}: {bounds}");
     }
 
-    [Fact]
-    public void Without_colors_there_is_no_tile()
+    [Test]
+    public void DrawTile_ColorsOnAKey_FillsAnInsetRoundedGradientTile()
     {
-        using var bitmap = Render(112, 112, context => context.DrawTile(Icons.Stop, 0, 0));
+        // Act
+        using var bitmap = Render(KeySize, KeySize, context => context.DrawTile(Icons.Stop, RedArgb, BlueArgb));
 
-        Assert.Equal(SKColors.Black, bitmap.GetPixel(20, 20));
-        Assert.Equal(SKColors.White, bitmap.GetPixel(56, 56));
+        // Assert
+        Assert.That(bitmap.GetPixel(0, 0), Is.EqualTo(SKColors.Black), "the tile is inset, with rounded corners");
+        Assert.That(bitmap.GetPixel(20, 20).Red > StrongChannel, Is.True, "red at the top left");
+        Assert.That(bitmap.GetPixel(92, 92).Blue > StrongChannel, Is.True, "blue at the bottom right");
     }
 
-    [Fact]
-    public void A_touch_zone_stays_one_surface_with_the_icon_in_the_tile_color()
+    [Test]
+    public void DrawTile_ColorsOnAKey_DrawsTheIconInWhite()
     {
-        using var bitmap = Render(176, 112, context => context.DrawTile(Icons.Stop, 0xFFFF0000, 0xFF0000FF, "Stop"));
+        // Act
+        using var bitmap = Render(KeySize, KeySize, context => context.DrawTile(Icons.Stop, RedArgb, BlueArgb));
 
-        Assert.Equal(SKColors.Black, bitmap.GetPixel(30, 100)); // no tile
-        Assert.Equal(new SKColor(0xFFFF0000), bitmap.GetPixel(88, 65)); // the icon, tinted
+        // Assert
+        Assert.That(bitmap.GetPixel(56, 56), Is.EqualTo(SKColors.White));
     }
 
-    [Fact]
-    public void A_reading_on_a_touch_zone_has_the_value_on_the_right_and_a_bar()
+    [Test]
+    public void DrawTile_WithoutColors_DrawsNoTileButStillTheIcon()
     {
-        using var bitmap = Render(176, 112, context => context.DrawReading("Volume", "42%", 0.5, 0xFF00FF00, Icons.Speaker));
+        // Act
+        using var bitmap = Render(KeySize, KeySize, context => context.DrawTile(Icons.Stop, 0, 0));
 
-        var valueLeft = Enumerable.Range(0, 176).First(x => Enumerable.Range(50, 25).Any(y => bitmap.GetPixel(x, y).Red > 200 && bitmap.GetPixel(x, y).Blue > 200 && x > 70));
-        Assert.True(valueLeft > 100, $"value starts at {valueLeft}");
-        var barY = (int)(112 * 0.78);
-        Assert.Equal(new SKColor(0xFF00FF00), bitmap.GetPixel(70, barY)); // filled half
-        Assert.NotEqual(new SKColor(0xFF00FF00), bitmap.GetPixel(160, barY));
+        // Assert
+        Assert.That(bitmap.GetPixel(20, 20), Is.EqualTo(SKColors.Black));
+        Assert.That(bitmap.GetPixel(56, 56), Is.EqualTo(SKColors.White));
+    }
+
+    [Test]
+    public void DrawTile_OnATouchZone_KeepsOneSurfaceAndTintsTheIcon()
+    {
+        // Act
+        using var bitmap = Render(ZoneWidth, KeySize, context => context.DrawTile(Icons.Stop, RedArgb, BlueArgb, "Stop"));
+
+        // Assert
+        Assert.That(bitmap.GetPixel(30, 100), Is.EqualTo(SKColors.Black), "no tile");
+        Assert.That(bitmap.GetPixel(88, 65), Is.EqualTo(new SKColor(RedArgb)), "the icon, tinted");
+    }
+
+    [Test]
+    public void DrawReading_OnATouchZone_PutsTheValueOnTheRight()
+    {
+        // Act
+        using var bitmap = Render(ReadingWidth, KeySize, context => context.DrawReading("Volume", "42%", 0.5, GreenArgb, Icons.Speaker));
+
+        // Assert
+        var valueLeft = Enumerable.Range(0, ReadingWidth).First(x => Enumerable.Range(50, 25).Any(y => bitmap.GetPixel(x, y).Red > 200 && bitmap.GetPixel(x, y).Blue > 200 && x > 70));
+        Assert.That(valueLeft > 100, Is.True, $"value starts at {valueLeft}");
+    }
+
+    [Test]
+    public void DrawReading_OnATouchZoneAtHalf_FillsHalfOfTheBar()
+    {
+        // Act
+        using var bitmap = Render(ReadingWidth, KeySize, context => context.DrawReading("Volume", "42%", 0.5, GreenArgb, Icons.Speaker));
+
+        // Assert
+        var barY = (int)(KeySize * 0.78);
+        Assert.That(bitmap.GetPixel(70, barY), Is.EqualTo(new SKColor(GreenArgb)), "filled half");
+        Assert.That(bitmap.GetPixel(160, barY), Is.Not.EqualTo(new SKColor(GreenArgb)));
     }
 
     private static SKBitmap Render(int width, int height, Action<SkiaRenderContext> draw)
@@ -90,78 +132,89 @@ public class IconTileTests
 /// <summary>A control's own background: it replaces the action's tile, and with opacity lets the profile show.</summary>
 public class ControlBackgroundTests
 {
-    [Theory]
-    [InlineData(null, false, "profile")] // transparent by default: the profile background
-    [InlineData(null, true, "tile")] // the action's tile, when chosen
-    [InlineData("#00000000", true, "profile")] // a color of its own (even transparent) replaces the tile
-    [InlineData("#80000000", false, "dark profile")] // half black over the profile background
-    public async Task Controls_are_transparent_unless_a_tile_or_color_is_chosen(string? background, bool showTile, string expected)
-    {
-        var plugins = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
-        var device = new KeyDevicePlugin();
-        using var store = new VariableStore();
-        await using var host = new DeckHost.Core.Devices.DeviceHostService([device], plugins, store);
-        var frames = new System.Collections.Concurrent.ConcurrentDictionary<string, DeckHost.Core.Models.ControlFrame>();
-        host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
-        var reference = new DeckHost.Contracts.Models.ActionReference(DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId, "Media", "media.playpause", "Play",
-            DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
-        host.SetProfiles([new DeckHost.Contracts.Models.DeviceProfile("p", "P", KeyDevicePlugin.DeviceId,
-            [new DeckHost.Contracts.Models.ControlBinding("key.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference,
-                new DeckHost.Contracts.Models.ControlAppearance(BackgroundColor: background) { ShowTile = showTile }, [])],
-            Background: new DeckHost.Contracts.Models.ProfileBackground("#FF0000"))]);
-        await host.StartAsync(CancellationToken.None);
-        await host.WhenIdleAsync();
+    private const string Profile = "profile";
+    private const string Tile = "tile";
+    private const string DarkProfile = "dark profile";
+    private const string ProfileRed = "#FF0000";
+    private const uint MediaPink = 0xFFF472B6u;
+    private const uint ChosenGreen = 0xFF00FF00u;
+    private const int InsideTheTile = 20;
+    private const int InsidePlayTriangle = 43;
 
-        var frame = frames["key.0"];
-        var offset = ((20 * frame.Width) + 20) * 4; // inside the tile, away from the icon
-        var (red, green, blue) = (frame.Rgba[offset], frame.Rgba[offset + 1], frame.Rgba[offset + 2]);
+    private static DeckHost.Contracts.Models.ActionReference PlayPause() => new(DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId, "Media", "media.playpause", "Play",
+        DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
+
+    [TestCase(null, false, Profile, TestName = "Render_NoBackgroundAndNoTile_ShowsTheProfileBackground")]
+    [TestCase(null, true, Tile, TestName = "Render_NoBackgroundButTheTileChosen_ShowsTheActionsTile")]
+    [TestCase("#00000000", true, Profile, TestName = "Render_ATransparentBackgroundOfItsOwn_ReplacesTheTile")]
+    [TestCase("#80000000", false, DarkProfile, TestName = "Render_HalfBlackBackground_DarkensTheProfileBackground")]
+    public async Task Render_BackgroundAndTileChoices_DecideWhatShowsBehindTheIcon(string? background, bool showTile, string expected)
+    {
+        // Arrange
+        var appearance = new DeckHost.Contracts.Models.ControlAppearance(BackgroundColor: background) { ShowTile = showTile };
+
+        // Act
+        var frame = await RenderKey(appearance, new DeckHost.Contracts.Models.ProfileBackground(ProfileRed));
+
+        // Assert
+        var (red, green, blue) = Pixel(frame, InsideTheTile, InsideTheTile);
         switch (expected)
         {
-            case "tile":
-                Assert.True(blue > 100, $"the media tile (pink to purple): {red},{green},{blue}");
+            case Tile:
+                Assert.That(blue > 100, Is.True, $"the media tile (pink to purple): {red},{green},{blue}");
                 break;
-            case "profile":
-                Assert.True(red > 240 && green < 20 && blue < 20, $"profile red: {red},{green},{blue}");
+            case Profile:
+                Assert.That(red > 240 && green < 20 && blue < 20, Is.True, $"profile red: {red},{green},{blue}");
                 break;
             default:
-                Assert.True(red is > 100 and < 160 && green < 20 && blue < 20, $"darkened profile red: {red},{green},{blue}");
+                Assert.That(red is > 100 and < 160 && green < 20 && blue < 20, Is.True, $"darkened profile red: {red},{green},{blue}");
                 break;
         }
     }
 
-    [Theory]
-    [InlineData(null, 0xFFF472B6u)] // the action's own color (media: pink)
-    [InlineData("#00FF00", 0xFF00FF00u)] // the text style's color
-    public async Task The_icon_follows_the_text_color(string? textColor, uint expected)
+    [TestCase(null, MediaPink, TestName = "Render_WithoutATextColor_DrawsTheIconInTheActionsColor")]
+    [TestCase("#00FF00", ChosenGreen, TestName = "Render_WithATextStyleColor_DrawsTheIconInThatColor")]
+    public async Task Render_TheIcon_FollowsTheTextColor(string? textColor, uint expected)
     {
-        var plugins = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
-        using var store = new VariableStore();
-        await using var host = new DeckHost.Core.Devices.DeviceHostService([new KeyDevicePlugin()], plugins, store);
-        var frames = new System.Collections.Concurrent.ConcurrentDictionary<string, DeckHost.Core.Models.ControlFrame>();
-        host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
-        var reference = new DeckHost.Contracts.Models.ActionReference(DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId, "Media", "media.playpause", "Play",
-            DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
+        // Arrange
         var style = textColor is null ? null : new DeckHost.Contracts.Models.TextStyle(Color: textColor);
-        host.SetProfiles([new DeckHost.Contracts.Models.DeviceProfile("p", "P", KeyDevicePlugin.DeviceId,
-            [new DeckHost.Contracts.Models.ControlBinding("key.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference,
-                new DeckHost.Contracts.Models.ControlAppearance(TextStyle: style), [])])]);
-        await host.StartAsync(CancellationToken.None);
-        await host.WhenIdleAsync();
 
-        var frame = frames["key.0"];
-        var offset = ((56 * frame.Width) + 43) * 4; // inside the play triangle
-        Assert.Equal(expected, 0xFF000000u | ((uint)frame.Rgba[offset] << 16) | ((uint)frame.Rgba[offset + 1] << 8) | frame.Rgba[offset + 2]);
+        // Act
+        var frame = await RenderKey(new DeckHost.Contracts.Models.ControlAppearance(TextStyle: style));
+
+        // Assert
+        var (red, green, blue) = Pixel(frame, InsidePlayTriangle, 56);
+        Assert.That(0xFF000000u | ((uint)red << 16) | ((uint)green << 8) | (uint)blue, Is.EqualTo(expected));
     }
 
-    [Fact]
-    public async Task The_tile_takes_the_users_color_and_corners()
+    [Test]
+    public async Task Render_ATileWithAColorAndRoundCorners_FillsItWithThatOneColor()
     {
+        // Act
         var round = await RenderKey(new DeckHost.Contracts.Models.ControlAppearance { ShowTile = true, Tile = new DeckHost.Contracts.Models.TileStyle("#FF0000", null, 50) });
+
+        // Assert
+        Assert.That(Pixel(round, 18, 56), Is.EqualTo((255, 0, 0)), "one color, no gradient");
+    }
+
+    [Test]
+    public async Task Render_ATileWithRoundCorners_LeavesTheCornerOutsideTheTile()
+    {
+        // Act
+        var round = await RenderKey(new DeckHost.Contracts.Models.ControlAppearance { ShowTile = true, Tile = new DeckHost.Contracts.Models.TileStyle("#FF0000", null, 50) });
+
+        // Assert
+        Assert.That(Pixel(round, 12, 12), Is.Not.EqualTo((255, 0, 0)), "outside the round tile");
+    }
+
+    [Test]
+    public async Task Render_ATileWithoutAStyle_ReachesIntoTheCornerWithTheActionsOwnGradient()
+    {
+        // Act
         var square = await RenderKey(new DeckHost.Contracts.Models.ControlAppearance { ShowTile = true });
 
-        Assert.Equal((255, 0, 0), Pixel(round, 18, 56)); // one color, no gradient
-        Assert.NotEqual((255, 0, 0), Pixel(round, 12, 12)); // outside the round tile
-        Assert.True(Pixel(square, 12, 12).B > 100, "the action's own tile reaches into the corner"); // media gradient, 16 % corners
+        // Assert
+        Assert.That(Pixel(square, 12, 12).B > 100, Is.True, "the action's own tile reaches into the corner");
     }
 
     private static (int R, int G, int B) Pixel(DeckHost.Core.Models.ControlFrame frame, int x, int y)
@@ -170,17 +223,16 @@ public class ControlBackgroundTests
         return (frame.Rgba[offset], frame.Rgba[offset + 1], frame.Rgba[offset + 2]);
     }
 
-    private static async Task<DeckHost.Core.Models.ControlFrame> RenderKey(DeckHost.Contracts.Models.ControlAppearance appearance)
+    private static async Task<DeckHost.Core.Models.ControlFrame> RenderKey(DeckHost.Contracts.Models.ControlAppearance appearance, DeckHost.Contracts.Models.ProfileBackground? background = null)
     {
         var plugins = DeckHost.App.SystemPlugins.SystemPluginSet.Create();
         using var store = new VariableStore();
         await using var host = new DeckHost.Core.Devices.DeviceHostService([new KeyDevicePlugin()], plugins, store);
         var frames = new System.Collections.Concurrent.ConcurrentDictionary<string, DeckHost.Core.Models.ControlFrame>();
         host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
-        var reference = new DeckHost.Contracts.Models.ActionReference(DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId, "Media", "media.playpause", "Play",
-            DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
         host.SetProfiles([new DeckHost.Contracts.Models.DeviceProfile("p", "P", KeyDevicePlugin.DeviceId,
-            [new DeckHost.Contracts.Models.ControlBinding("key.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference, appearance, [])])]);
+            [new DeckHost.Contracts.Models.ControlBinding("key.0", DeckHost.Contracts.Models.ProfileActionKind.Single, PlayPause(), appearance, [])],
+            Background: background)]);
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
         return frames["key.0"];
@@ -239,68 +291,137 @@ public sealed class ChosenIconTests : IDisposable
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
-    [Fact]
-    public void A_single_color_svg_file_is_drawn_in_the_given_color()
-    {
-        var path = Path.Combine(_folder, "square.svg");
-        File.WriteAllText(path, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M2 2h20v20H2z\"/></svg>");
+    private const string SquareSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M2 2h20v20H2z\"/></svg>";
+    private const string RedSquareSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill=\"#FF0000\" d=\"M2 2h20v20H2z\"/></svg>";
+    private const string MicIcon = "/icons/mic.svg";
+    private const string DisplayContentId = "builtin.display-content";
+    private const uint TintArgb = 0xFF00FF00;
 
+    private SKBitmap DrawIconFile(string name, string svg)
+    {
+        var path = Path.Combine(_folder, name);
+        File.WriteAllText(path, svg);
         using var resources = new SkiaDrawingResources();
-        using var bitmap = new SKBitmap(new SKImageInfo(112, 112, SKColorType.Rgba8888, SKAlphaType.Premul));
+        var bitmap = new SKBitmap(new SKImageInfo(112, 112, SKColorType.Rgba8888, SKAlphaType.Premul));
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(SKColors.Black);
-        new SkiaRenderContext(canvas, 112, 112, "dev", "key.0", new VariableStore(), resources).DrawIcon(path, 56, 56, 48, 0xFF00FF00);
+        new SkiaRenderContext(canvas, 112, 112, "dev", "key.0", new VariableStore(), resources).DrawIcon(path, 56, 56, 48, TintArgb);
         canvas.Flush();
-
-        Assert.Equal(new SKColor(0xFF00FF00), bitmap.GetPixel(56, 56));
-        Assert.Equal(SKColors.Black, bitmap.GetPixel(10, 10)); // only the icon's square
+        return bitmap;
     }
 
-    [Fact]
-    public void A_colored_icon_keeps_its_colors()
-    {
-        var path = Path.Combine(_folder, "red.svg");
-        File.WriteAllText(path, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill=\"#FF0000\" d=\"M2 2h20v20H2z\"/></svg>");
-
-        using var resources = new SkiaDrawingResources();
-        using var bitmap = new SKBitmap(new SKImageInfo(112, 112, SKColorType.Rgba8888, SKAlphaType.Premul));
-        using var canvas = new SKCanvas(bitmap);
-        canvas.Clear(SKColors.Black);
-        new SkiaRenderContext(canvas, 112, 112, "dev", "key.0", new VariableStore(), resources).DrawIcon(path, 56, 56, 48, 0xFF00FF00);
-        canvas.Flush();
-
-        Assert.Equal(SKColors.Red, bitmap.GetPixel(56, 56));
-    }
-
-    [Fact]
-    public void A_zone_with_only_an_icon_has_content_of_its_own()
+    private static DeckHost.Contracts.Models.ControlBinding DisplayBinding(DeckHost.Contracts.Models.ControlAppearance appearance)
     {
         var reference = new DeckHost.Contracts.Models.ActionReference("p", "P", "display", "Display", DeckHost.Contracts.Enums.InputCapabilities.None, DeckHost.Contracts.Enums.OutputCapabilities.None);
-        var iconOnly = new DeckHost.Contracts.Models.ControlBinding("touch.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference,
-            new DeckHost.Contracts.Models.ControlAppearance { IconPath = "/icons/mic.svg" }, []);
-
-        Assert.True(ControlRenderer.HasOwnContent(iconOnly, new AppearanceOnlyAction("display")));
-        Assert.False(ControlRenderer.HasOwnContent(iconOnly with { Appearance = new DeckHost.Contracts.Models.ControlAppearance() }, new AppearanceOnlyAction("display")));
+        return new DeckHost.Contracts.Models.ControlBinding("touch.0", DeckHost.Contracts.Models.ProfileActionKind.Single, reference, appearance, []);
     }
 
-    [Fact]
-    public void Choosing_an_icon_for_an_empty_control_creates_a_display_binding_with_it()
+    [Test]
+    public void DrawIcon_ASingleColorSvgFile_IsDrawnInTheGivenColor()
+    {
+        // Act
+        using var bitmap = DrawIconFile("square.svg", SquareSvg);
+
+        // Assert
+        Assert.That(bitmap.GetPixel(56, 56), Is.EqualTo(new SKColor(TintArgb)));
+    }
+
+    [Test]
+    public void DrawIcon_ASingleColorSvgFile_CoversOnlyTheIconsSquare()
+    {
+        // Act
+        using var bitmap = DrawIconFile("square.svg", SquareSvg);
+
+        // Assert
+        Assert.That(bitmap.GetPixel(10, 10), Is.EqualTo(SKColors.Black));
+    }
+
+    [Test]
+    public void DrawIcon_AColoredIcon_KeepsItsColors()
+    {
+        // Act
+        using var bitmap = DrawIconFile("red.svg", RedSquareSvg);
+
+        // Assert
+        Assert.That(bitmap.GetPixel(56, 56), Is.EqualTo(SKColors.Red));
+    }
+
+    [Test]
+    public void HasOwnContent_AZoneWithOnlyAnIcon_IsTrue()
+    {
+        // Arrange
+        var iconOnly = DisplayBinding(new DeckHost.Contracts.Models.ControlAppearance { IconPath = MicIcon });
+
+        // Act
+        var hasContent = ControlRenderer.HasOwnContent(iconOnly, new AppearanceOnlyAction("display"));
+
+        // Assert
+        Assert.That(hasContent, Is.True);
+    }
+
+    [Test]
+    public void HasOwnContent_AZoneWithNothingSet_IsFalse()
+    {
+        // Arrange
+        var empty = DisplayBinding(new DeckHost.Contracts.Models.ControlAppearance());
+
+        // Act
+        var hasContent = ControlRenderer.HasOwnContent(empty, new AppearanceOnlyAction("display"));
+
+        // Assert
+        Assert.That(hasContent, Is.False);
+    }
+
+    private static DeckHost.App.ViewModels.ControlCustomizationViewModel EditorForAnEmptyKey()
     {
         var builtIns = DeckHost.App.SystemPlugins.SystemPluginSet.Create().First(plugin => plugin.Id == DeckHost.App.SystemPlugins.SystemPluginSet.BuiltInPluginId);
-        var display = DeckHost.App.ViewModels.ActionItemViewModel.Create(builtIns.Id, builtIns.Name, builtIns.Actions.First(action => action.Id == "builtin.display-content"));
+        var display = DeckHost.App.ViewModels.ActionItemViewModel.Create(builtIns.Id, builtIns.Name, builtIns.Actions.First(action => action.Id == DisplayContentId));
         var control = new DeckHost.App.ViewModels.ControlItemViewModel(new DeckHost.Contracts.Models.PhysicalControl("key.0", "Key 1", DeckHost.Contracts.Models.ControlType.Key,
             new DeckHost.Contracts.Models.Rect(0, 0, 10, 10), DeckHost.Contracts.Enums.InputCapabilities.Press, DeckHost.Contracts.Enums.OutputCapabilities.ColorImage));
-        var customize = new DeckHost.App.ViewModels.ControlCustomizationViewModel(control, null, [display], display);
+        return new DeckHost.App.ViewModels.ControlCustomizationViewModel(control, null, [display], display);
+    }
 
-        Assert.Null(customize.BuildBinding());
-        customize.IconPath = "/icons/mic.svg";
+    [Test]
+    public void BuildBinding_AnEmptyControlWithNoIcon_HasNoBinding()
+    {
+        // Arrange
+        var customize = EditorForAnEmptyKey();
+
+        // Act
         var binding = customize.BuildBinding();
 
-        Assert.NotNull(binding);
-        Assert.Equal("builtin.display-content", binding!.Action.ActionId);
-        Assert.Equal("/icons/mic.svg", binding.Appearance.IconPath);
+        // Assert
+        Assert.That(binding, Is.Null);
+    }
+
+    [Test]
+    public void BuildBinding_AnIconChosenForAnEmptyControl_CreatesADisplayBindingWithIt()
+    {
+        // Arrange
+        var customize = EditorForAnEmptyKey();
+        customize.IconPath = MicIcon;
+
+        // Act
+        var binding = customize.BuildBinding();
+
+        // Assert
+        Assert.That(binding, Is.Not.Null);
+        Assert.That(binding!.Action.ActionId, Is.EqualTo(DisplayContentId));
+        Assert.That(binding.Appearance.IconPath, Is.EqualTo(MicIcon));
+    }
+
+    [Test]
+    public void ClearIcon_AfterChoosingOne_LeavesTheControlEmptyAgain()
+    {
+        // Arrange
+        var customize = EditorForAnEmptyKey();
+        customize.IconPath = MicIcon;
+
+        // Act
         customize.ClearIconCommand.Execute(null);
-        Assert.Null(customize.BuildBinding());
+
+        // Assert
+        Assert.That(customize.BuildBinding(), Is.Null);
     }
 }
 
@@ -341,25 +462,56 @@ public class EdgeBlackTests
 
     private static (byte R, byte A) At(byte[] rgba, int x, int y) => (rgba[((y * Size) + x) * 4], rgba[(((y * Size) + x) * 4) + 3]);
 
-    [Fact]
-    public void The_black_around_the_picture_goes_and_the_black_inside_stays()
+    private const byte Opaque = 255;
+    private const int RimStartsAbove = 80;
+
+    [Test]
+    public void Clear_ABlackBackground_BecomesTransparent()
     {
+        // Arrange
         var rgba = Picture();
 
+        // Act
         EdgeBlack.Clear(rgba, Size, Size);
 
-        Assert.Equal(0, At(rgba, 0, 0).A);
-        Assert.Equal(0, At(rgba, 11, 11).A);
-        Assert.Equal((byte)255, At(rgba, 4, 4).A); // white
-        Assert.Equal(((byte)0, (byte)255), At(rgba, 5, 5)); // the black dot inside the white square
-        var rim = At(rgba, 2, 5);
-        Assert.InRange(rim.A, 1, 254); // the gray rim fades out instead of staying a dark edge
-        Assert.True(rim.R > 80, $"un-blended from black: {rim.R}");
+        // Assert
+        Assert.That(At(rgba, 0, 0).A, Is.EqualTo(0));
+        Assert.That(At(rgba, 11, 11).A, Is.EqualTo(0));
     }
 
-    [Fact]
-    public void A_picture_without_a_black_edge_is_left_alone()
+    [Test]
+    public void Clear_BlackInsideThePicture_Stays()
     {
+        // Arrange
+        var rgba = Picture();
+
+        // Act
+        EdgeBlack.Clear(rgba, Size, Size);
+
+        // Assert
+        Assert.That(At(rgba, 4, 4).A, Is.EqualTo(Opaque), "white");
+        Assert.That(At(rgba, 5, 5), Is.EqualTo(((byte)0, Opaque)), "the black dot inside the white square");
+    }
+
+    [Test]
+    public void Clear_AnAntiAliasedRim_FadesOutInsteadOfStayingADarkEdge()
+    {
+        // Arrange
+        var rgba = Picture();
+
+        // Act
+        EdgeBlack.Clear(rgba, Size, Size);
+
+        // Assert
+        var rim = At(rgba, 2, 5);
+        Assert.That(rim.A, Is.InRange(1, Opaque - 1));
+        Assert.That(rim.R > RimStartsAbove, Is.True, $"un-blended from black: {rim.R}");
+    }
+
+    [Test]
+    public void Clear_APictureWithoutABlackEdge_IsLeftAlone()
+    {
+        // Arrange
         var rgba = Picture();
         for (var index = 0; index < Size * Size; index++)
         {
@@ -370,22 +522,28 @@ public class EdgeBlackTests
         }
 
         var before = rgba.ToArray();
+
+        // Act
         EdgeBlack.Clear(rgba, Size, Size);
 
-        Assert.Equal(before, rgba);
+        // Assert
+        Assert.That(rgba, Is.EqualTo(before));
     }
 
-    [Fact]
-    public void An_encoded_plugin_image_decodes_with_its_background_cleared()
+    [Test]
+    public void Clear_AnEncodedPluginImage_DecodesWithItsBackgroundCleared()
     {
+        // Arrange
         using var bitmap = new SKBitmap(new SKImageInfo(Size, Size, SKColorType.Rgba8888, SKAlphaType.Unpremul));
         System.Runtime.InteropServices.Marshal.Copy(Picture(), 0, bitmap.GetPixels(), Size * Size * 4);
         using var png = bitmap.Encode(SKEncodedImageFormat.Png, 100);
 
+        // Act
         using var image = EdgeBlack.Clear(png.ToArray());
         using var pixels = SKBitmap.FromImage(image!);
 
-        Assert.Equal(0, pixels.GetPixel(0, 0).Alpha);
-        Assert.Equal(SKColors.White, pixels.GetPixel(4, 4));
+        // Assert
+        Assert.That(pixels.GetPixel(0, 0).Alpha, Is.EqualTo(0));
+        Assert.That(pixels.GetPixel(4, 4), Is.EqualTo(SKColors.White));
     }
 }

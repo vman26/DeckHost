@@ -14,6 +14,7 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
     private bool _startMinimized;
     private bool _closeToTray;
     private bool _showDebugPanel;
+    private bool _deviceSimulator;
     private string _status = string.Empty;
 
     public AppSettingsViewModel(UpdateViewModel? updates = null)
@@ -24,6 +25,7 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
         _closeToTray = settings.KeepsRunningInTray;
         _startAtLogin = AppSettings.IsStartAtLoginEnabled();
         _showDebugPanel = settings.ShowDebugPanel;
+        _deviceSimulator = settings.DeviceSimulator;
     }
 
     /// <summary>Update checks and the available update (null where there is no update service, e.g. in tests).</summary>
@@ -102,6 +104,19 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Developer option: the device simulator (☰ → Device simulator; DeckHost listens for simulator windows).</summary>
+    public bool DeviceSimulator
+    {
+        get => _deviceSimulator;
+        set
+        {
+            if (SetProperty(ref _deviceSimulator, value))
+            {
+                Save();
+            }
+        }
+    }
+
     /// <summary>The debug panel next to the editor: the selected control's capabilities, the runtime connection and log.</summary>
     public bool ShowDebugPanel
     {
@@ -166,7 +181,7 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
     private void Save()
     {
         // The update fields are the update view model's; keep what's stored.
-        var settings = AppSettings.Load() with { StartMinimized = StartMinimized, CloseToTray = CloseToTray, ShowDebugPanel = ShowDebugPanel };
+        var settings = AppSettings.Load() with { StartMinimized = StartMinimized, CloseToTray = CloseToTray, ShowDebugPanel = ShowDebugPanel, DeviceSimulator = DeviceSimulator };
         try
         {
             AppSettings.Save(settings);

@@ -32,10 +32,23 @@ For devices with screens or lights, see the [device plugin guide](docs/maintaine
    are immutable; the plugin API only grows.
 4. Add tests for what you change. CI builds and tests on Windows, Linux and macOS.
 5. Say how you tested it, and on which hardware if any (it's fine if you couldn't).
+6. If people will notice the change, add a line to [`CHANGELOG.md`](CHANGELOG.md) under
+   **Unreleased**, written for them: what they can do now, or what works again.
 
 By contributing you agree that your contribution is licensed under the project's license
 (GPL-3.0-or-later; MIT for `DeckHost.Contracts` and the plugin template) and that you have the right
 to contribute it.
+
+### Writing tests
+
+Tests follow Microsoft's [unit testing best practices](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices):
+
+- Name a test `MethodUnderTest_Scenario_ExpectedBehavior` (`Resolve_AnUnreadableValue_UsesTheBindingsFallback`).
+- Arrange, Act, Assert, marked with `// Arrange`, `// Act` and `// Assert` comments; one Act per test, and no logic (`if`, loops, string building) in the body.
+- One behavior per test: assert what that behavior produces, not everything the object does. Several `Assert.That` lines are fine when they describe one result; use a `[TestCase]` instead of a loop for a table of inputs.
+- Give values a name (a `const` or a helper such as `StartTwoProfilesThatRunAnActionWhenShown`) instead of repeating magic strings and numbers.
+- A test needs nothing from another test: the constructor is the setup and `Dispose` the teardown (`TestSetup.cs` makes a new instance for each test). Wait for the host with `WhenIdleAsync`, not with delays.
+- Use `Assume.That` for something the machine may lack (Node.js, a platform) so the test shows as skipped, not passed.
 
 ## AI-assisted contributions
 

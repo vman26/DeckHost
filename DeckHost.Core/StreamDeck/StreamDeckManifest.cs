@@ -21,7 +21,9 @@ public sealed class StreamDeckManifest
         Description = Get(json, "Description");
         Category = Get(json, "Category");
         Icon = Get(json, "Icon");
+        Url = Get(json, "URL");
         PropertyInspectorPath = Get(json, "PropertyInspectorPath");
+        DeviceNamespace = Get(json, "DeviceNamespace");
         CodePath = SelectCodePath(json, out var unsupported);
         UnsupportedReason = unsupported;
 
@@ -59,7 +61,19 @@ public sealed class StreamDeckManifest
 
     public string? Icon { get; }
 
+    /// <summary>The plugin's website (the manifest's <c>URL</c>).</summary>
+    public string? Url { get; }
+
     public string? PropertyInspectorPath { get; }
+
+    /// <summary>
+    /// OpenAction device plugins (OpenDeck's: Mirabox, Ajazz, ...) name the prefix of the ids of
+    /// the devices they drive. Such a plugin has no actions: it registers devices and reports
+    /// their input (<see cref="OpenActionDevicePlugin"/>).
+    /// </summary>
+    public string? DeviceNamespace { get; }
+
+    public bool IsDevicePlugin => !string.IsNullOrWhiteSpace(DeviceNamespace);
 
     /// <summary>Path (relative to <see cref="Directory"/>) of the plugin program for this OS, or null.</summary>
     public string? CodePath { get; }
@@ -169,5 +183,9 @@ public sealed record StreamDeckActionManifest(
 {
     public bool SupportsKeypad => Controllers.Contains("Keypad", StringComparer.OrdinalIgnoreCase);
 
-    public bool SupportsEncoder => Controllers.Contains("Encoder", StringComparer.OrdinalIgnoreCase);
+    /// <summary>A dial action: Stream Deck's <c>Encoder</c>, or <c>Knob</c> as MiraBox StreamDock plugins say.</summary>
+    public bool SupportsEncoder => Controllers.Contains("Encoder", StringComparer.OrdinalIgnoreCase) || Controllers.Contains("Knob", StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The controller name the plugin uses for a dial (sent back in its events).</summary>
+    public string EncoderController => Controllers.Contains("Encoder", StringComparer.OrdinalIgnoreCase) || !Controllers.Contains("Knob", StringComparer.OrdinalIgnoreCase) ? "Encoder" : "Knob";
 }

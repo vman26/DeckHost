@@ -2,7 +2,7 @@ site_name: DeckHost
 site_description: One platform. Unlimited control. A free, open-source host for the MiraBox N4 Pro, Elgato Stream Decks, a Web Deck and USB devices.
 repo_url: https://github.com/vman26/DeckHost
 repo_name: vman26/DeckHost
-copyright: DeckHost is free software under the GNU GPL v3.0 or later
+copyright: "DeckHost is free software under the GNU GPL v3.0 or later. Stream Deck is a trademark of Corsair Memory, Inc. / Elgato, and DeckHost is an independent project not affiliated with or endorsed by Elgato. StreamDock is a trademark of MiraBox; DeckHost is not affiliated with MiraBox either."
 docs_dir: docs
 site_dir: site
 strict: true
@@ -19,7 +19,10 @@ theme:
     - navigation.top
     - search.highlight
     - content.code.copy
+extra_javascript:
+  - javascripts/download.js
 markdown_extensions:
+  - md_in_html
   - admonition
   - attr_list
   - tables
@@ -27,13 +30,18 @@ markdown_extensions:
       permalink: true
   - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
 nav:
   - Home: index.md
+  - Download: download.md
   - Getting started: getting-started.md
   - Devices: devices.md
   - Using DeckHost:
       - The editor: editor.md
       - Profiles, pages and folders: profiles.md
+      - Backgrounds: backgrounds.md
       - Multi Action and Key Logic: multi-actions.md
       - Workflows: workflows.md
       - Lights: lights.md
@@ -42,14 +50,20 @@ nav:
       - Built-in actions: reference/actions.md
       - Plugin API: reference/api.md
   - Updates: updates.md
+  - Changelog: changelog.md
   - Troubleshooting: troubleshooting.md
   - Privacy: privacy.md
+  - Vision:
+      - The master plan: vision/master-plan.md
+      - Status against the plan: vision/status.md
+      - "Devices: research and plan": vision/devices-research.md
   - For maintainers:
       - Releasing and signing: maintainers/releasing.md
       - Writing plugins: maintainers/plugins.md
       - Device plugins: maintainers/device-plugins.md
       - The plugin catalog: maintainers/plugin-store.md
-      - Going public: maintainers/going-public.md
+      - Launch checklist: maintainers/going-public.md
+      - Asking Claude to fix issues: maintainers/claude.md
       - Architecture: maintainers/architecture.md
       - Decisions:
           - maintainers/adr/index.md
@@ -63,3 +77,4 @@ nav:
           - "0008 Generic USB devices": maintainers/adr/0008-generic-usb-devices.md
           - "0009 Firmware updates": maintainers/adr/0009-firmware-updates.md
           - "0010 License": maintainers/adr/0010-license.md
+          - "0011 Device descriptor": maintainers/adr/0011-device-descriptor.md

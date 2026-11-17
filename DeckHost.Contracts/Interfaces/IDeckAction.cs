@@ -6,7 +6,7 @@ namespace DeckHost.Contracts.Interfaces;
 /// <summary>
 /// An action that can be bound to a control. <see cref="Execute"/> and <see cref="Render"/>
 /// are called on the host's worker thread, never the UI thread, and must return quickly:
-/// start long work in the background and call <see cref="IActionHost.RequestRender"/> when done.
+/// start long work in the background and call <see cref="IActionHost.RequestRender(string)"/> when done.
 /// </summary>
 public interface IDeckAction
 {

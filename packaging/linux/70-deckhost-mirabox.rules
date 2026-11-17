@@ -1,11 +1,67 @@
-# MiraBox / StreamDock N4 Pro (both USB ids): give the person signed in at the computer access to the
-# device, so DeckHost can run without root. "uaccess" (systemd-logind) grants it to the active
-# session only, unlike the SDK's sample rule, which makes the device writable for every user.
-# The number must stay below 73, where systemd applies uaccess.
+# MiraBox / StreamDock devices (the USB ids of every model in the vendor SDK): give the person
+# signed in at the computer access to the device, so DeckHost can run without root. "uaccess"
+# (systemd-logind) grants it to the active session only, unlike the SDK's sample rule, which makes
+# the device writable for every user. The number must stay below 73, where systemd applies uaccess.
+# N4 Pro
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1008", TAG+="uaccess"
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1021", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1008", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1021", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1021", TAG+="uaccess"
+# N4
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6602", ATTRS{idProduct}=="1001", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6602", ATTR{idProduct}=="1001", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1007", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1007", TAG+="uaccess"
+# 293 V2
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5500", ATTRS{idProduct}=="1001", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5500", ATTR{idProduct}=="1001", TAG+="uaccess"
+# 293 V3
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1005", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1005", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1006", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1006", TAG+="uaccess"
+# 293s
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="6670", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="6670", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1014", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1014", TAG+="uaccess"
+# M18
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1009", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1009", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1012", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1012", TAG+="uaccess"
+# XL
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1028", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1028", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1031", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1031", TAG+="uaccess"
+# M3
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1020", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1020", TAG+="uaccess"
+# N3
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6602", ATTRS{idProduct}=="1000", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6602", ATTR{idProduct}=="1000", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6602", ATTRS{idProduct}=="1002", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6602", ATTR{idProduct}=="1002", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1002", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1002", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1003", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1003", TAG+="uaccess"
+# N1
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1011", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1011", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1000", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1000", TAG+="uaccess"
+# K1 Pro
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1015", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1015", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="6603", ATTRS{idProduct}=="1019", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="6603", ATTR{idProduct}=="1019", TAG+="uaccess"
+# Mini
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1036", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1036", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5548", ATTRS{idProduct}=="1037", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="5548", ATTR{idProduct}=="1037", TAG+="uaccess"
 
 # Elgato Stream Deck (all models, vendor 0fd9), driven by DeckHost's Elgato device plugin.
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0fd9", TAG+="uaccess"

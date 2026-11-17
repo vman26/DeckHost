@@ -9,6 +9,23 @@
     <!-- The XML docs feed the API reference (docs/reference/api.md) and plugin authors' IntelliSense. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+
+    <!-- Published as a NuGet package for plugin authors (the release workflow; NUGET_API_KEY). -->
+    <IsPackable>true</IsPackable>
+    <PackageId>DeckHost.Contracts</PackageId>
+    <Description>The plugin API of DeckHost, the open-source host for control surfaces: actions, rendering, settings and variables. Reference it with ExcludeAssets="runtime"; DeckHost supplies it.</Description>
+    <PackageTags>deckhost;plugin;streamdeck;stream-deck;mirabox;macro-pad;control-surface</PackageTags>
+    <PackageProjectUrl>https://vman26.github.io/DeckHost/maintainers/plugins/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/vman26/DeckHost</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="LICENSE" Pack="true" PackagePath="/" />
+    <None Include="..\DeckHost.App\Assets\deckhost-256.png" Pack="true" PackagePath="/icon.png" Visible="false" />
+  </ItemGroup>
 
 </Project>

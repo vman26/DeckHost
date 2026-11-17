@@ -2,6 +2,8 @@
 
 A workflow is what a control does, drawn as nodes linked on a canvas. Drop the **Workflow** action on a control (or use **Turn into a workflow…** in its editor), then **Open workflow editor**.
 
+![A workflow in the editor: a tap checks a variable, then either clears it and plays, or sets it, waits five seconds (the node fills up while a run waits) and mutes](images/workflow.png)
+
 ## How a run goes
 
 A run starts at a **When** node and follows the links from left to right. A node's dots on the right are its outputs; drag from one onto another node to link them. An output with several links runs them side by side, and the run ends when every branch is done.
@@ -10,25 +12,73 @@ A run starts at a **When** node and follows the links from left to right. A node
 
 | Node | What it does |
 |---|---|
-| **When** | Starts the workflow: the control is pressed, released, tapped, double pressed, held down, turned left or right, or swiped left or right. A workflow can have several. |
-| **Action** | Runs an action, with its own settings. Drop an action from the list on the left onto the canvas. |
-| **Wait** | Waits, then continues. The device keeps working. |
-| **If** | Continues at **Yes** or **No**: a variable (equal to, greater than, containing, empty, …), the app in front (part of its name), or the time of day (also past midnight, 22:00–06:00). |
+| **When** | Starts the workflow: the control is pressed, released, tapped, double pressed, held down, turned left or right, or swiped left or right, or something happens that has nothing to do with the control (see [Workflows that start by themselves](#workflows-that-start-by-themselves)). A workflow can have several. |
+| **Action** | Runs an action, with its own settings. Drop an action from the list on the left onto the canvas. If the action did not run (its plugin isn't loaded, or it failed), the run goes on at **On error** when that has a link, else at **Then**; the node can also try again first (see [When an action fails](#when-an-action-fails)). |
+| **Wait** | Waits, then continues. The device keeps working. While a run waits the node fills up over the time it takes. |
+| **If** | Continues at **Yes** or **No**: a variable (equal to, greater than, containing, empty, …), the app in front (part of its name), the time of day (also past midnight, 22:00–06:00), or an [expression](#expressions-and-types). |
 | **Toggle** | Takes **1st** and **2nd** in turn: on, then off. |
-| **Repeat** | Runs **Each time** a number of times, one round after the other, then **Done**. |
-| **Set variable** | Sets, adds to, subtracts from, flips (true/false) or clears a variable. |
+| **Repeat** | Runs **Each time** one round after the other, then **Done**. How many rounds: a fixed number, as many as a variable says, **while** a variable has a value, or **until** it does. An optional pause between rounds turns it into a timer (a condition that never changes stops after 10,000 rounds). |
+| **Set variable** | Sets, adds to, subtracts from, flips (true/false), clears or **calculates** a variable (see [Expressions](#expressions-and-types)). **Store as** keeps a result as text, a number or true/false and refuses a value that doesn't fit. |
+| **Switch** | Takes the output of the first **case** that equals an expression's value (`[mode]`, `[count] % 3`, …), else **Else**. Numbers compare as numbers (`10` equals `10.0`), text ignores case. Add, move, rename and remove cases in the inspector; a case keeps its links when it moves or is renamed, and removing one only takes away its own links. A broken expression goes to Else and says why in the run log. |
+| **Call workflow** | Runs a [shared workflow](#shared-workflows) from its When node on, then goes on at **Then**. If it can't run (it was deleted, it has no When node, it would call itself, or calls are nested more than 8 deep) the run goes on at **On error** when that has a link, else at **Then**. |
 | **Stop** | Ends the run, including branches that are still waiting. |
 
-Variables are shared by all workflows (names ignore case). The **Show Variable** action shows one on a key. They start empty when DeckHost starts.
+Variables are shared by all workflows (names ignore case) unless a node says otherwise: **Set variable**, **If**, **Repeat** and the "variable changes" trigger have a **Shared by** setting: every workflow (the default), only this profile's workflows, or only this control's workflow, so two keys can both use a variable called `count` without touching each other. The editor lists scoped variables as `count (profile …)` and `count (key.3 on …)`. The **Show Variable** action shows one on a key. They start empty when DeckHost starts. The **Variables** page (☰ menu) lists every variable with its scope, type and live value, and lets you create, change and remove your own; variable boxes in the editor offer that list while you can still type a new name.
+
+## Workflows that start by themselves
+
+A When node can also start on an event, so a workflow can react without anyone pressing the control:
+
+| Starts when | Settings |
+|---|---|
+| **The profile comes onto the device** | Also when DeckHost starts. |
+| **An app comes to the front** | Part of the app's name (`obs` matches `obs64.exe`). Needs DeckHost to see the app in front: Windows, macOS, Linux on X11. |
+| **A variable changes** | The variable's name, and optionally the value it has to change to. Variables set by a Set variable node, another workflow or the **Show Variable** action count. A value that is set again without changing doesn't start it. |
+| **Every so many seconds** | From 1 second to a day, counted from when the profile was shown. |
+
+Event triggers run on a workflow whose profile (page or folder) is shown on a device; put the workflow on a control that isn't used for anything else. An event never piles runs up: it waits until the workflow's previous run is done. A workflow that keeps starting itself, such as one that changes the variable it starts on, is paused for half a minute after 20 starts within 5 seconds, and the log says so.
+
+## When an action fails
+
+An action node has two outputs: **Then** and **On error**. When its action did not run, the run follows **On error** if you linked it, so a failing step can show a warning, run something else or end the run; with nothing linked there, it goes on at **Then** as before. In the node's settings, **Try again when it did not run** (up to 5 times) and **Wait between tries** make the node try again first, and the node fills up while it waits for the next try. New actions you add after a node are linked from **Then**; link **On error** yourself by dragging from its dot.
+
+## Expressions and types
+
+Calculate (in Set variable) and the If check **An expression** take a small formula:
+
+- Variables are written in brackets: `[count]`; `[profile:count]` and `[control:count]` name a scope. An unset variable is empty.
+- Numbers use a dot (`2.5`). Operators: `+ - * / % **`, comparisons `== != < <= > >=`, logic `&& || !` (or `and`, `or`, `not`), and `condition ? a : b`. A number next to text joins as text (`[count] + ' taps'`).
+- Functions (lower case): `len upper lower trim contains startswith endswith replace substr number text bool clamp round` (`round(x)` or `round(x, digits)`), `hour() minute() weekday()` (1 = Monday), and from the formula library `min max abs floor ceiling sqrt pow if in`.
+- Anything else is refused with a message in the run log: a broken formula leaves the variable as it was, and an If node goes to **No**.
+
+Variables are stored as text and read back by what they look like: `true` / `false` are true/false values, `12.5` is a number, anything else is text. The variable view shows each variable's kind. Comparisons in an If node compare numbers as numbers (`10` is greater than `9`).
+
+## Shared workflows
+
+A workflow you want to use from several controls can be kept once. Give it a name in the box above the canvas and click **Save as shared**; it then shows in the **Shared workflows** list (with what uses it) and in the **Call workflow** node's list. On a **Call workflow** node, **New workflow…** makes an empty shared workflow and points the node at it. **Open** edits it in an editor of its own: every change is kept and applies wherever it is called. A shared workflow can't be deleted while a control or another shared workflow calls it. Exporting a profile takes the shared workflows it calls along (with new ids, so an import never replaces yours).
+
+## Debugging
+
+- Select a node and press **F9** (or right-click → **Add breakpoint**) to put a red dot on it. A run that gets there stops in front of the node and the node gets an amber border; the Run log says which run is held.
+- **Continue** lets it go on until the next breakpoint; **Step** runs the next node and holds the run again. A run that is held keeps its waits: a Wait that ends meanwhile only continues once you release it. **Stop** ends a held run.
+- Breakpoints belong to the control, so a breakpoint inside a shared workflow stops the runs of the control that called it. They aren't saved with the workflow and are gone when DeckHost closes. **Debugging only works while a workflow editor is open:** the points are kept, but when you close the last editor they stop holding runs, and a run that was held goes on at once; opening an editor switches them on again.
+- With nothing selected, **Variables right now** shows the state at the point where the run is held.
 
 ## While a run is going
 
-When the same input comes again before its run is done (a wait), the workflow can **start another run** next to it (the default), **ignore** the input, **stop the run and start again**, or **stop the run**, which makes the key a stop button.
+When the same input comes again before its run is done (for example it is still in a wait), the workflow can **start over** (stop the run and start again, so a wait begins again; the default for new workflows), **run in parallel** (every press starts its own run, and each run's wait shows on the node), **ignore** the press until the run is done (the log says so), or **stop the run**, which makes the key a stop button. Choose it in the editor with nothing selected, under **When triggered again while running**. Workflows made before this keep the setting they had.
 
 ## The editor
 
-- Click a node to set it up on the right; click a link to select it. **Delete** removes, **Ctrl+D** duplicates, **Ctrl+Z / Ctrl+Y** undo and redo.
-- **Arrange** lays the nodes out from left to right; **Fit** shows them all. Drag the background to pan, and use Ctrl + the mouse wheel to zoom.
+- Click a node to set it up on the right; click a link to select it. **Delete** takes a node out of the flow (what led into it is linked to what it led to; when it continues on several branches DeckHost asks which one to keep, and **Shift+Delete** removes it and its links without linking anything), **Ctrl+D** duplicates, **Ctrl+Z / Ctrl+Y** undo and redo. Right-click a node for Duplicate, Take off its links and Remove, a link for Remove link, or the background for Fit, Arrange and Undo.
+- Drop a node onto a link, from the lists or by dragging one that isn't linked yet, and the link opens up and the node goes in between (one undo step). The node after it and everything that follows move to the right to make room, so nothing ends up on top of anything else. Stop and When nodes can't go into a link.
+- The actions on the left are grouped by plugin like in the main window; the search opens every group with a match.
+- **Arrange** lays the nodes out from left to right, keeping the order of the flow: a Switch's branches stay in the order of its cases, Else last. **Fit** shows them all. Drag the background to pan, and use Ctrl + the mouse wheel to zoom.
+- With nothing selected, **Variables right now** lists the variables that are set (it follows the runs) and sets one to try the workflow with it.
 - **Run** starts the workflow as if the control was used; **Stop** stops every run. Each step lights up on the canvas and appears in the run log.
 - Links can't form a loop (use Repeat) and can't lead into a When node.
 - Every change reaches the device right away; **Revert** puts back the workflow as it was when you opened the editor.
+
+## Name and share a workflow
+
+Give a workflow a name in the box above the canvas; it shows in the editor's title. **Export…** saves it as a `.deckhostworkflow` file and **Import…** replaces the workflow you have open with one from a file (Undo brings yours back). The file holds the nodes, their settings and the links, and DeckHost checks it before using it: unknown nodes, links that lead nowhere or form a loop, and oversized files are refused. An action node needs its plugin installed on the machine that imports it; without it the node stays and is skipped when the workflow runs.

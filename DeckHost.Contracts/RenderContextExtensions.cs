@@ -62,9 +62,28 @@ public static class RenderContextExtensions
         }
 
         var hasIcon = !string.IsNullOrEmpty(icon);
+        if (hasIcon && IsCustomText(context, label))
+        {
+            // The user's own text (Customize → Text) goes under the value, in their text style, so
+            // the key shows icon, value and their text.
+            context.DrawIcon(icon!, width / 2d, height * 0.22d, height * 0.22d, TextColorOr(context, 0xFFFFFFFF));
+            context.DrawCenteredText(value, width / 2d, height * 0.5d, Math.Max(14f, height * 0.2f), TextColorOr(context, 0xFFFFFFFF));
+            if (fraction is { } customLevel)
+            {
+                DrawBar(context, width * 0.14d, height * 0.64d, width * 0.72d, Math.Max(3d, height * 0.05d), customLevel, BarBackgroundColor, barColor);
+            }
+
+            context.DrawLabel(label, TextVerticalAlignment.Bottom, Math.Max(10f, height * 0.12f), LabelColor);
+            return;
+        }
+
         if (hasIcon)
         {
             context.DrawIcon(icon!, width / 2d, height * 0.27d, height * 0.26d, TextColorOr(context, 0xFFFFFFFF));
+        }
+        else if (IsCustomText(context, label))
+        {
+            context.DrawLabel(label, TextVerticalAlignment.Top, Math.Max(10f, height * 0.12f), LabelColor);
         }
         else
         {
@@ -131,6 +150,12 @@ public static class RenderContextExtensions
             context.DrawLabel(caption!, TextVerticalAlignment.Bottom, Math.Max(10f, height * 0.13f));
         }
     }
+
+    /// <summary>Whether <paramref name="text"/> is the control's own text from Customize (drawn in the user's text style).</summary>
+    private static bool IsCustomText(IRenderContext context, string text) =>
+        !string.IsNullOrWhiteSpace(text) &&
+        context.Variables.TryGetValue<string>(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceText), out var own) &&
+        string.Equals(own, text, StringComparison.Ordinal);
 
     private static void DrawCompactLine(IRenderContext context, string? icon, string? text)
     {

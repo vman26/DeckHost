@@ -65,6 +65,7 @@
   DeckHost.Contracts.Interfaces.IActionHost.CloseFolder(System.String deviceId) : System.Void
   DeckHost.Contracts.Interfaces.IActionHost.OpenFolder(System.String deviceId, System.String folderId) : System.Void
   DeckHost.Contracts.Interfaces.IActionHost.RequestRender(System.String deviceId) : System.Void abstract
+  DeckHost.Contracts.Interfaces.IActionHost.RequestRender(System.String deviceId, System.String controlId) : System.Void
   DeckHost.Contracts.Interfaces.IApplicationPlugin.Actions : System.Collections.Generic.IReadOnlyCollection<DeckHost.Contracts.Interfaces.IDeckAction> abstract
   DeckHost.Contracts.Interfaces.IApplicationPlugin.Author : System.String
   DeckHost.Contracts.Interfaces.IApplicationPlugin.Description : System.String
@@ -96,6 +97,7 @@
   DeckHost.Contracts.Interfaces.IDeviceFirmware.GetFirmwareInfo(System.String deviceId) : DeckHost.Contracts.Models.DeviceFirmwareInfo abstract
   DeckHost.Contracts.Interfaces.IDeviceFirmware.InstallFirmwareAsync(System.String deviceId, DeckHost.Contracts.Models.FirmwareImage image, System.IProgress<DeckHost.Contracts.Models.FirmwareProgress> progress, System.Threading.CancellationToken cancellationToken) : System.Threading.Tasks.Task<DeckHost.Contracts.Models.FirmwareUpdateResult>
   DeckHost.Contracts.Interfaces.IDeviceLightBatchOutput.TrySetLights(System.String deviceId, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.LightColor> lights, System.String& error) : System.Boolean abstract
+  DeckHost.Contracts.Interfaces.IDeviceModelCatalog.DescribeModels() : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.DeviceDefinition> abstract
   DeckHost.Contracts.Interfaces.IDeviceOutput.Clear(System.String deviceId) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDeviceOutput.TryPushImage(System.String deviceId, System.String controlId, System.ReadOnlySpan<System.Byte> rgba, System.Int32 width, System.Int32 height, System.String& error) : System.Boolean abstract
   DeckHost.Contracts.Interfaces.IDeviceOutput.TrySetLight(System.String deviceId, System.String controlId, System.Byte red, System.Byte green, System.Byte blue, System.String& error) : System.Boolean abstract
@@ -194,6 +196,7 @@
   DeckHost.Contracts.Models.ActionSettingKind.Secret = 1
   DeckHost.Contracts.Models.ActionSettingKind.Text = 0
   DeckHost.Contracts.Models.ActionSettingKind.Toggle = 3
+  DeckHost.Contracts.Models.ActionSettingKind.Variable = 7
   DeckHost.Contracts.Models.ActionSettingKind.value__ : System.Int32
   DeckHost.Contracts.Models.ActionSettingOption(System.String Value, System.String Label)
   DeckHost.Contracts.Models.ActionSettingOption.<Clone>$() : DeckHost.Contracts.Models.ActionSettingOption
@@ -223,6 +226,48 @@
   DeckHost.Contracts.Models.ActionSettings.TryGetValue(System.String key, System.String& value) : System.Boolean
   DeckHost.Contracts.Models.ActionSettings.Values : System.Collections.Generic.IEnumerable<System.String>
   DeckHost.Contracts.Models.ActionSettings.With(System.String key, System.String value) : DeckHost.Contracts.Models.ActionSettings
+  DeckHost.Contracts.Models.BackgroundBinding(System.String Variable, System.String Target, System.Double Min, System.Double Max)
+  DeckHost.Contracts.Models.BackgroundBinding.<Clone>$() : DeckHost.Contracts.Models.BackgroundBinding
+  DeckHost.Contracts.Models.BackgroundBinding.Deconstruct(System.String& Variable, System.String& Target, System.Double& Min, System.Double& Max) : System.Void
+  DeckHost.Contracts.Models.BackgroundBinding.Equals(DeckHost.Contracts.Models.BackgroundBinding other) : System.Boolean
+  DeckHost.Contracts.Models.BackgroundBinding.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.BackgroundBinding.Fallback : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundBinding.FromColor : System.String {set}
+  DeckHost.Contracts.Models.BackgroundBinding.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.BackgroundBinding.Max : System.Double {set}
+  DeckHost.Contracts.Models.BackgroundBinding.Min : System.Double {set}
+  DeckHost.Contracts.Models.BackgroundBinding.Target : System.String {set}
+  DeckHost.Contracts.Models.BackgroundBinding.ToColor : System.String {set}
+  DeckHost.Contracts.Models.BackgroundBinding.ToString() : System.String
+  DeckHost.Contracts.Models.BackgroundBinding.Variable : System.String {set}
+  DeckHost.Contracts.Models.BackgroundBindingTargets.All : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.BackgroundBindingTargets.Color : System.String const
+  DeckHost.Contracts.Models.BackgroundBindingTargets.Opacity : System.String const
+  DeckHost.Contracts.Models.BackgroundBindingTargets.Visible : System.String const
+  DeckHost.Contracts.Models.BackgroundLayer(System.String Kind, System.Boolean Visible, System.Double Opacity)
+  DeckHost.Contracts.Models.BackgroundLayer.<Clone>$() : DeckHost.Contracts.Models.BackgroundLayer
+  DeckHost.Contracts.Models.BackgroundLayer.Angle : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Binding : DeckHost.Contracts.Models.BackgroundBinding {set}
+  DeckHost.Contracts.Models.BackgroundLayer.CenterX : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundLayer.CenterY : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Color : System.String {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Deconstruct(System.String& Kind, System.Boolean& Visible, System.Double& Opacity) : System.Void
+  DeckHost.Contracts.Models.BackgroundLayer.Equals(DeckHost.Contracts.Models.BackgroundLayer other) : System.Boolean
+  DeckHost.Contracts.Models.BackgroundLayer.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.BackgroundLayer.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.BackgroundLayer.ImagePath : System.String {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Kind : System.String {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Opacity : System.Double {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Radius : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Stops : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.GradientStop> {set}
+  DeckHost.Contracts.Models.BackgroundLayer.ToColor : System.String {set}
+  DeckHost.Contracts.Models.BackgroundLayer.ToString() : System.String
+  DeckHost.Contracts.Models.BackgroundLayer.Visible : System.Boolean {set}
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Gradient : System.String const
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Image : System.String const
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Known : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Radial : System.String const
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Solid : System.String const
   DeckHost.Contracts.Models.ControlAppearance(System.String Text, System.String ImagePath, DeckHost.Contracts.Models.RgbFeedback RgbFeedback, System.String BackgroundColor, DeckHost.Contracts.Models.TextStyle TextStyle)
   DeckHost.Contracts.Models.ControlAppearance.<Clone>$() : DeckHost.Contracts.Models.ControlAppearance
   DeckHost.Contracts.Models.ControlAppearance.BackgroundColor : System.String {set}
@@ -264,25 +309,66 @@
   DeckHost.Contracts.Models.ControlInputs.SettingKey(System.String key, System.String input) : System.String
   DeckHost.Contracts.Models.ControlInputs.SwipeLeft : System.String const
   DeckHost.Contracts.Models.ControlInputs.SwipeRight : System.String const
+  DeckHost.Contracts.Models.ControlShape.Rectangle = 0
+  DeckHost.Contracts.Models.ControlShape.Round = 1
+  DeckHost.Contracts.Models.ControlShape.value__ : System.Int32
+  DeckHost.Contracts.Models.ControlType.Button = 5
   DeckHost.Contracts.Models.ControlType.Display = 3
   DeckHost.Contracts.Models.ControlType.Encoder = 1
+  DeckHost.Contracts.Models.ControlType.Joystick = 6
   DeckHost.Contracts.Models.ControlType.Key = 0
+  DeckHost.Contracts.Models.ControlType.Led = 7
   DeckHost.Contracts.Models.ControlType.Slider = 4
   DeckHost.Contracts.Models.ControlType.TouchSurface = 2
   DeckHost.Contracts.Models.ControlType.value__ : System.Int32
+  DeckHost.Contracts.Models.DeviceCapabilities.AnimatedImages = 2
+  DeckHost.Contracts.Models.DeviceCapabilities.Backdrop = 128
+  DeckHost.Contracts.Models.DeviceCapabilities.Brightness = 16
+  DeckHost.Contracts.Models.DeviceCapabilities.Firmware = 256
+  DeckHost.Contracts.Models.DeviceCapabilities.Haptics = 64
+  DeckHost.Contracts.Models.DeviceCapabilities.Images = 1
+  DeckHost.Contracts.Models.DeviceCapabilities.MultiTouch = 8
+  DeckHost.Contracts.Models.DeviceCapabilities.None = 0
+  DeckHost.Contracts.Models.DeviceCapabilities.RgbLights = 32
+  DeckHost.Contracts.Models.DeviceCapabilities.Settings = 512
+  DeckHost.Contracts.Models.DeviceCapabilities.Touch = 4
+  DeckHost.Contracts.Models.DeviceCapabilities.value__ : System.Int32
   DeckHost.Contracts.Models.DeviceDefinition(System.String Id, System.String Name, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.PhysicalControl> Controls, System.Boolean IsConnected, System.String Detail)
   DeckHost.Contracts.Models.DeviceDefinition.<Clone>$() : DeckHost.Contracts.Models.DeviceDefinition
+  DeckHost.Contracts.Models.DeviceDefinition.Capabilities : DeckHost.Contracts.Models.DeviceCapabilities {set}
   DeckHost.Contracts.Models.DeviceDefinition.Controls : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.PhysicalControl> {set}
+  DeckHost.Contracts.Models.DeviceDefinition.CurrentDescriptorVersion : System.Int32 const
   DeckHost.Contracts.Models.DeviceDefinition.Deconstruct(System.String& Id, System.String& Name, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.PhysicalControl>& Controls, System.Boolean& IsConnected, System.String& Detail) : System.Void
+  DeckHost.Contracts.Models.DeviceDefinition.DescriptorVersion : System.Int32 {set}
   DeckHost.Contracts.Models.DeviceDefinition.Detail : System.String {set}
+  DeckHost.Contracts.Models.DeviceDefinition.Displays : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.DeviceDisplay> {set}
   DeckHost.Contracts.Models.DeviceDefinition.Equals(DeckHost.Contracts.Models.DeviceDefinition other) : System.Boolean
   DeckHost.Contracts.Models.DeviceDefinition.Equals(System.Object obj) : System.Boolean
   DeckHost.Contracts.Models.DeviceDefinition.FindControl(System.String controlId) : DeckHost.Contracts.Models.PhysicalControl
+  DeckHost.Contracts.Models.DeviceDefinition.FindDescriptorProblems() : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.DeviceDefinition.FindDisplay(System.String displayId) : DeckHost.Contracts.Models.DeviceDisplay
   DeckHost.Contracts.Models.DeviceDefinition.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceDefinition.Has(DeckHost.Contracts.Models.DeviceCapabilities capability) : System.Boolean
   DeckHost.Contracts.Models.DeviceDefinition.Id : System.String {set}
+  DeckHost.Contracts.Models.DeviceDefinition.Identity : DeckHost.Contracts.Models.DeviceIdentity {set}
   DeckHost.Contracts.Models.DeviceDefinition.IsConnected : System.Boolean {set}
+  DeckHost.Contracts.Models.DeviceDefinition.Limits : DeckHost.Contracts.Models.DeviceLimits {set}
   DeckHost.Contracts.Models.DeviceDefinition.Name : System.String {set}
+  DeckHost.Contracts.Models.DeviceDefinition.PhysicalSize : DeckHost.Contracts.Models.PhysicalSize {set}
   DeckHost.Contracts.Models.DeviceDefinition.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceDisplay(System.String Id, System.Int32 Width, System.Int32 Height)
+  DeckHost.Contracts.Models.DeviceDisplay.<Clone>$() : DeckHost.Contracts.Models.DeviceDisplay
+  DeckHost.Contracts.Models.DeviceDisplay.ControlIds : System.Collections.Generic.IReadOnlyList<System.String> {set}
+  DeckHost.Contracts.Models.DeviceDisplay.Deconstruct(System.String& Id, System.Int32& Width, System.Int32& Height) : System.Void
+  DeckHost.Contracts.Models.DeviceDisplay.Equals(DeckHost.Contracts.Models.DeviceDisplay other) : System.Boolean
+  DeckHost.Contracts.Models.DeviceDisplay.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.DeviceDisplay.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceDisplay.Height : System.Int32 {set}
+  DeckHost.Contracts.Models.DeviceDisplay.Id : System.String {set}
+  DeckHost.Contracts.Models.DeviceDisplay.MaxFramesPerSecond : System.Nullable<System.Int32> {set}
+  DeckHost.Contracts.Models.DeviceDisplay.RotationDegrees : System.Int32 {set}
+  DeckHost.Contracts.Models.DeviceDisplay.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceDisplay.Width : System.Int32 {set}
   DeckHost.Contracts.Models.DeviceFirmwareInfo(System.String Version, System.Boolean CanUpdate, System.String Detail)
   DeckHost.Contracts.Models.DeviceFirmwareInfo.<Clone>$() : DeckHost.Contracts.Models.DeviceFirmwareInfo
   DeckHost.Contracts.Models.DeviceFirmwareInfo.CanUpdate : System.Boolean {set}
@@ -294,6 +380,29 @@
   DeckHost.Contracts.Models.DeviceFirmwareInfo.GetHashCode() : System.Int32
   DeckHost.Contracts.Models.DeviceFirmwareInfo.ToString() : System.String
   DeckHost.Contracts.Models.DeviceFirmwareInfo.Version : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity(System.String Manufacturer, System.String Model, System.String SerialNumber, System.String HardwareRevision, System.String FirmwareVersion, System.String Connection)
+  DeckHost.Contracts.Models.DeviceIdentity.<Clone>$() : DeckHost.Contracts.Models.DeviceIdentity
+  DeckHost.Contracts.Models.DeviceIdentity.Connection : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.Deconstruct(System.String& Manufacturer, System.String& Model, System.String& SerialNumber, System.String& HardwareRevision, System.String& FirmwareVersion, System.String& Connection) : System.Void
+  DeckHost.Contracts.Models.DeviceIdentity.Equals(DeckHost.Contracts.Models.DeviceIdentity other) : System.Boolean
+  DeckHost.Contracts.Models.DeviceIdentity.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.DeviceIdentity.FirmwareVersion : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceIdentity.HardwareRevision : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.Manufacturer : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.Model : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.SerialNumber : System.String {set}
+  DeckHost.Contracts.Models.DeviceIdentity.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceLimits()
+  DeckHost.Contracts.Models.DeviceLimits.<Clone>$() : DeckHost.Contracts.Models.DeviceLimits
+  DeckHost.Contracts.Models.DeviceLimits.ColorDepthBits : System.Nullable<System.Int32> {set}
+  DeckHost.Contracts.Models.DeviceLimits.Equals(DeckHost.Contracts.Models.DeviceLimits other) : System.Boolean
+  DeckHost.Contracts.Models.DeviceLimits.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.DeviceLimits.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.DeviceLimits.MaxFramesPerSecond : System.Nullable<System.Int32> {set}
+  DeckHost.Contracts.Models.DeviceLimits.Notes : System.Collections.Generic.IReadOnlyList<System.String> {set}
+  DeckHost.Contracts.Models.DeviceLimits.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceLimits.Transparency : System.Nullable<System.Boolean> {set}
   DeckHost.Contracts.Models.DeviceProfile(System.String Id, System.String Name, System.String DeviceId, System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.ControlBinding> Bindings, System.Collections.Generic.IReadOnlyList<System.String> AutoSwitchApps, DeckHost.Contracts.Models.ProfileBackground Background)
   DeckHost.Contracts.Models.DeviceProfile.<Clone>$() : DeckHost.Contracts.Models.DeviceProfile
   DeckHost.Contracts.Models.DeviceProfile.AutoSwitchApps : System.Collections.Generic.IReadOnlyList<System.String> {set}
@@ -308,8 +417,16 @@
   DeckHost.Contracts.Models.DeviceProfile.IsRoot : System.Boolean
   DeckHost.Contracts.Models.DeviceProfile.Kind : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile.Name : System.String {set}
+  DeckHost.Contracts.Models.DeviceProfile.OverridesBackground : System.Nullable<System.Boolean> {set}
   DeckHost.Contracts.Models.DeviceProfile.ParentId : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile.ToString() : System.String
+  DeckHost.Contracts.Models.DeviceSide.Back = 5
+  DeckHost.Contracts.Models.DeviceSide.Bottom = 4
+  DeckHost.Contracts.Models.DeviceSide.Front = 0
+  DeckHost.Contracts.Models.DeviceSide.Left = 1
+  DeckHost.Contracts.Models.DeviceSide.Right = 2
+  DeckHost.Contracts.Models.DeviceSide.Top = 3
+  DeckHost.Contracts.Models.DeviceSide.value__ : System.Int32
   DeckHost.Contracts.Models.FirmwareImage(System.String Path, System.String Version)
   DeckHost.Contracts.Models.FirmwareImage.<Clone>$() : DeckHost.Contracts.Models.FirmwareImage
   DeckHost.Contracts.Models.FirmwareImage.Deconstruct(System.String& Path, System.String& Version) : System.Void
@@ -349,6 +466,15 @@
   DeckHost.Contracts.Models.FirmwareUpdateResult.NotSupported : DeckHost.Contracts.Models.FirmwareUpdateResult
   DeckHost.Contracts.Models.FirmwareUpdateResult.Success : System.Boolean {set}
   DeckHost.Contracts.Models.FirmwareUpdateResult.ToString() : System.String
+  DeckHost.Contracts.Models.GradientStop(System.String Color, System.Double Position)
+  DeckHost.Contracts.Models.GradientStop.<Clone>$() : DeckHost.Contracts.Models.GradientStop
+  DeckHost.Contracts.Models.GradientStop.Color : System.String {set}
+  DeckHost.Contracts.Models.GradientStop.Deconstruct(System.String& Color, System.Double& Position) : System.Void
+  DeckHost.Contracts.Models.GradientStop.Equals(DeckHost.Contracts.Models.GradientStop other) : System.Boolean
+  DeckHost.Contracts.Models.GradientStop.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.GradientStop.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.GradientStop.Position : System.Double {set}
+  DeckHost.Contracts.Models.GradientStop.ToString() : System.String
   DeckHost.Contracts.Models.LightColor(System.String ControlId, System.Byte Red, System.Byte Green, System.Byte Blue)
   DeckHost.Contracts.Models.LightColor.<Clone>$() : DeckHost.Contracts.Models.LightColor
   DeckHost.Contracts.Models.LightColor.Blue : System.Byte {set}
@@ -440,6 +566,7 @@
   DeckHost.Contracts.Models.PhysicalControl.Bounds : DeckHost.Contracts.Models.Rect {set}
   DeckHost.Contracts.Models.PhysicalControl.Deconstruct(System.String& Id, System.String& DisplayName, DeckHost.Contracts.Models.ControlType& Type, DeckHost.Contracts.Models.Rect& Bounds, DeckHost.Contracts.Enums.InputCapabilities& Inputs, DeckHost.Contracts.Enums.OutputCapabilities& Outputs, System.Int32& RenderWidth, System.Int32& RenderHeight, System.String& HardwareId, System.Nullable<System.Int32>& LedIndex, System.String& DisplayControlId) : System.Void
   DeckHost.Contracts.Models.PhysicalControl.DisplayControlId : System.String {set}
+  DeckHost.Contracts.Models.PhysicalControl.DisplayId : System.String {set}
   DeckHost.Contracts.Models.PhysicalControl.DisplayName : System.String {set}
   DeckHost.Contracts.Models.PhysicalControl.Equals(DeckHost.Contracts.Models.PhysicalControl other) : System.Boolean
   DeckHost.Contracts.Models.PhysicalControl.Equals(System.Object obj) : System.Boolean
@@ -452,10 +579,22 @@
   DeckHost.Contracts.Models.PhysicalControl.Inputs : DeckHost.Contracts.Enums.InputCapabilities {set}
   DeckHost.Contracts.Models.PhysicalControl.LedIndex : System.Nullable<System.Int32> {set}
   DeckHost.Contracts.Models.PhysicalControl.Outputs : DeckHost.Contracts.Enums.OutputCapabilities {set}
+  DeckHost.Contracts.Models.PhysicalControl.PhysicalBounds : System.Nullable<DeckHost.Contracts.Models.Rect> {set}
   DeckHost.Contracts.Models.PhysicalControl.RenderHeight : System.Int32 {set}
   DeckHost.Contracts.Models.PhysicalControl.RenderWidth : System.Int32 {set}
+  DeckHost.Contracts.Models.PhysicalControl.Shape : DeckHost.Contracts.Models.ControlShape {set}
+  DeckHost.Contracts.Models.PhysicalControl.Side : DeckHost.Contracts.Models.DeviceSide {set}
   DeckHost.Contracts.Models.PhysicalControl.ToString() : System.String
   DeckHost.Contracts.Models.PhysicalControl.Type : DeckHost.Contracts.Models.ControlType {set}
+  DeckHost.Contracts.Models.PhysicalSize(System.Double WidthMillimetres, System.Double HeightMillimetres)
+  DeckHost.Contracts.Models.PhysicalSize.<Clone>$() : DeckHost.Contracts.Models.PhysicalSize
+  DeckHost.Contracts.Models.PhysicalSize.Deconstruct(System.Double& WidthMillimetres, System.Double& HeightMillimetres) : System.Void
+  DeckHost.Contracts.Models.PhysicalSize.Equals(DeckHost.Contracts.Models.PhysicalSize other) : System.Boolean
+  DeckHost.Contracts.Models.PhysicalSize.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.PhysicalSize.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.PhysicalSize.HeightMillimetres : System.Double {set}
+  DeckHost.Contracts.Models.PhysicalSize.ToString() : System.String
+  DeckHost.Contracts.Models.PhysicalSize.WidthMillimetres : System.Double {set}
   DeckHost.Contracts.Models.ProfileActionKind.KeyLogic = 3
   DeckHost.Contracts.Models.ProfileActionKind.MultiAction = 1
   DeckHost.Contracts.Models.ProfileActionKind.MultiActionSwitch = 2
@@ -471,6 +610,7 @@
   DeckHost.Contracts.Models.ProfileBackground.GetHashCode() : System.Int32
   DeckHost.Contracts.Models.ProfileBackground.ImagePath : System.String {set}
   DeckHost.Contracts.Models.ProfileBackground.IsEmpty : System.Boolean
+  DeckHost.Contracts.Models.ProfileBackground.Layers : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.BackgroundLayer> {set}
   DeckHost.Contracts.Models.ProfileBackground.ToString() : System.String
   DeckHost.Contracts.Models.ProfileKinds.Folder : System.String const
   DeckHost.Contracts.Models.ProfileKinds.Page : System.String const
@@ -560,43 +700,91 @@
   DeckHost.Contracts.Models.Workflow.Equals(System.Object obj) : System.Boolean
   DeckHost.Contracts.Models.Workflow.Find(System.String nodeId) : DeckHost.Contracts.Models.WorkflowNode
   DeckHost.Contracts.Models.Workflow.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.Workflow.Id : System.String {set}
   DeckHost.Contracts.Models.Workflow.Links : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.WorkflowLink> {set}
   DeckHost.Contracts.Models.Workflow.LinksFrom(System.String nodeId, System.String port) : System.Collections.Generic.IEnumerable<DeckHost.Contracts.Models.WorkflowLink>
+  DeckHost.Contracts.Models.Workflow.Name : System.String {set}
   DeckHost.Contracts.Models.Workflow.Nodes : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.WorkflowNode> {set}
   DeckHost.Contracts.Models.Workflow.ToString() : System.String
   DeckHost.Contracts.Models.Workflow.WhileRunning : System.String {set}
   DeckHost.Contracts.Models.Workflow.WouldCycle(System.String from, System.String to) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowCase(System.String Id, System.String Text)
+  DeckHost.Contracts.Models.WorkflowCase.<Clone>$() : DeckHost.Contracts.Models.WorkflowCase
+  DeckHost.Contracts.Models.WorkflowCase.Deconstruct(System.String& Id, System.String& Text) : System.Void
+  DeckHost.Contracts.Models.WorkflowCase.Equals(DeckHost.Contracts.Models.WorkflowCase other) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowCase.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowCase.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.WorkflowCase.Id : System.String {set}
+  DeckHost.Contracts.Models.WorkflowCase.Text : System.String {set}
+  DeckHost.Contracts.Models.WorkflowCase.ToString() : System.String
+  DeckHost.Contracts.Models.WorkflowCases.CaseIdOf(System.String port) : System.String
+  DeckHost.Contracts.Models.WorkflowCases.Max : System.Int32 const
+  DeckHost.Contracts.Models.WorkflowCases.NextId(System.Collections.Generic.IEnumerable<DeckHost.Contracts.Models.WorkflowCase> cases) : System.String
+  DeckHost.Contracts.Models.WorkflowCases.Parse(System.String text) : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.WorkflowCase>
+  DeckHost.Contracts.Models.WorkflowCases.PortOf(System.String caseId) : System.String
+  DeckHost.Contracts.Models.WorkflowCases.PortPrefix : System.String const
+  DeckHost.Contracts.Models.WorkflowCases.Serialize(System.Collections.Generic.IEnumerable<DeckHost.Contracts.Models.WorkflowCase> cases) : System.String
+  DeckHost.Contracts.Models.WorkflowConcurrency.All : System.Collections.Generic.IReadOnlyList<System.String>
   DeckHost.Contracts.Models.WorkflowConcurrency.Ignore : System.String const
   DeckHost.Contracts.Models.WorkflowConcurrency.Parallel : System.String const
   DeckHost.Contracts.Models.WorkflowConcurrency.Restart : System.String const
   DeckHost.Contracts.Models.WorkflowConcurrency.Stop : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Add : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.App : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.As : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.AsAuto : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.AsBool : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.AsNumber : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.AsText : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Calculate : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Cases : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Check : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.CheckApp : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.CheckExpression : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.CheckTime : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.CheckVariable : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Clear : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Contains : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Count : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Every : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Expression : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Flip : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.From : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Interval : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsEmpty : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsEqual : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsGreater : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsLess : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsNotEqual : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsSet : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.MaxCallDepth : System.Int32 const
+  DeckHost.Contracts.Models.WorkflowKeys.MaxConditionRounds : System.Int32 const
+  DeckHost.Contracts.Models.WorkflowKeys.MaxEverySeconds : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxRepeat : System.Int32 const
+  DeckHost.Contracts.Models.WorkflowKeys.MaxRetries : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxWaitMs : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.Milliseconds : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.MinEverySeconds : System.Int32 const
+  DeckHost.Contracts.Models.WorkflowKeys.Mode : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ModeCount : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ModeUntil : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ModeVariable : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ModeWhile : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Name : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.On : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Operation : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Retries : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.RetryDelay : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Scope : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ScopeControl : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ScopeGlobal : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ScopeProfile : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Set : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Subtract : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Times : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.To : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Value : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Workflow : System.String const
   DeckHost.Contracts.Models.WorkflowLink(System.String From, System.String Port, System.String To)
   DeckHost.Contracts.Models.WorkflowLink.<Clone>$() : DeckHost.Contracts.Models.WorkflowLink
   DeckHost.Contracts.Models.WorkflowLink.Deconstruct(System.String& From, System.String& Port, System.String& To) : System.Void
@@ -624,34 +812,45 @@
   DeckHost.Contracts.Models.WorkflowNode.Y : System.Double {set}
   DeckHost.Contracts.Models.WorkflowNodeKinds.Action : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.All : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.WorkflowNodeKinds.Call : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.HasInput(System.String kind) : System.Boolean
   DeckHost.Contracts.Models.WorkflowNodeKinds.If : System.String const
+  DeckHost.Contracts.Models.WorkflowNodeKinds.OutputsOf(DeckHost.Contracts.Models.WorkflowNode node) : System.Collections.Generic.IReadOnlyList<System.String>
   DeckHost.Contracts.Models.WorkflowNodeKinds.OutputsOf(System.String kind) : System.Collections.Generic.IReadOnlyList<System.String>
   DeckHost.Contracts.Models.WorkflowNodeKinds.Repeat : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.SetVariable : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.Stop : System.String const
+  DeckHost.Contracts.Models.WorkflowNodeKinds.Switch : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.Toggle : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.Trigger : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.Wait : System.String const
+  DeckHost.Contracts.Models.WorkflowPorts.Default : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Describe(System.String port) : System.String
+  DeckHost.Contracts.Models.WorkflowPorts.Describe(System.String port, DeckHost.Contracts.Models.WorkflowNode node) : System.String
   DeckHost.Contracts.Models.WorkflowPorts.Done : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Each : System.String const
+  DeckHost.Contracts.Models.WorkflowPorts.Error : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.First : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Next : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.No : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Second : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Yes : System.String const
+  DeckHost.Contracts.Models.WorkflowTriggers.AppInFront : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Describe(System.String trigger) : System.String
   DeckHost.Contracts.Models.WorkflowTriggers.DoublePress : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Down : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Hold : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Immediate(DeckHost.Contracts.Enums.InputCapabilities eventType, System.Int32 value) : System.String
+  DeckHost.Contracts.Models.WorkflowTriggers.IsEvent(System.String trigger) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowTriggers.ProfileShown : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.RotateLeft : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.RotateRight : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.SwipeLeft : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.SwipeRight : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Tap : System.String const
+  DeckHost.Contracts.Models.WorkflowTriggers.Timer : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Up : System.String const
+  DeckHost.Contracts.Models.WorkflowTriggers.VariableChanged : System.String const
   DeckHost.Contracts.RenderContextExtensions.DrawReading(DeckHost.Contracts.Interfaces.IRenderContext context, System.String label, System.String value, System.Nullable<System.Double> fraction, System.UInt32 barColor) : System.Void
   DeckHost.Contracts.RenderContextExtensions.DrawReading(DeckHost.Contracts.Interfaces.IRenderContext context, System.String label, System.String value, System.Nullable<System.Double> fraction, System.UInt32 barColor, System.String icon) : System.Void
   DeckHost.Contracts.RenderContextExtensions.DrawTile(DeckHost.Contracts.Interfaces.IRenderContext context, System.String icon, System.UInt32 fromArgb, System.UInt32 toArgb, System.String caption) : System.Void
@@ -664,6 +863,7 @@
   DeckHost.Contracts.VariableKeys.AppearanceTile : System.String const
   DeckHost.Contracts.VariableKeys.AppearanceTileStyle : System.String const
   DeckHost.Contracts.VariableKeys.Control(System.String deviceId, System.String controlId) : System.String
+  DeckHost.Contracts.VariableKeys.ControlVariable(System.String deviceId, System.String controlId, System.String name) : System.String
   DeckHost.Contracts.VariableKeys.Counter : System.String const
   DeckHost.Contracts.VariableKeys.Device(System.String deviceId) : System.String
   DeckHost.Contracts.VariableKeys.ExecutionCount : System.String const
@@ -676,6 +876,7 @@
   DeckHost.Contracts.VariableKeys.LastError : System.String const
   DeckHost.Contracts.VariableKeys.LastEvent : System.String const
   DeckHost.Contracts.VariableKeys.LastValue : System.String const
+  DeckHost.Contracts.VariableKeys.ProfileVariable(System.String profileId, System.String name) : System.String
   DeckHost.Contracts.VariableKeys.Status : System.String const
   DeckHost.Contracts.VariableKeys.SwitchState : System.String const
   DeckHost.Contracts.VariableKeys.UserVariable(System.String name) : System.String
@@ -687,33 +888,44 @@ class DeckHost.Contracts.Models.ActionReference
 class DeckHost.Contracts.Models.ActionSettingDefinition
 class DeckHost.Contracts.Models.ActionSettingOption
 class DeckHost.Contracts.Models.ActionSettings
+class DeckHost.Contracts.Models.BackgroundBinding
+class DeckHost.Contracts.Models.BackgroundLayer
 class DeckHost.Contracts.Models.ControlAppearance
 class DeckHost.Contracts.Models.ControlBinding
 class DeckHost.Contracts.Models.DeviceDefinition
+class DeckHost.Contracts.Models.DeviceDisplay
 class DeckHost.Contracts.Models.DeviceFirmwareInfo
+class DeckHost.Contracts.Models.DeviceIdentity
+class DeckHost.Contracts.Models.DeviceLimits
 class DeckHost.Contracts.Models.DeviceProfile
 class DeckHost.Contracts.Models.FirmwareImage
 class DeckHost.Contracts.Models.FirmwareProgress
 class DeckHost.Contracts.Models.FirmwareRelease
 class DeckHost.Contracts.Models.FirmwareUpdateResult
+class DeckHost.Contracts.Models.GradientStop
 class DeckHost.Contracts.Models.LightColor
 class DeckHost.Contracts.Models.LightStep
 class DeckHost.Contracts.Models.LightStyle
 class DeckHost.Contracts.Models.MultiActionStep
 class DeckHost.Contracts.Models.NumberRange
 class DeckHost.Contracts.Models.PhysicalControl
+class DeckHost.Contracts.Models.PhysicalSize
 class DeckHost.Contracts.Models.ProfileBackground
 class DeckHost.Contracts.Models.RgbFeedback
 class DeckHost.Contracts.Models.SettingCondition
 class DeckHost.Contracts.Models.TextStyle
 class DeckHost.Contracts.Models.TileStyle
 class DeckHost.Contracts.Models.Workflow
+class DeckHost.Contracts.Models.WorkflowCase
 class DeckHost.Contracts.Models.WorkflowLink
 class DeckHost.Contracts.Models.WorkflowNode
 enum DeckHost.Contracts.Enums.InputCapabilities
 enum DeckHost.Contracts.Enums.OutputCapabilities
 enum DeckHost.Contracts.Models.ActionSettingKind
+enum DeckHost.Contracts.Models.ControlShape
 enum DeckHost.Contracts.Models.ControlType
+enum DeckHost.Contracts.Models.DeviceCapabilities
+enum DeckHost.Contracts.Models.DeviceSide
 enum DeckHost.Contracts.Models.ProfileActionKind
 enum DeckHost.Contracts.Models.TextHorizontalAlignment
 enum DeckHost.Contracts.Models.TextVerticalAlignment
@@ -724,6 +936,7 @@ interface DeckHost.Contracts.Interfaces.IDeckAction
 interface DeckHost.Contracts.Interfaces.IDeviceBackdropOutput
 interface DeckHost.Contracts.Interfaces.IDeviceFirmware
 interface DeckHost.Contracts.Interfaces.IDeviceLightBatchOutput
+interface DeckHost.Contracts.Interfaces.IDeviceModelCatalog
 interface DeckHost.Contracts.Interfaces.IDeviceOutput
 interface DeckHost.Contracts.Interfaces.IDevicePlugin
 interface DeckHost.Contracts.Interfaces.IDevicePluginContext
@@ -731,10 +944,13 @@ interface DeckHost.Contracts.Interfaces.IDeviceSettingActions
 interface DeckHost.Contracts.Interfaces.IRenderContext
 interface DeckHost.Contracts.Interfaces.IVariableStore
 static class DeckHost.Contracts.Icons
+static class DeckHost.Contracts.Models.BackgroundBindingTargets
+static class DeckHost.Contracts.Models.BackgroundLayerKinds
 static class DeckHost.Contracts.Models.ControlInputs
 static class DeckHost.Contracts.Models.LightEffects
 static class DeckHost.Contracts.Models.ProfileKinds
 static class DeckHost.Contracts.Models.StepGroups
+static class DeckHost.Contracts.Models.WorkflowCases
 static class DeckHost.Contracts.Models.WorkflowConcurrency
 static class DeckHost.Contracts.Models.WorkflowKeys
 static class DeckHost.Contracts.Models.WorkflowNodeKinds

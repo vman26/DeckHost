@@ -19,6 +19,12 @@ public enum WorkflowTraceKind
 
     /// <summary>The run was stopped before its end.</summary>
     Stopped,
+
+    /// <summary>The run stopped in front of a node (a breakpoint, or after a step) and waits to go on.</summary>
+    Paused,
+
+    /// <summary>A paused run went on.</summary>
+    Resumed,
 }
 
 /// <summary>One step of a workflow run, for the editor's live view and the run log.</summary>
@@ -30,4 +36,11 @@ public sealed record WorkflowTrace(
     string? NodeId,
     WorkflowTraceKind Kind,
     string Detail,
-    DateTimeOffset Time);
+    DateTimeOffset Time)
+{
+    /// <summary>For a step that waits (a Wait node, the pause between Repeat rounds): how long, so the editor can fill the node as time passes.</summary>
+    public TimeSpan? Wait { get; init; }
+
+    /// <summary>For a step inside a shared workflow: its id, because node ids are only unique within one workflow. Null for the control's own workflow.</summary>
+    public string? WorkflowId { get; init; }
+}

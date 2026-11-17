@@ -8,7 +8,38 @@ repository's GitHub Pages (`catalog.json`), which DeckHost reads.
 DeckHost also lists OpenAction and Stream Deck plugins from their own catalogs; this one is for
 **DeckHost plugins** (`plugin.json` packages).
 
+## How listing works
+
+| | What you do | Review |
+|---|---|---|
+| **New plugin** | Open an **Add a plugin** issue with your repository (or a pull request) | Once, by a maintainer |
+| **New version** | Publish a GitHub release with the plugin file | None: listed within about six hours |
+| **New name, description, author** | Change them in your `plugin.json` (or `manifest.json`) and release | None: taken from the package |
+| **New permissions** | Declare them in `plugin.json` and release | A maintainer approves the update |
+| **Other changes** (category, icon, repository) | A pull request to your entry | A maintainer merges it |
+
+A plugin runs on people's computers, so a maintainer looks at it once before it's listed. After
+that, the repository it was reviewed with is trusted: the **update** workflow checks every listed
+plugin's newest release every six hours and lists it by itself when the release is the same plugin
+with a higher version, asks for no new permissions and passes the same checks as a pull request
+(checksum, id, version, DeckHost loads it). Anything else becomes an issue labelled
+`review-update` for a maintainer.
+
+`main` only takes reviewed pull requests, so these new versions are kept on the `catalog-updates`
+branch (`updates/<id>.json`: version, download, checksum, name, author, description), and the
+**publish** workflow applies them on top of the reviewed entries. When an entry on `main` gets a
+version as new (a pull request), the update file for it is dropped.
+
 ## Add your plugin
+
+**The quick way:** open an issue with **Add a plugin** and give your plugin's GitHub repository. A
+workflow reads the package of its newest release (id, name, version, author, description), computes
+its SHA-256 and opens a pull request with the entry; a maintainer reviews it once. Later releases
+are picked up by themselves. The plugin template
+(`dotnet new deckhost-plugin`) makes such releases for you. Maintainers can do the same with
+`python3 tools/catalog.py from-release https://github.com/you/your-plugin` or **Actions → submit**.
+
+**By hand:**
 
 1. Build your plugin and check it: `DeckHost --check-plugin your-plugin.zip`
    ([how to write one](https://vman26.github.io/DeckHost/maintainers/plugins/)).
@@ -32,15 +63,33 @@ DeckHost also lists OpenAction and Stream Deck plugins from their own catalogs; 
 }
 ```
 
+Optional: `"auto_update": false` to update by pull request only (see Updating).
+
 `sha256`: `sha256sum your.plugin.id.zip` (Linux), `shasum -a 256` (macOS) or
 `Get-FileHash -Algorithm SHA256` (Windows). DeckHost refuses a download that doesn't match.
 
 The check downloads your package, compares the checksum and the id and version with its
-`plugin.json`, and loads it with DeckHost's own `--check-plugin`. A maintainer then reviews it.
+`plugin.json` (or a Stream Deck package's `manifest.json`), and loads it with DeckHost's own
+`--check-plugin`. A maintainer then reviews it.
+
+### Found on GitHub
+
+Once a week the **discover** workflow looks for repositories with the topics `deckhost-plugin`,
+`streamdeck-plugin`, `stream-deck-plugin` or `openaction-plugin` that have a plugin file in a release
+and aren't listed yet, and opens one pull request with their entries. Give your repository one of
+these topics to be found. Nothing is listed until a maintainer merges it.
 
 ### Updating
 
-Change `version`, `download_url` and `sha256` in your file, in a new pull request.
+Publish a release; nothing else. The catalog follows your newest release (stable before
+pre-release; a file named after your plugin id is picked first when a release has several).
+Releases that need a look (a new permission, a lower version, a different plugin id, a package
+that fails the checks) wait for a maintainer, who approves them with **Actions → update → Run
+workflow** and the plugin id under *approve*.
+
+A plugin not on GitHub, or one whose maintainers want to check every version, sets
+`"auto_update": false` in its entry and updates through pull requests (change `version`,
+`download_url` and `sha256`).
 
 ### Paid plugins
 
@@ -65,4 +114,5 @@ DeckHost shows a **Buy** button that opens the page; buyers install the file the
 
 ## License
 
-The catalog files are CC0 (public domain). Each plugin has its own license.
+This repository (the catalog files and the tools) is licensed under the GPL-3.0, like DeckHost
+([LICENSE](LICENSE)). Each plugin has its own license.

@@ -54,16 +54,42 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
                 _workflowSource.WorkflowEditorRequested -= OpenWorkflowEditor;
             }
 
+            if (_workflowSource is not null)
+            {
+                _workflowSource.PropertyChanged -= OnMainViewModelPropertyChanged;
+                _workflowSource.OnlyCompatibleActionsChanged -= RememberOnlyCompatible;
+            }
+
             _workflowSource = DataContext as MainViewModel;
             if (_workflowSource is not null)
             {
+                _workflowSource.OnlyCompatibleActionsChanged += RememberOnlyCompatible;
                 _workflowSource.WorkflowEditorRequested += OpenWorkflowEditor;
+                _workflowSource.PropertyChanged += OnMainViewModelPropertyChanged;
             }
+
+            ShowEditor();
         };
         AppSettingsViewModel.Changed += settings => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyDebugSetting(settings));
     }
 
     private MainViewModel? _workflowSource;
+
+    private void OnMainViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.Editor))
+        {
+            ShowEditor();
+        }
+    }
+
+    /// <summary>
+    /// A new editor view for each control, never a reused one: a reused view's choice boxes keep the
+    /// previous control's selection while their items change, and wrote it into the new control
+    /// (selecting a tile key after a transparent one turned its tile off).
+    /// </summary>
+    private void ShowEditor() =>
+        EditorHost.Content = _workflowSource?.Editor is { } editor ? new ControlCustomizationView { DataContext = editor } : null;
 
     /// <summary>The workflow editor as a page (one at a time: a second one replaces the first).</summary>
     private void OpenWorkflowEditor(WorkflowEditorViewModel editor)
@@ -76,12 +102,19 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         OpenPage(editor.Title, new WorkflowEditorView { DataContext = editor });
     }
 
+    private static void RememberOnlyCompatible(object? sender, bool value) =>
+        AppSettings.Save(AppSettings.Load() with { OnlyCompatibleActions = value });
+
     private void ApplyDebugSetting(AppSettingsData settings)
     {
         if (DataContext is MainViewModel vm)
         {
             vm.ShowDebugPanel = settings.ShowDebugPanel;
+            vm.LoadOnlyCompatibleActions(settings.OnlyCompatibleActions);
+            vm.ShowDeviceSimulator = settings.DeviceSimulator;
         }
+
+        TryResolve<DeckHost.Device.Simulator.SimulatorDevicePlugin>()?.SetEnabled(settings.DeviceSimulator);
     }
 
     /// <summary>A service from the app's container, or null when there is none (tests, previews).</summary>
@@ -154,6 +187,20 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         PageHost.IsVisible = true;
     }
 
+    /// <summary>Closes every page at once and shows the device layout (the Home button, Ctrl+Home).</summary>
+    public void GoHome()
+    {
+        if (_pages.Count == 0)
+        {
+            return;
+        }
+
+        _pages.Clear();
+        ShowTopPage();
+    }
+
+    private void PageHome_OnClick(object? sender, RoutedEventArgs e) => GoHome();
+
     private void PageBack_OnClick(object? sender, RoutedEventArgs e)
     {
         if (_pages.Count > 0)
@@ -170,6 +217,15 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         {
             e.Handled = true;
             PageBack_OnClick(sender, e);
+            return;
+        }
+
+        // Ctrl+Home (Cmd+Home) goes back to the layout from any number of pages.
+        var homeModifier = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+        if (e.Key == Key.Home && e.KeyModifiers.HasFlag(homeModifier) && !e.Handled && _pages.Count > 0)
+        {
+            e.Handled = true;
+            GoHome();
             return;
         }
 
@@ -243,6 +299,10 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     private void OpenSupport_OnClick(object? sender, RoutedEventArgs e) => OpenSupport();
 
+    private void RestartNormally_OnClick(object? sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.RestartNormally();
+
+    private void DismissRecovered_OnClick(object? sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.DismissRecoveredNotice();
+
     /// <summary>Help and support: documentation, reporting a problem, the support bundle, crash reports.</summary>
     public void OpenSupport() =>
         OpenSingle("Help and support", () => new SupportView
@@ -253,6 +313,27 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     private void OpenWelcome_OnClick(object? sender, RoutedEventArgs e) => OpenWelcome();
 
     private void OpenDeviceCreator_OnClick(object? sender, RoutedEventArgs e) => OpenDeviceCreator();
+
+    /// <summary>Starts a device simulator window (this program with --simulator, its own process).</summary>
+    private void OpenSimulator_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (Environment.ProcessPath is not { } program)
+        {
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(program) { ArgumentList = { "--simulator" }, UseShellExecute = false });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            if (Ioc.Default.GetService<Microsoft.Extensions.Logging.ILogger<MainWindow>>() is { } logger)
+            {
+                Microsoft.Extensions.Logging.LoggerExtensions.LogWarning(logger, ex, "Could not start the device simulator");
+            }
+        }
+    }
 
     /// <summary>The device creator: a USB device DeckHost doesn't know, made into a deck.</summary>
     public void OpenDeviceCreator()
@@ -277,7 +358,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     /// <summary>On start: a crash since last time opens Help and support; the first start opens the welcome tour.</summary>
     public void ShowStartPages()
     {
-        if (SupportViewModel.HasUnseenCrashes())
+        if (Platform.SafeMode.IsOn || SupportViewModel.HasUnseenCrashes())
         {
             OpenSupport();
         }
@@ -292,6 +373,22 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         if (TryResolve<PluginManagerViewModel>() is { } plugins)
         {
             OpenSingle("Plugins", () => new PluginManagerView { DataContext = plugins });
+        }
+    }
+
+    private void OpenVariables_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>() is { } host)
+        {
+            OpenSingle("Variables", () => new VariablesView { DataContext = new VariablesViewModel(host, (DataContext as MainViewModel)!.WantSystemValues) });
+        }
+    }
+
+    private void OpenDevices_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>() is { } host)
+        {
+            OpenSingle("Devices", () => new DeviceManagerView { DataContext = new DeviceManagerViewModel(host) });
         }
     }
 
@@ -568,12 +665,59 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         return controlId.Length > 0;
     }
 
-    private void ControlCustomize_OnClick(object? sender, RoutedEventArgs e)
+    /// <summary>Right-click → Try it: the action runs as if the control was pressed (a swipe bar: swiped right).</summary>
+    private void ControlTry_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel vm && TryGetMenuControl(sender, out var controlItem))
+        if (DataContext is not MainViewModel vm || !TryGetMenuControl(sender, out var controlItem))
         {
-            // The editor below the device shows the selected control.
-            vm.SelectControl(controlItem.Control);
+            return;
+        }
+
+        var inputs = controlItem.Control.Inputs;
+        if (inputs.HasFlag(InputCapabilities.Press))
+        {
+            vm.Simulate(controlItem, InputCapabilities.Press, 1);
+            if (inputs.HasFlag(InputCapabilities.Release))
+            {
+                vm.Simulate(controlItem, InputCapabilities.Release, 0);
+            }
+        }
+        else if (inputs.HasFlag(InputCapabilities.Swipe))
+        {
+            vm.Simulate(controlItem, InputCapabilities.Swipe, 1);
+        }
+    }
+
+    private void ControlDocs_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TryGetMenuControl(sender, out var controlItem) && controlItem.AssignedBinding?.Model.Action.PluginId is { } pluginId)
+        {
+            OpenPluginDocs(pluginId);
+        }
+    }
+
+    private void GroupDocs_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: PluginActionGroupViewModel group })
+        {
+            OpenPluginDocs(group.PluginId);
+        }
+    }
+
+    private void ActionDocs_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: ActionItemViewModel action })
+        {
+            OpenPluginDocs(action.PluginId);
+        }
+    }
+
+    /// <summary>The documentation page of a plugin (right-click on a control, an action or a plugin in the list).</summary>
+    public void OpenPluginDocs(string pluginId)
+    {
+        if (TryResolve<PluginDocsService>()?.Create(pluginId) is { } docs)
+        {
+            OpenPage(docs.Name, new PluginDocsView { DataContext = docs });
         }
     }
 

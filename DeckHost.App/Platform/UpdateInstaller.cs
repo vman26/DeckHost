@@ -44,13 +44,22 @@ internal static class UpdateInstaller
 
     /// <summary>Whether this installation can be updated in place (else the download is shown).</summary>
     /// <remarks>
-    /// Only a released (self-contained) DeckHost: a development build (bin/Debug) is never swapped.
+    /// Only a released (self-contained) DeckHost: a development build (bin/Debug) is never swapped,
+    /// and neither is an AppImage (a read-only mount; the user replaces the file).
     /// </remarks>
     public static bool CanInstallInPlace => OperatingSystem.IsWindows() ||
-        (Environment.ProcessPath is not null && IsSelfContained && CanReplace(InstallLocation));
+        (!AppImage.IsActive && Environment.ProcessPath is not null && IsSelfContained && CanReplace(InstallLocation));
 
     private static bool IsSelfContained =>
         new[] { "libcoreclr.so", "libcoreclr.dylib", "coreclr.dll" }.Any(name => File.Exists(Path.Combine(AppContext.BaseDirectory, name)));
+
+    /// <summary>
+    /// Whether an update can install without a question: a setup-installed DeckHost on Windows
+    /// (the setup runs silently), or an install that can be swapped on Linux and macOS.
+    /// </summary>
+    public static bool CanInstallSilently => OperatingSystem.IsWindows()
+        ? File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"))
+        : CanInstallInPlace;
 
     /// <summary>What the install button does here.</summary>
     public static string InstallLabel => CanInstallInPlace ? "Install and restart" : "Download";
@@ -59,11 +68,12 @@ internal static class UpdateInstaller
     /// Gets a downloaded package ready (unpacks it) and returns the helper to start, or null when
     /// the update has to be installed by hand (the package is then shown in the file manager).
     /// </summary>
-    public static async Task<ProcessStartInfo?> PrepareAsync(string package, CancellationToken cancellationToken)
+    /// <remarks><paramref name="relaunch"/> false: DeckHost isn't started again (an update installed when the user quits).</remarks>
+    public static async Task<ProcessStartInfo?> PrepareAsync(string package, CancellationToken cancellationToken, bool relaunch = true)
     {
         if (OperatingSystem.IsWindows())
         {
-            return package.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? WindowsSetup(package) : null;
+            return package.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? WindowsSetup(package, relaunch) : null;
         }
 
         if (!CanInstallInPlace)
@@ -98,7 +108,7 @@ internal static class UpdateInstaller
                      ?? throw new UpdateException("The update package has no DeckHost folder.");
         }
 
-        return SwapScript(source, InstallLocation);
+        return SwapScript(source, InstallLocation, relaunch);
     }
 
     /// <summary>Starts the helper; DeckHost must exit right after, which the helper waits for.</summary>
@@ -135,7 +145,7 @@ internal static class UpdateInstaller
     /// </summary>
     internal const string SwapScriptText = """
         #!/bin/sh
-        # DeckHost update helper: $1 = DeckHost's process id, $2 = the new version, $3 = the install, $4 = how to start it
+        # DeckHost update helper: $1 = DeckHost's process id, $2 = the new version, $3 = the install, $4 = how to start it ("none": not again)
         pid="$1"; source="$2"; target="$3"; launch="$4"
         while kill -0 "$pid" 2>/dev/null; do sleep 0.3; done
         backup="$target.update-backup"
@@ -148,14 +158,16 @@ internal static class UpdateInstaller
                 mv "$backup" "$target"
             fi
         fi
-        if [ "$launch" = "open" ]; then
+        if [ "$launch" = "none" ]; then
+            :
+        elif [ "$launch" = "open" ]; then
             open "$target"
         else
             nohup "$target/$launch" >/dev/null 2>&1 &
         fi
         """;
 
-    private static ProcessStartInfo SwapScript(string source, string target)
+    private static ProcessStartInfo SwapScript(string source, string target, bool relaunch)
     {
         var script = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(source)!)!, "update.sh");
         File.WriteAllText(script, SwapScriptText.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n");
@@ -164,7 +176,7 @@ internal static class UpdateInstaller
         startInfo.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
         startInfo.ArgumentList.Add(source);
         startInfo.ArgumentList.Add(target);
-        startInfo.ArgumentList.Add(OperatingSystem.IsMacOS() ? "open" : Path.GetFileName(Environment.ProcessPath!));
+        startInfo.ArgumentList.Add(!relaunch ? "none" : OperatingSystem.IsMacOS() ? "open" : Path.GetFileName(Environment.ProcessPath!));
         return startInfo;
     }
 
@@ -172,10 +184,12 @@ internal static class UpdateInstaller
     /// Windows: PowerShell waits for DeckHost to exit, then starts setup (the setup's own check for
     /// a running DeckHost would otherwise ask the user to close it).
     /// </summary>
-    private static ProcessStartInfo WindowsSetup(string setup)
+    private static ProcessStartInfo WindowsSetup(string setup, bool relaunch)
     {
         var installedBySetup = File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"));
-        var arguments = installedBySetup ? new[] { "/SILENT", "/SP-", "/NOCANCEL", RelaunchParameter } : ["/SP-"];
+        var arguments = !installedBySetup ? ["/SP-"]
+            : relaunch ? new[] { "/SILENT", "/SP-", "/NOCANCEL", RelaunchParameter }
+            : ["/SILENT", "/SP-", "/NOCANCEL"];
         var command =
             $"Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue; " +
             $"Start-Process -FilePath {Quote(setup)} -ArgumentList {string.Join(',', arguments.Select(Quote))}";

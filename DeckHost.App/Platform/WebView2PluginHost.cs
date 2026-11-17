@@ -18,6 +18,31 @@ namespace DeckHost.App.Platform;
 public sealed class WebView2PluginHost : IHtmlPluginHost
 {
     private const int WsPopup = unchecked((int)0x80000000);
+    private const int WsExToolWindow = 0x00000080;
+    private const int WsExNoActivate = 0x08000000;
+    private const int SwShowNoActivate = 4;
+
+    /// <summary>
+    /// Chromium treats a page in a never-shown window as a background page: it slows its timers
+    /// down (to once a minute after a while), stops animation frames and may freeze it, so a
+    /// plugin that redraws every second (a clock) stops. The Stream Deck app runs its plugins with
+    /// that throttling off; so does DeckHost.
+    /// </summary>
+    internal const string BrowserArguments =
+        "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows " +
+        "--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling";
+
+    /// <summary>
+    /// One browser for all plugin pages, with its own data folder: a WebView2 browser can't change
+    /// its options while another view (the property inspectors) already uses a folder.
+    /// </summary>
+    private static Task<CoreWebView2Environment>? _environment;
+
+    private static Task<CoreWebView2Environment> SharedEnvironmentAsync() =>
+        _environment ??= CoreWebView2Environment.CreateAsync(
+            null,
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeckHost", "webview-plugins"),
+            new CoreWebView2EnvironmentOptions(BrowserArguments));
 
     public static bool IsSupported => OperatingSystem.IsWindows();
 
@@ -43,10 +68,11 @@ public sealed class WebView2PluginHost : IHtmlPluginHost
 
             try
             {
-                // A hidden, never-shown top-level window owns the browser.
-                _window = CreateWindowEx(0, "Static", "DeckHost plugin " + pluginUuid, WsPopup, -32000, -32000, 1024, 768, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-                var userData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeckHost", "webview");
-                var environment = await CoreWebView2Environment.CreateAsync(null, userData);
+                // An off-screen tool window owns the browser: shown (so the page counts as visible),
+                // but never on screen, in the taskbar or focused.
+                _window = CreateWindowEx(WsExToolWindow | WsExNoActivate, "Static", "DeckHost plugin " + pluginUuid, WsPopup, -32000, -32000, 1024, 768, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                ShowWindow(_window, SwShowNoActivate);
+                var environment = await SharedEnvironmentAsync();
                 var controller = await environment.CreateCoreWebView2ControllerAsync(_window);
                 if (_disposed)
                 {
@@ -85,6 +111,8 @@ public sealed class WebView2PluginHost : IHtmlPluginHost
                     try
                     {
                         await web.ExecuteScriptAsync(startScript);
+                        var visibility = await web.ExecuteScriptAsync("document.visibilityState");
+                        log("Debug", $"{pluginUuid}: page loaded ({visibility.Trim('"')}).");
                     }
                     catch (Exception ex) when (ex is COMException or InvalidOperationException)
                     {
@@ -148,5 +176,9 @@ public sealed class WebView2PluginHost : IHtmlPluginHost
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool DestroyWindow(IntPtr window);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindow(IntPtr window, int command);
     }
 }

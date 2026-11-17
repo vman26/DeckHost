@@ -10,9 +10,22 @@
 
 DeckHost is a free, open-source host for physical control surfaces (macro pads, rotary consoles, touch strips) on Windows, Linux and macOS. It separates the hardware from the actions: device plugins drive the hardware, application plugins provide the actions, and the editor lets you map one onto the other.
 
-- **Devices:** the **MiraBox / StreamDock N4 Pro** (10 LCD keys, a touch strip with 4 zones and swipe, 4 knobs with RGB rings), **Elgato Stream Decks** (MK.2, XL, Neo, +, Pedal, Mini, the first edition; preview), a **Web Deck** on your phone or tablet, and **other USB devices** you teach it in the device creator.
+- **Devices:** the **MiraBox / StreamDock N4 Pro** (10 LCD keys, a touch strip with 4 zones and swipe, 4 knobs with RGB rings) and the other StreamDock models (N4, 293, 293s, M18, XL, M3, N3, N1, K1 Pro, Mini; preview), **Elgato Stream Decks** (MK.2, XL, Neo, +, Pedal, Mini, the first edition; preview), a **Web Deck** on your phone or tablet, **other USB devices** you teach it in the device creator, and a **device simulator** that acts like any of them without the hardware.
 - **Actions:** media, volume, apps, hotkeys, profiles, pages and folders; Multi Action, Key Logic and visual **workflows**; DeckHost plugins and thousands of **Stream Deck and OpenAction plugins**.
 - **Documentation:** [vman26.github.io/DeckHost](https://vman26.github.io/DeckHost/).
+
+<p align="center"><img src="docs/images/editor.png" width="860" alt="The DeckHost editor with an N4 Pro profile: keys, touch strip and knobs on top, the selected key's settings below, actions grouped by plugin on the right"></p>
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/images/workflow.png"><img src="docs/images/workflow.png" alt="The workflow editor: nodes linked on a canvas, a Wait filling up while it runs"></a><br><sub><b>Workflows:</b> build what a key does from linked nodes, with live highlighting of each step.</sub></td>
+    <td width="50%"><a href="docs/images/simulator.png"><img src="docs/images/simulator.png" alt="The device simulator acting as an N4 Pro"></a><br><sub><b>Device simulator:</b> try any supported device without the hardware.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="docs/images/lights.png"><img src="docs/images/lights.png" alt="Knob light settings with a breathing effect"></a><br><sub><b>Lights:</b> an effect per device or per knob.</sub></td>
+    <td width="50%"><a href="docs/images/plugins.png"><img src="docs/images/plugins.png" alt="The Plugins page with devices and plugins"></a><br><sub><b>Plugins:</b> DeckHost, Stream Deck and OpenAction plugins, with a store.</sub></td>
+  </tr>
+</table>
 
 ## How DeckHost is made
 
@@ -30,12 +43,13 @@ I'm saying this up front because you should know how the software you run is mad
 
 ## Download and install
 
-Releases are on the [**Releases** page](https://github.com/vman26/DeckHost/releases), one package per platform:
+**[Download DeckHost](https://vman26.github.io/DeckHost/download/)** picks the package for your system. All releases are on the [**Releases** page](https://github.com/vman26/DeckHost/releases), one package per platform:
 
 | Platform | Package | Install |
 |---|---|---|
 | Windows 10/11 (x64) | `DeckHost-<version>-win-x64-setup.exe` | Run it. Installs for your user (no administrator rights), with a Start menu entry and uninstaller. A plain `.zip` is there too. |
 | Linux (x64) | `DeckHost-<version>-linux-x64.tar.gz` | Unpack and run `./install.sh`: installs to `~/.local/share/deckhost` with a menu entry, and (with sudo, once) the udev rule that lets you use the N4 Pro and Elgato Stream Decks without root. `./install.sh --uninstall` removes it. |
+| Linux (x64), no install | `DeckHost-<version>-linux-x86_64.AppImage` | `chmod +x` it and run it. The udev rule is installed once by hand ([notes](https://vman26.github.io/DeckHost/devices/#linux-appimage)). |
 | macOS 12+ (Apple Silicon) | `DeckHost-<version>-osx-arm64.zip` | Unzip and move **DeckHost.app** to Applications. It isn't notarized: the first time, right-click → **Open**, or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`. |
 
 `SHA256SUMS.txt` lists the checksums. To check that the device support is installed without opening the window, run DeckHost with `--check-native`: it loads the native bridge and lists the StreamDock devices it finds.
@@ -45,6 +59,7 @@ Releases are on the [**Releases** page](https://github.com/vman26/DeckHost/relea
 | | Windows | Linux | macOS |
 |---|---|---|---|
 | N4 Pro (keys, touch strip, knobs, LEDs, settings) | ✓ | ✓ (udev rule) | ✓ |
+| Other StreamDock models: keys, buttons, knobs, small displays (preview) | ✓ | ✓ (udev rule) | ✓ |
 | Elgato Stream Deck: MK.2, Original v2, XL, Neo, +, Pedal (preview, see below) | ✓ | ✓ (udev rule) | ✓ |
 | Web Deck: keys on a phone, tablet or browser window | ✓ | ✓ | ✓ |
 | Media keys, volume | ✓ | playerctl; wpctl, pactl or amixer | ✓ (volume HUD) |
@@ -122,15 +137,9 @@ git push origin v1.4.0
 
 The tag is the version. The **release** workflow then tests and publishes DeckHost self-contained for Windows, Linux and macOS, checks the native bridge in each package (`--check-native`), packages them (Windows installer and zip, Linux tarball, macOS app) and creates the GitHub release with notes and checksums. A tag with a suffix (`v1.4.0-rc.1`, `v1.3.1-beta.1`) becomes a pre-release; use the label of the branch you tag on (`rc` on `release/*`, `beta` on `hotfix/*`), so the builds after it count on from it. Run the workflow by hand to get the packages as build artifacts without releasing.
 
-**Updates in the app** come from these releases: DeckHost asks GitHub's public API for the releases of the repository it was built for (`api.github.com/repos/<owner>/<repo>/releases`, no sign-in), takes the newest one whose tag is a higher version than its own, and downloads that release's package for the system (see [DeckHost settings and the tray](#deckhost-settings-and-the-tray)). That only works for a **public** repository. A fork kept private can publish its releases to a separate public repository that holds nothing but releases:
+**Updates in the app** come from these releases: DeckHost asks GitHub's public API for the releases of the repository it was built for (`api.github.com/repos/<owner>/<repo>/releases`, no sign-in), takes the newest one whose tag is a higher version than its own, and downloads that release's package for the system (see [DeckHost settings and the tray](#deckhost-settings-and-the-tray)). A fork builds against its own releases (the build property `DeckHostUpdateRepository`, set by the release workflow to the repository it runs in).
 
-1. Create a public repository, for example `vman26/DeckHost-releases`, with one commit (a README is enough; GitHub needs a commit to put the release tags on).
-2. Create a fine-grained token with **Contents: Read and write** on that repository only, and add it to the source repository as the Actions secret `RELEASES_TOKEN`.
-3. Add the Actions variable `RELEASES_REPO` = `vman26/DeckHost-releases` to the source repository.
-
-From then on the release workflow creates each release in the source repository and in the releases repository (same files and notes), and the apps it builds check the releases repository (the build property `DeckHostUpdateRepository`, default `vman26/DeckHost`). The release notes link to pull requests in the private repository, which only you can open.
-
-**Download counts:** GitHub counts every download of a release file. `scripts/downloads.sh` lists them per release and file, with the total (`scripts/downloads.sh vman26/DeckHost-releases`; a private repository needs `GITHUB_TOKEN`). The README's downloads badge shows the total of the releases repository.
+**Download counts:** GitHub counts every download of a release file. `scripts/downloads.sh` lists them per release and file, with the total (`scripts/downloads.sh vman26/DeckHost`).
 
 The usual flow (git-flow):
 
@@ -346,9 +355,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Apply-StreamDockSdkPatch.ps1 
 
 When you update the submodule and the patch no longer applies, regenerate it against the new upstream commit with `git -C native/StreamDock-SDK diff > native/patches/streamdock-sdk.patch` after fixing the files.
 
-## N4 Pro key mapping
+## MiraBox key mapping
 
-The SDK numbers the N4 Pro's keys from the bottom-left, so the top row is SDK keys 11–15 and the bottom row 6–10. If an image appears on the wrong key on your unit, assign the **Key ID (Diagnostic)** action to the keys and adjust `KeyHardwareIds` in `DeckHost.Device.MiraBox/N4ProLayout.cs`.
+The SDK numbers the N4 Pro's keys from the bottom-left, so the top row is SDK keys 11–15 and the bottom row 6–10. Each model's numbering is in `DeckHost.Device.MiraBox/MiraBoxModels.cs`, taken from the SDK's device classes. If an image appears on the wrong key on your unit, assign the **Key ID (Diagnostic)** action to the keys and adjust that model's entry (and please report it).
 
 ## Contributing
 
@@ -359,3 +368,10 @@ Bug reports, ideas, device support, plugins and fixes are welcome: see [CONTRIBU
 DeckHost is free software under the **GNU General Public License v3.0 or later** ([`LICENSE`](LICENSE)): you may use, study, share and change it; changed versions you share must stay under the GPL too.
 
 The **plugin API** (`DeckHost.Contracts`) and the plugin template are **MIT**, and an additional permission lets plugins of any license, free or paid, run with DeckHost: see [`NOTICE.md`](NOTICE.md).
+
+## Trademarks
+
+Stream Deck is a trademark of Corsair Memory, Inc. / Elgato, and DeckHost is an independent project
+not affiliated with or endorsed by Elgato. StreamDock is a trademark of MiraBox; DeckHost is not
+affiliated with or endorsed by MiraBox either. Other product names belong to their owners and are
+used only to say which devices and plugins DeckHost works with.

@@ -83,8 +83,10 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string SwitchState` | A Multi Action Switch's set that the next press runs (`First` or `Second`). |
 | `const string WorkflowState` | Prefix of a workflow's own state under a control (e.g. which output a Toggle node takes next). |
 | `static string Control(string deviceId, string controlId)` | `devices.{deviceId}.{controlId}.` |
+| `static string ControlVariable(string deviceId, string controlId, string name)` | `vars.control\|{deviceId}\|{controlId}\|{name}`: a variable that belongs to one control's workflow. |
 | `static string Device(string deviceId)` | `devices.{deviceId}.` |
 | `static string For(string deviceId, string controlId, string suffix)` |  |
+| `static string ProfileVariable(string profileId, string name)` | `vars.profile\|{profileId}\|{name}`: a variable that only the workflows of one profile share. The `\|` keeps the parts apart (device and profile ids contain dots) and the key still starts with `vars.`, like every variable workflows set. |
 | `static string UserVariable(string name)` | `vars.{name}`: a variable that workflows set and check (names ignore case). |
 
 ## DeckHost.Contracts.Enums
@@ -144,6 +146,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `void CloseFolder(string deviceId)` | Leaves the open folder: back to the layout whose key opened it. |
 | `void OpenFolder(string deviceId, string folderId)` | Opens a folder (a layout of the active profile) on the device. |
 | `void RequestRender(string deviceId)` | Re-renders the device's controls (only changed controls are pushed). |
+| `void RequestRender(string deviceId, string controlId)` | Re-renders one control (and the display it is shown on, for a knob). Hosts that don't know the difference draw the whole device again, which is what `RequestRender` does. |
 
 ### IApplicationPlugin
 
@@ -217,6 +220,14 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | Member | |
 |---|---|
 | `bool TrySetLights(string deviceId, IReadOnlyList<LightColor> lights, string error)` |  |
+
+### IDeviceModelCatalog
+
+*interface* — Optional for an `IDevicePlugin`: every model the plugin can drive, each described as an unplugged device (its controls, displays, capabilities). DeckHost's device simulator (`DeckHost --simulator`) offers these models and behaves like the hardware: it shows the controls, sends their input and shows the images and lights DeckHost sends. A plugin that describes a device it can't see yet (a model table, a saved layout) is a good fit.
+
+| Member | |
+|---|---|
+| `IReadOnlyList<DeviceDefinition> DescribeModels()` | The models, as unplugged devices. Ids only need to be unique within the plugin. |
 
 ### IDeviceOutput
 
@@ -376,6 +387,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `Choice` |  |
 | `FilePath` |  |
 | `Hotkey` | A key combination such as "Ctrl+Shift+M"; the editor can record it from a key press. |
+| `Variable` | The name of a variable (the ones workflows set, `vars.{name}`): typed freely, or picked from the variables DeckHost knows. The stored value is the name as typed. |
 
 ### ActionSettingOption
 
@@ -409,6 +421,64 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `int GetInt(string key, int fallback)` |  |
 | `bool TryGetValue(string key, string value)` |  |
 | `ActionSettings With(string key, string value)` |  |
+
+### BackgroundBinding
+
+*record* — A layer property that follows a variable. The value is read as a number between `Min` and `Max` (`true` counts as 1, anything unreadable as `Fallback`, else 0).
+
+| Member | |
+|---|---|
+| `BackgroundBinding(string Variable, string Target = "color", double Min = 0, double Max = 100)` | A layer property that follows a variable. The value is read as a number between `Min` and `Max` (`true` counts as 1, anything unreadable as `Fallback`, else 0). |
+| `double? Fallback { get; init; }` | The value to use while the variable has none (or isn't a number). |
+| `string FromColor { get; init; }` | The color at `Min` (target color). |
+| `double Max { get; init; }` |  |
+| `double Min { get; init; }` |  |
+| `string Target { get; init; }` |  |
+| `string ToColor { get; init; }` | The color at `Max` (target color). |
+| `string Variable { get; init; }` |  |
+
+### BackgroundBindingTargets
+
+*static class* — What a bound property of a layer follows.
+
+| Member | |
+|---|---|
+| `IReadOnlyList<string> All` |  |
+| `const string Color` | The layer's color (a solid layer's color, a gradient's end color) goes from `FromColor` to `ToColor`. |
+| `const string Opacity` | The layer's opacity goes from 0 to the layer's own `Opacity`. |
+| `const string Visible` | The layer shows while the variable is at or above `Min` (true counts as 1). |
+
+### BackgroundLayer
+
+*record* — One layer of a profile background, drawn over the layers before it. `Kind` is text so a layer of a kind this version doesn't know survives a save.
+
+| Member | |
+|---|---|
+| `BackgroundLayer(string Kind, bool Visible = true, double Opacity = 1)` | One layer of a profile background, drawn over the layers before it. `Kind` is text so a layer of a kind this version doesn't know survives a save. |
+| `double? Angle { get; init; }` | A gradient's direction in degrees: 0 left to right, 90 top to bottom. |
+| `BackgroundBinding Binding { get; init; }` | Makes a property of the layer follow a variable (the CPU load, a Set variable node's value, …). |
+| `double? CenterX { get; init; }` | A radial gradient's center across the layout, 0 (left) to 1 (right); 0.5 when not set. |
+| `double? CenterY { get; init; }` | A radial gradient's center down the layout, 0 (top) to 1 (bottom); 0.5 when not set. |
+| `string Color { get; init; }` | #RRGGBB or #AARRGGBB: a solid layer's color, a gradient's start. |
+| `string ImagePath { get; init; }` |  |
+| `string Kind { get; init; }` |  |
+| `double Opacity { get; init; }` | 0 to 1. |
+| `double? Radius { get; init; }` | A radial gradient's radius as a share of the layout's half diagonal (1 reaches the corners); 1 when not set. |
+| `IReadOnlyList<GradientStop> Stops { get; init; }` | A gradient's colors with their places along it. With two or more, they replace `Color` and `ToColor` (which still hold the first and last color, so older versions show a two-color gradient). |
+| `string ToColor { get; init; }` | A gradient's end color. |
+| `bool Visible { get; init; }` | Off keeps the layer but doesn't draw it. |
+
+### BackgroundLayerKinds
+
+*static class* — The kinds of `BackgroundLayer` DeckHost draws; an unknown kind is kept in the file and not drawn.
+
+| Member | |
+|---|---|
+| `IReadOnlyList<string> Known` |  |
+| `const string Gradient` | A gradient across the whole layout, from `Color` to `ToColor` at `Angle` degrees. |
+| `const string Image` | A picture (or animated GIF) spread over the whole layout, every control showing its slice. |
+| `const string Radial` | A radial gradient across the whole layout: from the center (`CenterX`, `CenterY`) out to `Radius`, through the same colors as a `Gradient`. |
+| `const string Solid` | One color over the whole layout. |
 
 ### ControlAppearance
 
@@ -460,6 +530,15 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `static IReadOnlyList<string> Of(InputCapabilities inputs)` | The inputs a control with these capabilities can be set up for, in the order the editor shows them. A release isn't one: it only ends a press. |
 | `static string SettingKey(string key, string input)` | Where a `PerInput` setting's value for one input is stored. |
 
+### ControlShape
+
+*enum* — The outline of a control, for drawing it like the hardware (master plan 7.1.2).
+
+| Member | |
+|---|---|
+| `Rectangle` |  |
+| `Round` |  |
+
 ### ControlType
 
 *enum*
@@ -471,20 +550,65 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `TouchSurface` |  |
 | `Display` |  |
 | `Slider` |  |
+| `Button` | A physical button without a display of its own. |
+| `Joystick` | A joystick or directional pad. |
+| `Led` | A light only (an indicator or a lighting zone), no input. |
 
-### DeviceDefinition
+### DeviceCapabilities
 
-*record* — A device a plugin can drive. Plugins also expose definitions for devices that are not plugged in, so profiles can be edited offline; `IsConnected` tells them apart.
+*enum* — What a device can do (master plan 7.1.4). Query before using a feature.
 
 | Member | |
 |---|---|
-| `DeviceDefinition(string Id, string Name, IReadOnlyList<PhysicalControl> Controls, bool IsConnected = false, string Detail = null)` | A device a plugin can drive. Plugins also expose definitions for devices that are not plugged in, so profiles can be edited offline; `IsConnected` tells them apart. |
+| `None` |  |
+| `Images` | Shows pictures on its controls. |
+| `AnimatedImages` | Plays animated pictures by itself (else the host sends frames). |
+| `Touch` | Reports touches on a surface. |
+| `MultiTouch` | Reports several touches at once. |
+| `Brightness` | Its screen brightness can be set. |
+| `RgbLights` | Has RGB lights the host can set. |
+| `Haptics` | Can vibrate. |
+| `Backdrop` | Shows a background behind all controls (`IDeviceBackdropOutput`). |
+| `Firmware` | Reports its firmware (`IDeviceFirmware`). |
+| `Settings` | Has its own settings page (`IConfigurableDevicePlugin`). |
+
+### DeviceDefinition
+
+*record* — A device a plugin can drive: its descriptor (master plan 7.1). Plugins also expose definitions for devices that are not plugged in, so profiles can be edited offline; `IsConnected` tells them apart. The control topology is `Controls`; identity, displays, capabilities and limits are optional properties, so plugins built before them keep working. When the topology changes, the plugin raises `DevicesChanged` with the new definition; bindings are kept by control id, so a control that disappears doesn't move others.
+
+| Member | |
+|---|---|
+| `DeviceDefinition(string Id, string Name, IReadOnlyList<PhysicalControl> Controls, bool IsConnected = false, string Detail = null)` | A device a plugin can drive: its descriptor (master plan 7.1). Plugins also expose definitions for devices that are not plugged in, so profiles can be edited offline; `IsConnected` tells them apart. The control topology is `Controls`; identity, displays, capabilities and limits are optional properties, so plugins built before them keep working. When the topology changes, the plugin raises `DevicesChanged` with the new definition; bindings are kept by control id, so a control that disappears doesn't move others. |
+| `DeviceCapabilities Capabilities { get; init; }` | What the device can do. |
 | `IReadOnlyList<PhysicalControl> Controls { get; init; }` |  |
+| `int DescriptorVersion { get; init; }` | The descriptor format version; plugins built for an older one say so. |
 | `string Detail { get; init; }` |  |
+| `IReadOnlyList<DeviceDisplay> Displays { get; init; }` | The displays or display regions; empty when the device has none or doesn't say. |
 | `string Id { get; init; }` |  |
+| `DeviceIdentity Identity { get; init; }` | Manufacturer, model, serial, revision, firmware and connection; null when unknown. |
 | `bool IsConnected { get; init; }` |  |
+| `DeviceLimits Limits { get; init; }` | What it can't do, or not fully; null when nothing is known. |
 | `string Name { get; init; }` |  |
+| `PhysicalSize PhysicalSize { get; init; }` | The device's outer size in millimetres; null when unknown. |
+| `const int CurrentDescriptorVersion` | The descriptor format version this definition follows. |
 | `PhysicalControl FindControl(string controlId)` |  |
+| `IReadOnlyList<string> FindDescriptorProblems()` | What's inconsistent in this descriptor, in words (empty when it's fine): duplicate control ids, controls with images but no display (when the device lists displays), displays that list unknown controls or none, links to unknown controls. Device plugin authors can test with it. |
+| `DeviceDisplay FindDisplay(string displayId)` |  |
+| `bool Has(DeviceCapabilities capability)` | Whether the device declares `capability` (all of the given flags). |
+
+### DeviceDisplay
+
+*record* — A display or a region of one (master plan 7.1.3): its pixel size and the controls whose images are shown on it. Controls point back with `DisplayId`.
+
+| Member | |
+|---|---|
+| `DeviceDisplay(string Id, int Width, int Height)` | A display or a region of one (master plan 7.1.3): its pixel size and the controls whose images are shown on it. Controls point back with `DisplayId`. |
+| `IReadOnlyList<string> ControlIds { get; init; }` | The controls on this display, in reading order. |
+| `int Height { get; init; }` | Height in pixels. |
+| `string Id { get; init; }` | Stable id within the device: "main", "strip", "keys". |
+| `int? MaxFramesPerSecond { get; init; }` | The most frames a second the display takes; null when it doesn't say. |
+| `int RotationDegrees { get; init; }` | How the device turns what it gets (0, 90, 180, 270); device plugins apply it. |
+| `int Width { get; init; }` | Width in pixels, as the device draws it (before `RotationDegrees`). |
 
 ### DeviceFirmwareInfo
 
@@ -497,6 +621,32 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `string Detail { get; init; }` | A line for the user: where updates come from, or why there are none here. |
 | `IReadOnlyList<string> FileExtensions { get; init; }` | File types the plugin installs from a file the user picks (".bin", ".dfu"); empty for none. |
 | `string Version { get; init; }` | The version the device reports. |
+
+### DeviceIdentity
+
+*record* — Who made a device and which one it is (master plan 7.1.1); every field is optional.
+
+| Member | |
+|---|---|
+| `DeviceIdentity(string Manufacturer = null, string Model = null, string SerialNumber = null, string HardwareRevision = null, string FirmwareVersion = null, string Connection = null)` | Who made a device and which one it is (master plan 7.1.1); every field is optional. |
+| `string Connection { get; init; }` | How it's connected: "USB", "Network", "Virtual", … |
+| `string FirmwareVersion { get; init; }` | The firmware version, when the device reports one. |
+| `string HardwareRevision { get; init; }` | A hardware revision, when the device reports one. |
+| `string Manufacturer { get; init; }` | "MiraBox", "Elgato", … |
+| `string Model { get; init; }` | "StreamDock N4 Pro", "Stream Deck +", … |
+| `string SerialNumber { get; init; }` | The device's serial number, when it reports one. |
+
+### DeviceLimits
+
+*record* — What a device can't do, or not fully (master plan 7.1.1 "limitations"); null fields: no limit known.
+
+| Member | |
+|---|---|
+| `DeviceLimits()` | Creates it with the positional properties. |
+| `int? ColorDepthBits { get; init; }` | Bits per pixel of its screens (16 for RGB565), when fewer than 24. |
+| `int? MaxFramesPerSecond { get; init; }` | The most image updates a second the device keeps up with, for all its controls. |
+| `IReadOnlyList<string> Notes { get; init; }` | Anything else worth knowing, in words: "no knob release events", … |
+| `bool? Transparency { get; init; }` | False when transparent pixels can't be shown (the host flattens them). |
 
 ### DeviceProfile
 
@@ -513,7 +663,21 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `bool IsRoot` |  |
 | `string Kind { get; init; }` | What this layout is: null for a profile, `Page` or `Folder`. |
 | `string Name { get; init; }` |  |
+| `bool? OverridesBackground { get; init; }` | Whether this layout uses `Background` instead of the default background for all profiles. Null (files from before the checkbox) means yes when it has a background. Off keeps the background stored but unused, so turning it on again brings it back. |
 | `string ParentId { get; init; }` | For a page or folder: the layout it belongs to. A page belongs to its profile; a folder to the page (or folder) whose key opens it. Null for a profile (its own first page). |
+
+### DeviceSide
+
+*enum* — Which face of the device a control is on (master plan 7.1.3). Most are on the front; a wheel on the side of the device is drawn on that edge, not as part of the front.
+
+| Member | |
+|---|---|
+| `Front` |  |
+| `Left` |  |
+| `Right` |  |
+| `Top` |  |
+| `Bottom` |  |
+| `Back` |  |
 
 ### FirmwareImage
 
@@ -557,6 +721,16 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `string Message { get; init; }` |  |
 | `FirmwareUpdateResult NotSupported` |  |
 | `bool Success { get; init; }` |  |
+
+### GradientStop
+
+*record* — One color of a gradient and where it starts: `Position` 0 (the start) to 1 (the end).
+
+| Member | |
+|---|---|
+| `GradientStop(string Color, double Position)` | One color of a gradient and where it starts: `Position` 0 (the start) to 1 (the end). |
+| `string Color { get; init; }` |  |
+| `double Position { get; init; }` |  |
 
 ### LightColor
 
@@ -665,6 +839,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `PhysicalControl(string Id, string DisplayName, ControlType Type, Rect Bounds, InputCapabilities Inputs, OutputCapabilities Outputs, int RenderWidth = 0, int RenderHeight = 0, string HardwareId = null, int? LedIndex = null, string DisplayControlId = null)` | One physical control on a device. |
 | `Rect Bounds { get; init; }` | Position in the designer's layout coordinates (not device pixels). |
 | `string DisplayControlId { get; init; }` | For a control without a display of its own: the id of the control whose display belongs to it (the touch zone above a knob). The host shows this control's action there; see `ShowOnLinkedDisplay`. |
+| `string DisplayId { get; init; }` | The display (or region) its image is on (`Displays`); null when it has none or the device doesn't say. |
 | `string DisplayName { get; init; }` |  |
 | `string HardwareId { get; init; }` | The id the hardware/SDK uses for this control, for diagnostics. |
 | `bool HasImageOutput` |  |
@@ -674,9 +849,22 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `InputCapabilities Inputs { get; init; }` |  |
 | `int? LedIndex { get; init; }` | Index of the RGB LED tied to this control, when there is one. |
 | `OutputCapabilities Outputs { get; init; }` |  |
+| `Rect? PhysicalBounds { get; init; }` | Where the control is on the device, in millimetres from its top left (physical coordinates); null when unknown. |
 | `int RenderHeight { get; init; }` | Pixel height of the control's own image on the device; 0 when it has none. |
 | `int RenderWidth { get; init; }` | Pixel width of the control's own image on the device; 0 when it has none. |
+| `ControlShape Shape { get; init; }` | Its outline, for drawing it like the hardware. |
+| `DeviceSide Side { get; init; }` | The face it is on; `Front` unless the device says otherwise. Its `Bounds` still place it in the layout, next to the front controls on that side. |
 | `ControlType Type { get; init; }` |  |
+
+### PhysicalSize
+
+*record* — A size in millimetres (physical dimensions, master plan 7.1.3).
+
+| Member | |
+|---|---|
+| `PhysicalSize(double WidthMillimetres, double HeightMillimetres)` | A size in millimetres (physical dimensions, master plan 7.1.3). |
+| `double HeightMillimetres { get; init; }` |  |
+| `double WidthMillimetres { get; init; }` |  |
 
 ### ProfileActionKind
 
@@ -700,6 +888,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `string Color { get; init; }` |  |
 | `string ImagePath { get; init; }` |  |
 | `bool IsEmpty` |  |
+| `IReadOnlyList<BackgroundLayer> Layers { get; init; }` | More layers, drawn over `Color` and `ImagePath` (which are the bottom ones), in this order. An init property, so the record's constructor stays binary-compatible. |
 
 ### ProfileKinds
 
@@ -822,12 +1011,38 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | Member | |
 |---|---|
 | `Workflow()` | Creates it with the positional properties. |
+| `string Id { get; init; }` | For a shared workflow (one that Call nodes run): the id they refer to. Null for a control's own workflow. |
 | `IReadOnlyList<WorkflowLink> Links { get; init; }` |  |
+| `string Name { get; init; }` | A name the user gave the workflow (shown in the editor; also the file name when it's shared). |
 | `IReadOnlyList<WorkflowNode> Nodes { get; init; }` |  |
 | `string WhileRunning { get; init; }` | What a trigger does while its previous run is still going (`WorkflowConcurrency`). |
 | `WorkflowNode Find(string nodeId)` |  |
 | `IEnumerable<WorkflowLink> LinksFrom(string nodeId, string port)` | The links leaving a node's output port, in the order they were made. |
 | `bool WouldCycle(string from, string to)` | Whether a link from `from` to `to` would close a loop. |
+
+### WorkflowCase
+
+*record* — One case of a Switch node: a stable id (its output is `case:{id}`) and the text it is compared with.
+
+| Member | |
+|---|---|
+| `WorkflowCase(string Id, string Text)` | One case of a Switch node: a stable id (its output is `case:{id}`) and the text it is compared with. |
+| `string Id { get; init; }` |  |
+| `string Text { get; init; }` |  |
+
+### WorkflowCases
+
+*static class* — Reads and writes a Switch node's cases, stored as one `id=text` line each.
+
+| Member | |
+|---|---|
+| `const int Max` | The most cases one Switch node has (a limit for files and the canvas, not for use). |
+| `const string PortPrefix` |  |
+| `static string CaseIdOf(string port)` | The case id of an output port, or null for any other port. |
+| `static string NextId(IEnumerable<WorkflowCase> cases)` | A case id that no case of the node uses yet (c1, c2, …). |
+| `static IReadOnlyList<WorkflowCase> Parse(string text)` | The cases in order; lines without an id, empty ids and repeated ids are left out. |
+| `static string PortOf(string caseId)` |  |
+| `static string Serialize(IEnumerable<WorkflowCase> cases)` |  |
 
 ### WorkflowConcurrency
 
@@ -835,6 +1050,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 
 | Member | |
 |---|---|
+| `IReadOnlyList<string> All` |  |
 | `const string Ignore` | Ignore the input until the run is finished. |
 | `const string Parallel` | Start another run next to it. |
 | `const string Restart` | Stop the run and start again. |
@@ -848,31 +1064,60 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 |---|---|
 | `const string Add` |  |
 | `const string App` | If (app): part of the focused app's name. |
+| `const string As` | Set variable: what type the result is stored as (`AsAuto`, `AsText`, `AsNumber` or `AsBool`). |
+| `const string AsAuto` |  |
+| `const string AsBool` |  |
+| `const string AsNumber` |  |
+| `const string AsText` |  |
+| `const string Calculate` |  |
+| `const string Cases` | Switch: the cases, one per line as `id=text` (the id keeps a case's links when its text or place changes). |
 | `const string Check` | If: what to check (`CheckVariable`, `CheckApp`, `CheckTime`). |
 | `const string CheckApp` |  |
+| `const string CheckExpression` |  |
 | `const string CheckTime` |  |
 | `const string CheckVariable` |  |
 | `const string Clear` |  |
 | `const string Contains` |  |
-| `const string Count` | Repeat: how many times. |
+| `const string Count` | Repeat: how many times (`ModeCount`). |
+| `const string Every` | Trigger (timer): the seconds between runs. |
+| `const string Expression` | If (expression) and Set variable (Calculate): the expression, e.g. `[count] > 3 && hour() < 18`. |
 | `const string Flip` |  |
 | `const string From` | If (time): from and to, "HH:mm" (may wrap past midnight). |
+| `const string Interval` | Repeat: how long to wait between rounds, in milliseconds (0: none). |
 | `const string IsEmpty` |  |
 | `const string IsEqual` |  |
 | `const string IsGreater` |  |
 | `const string IsLess` |  |
 | `const string IsNotEqual` |  |
 | `const string IsSet` |  |
+| `const int MaxCallDepth` | The deepest a shared workflow may call another one. |
+| `const int MaxConditionRounds` | The most rounds a while / until Repeat runs (a condition that never changes can't run forever). |
+| `const int MaxEverySeconds` | The longest, in seconds (a day). |
 | `const int MaxRepeat` | The most times a Repeat node runs. |
+| `const int MaxRetries` | The most times an action node is tried again. |
 | `const int MaxWaitMs` | The longest wait a node can have (ten minutes). |
 | `const string Milliseconds` | Wait: how long, in milliseconds. |
+| `const int MinEverySeconds` | The shortest time between a timer trigger's runs, in seconds. |
+| `const string Mode` | Repeat: how the rounds are decided (`ModeCount`, `ModeVariable`, `ModeWhile`, `ModeUntil`). |
+| `const string ModeCount` | A fixed number of rounds (`Count`); also what a Repeat node without a mode does. |
+| `const string ModeUntil` | Rounds until a variable condition holds, checked before each round. |
+| `const string ModeVariable` | As many rounds as a variable's value (`Times`). |
+| `const string ModeWhile` | Rounds as long as a variable condition holds (`Name`, `Operation`, `Value`), checked before each round. |
 | `const string Name` | If / Set variable: the variable's name. |
 | `const string On` | Trigger: which input (`WorkflowTriggers`). |
 | `const string Operation` | If: the comparison; Set variable: the operation. |
+| `const string Retries` | Action: how many more times to try when it did not run (0 to `MaxRetries`). |
+| `const string RetryDelay` | Action: the wait between tries, in milliseconds. |
+| `const string Scope` | Set variable, If, Repeat and the "variable changes" trigger: whose variable it is (`ScopeGlobal`, `ScopeProfile` or `ScopeControl`). |
+| `const string ScopeControl` | Only this control's workflow. |
+| `const string ScopeGlobal` | Shared by every workflow (the default). |
+| `const string ScopeProfile` | Shared by the workflows of the same profile only. |
 | `const string Set` |  |
 | `const string Subtract` |  |
+| `const string Times` | Repeat (`ModeVariable`): the variable that holds the number of rounds. |
 | `const string To` |  |
 | `const string Value` |  |
+| `const string Workflow` | Call: the id of the shared workflow to run. |
 
 ### WorkflowLink
 
@@ -909,15 +1154,18 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 |---|---|
 | `IReadOnlyList<string> All` |  |
 | `const string Action` | Runs an action (`Action`). |
+| `const string Call` | Runs a shared workflow (`Workflow`), then goes on. |
 | `const string If` | Continues at Yes or No depending on a condition. |
 | `const string Repeat` | Runs its Each output a number of times, one after the other, then continues at Done. |
 | `const string SetVariable` | Sets, adds to or flips a workflow variable. |
 | `const string Stop` | Ends the run (waits still to come don't continue). |
+| `const string Switch` | Goes on at the output of the first case that equals an expression's value, else at Else (`WorkflowCases`). |
 | `const string Toggle` | Continues at First and Second in turn: the first run First, the next Second, and so on. |
 | `const string Trigger` | Where a run starts: an input of the control (`On`, `WorkflowTriggers`). |
 | `const string Wait` | Waits (`Milliseconds`), then continues. |
 | `static bool HasInput(string kind)` | Whether links can lead into the kind (a trigger only starts runs). |
 | `static IReadOnlyList<string> OutputsOf(string kind)` | The output ports of a kind, in the order the editor shows them. |
+| `static IReadOnlyList<string> OutputsOf(WorkflowNode node)` | The output ports of a node: like `OutputsOf`, but a Switch has one per case, then Else. |
 
 ### WorkflowPorts
 
@@ -925,14 +1173,17 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 
 | Member | |
 |---|---|
+| `const string Default` | A Switch node's output for when no case matches. |
 | `const string Done` |  |
 | `const string Each` |  |
+| `const string Error` | An action node's output for when the action did not run (the plugin isn't loaded, or it failed). |
 | `const string First` |  |
 | `const string Next` |  |
 | `const string No` |  |
 | `const string Second` |  |
 | `const string Yes` |  |
 | `static string Describe(string port)` |  |
+| `static string Describe(string port, WorkflowNode node)` | The label of a port on a node: a Switch case shows its text. |
 
 ### WorkflowTriggers
 
@@ -940,14 +1191,19 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 
 | Member | |
 |---|---|
+| `const string AppInFront` | Event: an app comes to the front (`App`: part of its name). |
 | `const string DoublePress` |  |
 | `const string Down` | The key goes down (right away). |
 | `const string Hold` | Held down (the device's long press). |
+| `const string ProfileShown` | Event: the workflow's profile (page or folder) comes onto the device. |
 | `const string RotateLeft` |  |
 | `const string RotateRight` |  |
 | `const string SwipeLeft` |  |
 | `const string SwipeRight` |  |
 | `const string Tap` | A short press: on release, not after a hold, and not when a second press follows (with a Double trigger). |
+| `const string Timer` | Event: every so many seconds (`Every`) while the profile is shown. |
 | `const string Up` | The key comes up. |
+| `const string VariableChanged` | Event: a variable changes (`Name`, optionally to `Value`). |
 | `static string Describe(string trigger)` |  |
 | `static string Immediate(InputCapabilities eventType, int value)` | The triggers a raw input fires at once (tap, double press and hold need timing: the host decides those). |
+| `static bool IsEvent(string trigger)` | Whether a trigger starts without the control being used: something happens instead (a timer, a variable, an app, the profile). |

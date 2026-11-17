@@ -1,0 +1,48 @@
+using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Headless.NUnit;
+using DeckHost.App.Views;
+
+namespace DeckHost.UiTests;
+
+public sealed class ViewTests
+{
+    private static IEnumerable<Type> ViewTypes() =>
+        typeof(MainWindow).Assembly.GetTypes()
+            .Where(static type => type is { IsAbstract: false, IsPublic: true } && type.Namespace == "DeckHost.App.Views" &&
+                                  typeof(Control).IsAssignableFrom(type) && type.GetConstructor(Type.EmptyTypes) is not null)
+            .OrderBy(static type => type.Name);
+
+    [AvaloniaTest]
+    public void CaptureRenderedFrame_EveryView_LoadsAndDrawsAFrameWithoutAViewModel()
+    {
+        // Arrange
+        const int MinimumViews = 15;
+        var failures = new List<string>();
+        Assert.That(ViewTypes().Count(), Is.GreaterThan(MinimumViews), "the views were found");
+
+        // Act
+        foreach (var type in ViewTypes())
+        {
+            try
+            {
+                var control = (Control)Activator.CreateInstance(type)!;
+                var window = control as Window ?? new Window { Width = 900, Height = 600, Content = control };
+                window.Show();
+                using var frame = window.CaptureRenderedFrame();
+                window.Close();
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                // A native control (the plugin settings web view) that needs COM in a mode the headless thread can't give it (Windows only).
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{type.Name}: {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
+            }
+        }
+
+        // Assert
+        Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
+    }
+}

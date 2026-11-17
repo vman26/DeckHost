@@ -15,16 +15,18 @@ public class ControlItemViewModel : ViewModelBase
     private ControlBindingViewModel? _assignedBinding;
     private bool _isSelected;
 
-    public ControlItemViewModel(PhysicalControl control)
+    /// <param name="placed">Where it is drawn on the canvas (<see cref="Views.DeviceGeometry"/>); its layout bounds when not given.</param>
+    public ControlItemViewModel(PhysicalControl control, Rect? placed = null)
     {
         Control = control;
         Id = control.Id;
         DisplayName = control.DisplayName;
         Type = control.Type;
-        X = control.Bounds.X;
-        Y = control.Bounds.Y;
-        Width = control.Bounds.Width;
-        Height = control.Bounds.Height;
+        var rect = placed ?? control.Bounds;
+        X = rect.X;
+        Y = rect.Y;
+        Width = rect.Width;
+        Height = rect.Height;
         InputsLabel = CapabilityFormatter.Format(control.Inputs, "None");
         OutputsLabel = CapabilityFormatter.Format(control.Outputs, "None");
         SupportsAppearance = control.Outputs != OutputCapabilities.None || control.HasLinkedDisplay;
@@ -52,7 +54,6 @@ public class ControlItemViewModel : ViewModelBase
     public bool SupportsLight => Control.HasLight;
 
     /// <summary>Every control can be customized: appearance, action settings, Multi Action steps or its LED.</summary>
-    public bool SupportsCustomization => true;
 
     /// <summary>Thin controls (the swipe bar) only show their name.</summary>
     public bool IsCompact => Height < CompactHeight;
@@ -69,6 +70,7 @@ public class ControlItemViewModel : ViewModelBase
     public string TypeLabel => Type switch
     {
         ControlType.Key => "Key",
+        ControlType.Button => "Button",
         ControlType.Encoder => "Knob",
         ControlType.TouchSurface => "Touch",
         ControlType.Display => "Display",
@@ -140,23 +142,7 @@ public class ControlItemViewModel : ViewModelBase
 
     public void SetPreview(int width, int height, byte[] rgba)
     {
-        var bitmap = PreviewBitmap;
-        if (bitmap is null || bitmap.PixelSize.Width != width || bitmap.PixelSize.Height != height)
-        {
-            bitmap = new Avalonia.Media.Imaging.WriteableBitmap(
-                new Avalonia.PixelSize(width, height),
-                new Avalonia.Vector(96, 96),
-                Avalonia.Platform.PixelFormat.Rgba8888,
-                Avalonia.Platform.AlphaFormat.Premul);
-        }
-
-        using (var buffer = bitmap.Lock())
-        {
-            for (var row = 0; row < height; row++)
-            {
-                System.Runtime.InteropServices.Marshal.Copy(rgba, row * width * 4, buffer.Address + (row * buffer.RowBytes), width * 4);
-            }
-        }
+        var bitmap = Views.FrameBitmaps.Copy(width, height, rgba, PreviewBitmap);
 
         // A new instance makes the Image control redraw.
         PreviewBitmap = null;

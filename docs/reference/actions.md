@@ -95,7 +95,7 @@ Goes on: keys, knobs. Redraws every 500 ms. Not available as a Multi Action step
 
 | Setting | Kind | |
 |---|---|---|
-| Variable | text |  |
+| Variable | variable |  |
 | Shown while it's empty | text |  |
 
 ### Switch Profile

@@ -10,94 +10,249 @@ namespace DeckHost.Tests;
 
 public class LightEffectMathTests
 {
-    [Fact]
-    public void Solid_and_off()
+    private const string Pink = "FF0080";
+    private const string Red = "FF0000";
+    private const string Black = "000000";
+    private const double BreathePeriodSeconds = 2;
+    private const double RainbowPeriodSeconds = 4;
+    private const int SomeSecond = 7;
+    private const byte DimestRed = 5;
+    private const byte BrightestOfTheDim = 15;
+
+    [Test]
+    public void ColorAt_SolidStyle_IsTheColorAtAnyTime()
     {
-        Assert.Equal(((byte)255, (byte)0, (byte)128), LightEffectMath.ColorAt(new LightStyle("FF0080"), TimeSpan.FromSeconds(7)));
-        Assert.Equal(((byte)0, (byte)0, (byte)0), LightEffectMath.ColorAt(new LightStyle("FF0080", LightEffects.Off), TimeSpan.Zero));
+        // Arrange
+        var style = new LightStyle(Pink);
+
+        // Act
+        var color = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(SomeSecond));
+
+        // Assert
+        Assert.That(color, Is.EqualTo(((byte)255, (byte)0, (byte)128)));
     }
 
-    [Fact]
-    public void Breathing_fades_between_a_glow_and_the_full_color()
+    [Test]
+    public void ColorAt_OffEffect_IsBlack()
     {
-        var style = new LightStyle("FF0000", LightEffects.Breathe, 2);
+        // Arrange
+        var style = new LightStyle(Pink, LightEffects.Off);
 
+        // Act
+        var color = LightEffectMath.ColorAt(style, TimeSpan.Zero);
+
+        // Assert
+        Assert.That(color, Is.EqualTo(((byte)0, (byte)0, (byte)0)));
+    }
+
+    [Test]
+    public void ColorAt_BreatheAtTheStartOfACycle_IsAGlowThatIsNeverFullyDark()
+    {
+        // Arrange
+        var style = new LightStyle(Red, LightEffects.Breathe, BreathePeriodSeconds);
+
+        // Act
         var start = LightEffectMath.ColorAt(style, TimeSpan.Zero);
-        var middle = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1));
 
-        Assert.InRange(start.R, (byte)5, (byte)15); // never fully dark
-        Assert.Equal((byte)255, middle.R);
-        Assert.Equal(start, LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(2))); // one cycle later
+        // Assert
+        Assert.That(start.R, Is.InRange(DimestRed, BrightestOfTheDim));
     }
 
-    [Fact]
-    public void Rainbow_moves_on_and_each_light_is_ahead_of_the_previous_one()
+    [Test]
+    public void ColorAt_BreatheHalfWayThroughACycle_IsTheFullColor()
     {
-        var style = new LightStyle("000000", LightEffects.Rainbow, 4);
+        // Arrange
+        var style = new LightStyle(Red, LightEffects.Breathe, BreathePeriodSeconds);
 
-        Assert.NotEqual(LightEffectMath.ColorAt(style, TimeSpan.Zero), LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1)));
-        Assert.Equal(LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1)), LightEffectMath.ColorAt(style, TimeSpan.Zero, phase: 1));
+        // Act
+        var middle = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(BreathePeriodSeconds / 2));
+
+        // Assert
+        Assert.That(middle.R, Is.EqualTo((byte)255));
+    }
+
+    [Test]
+    public void ColorAt_BreatheOneCycleLater_IsTheStartColorAgain()
+    {
+        // Arrange
+        var style = new LightStyle(Red, LightEffects.Breathe, BreathePeriodSeconds);
+        var start = LightEffectMath.ColorAt(style, TimeSpan.Zero);
+
+        // Act
+        var later = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(BreathePeriodSeconds));
+
+        // Assert
+        Assert.That(later, Is.EqualTo(start));
+    }
+
+    [Test]
+    public void ColorAt_RainbowAQuarterCycleLater_IsAnotherColor()
+    {
+        // Arrange
+        var style = new LightStyle(Black, LightEffects.Rainbow, RainbowPeriodSeconds);
+        var start = LightEffectMath.ColorAt(style, TimeSpan.Zero);
+
+        // Act
+        var later = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1));
+
+        // Assert
+        Assert.That(later, Is.Not.EqualTo(start));
+    }
+
+    [Test]
+    public void ColorAt_RainbowOnTheNextLight_IsAheadByTheSameQuarterCycle()
+    {
+        // Arrange
+        var style = new LightStyle(Black, LightEffects.Rainbow, RainbowPeriodSeconds);
+        var aQuarterLater = LightEffectMath.ColorAt(style, TimeSpan.FromSeconds(1));
+
+        // Act
+        var nextLight = LightEffectMath.ColorAt(style, TimeSpan.Zero, phase: 1);
+
+        // Assert
+        Assert.That(nextLight, Is.EqualTo(aQuarterLater));
     }
 }
 
 public class HostLightTests
 {
-    [Fact]
-    public async Task The_device_light_shows_on_every_knob_and_a_knob_can_have_its_own()
-    {
-        var device = new LightDevice();
-        await using var fixture = await Fixture.StartAsync(device,
-            Knob("encoder.0", new RgbFeedback("FFFFFF", "00FF00")));
+    private const string FirstKnob = "encoder.0";
+    private const string SecondKnob = "encoder.1";
+    private const string White = "FFFFFF";
+    private const string Green = "00FF00";
+    private const string Red = "FF0000";
+    private const string Blue = "0000FF";
+    private const int PressDurationMilliseconds = 60;
+    private const int OneRainbowSecond = 1;
+    private static readonly (int, int, int) GreenLight = (0, 255, 0);
+    private static readonly (int, int, int) RedLight = (255, 0, 0);
+    private static readonly (int, int, int) BlueLight = (0, 0, 255);
+    private static readonly (int, int, int) WhiteLight = (255, 255, 255);
 
-        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle("FF0000"));
+    private static async Task<Fixture> StartedWithAGreenFirstKnobAsync(LightDevice device) =>
+        await Fixture.StartAsync(device, Knob(FirstKnob, new RgbFeedback(White, Green)));
+
+    [Test]
+    public async Task SetDeviceLight_KnobWithItsOwnIdleColor_KeepsItsOwnColor()
+    {
+        // Arrange
+        await using var fixture = await StartedWithAGreenFirstKnobAsync(new LightDevice());
+
+        // Act
+        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle(Red));
         await fixture.Host.WhenIdleAsync();
 
-        Assert.Equal((0, 255, 0), fixture.Shown("encoder.0")); // its own idle color
-        Assert.Equal((255, 0, 0), fixture.Shown("encoder.1")); // the device's
-        Assert.Contains("encoder.1:255,0,0", device.Calls);
+        // Assert
+        Assert.That(fixture.Shown(FirstKnob), Is.EqualTo(GreenLight));
     }
 
-    [Fact]
-    public async Task An_unplugged_device_still_shows_its_lights_in_the_editor()
+    [Test]
+    public async Task SetDeviceLight_KnobWithoutItsOwnColor_ShowsTheDevicesLight()
     {
+        // Arrange
+        var device = new LightDevice();
+        await using var fixture = await StartedWithAGreenFirstKnobAsync(device);
+
+        // Act
+        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle(Red));
+        await fixture.Host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(fixture.Shown(SecondKnob), Is.EqualTo(RedLight));
+        Assert.That(device.Calls, Does.Contain($"{SecondKnob}:255,0,0"));
+    }
+
+    [Test]
+    public async Task SetDeviceLight_UnpluggedDevice_ShowsTheLightInTheEditor()
+    {
+        // Arrange
+        await using var fixture = await Fixture.StartAsync(new LightDevice(connected: false));
+
+        // Act
+        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle(Blue));
+        await fixture.Host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(fixture.Shown(FirstKnob), Is.EqualTo(BlueLight));
+    }
+
+    [Test]
+    public async Task SetDeviceLight_UnpluggedDevice_SendsNothingToTheDevice()
+    {
+        // Arrange
         var device = new LightDevice(connected: false);
         await using var fixture = await Fixture.StartAsync(device);
 
-        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle("0000FF"));
+        // Act
+        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle(Blue));
         await fixture.Host.WhenIdleAsync();
 
-        Assert.Equal((0, 0, 255), fixture.Shown("encoder.0"));
-        Assert.Empty(device.Calls);
+        // Assert
+        Assert.That(device.Calls, Is.Empty);
     }
 
-    [Fact]
-    public async Task A_press_shows_the_active_color_then_the_idle_light_again()
+    [Test]
+    public async Task SimulateInput_PressOnAKnobWithLightFeedback_ShowsTheActiveColor()
     {
-        var device = new LightDevice();
-        await using var fixture = await Fixture.StartAsync(device, Knob("encoder.0", new RgbFeedback("FFFFFF", "00FF00", ActiveDuration: 60)));
+        // Arrange
+        await using var fixture = await Fixture.StartAsync(new LightDevice(), Knob(FirstKnob, new RgbFeedback(White, Green, ActiveDuration: PressDurationMilliseconds)));
 
-        fixture.Host.SimulateInput(new DeviceInputEvent(LightDevice.DeviceId, "encoder.0", InputCapabilities.Press, 1));
+        // Act
+        fixture.Host.SimulateInput(new DeviceInputEvent(LightDevice.DeviceId, FirstKnob, InputCapabilities.Press, 1));
         await fixture.Host.WhenIdleAsync();
-        Assert.Equal((255, 255, 255), fixture.Shown("encoder.0"));
 
-        await WaitUntil(() => fixture.Shown("encoder.0") == (0, 255, 0));
-        Assert.Equal((0, 255, 0), fixture.Shown("encoder.0"));
+        // Assert
+        Assert.That(fixture.Shown(FirstKnob), Is.EqualTo(WhiteLight));
     }
 
-    [Fact]
-    public async Task An_effect_keeps_changing_the_light_in_one_command_for_all_knobs()
+    [Test]
+    public async Task SimulateInput_PressOnAKnobWithLightFeedback_ShowsTheIdleLightAgainAfterTheActiveDuration()
     {
+        // Arrange
+        await using var fixture = await Fixture.StartAsync(new LightDevice(), Knob(FirstKnob, new RgbFeedback(White, Green, ActiveDuration: PressDurationMilliseconds)));
+        fixture.Host.SimulateInput(new DeviceInputEvent(LightDevice.DeviceId, FirstKnob, InputCapabilities.Press, 1));
+        await fixture.Host.WhenIdleAsync();
+
+        // Act
+        await WaitUntil(() => fixture.Shown(FirstKnob) == GreenLight);
+
+        // Assert
+        Assert.That(fixture.Shown(FirstKnob), Is.EqualTo(GreenLight));
+    }
+
+    [Test]
+    public async Task SetDeviceLight_RainbowEffect_KeepsChangingTheLight()
+    {
+        // Arrange
+        await using var fixture = await Fixture.StartAsync(new LightDevice());
+        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle(Red, LightEffects.Rainbow, OneRainbowSecond));
+        await fixture.Host.WhenIdleAsync();
+        var first = fixture.Shown(FirstKnob);
+
+        // Act
+        await WaitUntil(() => fixture.Shown(FirstKnob) != first);
+
+        // Assert
+        Assert.That(fixture.Shown(FirstKnob), Is.Not.EqualTo(first));
+    }
+
+    [Test]
+    public async Task SetDeviceLight_RainbowEffect_SendsOneCommandForAllKnobs()
+    {
+        // Arrange
         var device = new LightDevice();
         await using var fixture = await Fixture.StartAsync(device);
-        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle("FF0000", LightEffects.Rainbow, 1));
+
+        // Act
+        fixture.Host.SetDeviceLight(LightDevice.DeviceId, new LightStyle(Red, LightEffects.Rainbow, OneRainbowSecond));
         await fixture.Host.WhenIdleAsync();
-        var first = fixture.Shown("encoder.0");
+        await WaitUntil(() => device.Calls.Any(IsABatch));
 
-        await WaitUntil(() => fixture.Shown("encoder.0") != first);
-
-        Assert.NotEqual(first, fixture.Shown("encoder.0"));
-        Assert.Contains(device.Calls, call => call.StartsWith("batch:", StringComparison.Ordinal));
+        // Assert
+        Assert.That(device.Calls.Any(IsABatch), Is.True);
     }
+
+    private static bool IsABatch(string call) => call.StartsWith("batch:", StringComparison.Ordinal);
 
     private static ControlBinding Knob(string controlId, RgbFeedback light) =>
         new(controlId, ProfileActionKind.Single, Bindings.Reference("p", "a"), new ControlAppearance(RgbFeedback: light), []);
@@ -203,9 +358,14 @@ public class HostLightTests
         }
     }
 }
-
 public class LightSettingsTests
 {
+    private const string DeviceId = "dev";
+    private const string Orange = "#FF8800";
+    private const string OrangeHex = "FF8800";
+    private const double Period = 4.2;
+    private const double RainbowPeriod = 6;
+
     private sealed class Store : DeckHost.App.ViewModels.IDeviceLightSettings
     {
         public Dictionary<string, LightStyle?> Lights { get; } = [];
@@ -215,25 +375,76 @@ public class LightSettingsTests
         public void SetDeviceLight(string deviceId, LightStyle? style) => Lights[deviceId] = style;
     }
 
-    [Fact]
-    public void The_knob_lights_card_sets_the_devices_light_right_away()
+    private sealed class TempProfilesFolder : IDisposable
     {
-        var store = new Store();
-        var card = new DeckHost.App.ViewModels.KnobLightsViewModel(store, "dev");
+        public string Folder { get; } = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}");
 
-        Assert.Equal(DeckHost.App.ViewModels.KnobLightsViewModel.Off, card.SelectedEffect.Value); // dark until chosen
-        card.SelectedEffect = card.Effects.First(option => option.Value == LightEffects.Breathe);
-        card.Color = "#FF8800";
-        card.PeriodSeconds = 4.2;
+        public string ProfilesFile => Path.Combine(Folder, "profiles.json");
 
-        Assert.Equal(new LightStyle("FF8800", LightEffects.Breathe, 4.2), store.Lights["dev"]);
-        Assert.True(card.ShowColor && card.ShowSpeed);
-        card.SelectedEffect = card.Effects.First(option => option.Value == DeckHost.App.ViewModels.KnobLightsViewModel.Off);
-        Assert.Null(store.Lights["dev"]);
+        public void Dispose() => Directory.Delete(Folder, recursive: true);
     }
 
-    [Fact]
-    public void A_knob_can_have_its_own_idle_effect()
+    private static ActionSettingOption Effect(DeckHost.App.ViewModels.KnobLightsViewModel card, string value) =>
+        card.Effects.First(option => option.Value == value);
+
+    [Test]
+    public void Constructor_NoLightSet_ShowsTheDeviceDark()
+    {
+        // Arrange
+        var store = new Store();
+
+        // Act
+        var card = new DeckHost.App.ViewModels.KnobLightsViewModel(store, DeviceId);
+
+        // Assert
+        Assert.That(card.SelectedEffect.Value, Is.EqualTo(DeckHost.App.ViewModels.KnobLightsViewModel.Off));
+    }
+
+    [Test]
+    public void SelectedEffect_ChosenWithAColorAndPeriod_SetsTheDevicesLightRightAway()
+    {
+        // Arrange
+        var store = new Store();
+        var card = new DeckHost.App.ViewModels.KnobLightsViewModel(store, DeviceId);
+
+        // Act
+        card.SelectedEffect = Effect(card, LightEffects.Breathe);
+        card.Color = Orange;
+        card.PeriodSeconds = Period;
+
+        // Assert
+        Assert.That(store.Lights[DeviceId], Is.EqualTo(new LightStyle(OrangeHex, LightEffects.Breathe, Period)));
+    }
+
+    [Test]
+    public void SelectedEffect_Breathe_ShowsTheColorAndSpeedFields()
+    {
+        // Arrange
+        var card = new DeckHost.App.ViewModels.KnobLightsViewModel(new Store(), DeviceId);
+
+        // Act
+        card.SelectedEffect = Effect(card, LightEffects.Breathe);
+
+        // Assert
+        Assert.That(card.ShowColor && card.ShowSpeed, Is.True);
+    }
+
+    [Test]
+    public void SelectedEffect_BackToOff_ClearsTheDevicesLight()
+    {
+        // Arrange
+        var store = new Store();
+        var card = new DeckHost.App.ViewModels.KnobLightsViewModel(store, DeviceId);
+        card.SelectedEffect = Effect(card, LightEffects.Breathe);
+
+        // Act
+        card.SelectedEffect = Effect(card, DeckHost.App.ViewModels.KnobLightsViewModel.Off);
+
+        // Assert
+        Assert.That(store.Lights[DeviceId], Is.Null);
+    }
+
+    private static DeckHost.App.ViewModels.ControlCustomizationViewModel CustomizeAKnob()
     {
         var builtIns = DeckHost.App.SystemPlugins.SystemPluginSet.Create().First(plugin => plugin.Id == DeckHost.App.SystemPlugins.SystemPluginSet.MediaPluginId);
         var item = DeckHost.App.ViewModels.ActionItemViewModel.Create(builtIns.Id, builtIns.Name, builtIns.Actions.First(action => action.Id == "media.volume-knob"));
@@ -241,38 +452,89 @@ public class LightSettingsTests
             InputCapabilities.Rotate | InputCapabilities.Press, OutputCapabilities.None, DisplayControlId: "touch.0", LedIndex: 0));
         var binding = new DeckHost.App.ViewModels.ControlBindingViewModel(
             new ControlBinding("encoder.0", ProfileActionKind.Single, item.ToActionReference(), new ControlAppearance(), []), item, []);
-        var customize = new DeckHost.App.ViewModels.ControlCustomizationViewModel(knob, binding, [item], null);
-
-        Assert.Null(customize.BuildBinding()!.Appearance.RgbFeedback); // follows the device's knob lights
-        customize.LightEnabled = true;
-        customize.SelectedIdleEffect = customize.IdleEffects.First(option => option.Value == LightEffects.Rainbow);
-        customize.EffectPeriod = 6;
-
-        var light = customize.BuildBinding()!.Appearance.RgbFeedback!;
-        Assert.Equal((LightEffects.Rainbow, 6d), (light.IdleEffect, light.EffectPeriodSeconds));
-        Assert.Equal(new LightStyle(light.IdleColor, LightEffects.Rainbow, 6), light.IdleStyle);
+        return new DeckHost.App.ViewModels.ControlCustomizationViewModel(knob, binding, [item], null);
     }
 
-    [Fact]
-    public void Device_lights_and_a_knobs_effect_are_saved()
+    [Test]
+    public void BuildBinding_KnobWithoutItsOwnLight_FollowsTheDevicesKnobLights()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}", "profiles.json");
-        try
-        {
-            var store = new DeckHost.Core.Profiles.ProfileStore(path);
-            var light = new RgbFeedback("FFFFFF", "00FF00") { IdleEffect = LightEffects.Breathe, EffectPeriodSeconds = 2.5 };
-            var binding = new ControlBinding("encoder.0", ProfileActionKind.Single, Bindings.Reference("p", "a"), new ControlAppearance(RgbFeedback: light), []);
-            store.Save(new DeckHost.Core.Profiles.ProfileDocument(DeckHost.Core.Profiles.ProfileDocument.CurrentVersion, "p", [new DeviceProfile("p", "P", "dev", [binding])],
-                DeviceLights: new Dictionary<string, LightStyle> { ["dev"] = new("FF0000", LightEffects.Rainbow, 5) }));
+        // Arrange
+        var customize = CustomizeAKnob();
 
-            var loaded = store.Load()!;
+        // Act
+        var light = customize.BuildBinding()!.Appearance.RgbFeedback;
 
-            Assert.Equal(new LightStyle("FF0000", LightEffects.Rainbow, 5), loaded.DeviceLights!["dev"]);
-            Assert.Equal(light, Assert.Single(Assert.Single(loaded.Profiles).Bindings).Appearance.RgbFeedback);
-        }
-        finally
-        {
-            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
-        }
+        // Assert
+        Assert.That(light, Is.Null);
+    }
+
+    [Test]
+    public void BuildBinding_KnobWithItsOwnIdleEffect_KeepsTheEffectAndPeriod()
+    {
+        // Arrange
+        var customize = CustomizeAKnob();
+        customize.LightEnabled = true;
+        customize.SelectedIdleEffect = customize.IdleEffects.First(option => option.Value == LightEffects.Rainbow);
+        customize.EffectPeriod = RainbowPeriod;
+
+        // Act
+        var light = customize.BuildBinding()!.Appearance.RgbFeedback!;
+
+        // Assert
+        Assert.That((light.IdleEffect, light.EffectPeriodSeconds), Is.EqualTo((LightEffects.Rainbow, RainbowPeriod)));
+    }
+
+    [Test]
+    public void BuildBinding_KnobWithItsOwnIdleEffect_BuildsTheFullIdleStyle()
+    {
+        // Arrange
+        var customize = CustomizeAKnob();
+        customize.LightEnabled = true;
+        customize.SelectedIdleEffect = customize.IdleEffects.First(option => option.Value == LightEffects.Rainbow);
+        customize.EffectPeriod = RainbowPeriod;
+
+        // Act
+        var light = customize.BuildBinding()!.Appearance.RgbFeedback!;
+
+        // Assert
+        Assert.That(light.IdleStyle, Is.EqualTo(new LightStyle(light.IdleColor, LightEffects.Rainbow, RainbowPeriod)));
+    }
+
+    private static DeckHost.Core.Profiles.ProfileDocument DocumentWithKnobEffectAndDeviceLight(RgbFeedback light)
+    {
+        var binding = new ControlBinding("encoder.0", ProfileActionKind.Single, Bindings.Reference("p", "a"), new ControlAppearance(RgbFeedback: light), []);
+        return new DeckHost.Core.Profiles.ProfileDocument(DeckHost.Core.Profiles.ProfileDocument.CurrentVersion, "p", [new DeviceProfile("p", "P", DeviceId, [binding])],
+            DeviceLights: new Dictionary<string, LightStyle> { [DeviceId] = new("FF0000", LightEffects.Rainbow, 5) });
+    }
+
+    [Test]
+    public void Load_AfterSavingADeviceLight_ReturnsIt()
+    {
+        // Arrange
+        using var folder = new TempProfilesFolder();
+        var store = new DeckHost.Core.Profiles.ProfileStore(folder.ProfilesFile);
+        store.Save(DocumentWithKnobEffectAndDeviceLight(new RgbFeedback("FFFFFF", "00FF00")));
+
+        // Act
+        var loaded = store.Load()!;
+
+        // Assert
+        Assert.That(loaded.DeviceLights![DeviceId], Is.EqualTo(new LightStyle("FF0000", LightEffects.Rainbow, 5)));
+    }
+
+    [Test]
+    public void Load_AfterSavingAKnobsIdleEffect_ReturnsIt()
+    {
+        // Arrange
+        using var folder = new TempProfilesFolder();
+        var store = new DeckHost.Core.Profiles.ProfileStore(folder.ProfilesFile);
+        var light = new RgbFeedback("FFFFFF", "00FF00") { IdleEffect = LightEffects.Breathe, EffectPeriodSeconds = 2.5 };
+        store.Save(DocumentWithKnobEffectAndDeviceLight(light));
+
+        // Act
+        var loaded = store.Load()!;
+
+        // Assert
+        Assert.That(Expect.Single(Expect.Single(loaded.Profiles).Bindings).Appearance.RgbFeedback, Is.EqualTo(light));
     }
 }

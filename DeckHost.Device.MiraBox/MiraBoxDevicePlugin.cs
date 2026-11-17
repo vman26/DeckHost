@@ -4,19 +4,65 @@ using DeckHost.Contracts.Models;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace DeckHost.Device.MiraBox;
 
 /// <summary>
-/// Device plugin for the MiraBox / StreamDock N4 Pro (see <see cref="N4ProLayout"/>).
+/// Device plugin for MiraBox / StreamDock devices: the N4 Pro, and the other models the vendor SDK
+/// knows (<see cref="MiraBoxModels"/>), picked by the SDK's origin type.
 /// <para>
-/// The first N4 Pro gets the id <see cref="PrimaryDeviceId"/>, so profiles keep working when it is
-/// unplugged and plugged back in; further units get <c>mirabox.n4pro-2</c>, <c>-3</c>, ...
-/// The primary definition always exists, connected or not, so profiles can be edited offline.
+/// The first unit of a model gets the id <c>mirabox.{model}</c> (<see cref="PrimaryDeviceId"/> for
+/// the N4 Pro), so profiles keep working when it is unplugged and plugged back in; further units get
+/// <c>-2</c>, <c>-3</c>, ... The N4 Pro's definition always exists, and every device seen before is
+/// remembered (<c>devices/mirabox-known.json</c>), connected or not, so profiles can be edited offline.
 /// </para>
 /// </summary>
-public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin, IDeviceFirmware
+public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceBackdropOutput, IDeviceLightBatchOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog, IDeviceSettingActions
 {
+    public const string ForgetActionId = "forget";
+
+    /// <summary>
+    /// An unplugged device can be forgotten: it leaves the device list until it's plugged in again
+    /// (the N4 Pro shown before any device was plugged in too).
+    /// </summary>
+    public IReadOnlyList<DeviceSettingAction> GetSettingActions(string deviceId)
+    {
+        lock (_sync)
+        {
+            return FindSession(deviceId) is { DeviceKey: null } session
+                ? [new DeviceSettingAction(ForgetActionId, "Forget this device", "Removes it from the device list until it's plugged in again. Its profiles are kept for then.", $"Forget MiraBox {session.Model.ShortName}?")]
+                : [];
+        }
+    }
+
+    public string RunSettingAction(string deviceId, string actionId)
+    {
+        if (actionId != ForgetActionId)
+        {
+            return "Unknown action.";
+        }
+
+        lock (_sync)
+        {
+            if (FindSession(deviceId) is not { DeviceKey: null } session)
+            {
+                return "Only an unplugged device can be forgotten.";
+            }
+
+            _sessions.Remove(session);
+            Volatile.Write(ref _devices, BuildDefinitions());
+        }
+
+        SaveKnown();
+        DevicesChanged?.Invoke(this, EventArgs.Empty);
+        return "Forgotten. It comes back when you plug it in.";
+    }
+
+    /// <summary>Every StreamDock model DeckHost knows, unplugged (for the device simulator).</summary>
+    public IReadOnlyList<DeviceDefinition> DescribeModels() =>
+        [.. MiraBoxModels.All.Select(static model => model.Describe(model.DefaultDeviceId, $"MiraBox {model.ShortName}", null, isConnected: false, detail: null))];
+
     /// <summary>The version the SDK reads; the StreamDock SDK has no way to write firmware.</summary>
     public DeviceFirmwareInfo? GetFirmwareInfo(string deviceId)
     {
@@ -28,20 +74,20 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         }
     }
 
-    public IReadOnlyList<ActionSettingDefinition> GetDeviceSettingDefinitions(string deviceId) => N4ProDeviceSettings.Definitions;
+    public IReadOnlyList<ActionSettingDefinition> GetDeviceSettingDefinitions(string deviceId) => MiraBoxDeviceSettings.For(ModelOf(deviceId));
 
-    public ActionSettings GetDeviceSettings(string deviceId) => N4ProDeviceSettings.Load(deviceId);
+    public ActionSettings GetDeviceSettings(string deviceId) => MiraBoxDeviceSettings.Load(deviceId);
 
     public string? ApplyDeviceSettings(string deviceId, ActionSettings settings)
     {
         // Keep the markers of what was already sent to the device.
-        var stored = N4ProDeviceSettings.Load(deviceId);
-        foreach (var marker in N4ProDeviceSettings.Markers)
+        var stored = MiraBoxDeviceSettings.Load(deviceId);
+        foreach (var marker in MiraBoxDeviceSettings.Markers)
         {
             settings = settings.With(marker, stored.TryGetValue(marker, out var applied) ? applied : null);
         }
 
-        N4ProDeviceSettings.Save(deviceId, settings);
+        MiraBoxDeviceSettings.Save(deviceId, settings);
 
         if (!TryGetConnectedKey(deviceId, out var deviceKey, out _))
         {
@@ -57,9 +103,9 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
     private List<string> ApplyStoredSettings(string deviceId, string deviceKey)
     {
-        var settings = N4ProDeviceSettings.Load(deviceId);
-        var (problems, idleScreenWritten) = N4ProDeviceSettings.Apply(deviceKey, settings, (marker, value) =>
-            N4ProDeviceSettings.Save(deviceId, N4ProDeviceSettings.Load(deviceId).With(marker, value)));
+        var settings = MiraBoxDeviceSettings.Load(deviceId);
+        var (problems, idleScreenWritten) = MiraBoxDeviceSettings.Apply(deviceKey, ModelOf(deviceId), settings, (marker, value) =>
+            MiraBoxDeviceSettings.Save(deviceId, MiraBoxDeviceSettings.Load(deviceId).With(marker, value)));
         // Writing the idle screen blanks the keys, and the device configuration resets the LEDs to
         // the device's own lighting: send images and lights again.
         _context?.RequestRedraw(deviceId);
@@ -106,7 +152,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
                     if (MiraBoxNative.GetDeviceKey(index) is { } key &&
                         MiraBoxDeviceInfo.FromJson(MiraBoxNative.GetDeviceInfoJson(key, out _)) is { } info)
                     {
-                        lines.Add($"  {(info.IsN4Pro ? "N4 Pro" : $"model {info.OriginType}")} {info.VendorId:X4}:{info.ProductId:X4}, serial {info.SerialNumber}, firmware {info.FirmwareVersion}");
+                        lines.Add($"  {MiraBoxModels.For(info.OriginType)?.ShortName ?? $"unknown model {info.OriginType}"} {info.VendorId:X4}:{info.ProductId:X4}, serial {info.SerialNumber}, firmware {info.FirmwareVersion}");
                     }
                 }
 
@@ -124,10 +170,9 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
     }
 
     public const string PrimaryDeviceId = "mirabox.n4pro";
-    private const string DeviceName = "MiraBox N4 Pro";
     private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);
 
-    /// <summary>The N4 Pro reports a knob press but never its release; one is reported this long after the press.</summary>
+    /// <summary>Some models (the N4 Pro) report a knob press but never its release; one is reported this long after the press.</summary>
     private static readonly TimeSpan KnobReleaseDelay = TimeSpan.FromMilliseconds(120);
 
     /// <summary>The backdrop is one color, so a few pixels are enough: the device scales them to its screen.</summary>
@@ -137,7 +182,8 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
     private static MiraBoxDevicePlugin? s_active;
 
     private readonly Lock _sync = new();
-    private readonly List<DeviceSession> _sessions = [new DeviceSession(PrimaryDeviceId)];
+    private readonly List<DeviceSession> _sessions = [new DeviceSession(PrimaryDeviceId, MiraBoxModels.N4Pro)];
+    private readonly string _directory;
     private readonly HashSet<string> _reportedUnsupported = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<(string DeviceId, string ControlId), Timer> _longPressTimers = new();
     private IReadOnlyCollection<DeviceDefinition> _devices;
@@ -147,7 +193,29 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
     private bool _disposed;
 
     public MiraBoxDevicePlugin()
+        : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost", "devices"))
     {
+    }
+
+    /// <param name="directory">Where the devices seen before are remembered.</param>
+    public MiraBoxDevicePlugin(string directory)
+    {
+        _directory = directory;
+        foreach (var known in LoadKnown())
+        {
+            if (known.Forgotten)
+            {
+                // The N4 Pro shown before anything was plugged in, forgotten.
+                _sessions.RemoveAll(session => string.Equals(session.DeviceId, known.Id, StringComparison.OrdinalIgnoreCase));
+                continue;
+            }
+
+            if (MiraBoxModels.For(known.OriginType) is { } model && FindSession(known.Id) is null)
+            {
+                _sessions.Add(new DeviceSession(known.Id, model) { SerialNumber = string.IsNullOrEmpty(known.Serial) ? null : known.Serial });
+            }
+        }
+
         _devices = BuildDefinitions();
     }
 
@@ -213,7 +281,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
             return false;
         }
 
-        if (N4ProLayout.GetImageKeyId(controlId) is not { } keyId)
+        if (ModelOf(deviceId).GetImageKeyId(controlId) is not { } keyId)
         {
             error = $"'{controlId}' has no image output.";
             return false;
@@ -244,7 +312,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
             foreach (var light in lights)
             {
-                if (N4ProLayout.GetLedIndex(light.ControlId) is not { } ledIndex || session.LedColors.Length < (ledIndex + 1) * 3)
+                if (session.Model.GetLedIndex(light.ControlId) is not { } ledIndex || session.LedColors.Length < (ledIndex + 1) * 3)
                 {
                     error = $"'{light.ControlId}' has no LED.";
                     return false;
@@ -269,7 +337,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
             return CheckResult(deviceId, MiraBoxNative.SetLedBrightness(deviceKey, 0), out error);
         }
 
-        if (restoreBrightness && !CheckResult(deviceId, MiraBoxNative.SetLedBrightness(deviceKey, N4ProDeviceSettings.LedBrightnessLevel(deviceId)), out error))
+        if (restoreBrightness && !CheckResult(deviceId, MiraBoxNative.SetLedBrightness(deviceKey, MiraBoxDeviceSettings.LedBrightnessLevel(deviceId)), out error))
         {
             return false;
         }
@@ -379,28 +447,34 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
             return;
         }
 
-        string? deviceId;
+        DeviceSession? session;
         lock (_sync)
         {
-            deviceId = _sessions.FirstOrDefault(session => session.DeviceKey == deviceKey)?.DeviceId;
+            session = _sessions.FirstOrDefault(candidate => candidate.DeviceKey == deviceKey);
         }
 
-        if (deviceId is null)
+        if (session is null)
         {
             QueueRefresh();
             return;
         }
 
-        if (!N4ProLayout.TryMapInput(eventType, sdkControlId, out var controlId, out var inputEvent, out var value))
+        var deviceId = session.DeviceId;
+        var model = session.Model;
+        if (!model.TryMapInput(eventType, sdkControlId, out var controlId, out var inputEvent, out var value))
         {
-            _context.Log("Debug", $"Ignored N4 Pro event {eventType} for SDK id {sdkControlId}.");
+            _context.Log("Debug", $"Ignored {model.ShortName} event {eventType} for SDK id {sdkControlId}.");
             return;
         }
 
-        TrackLongPress(deviceId, controlId, inputEvent);
+        if (model.TracksLongPress(controlId))
+        {
+            TrackLongPress(deviceId, controlId, inputEvent);
+        }
+
         _context.ReportInputEvent(deviceId, controlId, inputEvent, value);
 
-        if (eventType == MiraBoxEventType.KnobPress)
+        if (eventType == MiraBoxEventType.KnobPress && model.KnobsReportNoRelease)
         {
             // Without a release the knob would stay "held" for the editor and for "Released" triggers.
             _ = Task.Delay(KnobReleaseDelay).ContinueWith(
@@ -418,11 +492,6 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
     /// <summary>Raises LongPress when a key stays down for <see cref="LongPressDelay"/>.</summary>
     private void TrackLongPress(string deviceId, string controlId, InputCapabilities inputEvent)
     {
-        if (!controlId.StartsWith(N4ProLayout.KeyPrefix, StringComparison.Ordinal))
-        {
-            return;
-        }
-
         var key = (deviceId, controlId);
         if (_longPressTimers.TryRemove(key, out var previous))
         {
@@ -492,11 +561,11 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
                 continue;
             }
 
-            if (!info.IsN4Pro)
+            if (MiraBoxModels.For(info.OriginType) is null)
             {
                 if (_reportedUnsupported.Add(deviceKey))
                 {
-                    _context?.Log("Warning", $"StreamDock device {info.VendorId:X4}:{info.ProductId:X4} (model {info.OriginType}) is not supported yet; only the N4 Pro is.");
+                    _context?.Log("Warning", $"StreamDock device {info.VendorId:X4}:{info.ProductId:X4} (model {info.OriginType}) is not supported yet.");
                 }
 
                 continue;
@@ -507,13 +576,21 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
         var statusChanges = new List<(string DeviceId, string State, string Message)>();
         bool changed;
+        bool added;
         lock (_sync)
         {
+            var before = _sessions.Count;
             changed = AssignSessions(connected, statusChanges);
+            added = _sessions.Count != before;
             if (changed)
             {
                 Volatile.Write(ref _devices, BuildDefinitions());
             }
+        }
+
+        if (added)
+        {
+            SaveKnown();
         }
 
         foreach (var (deviceId, state, message) in statusChanges)
@@ -540,13 +617,15 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
         foreach (var info in connected)
         {
-            var session = _sessions.FirstOrDefault(candidate => candidate.DeviceKey == info.DeviceKey && !matched.Contains(candidate))
-                ?? _sessions.FirstOrDefault(candidate => candidate.DeviceKey is null && candidate.SerialNumber == info.SerialNumber && !matched.Contains(candidate))
-                ?? _sessions.FirstOrDefault(candidate => candidate.DeviceKey is null && candidate.SerialNumber is null && !matched.Contains(candidate));
+            var model = MiraBoxModels.For(info.OriginType)!;
+            var sameModel = _sessions.Where(candidate => candidate.Model == model && !matched.Contains(candidate)).ToList();
+            var session = sameModel.FirstOrDefault(candidate => candidate.DeviceKey == info.DeviceKey)
+                ?? sameModel.FirstOrDefault(candidate => candidate.DeviceKey is null && candidate.SerialNumber == info.SerialNumber)
+                ?? sameModel.FirstOrDefault(candidate => candidate.DeviceKey is null && candidate.SerialNumber is null);
 
             if (session is null)
             {
-                session = new DeviceSession($"{PrimaryDeviceId}-{_sessions.Count + 1}");
+                session = new DeviceSession(NewDeviceId(model), model);
                 _sessions.Add(session);
             }
 
@@ -560,12 +639,13 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
             session.DeviceKey = info.DeviceKey;
             session.SerialNumber = info.SerialNumber;
             session.Info = info;
-            if (session.LedColors.Length != info.LedCount * 3)
+            var ledCount = Math.Min(model.LedCount, Math.Max(0, info.LedCount));
+            if (session.LedColors.Length != ledCount * 3)
             {
-                session.LedColors = new byte[Math.Max(0, info.LedCount) * 3];
+                session.LedColors = new byte[ledCount * 3];
             }
 
-            statusChanges.Add((session.DeviceId, "Connected", $"N4 Pro {info.SerialNumber}, firmware {info.FirmwareVersion}."));
+            statusChanges.Add((session.DeviceId, "Connected", $"{model.ShortName} {info.SerialNumber}, firmware {info.FirmwareVersion}."));
         }
 
         foreach (var session in _sessions.Where(session => !matched.Contains(session)))
@@ -574,7 +654,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
             {
                 changed |= session.DeviceKey is not null;
                 session.DeviceKey = null;
-                statusChanges.Add((session.DeviceId, "Disconnected", "Plug in the N4 Pro over USB."));
+                statusChanges.Add((session.DeviceId, "Disconnected", $"Plug in the {session.Model.ShortName} over USB."));
             }
         }
 
@@ -588,16 +668,82 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
     private DeviceDefinition[] BuildDefinitions() =>
     [
-        .. _sessions.Select(session => N4ProLayout.Create(
+        .. _sessions.Select(session => session.Model.Describe(
             session.DeviceId,
-            session.DeviceId == PrimaryDeviceId ? DeviceName : $"{DeviceName} ({session.SerialNumber})",
+            session.DeviceId == session.Model.DefaultDeviceId ? $"MiraBox {session.Model.ShortName}" : $"MiraBox {session.Model.ShortName} ({session.SerialNumber})",
             session.Info,
             session.DeviceKey is not null,
             session.Info is null ? null : $"Serial {session.Info.SerialNumber}, firmware {session.Info.FirmwareVersion}"))
     ];
 
+    /// <summary><c>mirabox.{model}</c> for the first unit of a model, then <c>-2</c>, <c>-3</c>, ...</summary>
+    private string NewDeviceId(MiraBoxModel model)
+    {
+        var id = model.DefaultDeviceId;
+        for (var number = 2; FindSession(id) is not null; number++)
+        {
+            id = $"{model.DefaultDeviceId}-{number}";
+        }
+
+        return id;
+    }
+
     private DeviceSession? FindSession(string deviceId) =>
         _sessions.FirstOrDefault(session => string.Equals(session.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The model of a device; the N4 Pro for an id this plugin doesn't know.</summary>
+    private MiraBoxModel ModelOf(string deviceId)
+    {
+        lock (_sync)
+        {
+            return FindSession(deviceId)?.Model ?? MiraBoxModels.N4Pro;
+        }
+    }
+
+    private string KnownPath => Path.Combine(_directory, "mirabox-known.json");
+
+    private List<KnownDevice> LoadKnown()
+    {
+        try
+        {
+            return File.Exists(KnownPath) ? JsonSerializer.Deserialize<List<KnownDevice>>(File.ReadAllText(KnownPath)) ?? [] : [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return [];
+        }
+    }
+
+    private void SaveKnown()
+    {
+        try
+        {
+            List<KnownDevice> known;
+            lock (_sync)
+            {
+                known = [.. _sessions
+                    .Where(static session => session.DeviceId != PrimaryDeviceId || session.SerialNumber is not null)
+                    .Select(static session => new KnownDevice(session.DeviceId, session.Model.OriginType, session.SerialNumber ?? string.Empty))];
+                if (FindSession(PrimaryDeviceId) is null)
+                {
+                    known.Add(new KnownDevice(PrimaryDeviceId, MiraBoxModels.N4Pro.OriginType, string.Empty) { Forgotten = true });
+                }
+            }
+
+            Directory.CreateDirectory(_directory);
+            File.WriteAllText(KnownPath, JsonSerializer.Serialize(known));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _context?.Log("Warning", $"Could not remember the MiraBox devices: {ex.Message}");
+        }
+    }
+
+    private sealed record KnownDevice(string Id, int OriginType, string Serial)
+    {
+        /// <summary>For the N4 Pro that is listed before anything is plugged in: the user forgot it.</summary>
+        public bool Forgotten { get; init; }
+    }
 
     private bool TryGetConnectedKey(string deviceId, out string deviceKey, out string? error)
     {
@@ -634,9 +780,11 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         return false;
     }
 
-    private sealed class DeviceSession(string deviceId)
+    private sealed class DeviceSession(string deviceId, MiraBoxModel model)
     {
         public string DeviceId { get; } = deviceId;
+
+        public MiraBoxModel Model { get; } = model;
 
         public string? DeviceKey { get; set; }
 
@@ -644,7 +792,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
         public MiraBoxDeviceInfo? Info { get; set; }
 
-        public byte[] LedColors { get; set; } = new byte[N4ProLayout.EncoderCount * 3];
+        public byte[] LedColors { get; set; } = new byte[model.LedCount * 3];
 
         /// <summary>The LEDs are off through brightness 0 (see <see cref="TrySetLights"/>).</summary>
         public bool LedsDimmed { get; set; }

@@ -9,6 +9,16 @@ namespace DeckHost.Contracts.Models;
 /// </summary>
 public sealed record Workflow
 {
+    /// <summary>A name the user gave the workflow (shown in the editor; also the file name when it's shared).</summary>
+    [JsonPropertyName("name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; init; }
+
+    /// <summary>For a shared workflow (one that Call nodes run): the id they refer to. Null for a control's own workflow.</summary>
+    [JsonPropertyName("id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Id { get; init; }
+
     [JsonPropertyName("nodes")]
     public IReadOnlyList<WorkflowNode> Nodes { get; init; } = [];
 
@@ -61,6 +71,7 @@ public sealed record Workflow
     public bool Equals(Workflow? other) =>
         other is not null &&
         WhileRunning == other.WhileRunning &&
+        Name == other.Name &&
         Nodes.SequenceEqual(other.Nodes) &&
         Links.SequenceEqual(other.Links);
 
@@ -120,13 +131,19 @@ public static class WorkflowNodeKinds
     /// <summary>Runs its Each output a number of times, one after the other, then continues at Done.</summary>
     public const string Repeat = "repeat";
 
+    /// <summary>Runs a shared workflow (<see cref="WorkflowKeys.Workflow"/>), then goes on.</summary>
+    public const string Call = "call";
+
+    /// <summary>Goes on at the output of the first case that equals an expression's value, else at Else (<see cref="WorkflowCases"/>).</summary>
+    public const string Switch = "switch";
+
     /// <summary>Sets, adds to or flips a workflow variable.</summary>
     public const string SetVariable = "set-variable";
 
     /// <summary>Ends the run (waits still to come don't continue).</summary>
     public const string Stop = "stop";
 
-    public static IReadOnlyList<string> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Stop];
+    public static IReadOnlyList<string> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Call, Switch, Stop];
 
     /// <summary>The output ports of a kind, in the order the editor shows them.</summary>
     public static IReadOnlyList<string> OutputsOf(string kind) => kind switch
@@ -135,8 +152,19 @@ public static class WorkflowNodeKinds
         Toggle => [WorkflowPorts.First, WorkflowPorts.Second],
         Repeat => [WorkflowPorts.Each, WorkflowPorts.Done],
         Stop => [],
+        Action or Call => [WorkflowPorts.Next, WorkflowPorts.Error],
+        Switch => [WorkflowPorts.Default],
         _ => [WorkflowPorts.Next],
     };
+
+    /// <summary>The output ports of a node: like <see cref="OutputsOf(string)"/>, but a Switch has one per case, then Else.</summary>
+    public static IReadOnlyList<string> OutputsOf(WorkflowNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return node.Kind == Switch
+            ? [.. WorkflowCases.Parse(node.EffectiveSettings.Get(WorkflowKeys.Cases)).Select(static one => WorkflowCases.PortOf(one.Id)), WorkflowPorts.Default]
+            : OutputsOf(node.Kind);
+    }
 
     /// <summary>Whether links can lead into the kind (a trigger only starts runs).</summary>
     public static bool HasInput(string kind) => kind != Trigger;
@@ -152,6 +180,12 @@ public static class WorkflowPorts
     public const string Each = "each";
     public const string Done = "done";
 
+    /// <summary>An action node's output for when the action did not run (the plugin isn't loaded, or it failed).</summary>
+    public const string Error = "error";
+
+    /// <summary>A Switch node's output for when no case matches.</summary>
+    public const string Default = "default";
+
     public static string Describe(string port) => port switch
     {
         Next => "Then",
@@ -161,8 +195,22 @@ public static class WorkflowPorts
         Second => "2nd",
         Each => "Each time",
         Done => "Done",
+        Error => "On error",
+        Default => "Else",
         _ => port,
     };
+
+    /// <summary>The label of a port on a node: a Switch case shows its text.</summary>
+    public static string Describe(string port, WorkflowNode? node)
+    {
+        if (node is not null && WorkflowCases.CaseIdOf(port) is { } id &&
+            WorkflowCases.Parse(node.EffectiveSettings.Get(WorkflowKeys.Cases)).FirstOrDefault(one => one.Id == id) is { } found)
+        {
+            return found.Text.Length == 0 ? "= (empty)" : "= " + found.Text;
+        }
+
+        return Describe(port);
+    }
 }
 
 /// <summary>The inputs a trigger node can start on.</summary>
@@ -187,6 +235,21 @@ public static class WorkflowTriggers
     public const string SwipeLeft = ControlInputs.SwipeLeft;
     public const string SwipeRight = ControlInputs.SwipeRight;
 
+    /// <summary>Event: the workflow's profile (page or folder) comes onto the device.</summary>
+    public const string ProfileShown = "profile";
+
+    /// <summary>Event: a variable changes (<see cref="WorkflowKeys.Name"/>, optionally to <see cref="WorkflowKeys.Value"/>).</summary>
+    public const string VariableChanged = "variable-changed";
+
+    /// <summary>Event: an app comes to the front (<see cref="WorkflowKeys.App"/>: part of its name).</summary>
+    public const string AppInFront = "app-in-front";
+
+    /// <summary>Event: every so many seconds (<see cref="WorkflowKeys.Every"/>) while the profile is shown.</summary>
+    public const string Timer = "timer";
+
+    /// <summary>Whether a trigger starts without the control being used: something happens instead (a timer, a variable, an app, the profile).</summary>
+    public static bool IsEvent(string trigger) => trigger is ProfileShown or VariableChanged or AppInFront or Timer;
+
     /// <summary>The triggers a raw input fires at once (tap, double press and hold need timing: the host decides those).</summary>
     public static string? Immediate(Enums.InputCapabilities eventType, int value) => eventType switch
     {
@@ -207,6 +270,10 @@ public static class WorkflowTriggers
         RotateRight => "Turned right",
         SwipeLeft => "Swiped left",
         SwipeRight => "Swiped right",
+        ProfileShown => "The profile is shown",
+        VariableChanged => "A variable changes",
+        AppInFront => "An app comes to the front",
+        Timer => "A timer is due",
         _ => trigger,
     };
 }
@@ -225,6 +292,8 @@ public static class WorkflowConcurrency
 
     /// <summary>Stop the run (the input works as a stop button).</summary>
     public const string Stop = "stop";
+
+    public static IReadOnlyList<string> All { get; } = [Parallel, Ignore, Restart, Stop];
 }
 
 /// <summary>Setting keys of workflow nodes (<see cref="WorkflowNode.Settings"/>) and their values.</summary>
@@ -236,8 +305,71 @@ public static class WorkflowKeys
     /// <summary>Wait: how long, in milliseconds.</summary>
     public const string Milliseconds = "ms";
 
-    /// <summary>Repeat: how many times.</summary>
+    /// <summary>Switch: the cases, one per line as <c>id=text</c> (the id keeps a case's links when its text or place changes).</summary>
+    public const string Cases = "cases";
+
+    /// <summary>Call: the id of the shared workflow to run.</summary>
+    public const string Workflow = "workflow";
+
+    /// <summary>The deepest a shared workflow may call another one.</summary>
+    public const int MaxCallDepth = 8;
+
+    /// <summary>Action: how many more times to try when it did not run (0 to <see cref="MaxRetries"/>).</summary>
+    public const string Retries = "retries";
+
+    /// <summary>Action: the wait between tries, in milliseconds.</summary>
+    public const string RetryDelay = "retry-delay";
+
+    /// <summary>The most times an action node is tried again.</summary>
+    public const int MaxRetries = 5;
+
+    /// <summary>Set variable, If, Repeat and the "variable changes" trigger: whose variable it is (<see cref="ScopeGlobal"/>, <see cref="ScopeProfile"/> or <see cref="ScopeControl"/>).</summary>
+    public const string Scope = "scope";
+
+    /// <summary>Shared by every workflow (the default).</summary>
+    public const string ScopeGlobal = "global";
+
+    /// <summary>Shared by the workflows of the same profile only.</summary>
+    public const string ScopeProfile = "profile";
+
+    /// <summary>Only this control's workflow.</summary>
+    public const string ScopeControl = "control";
+
+    /// <summary>Trigger (timer): the seconds between runs.</summary>
+    public const string Every = "every";
+
+    /// <summary>The shortest time between a timer trigger's runs, in seconds.</summary>
+    public const int MinEverySeconds = 1;
+
+    /// <summary>The longest, in seconds (a day).</summary>
+    public const int MaxEverySeconds = 86_400;
+
+    /// <summary>Repeat: how many times (<see cref="ModeCount"/>).</summary>
     public const string Count = "count";
+
+    /// <summary>Repeat: how the rounds are decided (<see cref="ModeCount"/>, <see cref="ModeVariable"/>, <see cref="ModeWhile"/>, <see cref="ModeUntil"/>).</summary>
+    public const string Mode = "mode";
+
+    /// <summary>A fixed number of rounds (<see cref="Count"/>); also what a Repeat node without a mode does.</summary>
+    public const string ModeCount = "count";
+
+    /// <summary>As many rounds as a variable's value (<see cref="Times"/>).</summary>
+    public const string ModeVariable = "variable";
+
+    /// <summary>Rounds as long as a variable condition holds (<see cref="Name"/>, <see cref="Operation"/>, <see cref="Value"/>), checked before each round.</summary>
+    public const string ModeWhile = "while";
+
+    /// <summary>Rounds until a variable condition holds, checked before each round.</summary>
+    public const string ModeUntil = "until";
+
+    /// <summary>Repeat (<see cref="ModeVariable"/>): the variable that holds the number of rounds.</summary>
+    public const string Times = "times";
+
+    /// <summary>Repeat: how long to wait between rounds, in milliseconds (0: none).</summary>
+    public const string Interval = "interval";
+
+    /// <summary>The most rounds a while / until Repeat runs (a condition that never changes can't run forever).</summary>
+    public const int MaxConditionRounds = 10_000;
 
     /// <summary>If: what to check (<see cref="CheckVariable"/>, <see cref="CheckApp"/>, <see cref="CheckTime"/>).</summary>
     public const string Check = "check";
@@ -257,9 +389,21 @@ public static class WorkflowKeys
     public const string From = "from";
     public const string To = "to";
 
+    /// <summary>If (expression) and Set variable (Calculate): the expression, e.g. <c>[count] &gt; 3 &amp;&amp; hour() &lt; 18</c>.</summary>
+    public const string Expression = "expression";
+
+    /// <summary>Set variable: what type the result is stored as (<see cref="AsAuto"/>, <see cref="AsText"/>, <see cref="AsNumber"/> or <see cref="AsBool"/>).</summary>
+    public const string As = "as";
+
+    public const string AsAuto = "auto";
+    public const string AsText = "text";
+    public const string AsNumber = "number";
+    public const string AsBool = "bool";
+
     public const string CheckVariable = "variable";
     public const string CheckApp = "app";
     public const string CheckTime = "time";
+    public const string CheckExpression = "expression";
 
     public const string IsEqual = "equals";
     public const string IsNotEqual = "not-equals";
@@ -274,6 +418,7 @@ public static class WorkflowKeys
     public const string Subtract = "subtract";
     public const string Flip = "flip";
     public const string Clear = "clear";
+    public const string Calculate = "calculate";
 
     /// <summary>The longest wait a node can have (ten minutes).</summary>
     public const int MaxWaitMs = 600_000;

@@ -44,7 +44,10 @@ public static class CrashReports
     {
         ArgumentNullException.ThrowIfNull(exception);
         var text = new StringBuilder();
-        text.AppendLine(CultureInfo.InvariantCulture, $"DeckHost {version} closed unexpectedly ({source}).");
+        var headline = source.StartsWith("recovered", StringComparison.Ordinal)
+            ? $"DeckHost {version} hit an unexpected error and carried on ({source})."
+            : $"DeckHost {version} closed unexpectedly ({source}).";
+        text.AppendLine(headline);
         text.AppendLine(CultureInfo.InvariantCulture, $"Time: {time.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)}");
         text.AppendLine(CultureInfo.InvariantCulture, $"System: {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture}), .NET {Environment.Version}");
         text.AppendLine();

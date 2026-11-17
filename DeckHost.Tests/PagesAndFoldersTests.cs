@@ -12,6 +12,16 @@ namespace DeckHost.Tests;
 public sealed class PagesAndFoldersTests : IAsyncDisposable
 {
     private const string Device = FakeDevicePlugin.DeviceId;
+    private const string FirstKey = "key.0";
+    private const string SecondKey = "key.1";
+    private const string PageAction = "builtin.page";
+    private const string SwitchProfileAction = "builtin.switch-profile";
+    private const string ModeKey = "mode";
+    private const string FirstProfile = "p1";
+    private const string SecondPage = "p2";
+    private const string ThirdPage = "p3";
+    private const string Folder1 = "f1";
+    private const string Folder2 = "f2";
     private readonly VariableStore _store = new();
     private readonly DeviceHostService _host;
     private readonly IApplicationPlugin _builtIns = SystemPluginSet.Create().First(plugin => plugin.Id == SystemPluginSet.BuiltInPluginId);
@@ -57,122 +67,266 @@ public sealed class PagesAndFoldersTests : IAsyncDisposable
     private DeviceProfile Folder(string id, string parent, params ControlBinding[] bindings) =>
         new DeviceProfile(id, id, Device, bindings) { ParentId = parent, Kind = ProfileKinds.Folder };
 
-    [Fact]
-    public async Task The_pages_action_flips_through_the_pages_and_wraps_around()
-    {
-        var next = Builtin("key.0", "builtin.page", ("mode", "next"));
-        await Start(Profile("p1", next), Page("p2", "p1", next), Page("p3", "p1", next), Profile("other"));
+    private ControlBinding NextPage() => Builtin(FirstKey, PageAction, (ModeKey, "next"));
 
-        await Press("key.0");
-        Assert.Equal("p2", _active);
-        await Press("key.0");
-        Assert.Equal("p3", _active);
-        await Press("key.0");
-        Assert.Equal("p1", _active);
+    private async Task StartWithThreePages()
+    {
+        var next = NextPage();
+        await Start(Profile(FirstProfile, next), Page(SecondPage, FirstProfile, next), Page(ThirdPage, FirstProfile, next), Profile("other"));
     }
 
-    [Fact]
-    public async Task A_specific_page_and_the_previous_page()
+    [Test]
+    public async Task Press_NextPage_GoesToTheNextPage()
+    {
+        // Arrange
+        await StartWithThreePages();
+
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(SecondPage));
+    }
+
+    [Test]
+    public async Task Press_NextPageOnTheLastPage_WrapsAroundToTheFirstPage()
+    {
+        // Arrange
+        await StartWithThreePages();
+        await Press(FirstKey);
+        await Press(FirstKey);
+
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(FirstProfile));
+    }
+
+    private async Task StartWithASpecificAndAPreviousPageKey() => await Start(
+        Profile(FirstProfile, Builtin(FirstKey, PageAction, (ModeKey, "specific"), ("page", "3"))),
+        Page(SecondPage, FirstProfile),
+        Page(ThirdPage, FirstProfile, Builtin(FirstKey, PageAction, (ModeKey, "previous"))));
+
+    [Test]
+    public async Task Press_SpecificPageNumber_GoesToThatPage()
+    {
+        // Arrange
+        await StartWithASpecificAndAPreviousPageKey();
+
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(ThirdPage));
+    }
+
+    [Test]
+    public async Task Press_PreviousPage_GoesToThePageBefore()
+    {
+        // Arrange
+        await StartWithASpecificAndAPreviousPageKey();
+        await Press(FirstKey);
+
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(SecondPage));
+    }
+
+    [Test]
+    public async Task SimulateInput_SwipeLeftOnAStripWithoutAnAction_GoesToTheNextPage()
+    {
+        // Arrange
+        await Start(Profile(FirstProfile), Page(SecondPage, FirstProfile));
+
+        // Act
+        _host.SimulateInput(new DeviceInputEvent(Device, SecondKey, InputCapabilities.Swipe, -1));
+        await _host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(SecondPage));
+    }
+
+    [Test]
+    public async Task SimulateInput_SwipeRightOnAStripWithoutAnAction_GoesBackToThePreviousPage()
+    {
+        // Arrange
+        await Start(Profile(FirstProfile), Page(SecondPage, FirstProfile));
+        _host.SimulateInput(new DeviceInputEvent(Device, SecondKey, InputCapabilities.Swipe, -1));
+        await _host.WhenIdleAsync();
+
+        // Act
+        _host.SimulateInput(new DeviceInputEvent(Device, SecondKey, InputCapabilities.Swipe, 1));
+        await _host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(FirstProfile));
+    }
+
+    private async Task StartWithAFolderInAFolderOnThePageTwo()
     {
         await Start(
-            Profile("p1", Builtin("key.0", "builtin.page", ("mode", "specific"), ("page", "3"))),
-            Page("p2", "p1"),
-            Page("p3", "p1", Builtin("key.0", "builtin.page", ("mode", "previous"))));
-
-        await Press("key.0");
-        Assert.Equal("p3", _active);
-        await Press("key.0");
-        Assert.Equal("p2", _active);
+            Profile(FirstProfile),
+            Page(SecondPage, FirstProfile, Builtin(SecondKey, FolderAction.ActionId, (FolderAction.FolderIdKey, Folder1))),
+            Folder(Folder1, SecondPage, Builtin(FirstKey, FolderBackAction.ActionId), Builtin(SecondKey, FolderAction.ActionId, (FolderAction.FolderIdKey, Folder2))),
+            Folder(Folder2, Folder1, Builtin(FirstKey, FolderBackAction.ActionId)));
+        _host.SetActiveProfile(SecondPage);
+        await _host.WhenIdleAsync();
     }
 
-    [Fact]
-    public async Task Swiping_a_strip_without_an_action_flips_pages_like_a_phone()
+    [Test]
+    public async Task Press_FolderKey_OpensTheFolder()
     {
-        await Start(Profile("p1"), Page("p2", "p1"));
+        // Arrange
+        await StartWithAFolderInAFolderOnThePageTwo();
 
-        _host.SimulateInput(new DeviceInputEvent(Device, "key.1", InputCapabilities.Swipe, -1));
-        await _host.WhenIdleAsync();
-        Assert.Equal("p2", _active);
+        // Act
+        await Press(SecondKey);
 
-        _host.SimulateInput(new DeviceInputEvent(Device, "key.1", InputCapabilities.Swipe, 1));
-        await _host.WhenIdleAsync();
-        Assert.Equal("p1", _active);
+        // Assert
+        Assert.That(_active, Is.EqualTo(Folder1));
     }
 
-    [Fact]
-    public async Task A_folder_opens_and_its_back_key_returns_to_the_page_it_was_opened_from()
+    [Test]
+    public async Task Press_FolderKeyInsideAFolder_OpensTheFolderInTheFolder()
     {
+        // Arrange
+        await StartWithAFolderInAFolderOnThePageTwo();
+        await Press(SecondKey);
+
+        // Act
+        await Press(SecondKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(Folder2));
+    }
+
+    [Test]
+    public async Task Press_BackKeyInAFolderInAFolder_ReturnsToTheOuterFolder()
+    {
+        // Arrange
+        await StartWithAFolderInAFolderOnThePageTwo();
+        await Press(SecondKey);
+        await Press(SecondKey);
+
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(Folder1));
+    }
+
+    [Test]
+    public async Task Press_BackKeyInAFolder_ReturnsToThePageItWasOpenedFrom()
+    {
+        // Arrange
+        await StartWithAFolderInAFolderOnThePageTwo();
+        await Press(SecondKey);
+
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(SecondPage));
+    }
+
+    [Test]
+    public async Task Press_NextPageInsideAFolder_GoesToThePageAfterTheFoldersPage()
+    {
+        // Arrange
         await Start(
-            Profile("p1"),
-            Page("p2", "p1", Builtin("key.1", FolderAction.ActionId, (FolderAction.FolderIdKey, "f1"))),
-            Folder("f1", "p2", Builtin("key.0", FolderBackAction.ActionId), Builtin("key.1", FolderAction.ActionId, (FolderAction.FolderIdKey, "f2"))),
-            Folder("f2", "f1", Builtin("key.0", FolderBackAction.ActionId)));
-        _host.SetActiveProfile("p2");
-        await _host.WhenIdleAsync();
+            Profile(FirstProfile, Builtin(SecondKey, FolderAction.ActionId, (FolderAction.FolderIdKey, Folder1))),
+            Page(SecondPage, FirstProfile),
+            Folder(Folder1, FirstProfile, NextPage()));
+        await Press(SecondKey);
 
-        await Press("key.1");
-        Assert.Equal("f1", _active);
-        await Press("key.1");
-        Assert.Equal("f2", _active); // a folder in a folder
-        await Press("key.0");
-        Assert.Equal("f1", _active);
-        await Press("key.0");
-        Assert.Equal("p2", _active);
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo(SecondPage));
     }
 
-    [Fact]
-    public async Task Next_page_inside_a_folder_goes_to_the_page_after_the_folders_page()
+    private async Task StartWithPagesAndFoldersBetweenTwoProfiles()
     {
-        await Start(
-            Profile("p1", Builtin("key.1", FolderAction.ActionId, (FolderAction.FolderIdKey, "f1"))),
-            Page("p2", "p1"),
-            Folder("f1", "p1", Builtin("key.0", "builtin.page", ("mode", "next"))));
-        await Press("key.1");
-        Assert.Equal("f1", _active);
-
-        await Press("key.0");
-        Assert.Equal("p2", _active);
-    }
-
-    [Fact]
-    public async Task Switching_profiles_skips_pages_and_folders()
-    {
-        var switchNext = Builtin("key.0", "builtin.switch-profile", ("mode", "next"));
+        var switchNext = Builtin(FirstKey, SwitchProfileAction, (ModeKey, "next"));
         await Start(Profile("a", switchNext), Page("a2", "a", switchNext), Folder("af", "a"), Profile("b", switchNext));
         _host.SetActiveProfile("a2");
         await _host.WhenIdleAsync();
-
-        await Press("key.0");
-        Assert.Equal("b", _active);
-        await Press("key.0");
-        Assert.Equal("a", _active); // a profile starts on its first page
     }
 
-    [Fact]
-    public void Layouts_keep_their_kind_and_parent_when_saved()
+    [Test]
+    public async Task Press_SwitchToTheNextProfile_SkipsPagesAndFolders()
     {
-        var page = Page("p2", "p1");
-        var json = System.Text.Json.JsonSerializer.Serialize(page);
+        // Arrange
+        await StartWithPagesAndFoldersBetweenTwoProfiles();
+
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo("b"));
+    }
+
+    [Test]
+    public async Task Press_SwitchToTheNextProfileFromTheLastOne_StartsTheFirstProfileOnItsFirstPage()
+    {
+        // Arrange
+        await StartWithPagesAndFoldersBetweenTwoProfiles();
+        await Press(FirstKey);
+
+        // Act
+        await Press(FirstKey);
+
+        // Assert
+        Assert.That(_active, Is.EqualTo("a"));
+    }
+
+    [Test]
+    public void Deserialize_PageSavedWithItsKindAndParent_KeepsBoth()
+    {
+        // Arrange
+        var json = System.Text.Json.JsonSerializer.Serialize(Page(SecondPage, FirstProfile));
+
+        // Act
         var loaded = System.Text.Json.JsonSerializer.Deserialize<DeviceProfile>(json)!;
 
-        Assert.Equal((ProfileKinds.Page, "p1"), (loaded.Kind, loaded.ParentId));
-        Assert.False(loaded.IsRoot);
-        Assert.True(Profile("p1").IsRoot);
+        // Assert
+        Assert.That((loaded.Kind, loaded.ParentId), Is.EqualTo((ProfileKinds.Page, FirstProfile)));
+        Assert.That(loaded.IsRoot, Is.False);
     }
 
-    [Fact]
-    public void The_settings_editor_keeps_values_it_doesnt_show()
+    [Test]
+    public void IsRoot_PlainProfile_IsTrue()
     {
+        // Arrange
+        var profile = Profile(FirstProfile);
+
+        // Act
+        var isRoot = profile.IsRoot;
+
+        // Assert
+        Assert.That(isRoot, Is.True);
+    }
+
+    [Test]
+    public void ToSettings_ValueEditedInTheEditor_KeepsTheValuesItDoesNotShow()
+    {
+        // Arrange
         var folder = (FolderAction)_builtIns.Actions.First(action => action.Id == FolderAction.ActionId);
         var editor = new SettingsEditorViewModel(folder.Settings,
-            new ActionSettings([new(FolderAction.FolderIdKey, "f1"), new(FolderAction.NameKey, "Tools"), new("plugin.private", "x")]),
+            new ActionSettings([new(FolderAction.FolderIdKey, Folder1), new(FolderAction.NameKey, "Tools"), new("plugin.private", "x")]),
             InputCapabilities.Press | InputCapabilities.Release);
-
         editor.Fields.First(field => field.Definition.Key == FolderAction.NameKey).Value = "Audio";
+
+        // Act
         var saved = editor.ToSettings();
 
-        Assert.Equal("f1", saved.Get(FolderAction.FolderIdKey));
-        Assert.Equal("x", saved.Get("plugin.private"));
-        Assert.Equal("Audio", saved.Get(FolderAction.NameKey));
+        // Assert
+        Assert.That(saved.Get(FolderAction.FolderIdKey), Is.EqualTo(Folder1));
+        Assert.That(saved.Get("plugin.private"), Is.EqualTo("x"));
+        Assert.That(saved.Get(FolderAction.NameKey), Is.EqualTo("Audio"));
     }
 }

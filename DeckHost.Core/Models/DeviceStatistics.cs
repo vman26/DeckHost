@@ -12,4 +12,8 @@ public sealed record DeviceStatistics(
     long FrameFailures,
     long LightFailures,
     string? LastError,
-    DateTimeOffset? LastErrorTime);
+    DateTimeOffset? LastErrorTime)
+{
+    /// <summary>Control images the host drew (a drawn image whose pixels didn't change is not sent: compare with <see cref="FramesSent"/>).</summary>
+    public long FramesRendered { get; init; }
+}

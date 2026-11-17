@@ -8,63 +8,93 @@ namespace DeckHost.Tests;
 
 public class DeviceHostServiceTests
 {
+    private const string ProfileId = "profile";
+    private const string PluginId = "p";
+    private const string ActionId = "a";
+    private const string FirstKey = "key.0";
+    private const string SecondKey = "key.1";
+    private const string Knob = "encoder.0";
+    private const string ActiveColor = "FF0000";
+    private const string IdleColor = "0000FF";
+    private const int ActiveDurationMilliseconds = 50;
+    private const int AfterActiveDurationMilliseconds = 300;
+    private const int ImagesOnTheDevice = 2;
+    private const int FloodOfMessages = 2000;
+    private const int LogLimit = 500;
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(5);
+    private static readonly (string, byte, byte, byte) KnobIdle = (Knob, 0, 0, 255);
+    private static readonly (string, byte, byte, byte) KnobActive = (Knob, 255, 0, 0);
+
     private static (DeviceHostService Host, FakeDevicePlugin Plugin, RecordingAction Action, VariableStore Store) Create(RgbFeedback? light = null, bool connected = true)
     {
         var plugin = new FakeDevicePlugin(connected);
-        var action = new RecordingAction("a");
+        var action = new RecordingAction(ActionId);
         var store = new VariableStore();
-        var host = new DeviceHostService([plugin], [new TestApplicationPlugin("p", action)], store);
+        var host = new DeviceHostService([plugin], [new TestApplicationPlugin(PluginId, action)], store);
         host.SetProfiles([
-            new DeviceProfile("profile", "Profile", FakeDevicePlugin.DeviceId,
+            new DeviceProfile(ProfileId, "Profile", FakeDevicePlugin.DeviceId,
             [
-                Bindings.Single("key.0", "p", "a"),
-                Bindings.Single("encoder.0", "p", "a", light),
+                Bindings.Single(FirstKey, PluginId, ActionId),
+                Bindings.Single(Knob, PluginId, ActionId, light),
             ]),
         ]);
         return (host, plugin, action, store);
     }
 
-    [Fact]
-    public async Task The_host_counts_inputs_and_images_per_device()
+    private static async Task StartedAsync(DeviceHostService host)
     {
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+    }
+
+    private static void ReportInput(FakeDevicePlugin plugin, string controlId, InputCapabilities eventType, int value = 1) =>
+        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, controlId, eventType, value);
+
+    [Test]
+    public async Task DeviceStatistics_AfterOneInput_CountsTheInputAndTheImagesSent()
+    {
+        // Arrange
+        var (host, plugin, _, store) = Create();
+        await using var _ = host;
+        using var __ = store;
+        await host.StartAsync(CancellationToken.None);
+
+        // Act
+        ReportInput(plugin, FirstKey, InputCapabilities.Press);
+        await host.WhenIdleAsync();
+
+        // Assert
+        var statistics = Expect.Single(host.DeviceStatistics);
+        Assert.That(statistics.DeviceId, Is.EqualTo(FakeDevicePlugin.DeviceId));
+        Assert.That(statistics.Inputs, Is.EqualTo(1));
+        Assert.That(statistics.LastInput, Is.Not.Null);
+        Assert.That(statistics.FramesSent, Is.GreaterThanOrEqualTo(2));
+        Assert.That(statistics.FrameFailures, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task StartAsync_ConnectedDevice_PushesEveryControlWithAnImageOnce()
+    {
+        // Arrange
         var (host, plugin, _, store) = Create();
         await using var _ = host;
         using var __ = store;
 
-        await host.StartAsync(CancellationToken.None);
-        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1);
-        await host.WhenIdleAsync();
+        // Act
+        await StartedAsync(host);
 
-        var statistics = Assert.Single(host.DeviceStatistics);
-        Assert.Equal(FakeDevicePlugin.DeviceId, statistics.DeviceId);
-        Assert.Equal(1, statistics.Inputs);
-        Assert.NotNull(statistics.LastInput);
-        Assert.True(statistics.FramesSent >= 2);
-        Assert.Equal(0, statistics.FrameFailures);
+        // Assert
+        Assert.That(plugin.PushedImages.Order(), Is.EqualTo(new[] { FirstKey, SecondKey }));
     }
 
-    [Fact]
-    public async Task Start_pushes_every_control_with_an_image_once()
+    [Test]
+    public async Task ReportInput_ActionWaitingForTheReportToReturn_RunsOnTheWorkerAfterTheReturn()
     {
-        var (host, plugin, _, store) = Create();
-        await using var _ = host;
-        using var __ = store;
-
-        await host.StartAsync(CancellationToken.None);
-        await host.WhenIdleAsync();
-
-        Assert.Equal(["key.0", "key.1"], plugin.PushedImages.Order());
-    }
-
-    [Fact]
-    public async Task Input_is_queued_for_the_worker_and_pushes_only_changed_controls()
-    {
+        // Arrange
         var (host, plugin, action, store) = Create();
         await using var _ = host;
         using var __ = store;
-        await host.StartAsync(CancellationToken.None);
-        await host.WhenIdleAsync();
-        plugin.PushedImages.Clear();
+        await StartedAsync(host);
 
         // The action can't finish until the report call has returned. A host that ran the action
         // inside ReportInputEvent (on the SDK's callback thread) would time out here. Comparing
@@ -73,95 +103,232 @@ public class DeviceHostServiceTests
         var ranAfterReportReturned = false;
         action.OnExecute = context =>
         {
-            ranAfterReportReturned = reportReturned.Wait(TimeSpan.FromSeconds(5));
+            ranAfterReportReturned = reportReturned.Wait(Patience);
             context.Variables.Publish(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.ExecutionCount), action.Executions.Count);
         };
 
-        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1);
+        // Act
+        ReportInput(plugin, FirstKey, InputCapabilities.Press);
         reportReturned.Set();
         await host.WhenIdleAsync();
 
-        Assert.Single(action.Executions);
-        Assert.True(ranAfterReportReturned);
-        Assert.Equal(["key.0"], plugin.PushedImages);
-
-        // Nothing changed visually: no further pushes.
-        plugin.PushedImages.Clear();
-        host.SetActiveProfile("profile");
-        await host.WhenIdleAsync();
-        Assert.Empty(plugin.PushedImages);
+        // Assert
+        Assert.That(action.Executions, Has.Exactly(1).Items);
+        Assert.That(ranAfterReportReturned, Is.True);
     }
 
-    [Fact]
-    public async Task Light_feedback_sets_active_color_then_returns_to_idle()
+    [Test]
+    public async Task ReportInput_PressOnAKey_PushesOnlyTheChangedKey()
     {
-        var (host, plugin, _, store) = Create(new RgbFeedback("FF0000", "0000FF", 50));
+        // Arrange
+        var (host, plugin, action, store) = Create();
         await using var _ = host;
         using var __ = store;
-        await host.StartAsync(CancellationToken.None);
-        await host.WhenIdleAsync();
-        Assert.Contains(("encoder.0", (byte)0, (byte)0, (byte)255), plugin.Lights);
-        plugin.Lights.Clear();
+        await StartedAsync(host);
+        plugin.PushedImages.Clear();
+        action.OnExecute = context =>
+            context.Variables.Publish(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.ExecutionCount), action.Executions.Count);
 
-        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "encoder.0", InputCapabilities.Rotate, 1);
+        // Act
+        ReportInput(plugin, FirstKey, InputCapabilities.Press);
         await host.WhenIdleAsync();
-        Assert.Equal([("encoder.0", (byte)255, (byte)0, (byte)0)], plugin.Lights);
 
-        await Task.Delay(300);
-        await host.WhenIdleAsync();
-        Assert.Equal(("encoder.0", (byte)0, (byte)0, (byte)255), plugin.Lights.Last());
+        // Assert
+        Assert.That(plugin.PushedImages, Is.EqualTo(new[] { FirstKey }));
     }
 
-    [Fact]
-    public async Task Disconnected_devices_are_not_rendered_until_they_connect()
+    [Test]
+    public async Task SetActiveProfile_NothingChangedVisually_PushesNothing()
     {
+        // Arrange
+        var (host, plugin, _, store) = Create();
+        await using var _ = host;
+        using var __ = store;
+        await StartedAsync(host);
+        plugin.PushedImages.Clear();
+
+        // Act
+        host.SetActiveProfile(ProfileId);
+        await host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(plugin.PushedImages, Is.Empty);
+    }
+
+    [Test]
+    public async Task StartAsync_KnobWithAnIdleLight_ShowsTheIdleColor()
+    {
+        // Arrange
+        var (host, plugin, _, store) = Create(new RgbFeedback(ActiveColor, IdleColor, ActiveDurationMilliseconds));
+        await using var _ = host;
+        using var __ = store;
+
+        // Act
+        await StartedAsync(host);
+
+        // Assert
+        Assert.That(plugin.Lights, Does.Contain(KnobIdle));
+    }
+
+    [Test]
+    public async Task ReportInput_RotateKnobWithLightFeedback_ShowsTheActiveColor()
+    {
+        // Arrange
+        var (host, plugin, _, store) = Create(new RgbFeedback(ActiveColor, IdleColor, ActiveDurationMilliseconds));
+        await using var _ = host;
+        using var __ = store;
+        await StartedAsync(host);
+        plugin.Lights.Clear();
+
+        // Act
+        ReportInput(plugin, Knob, InputCapabilities.Rotate);
+        await host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(plugin.Lights, Is.EqualTo(new[] { KnobActive }));
+    }
+
+    [Test]
+    public async Task ReportInput_RotateKnobWithLightFeedback_ReturnsToTheIdleColorAfterTheActiveDuration()
+    {
+        // Arrange
+        var (host, plugin, _, store) = Create(new RgbFeedback(ActiveColor, IdleColor, ActiveDurationMilliseconds));
+        await using var _ = host;
+        using var __ = store;
+        await StartedAsync(host);
+        ReportInput(plugin, Knob, InputCapabilities.Rotate);
+        await host.WhenIdleAsync();
+
+        // Act
+        await Task.Delay(AfterActiveDurationMilliseconds);
+        await host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(plugin.Lights.Last(), Is.EqualTo(KnobIdle));
+    }
+
+    [Test]
+    public async Task StartAsync_DisconnectedDevice_PushesNothing()
+    {
+        // Arrange
         var (host, plugin, _, store) = Create(connected: false);
         await using var _ = host;
         using var __ = store;
-        await host.StartAsync(CancellationToken.None);
-        await host.WhenIdleAsync();
-        Assert.Empty(plugin.PushedImages);
 
-        var devicesChanged = new TaskCompletionSource();
-        host.DevicesChanged += () => devicesChanged.TrySetResult();
-        plugin.SetConnected(true);
-        await devicesChanged.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await host.WhenIdleAsync();
+        // Act
+        await StartedAsync(host);
 
-        Assert.Equal(2, plugin.PushedImages.Count);
-        Assert.True(Assert.Single(host.Devices).IsConnected);
+        // Assert
+        Assert.That(plugin.PushedImages, Is.Empty);
     }
 
-    [Fact]
-    public async Task Dispose_clears_the_device_and_disposes_plugins()
+    [Test]
+    public async Task SetConnected_DeviceConnectsAfterStart_PushesItsImages()
     {
+        // Arrange
+        var (host, plugin, _, store) = Create(connected: false);
+        await using var _ = host;
+        using var __ = store;
+        await StartedAsync(host);
+        var devicesChanged = new TaskCompletionSource();
+        host.DevicesChanged += () => devicesChanged.TrySetResult();
+
+        // Act
+        plugin.SetConnected(true);
+        await devicesChanged.Task.WaitAsync(Patience);
+        await host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(plugin.PushedImages.Count, Is.EqualTo(ImagesOnTheDevice));
+    }
+
+    [Test]
+    public async Task SetConnected_DeviceConnectsAfterStart_ListsTheDeviceAsConnected()
+    {
+        // Arrange
+        var (host, plugin, _, store) = Create(connected: false);
+        await using var _ = host;
+        using var __ = store;
+        await StartedAsync(host);
+        var devicesChanged = new TaskCompletionSource();
+        host.DevicesChanged += () => devicesChanged.TrySetResult();
+
+        // Act
+        plugin.SetConnected(true);
+        await devicesChanged.Task.WaitAsync(Patience);
+        await host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(Expect.Single(host.Devices).IsConnected, Is.True);
+    }
+
+    [Test]
+    public async Task DisposeAsync_StartedHost_ClearsTheDeviceOnce()
+    {
+        // Arrange
         var (host, plugin, _, store) = Create();
         using var __ = store;
         await host.StartAsync(CancellationToken.None);
 
+        // Act
         await host.DisposeAsync();
 
-        Assert.Equal(1, plugin.ClearCount);
-        Assert.True(plugin.Disposed);
+        // Assert
+        Assert.That(plugin.ClearCount, Is.EqualTo(1));
     }
 
-    [Fact]
-    public async Task Log_buffer_is_bounded()
+    [Test]
+    public async Task DisposeAsync_StartedHost_DisposesThePlugins()
     {
+        // Arrange
+        var (host, plugin, _, store) = Create();
+        using var __ = store;
+        await host.StartAsync(CancellationToken.None);
+
+        // Act
+        await host.DisposeAsync();
+
+        // Assert
+        Assert.That(plugin.Disposed, Is.True);
+    }
+
+    [Test]
+    public async Task RuntimeLogs_MoreMessagesThanTheLimit_KeepsOnlyTheLimit()
+    {
+        // Arrange
         var (host, plugin, _, store) = Create();
         await using var _ = host;
         using var __ = store;
-        await host.StartAsync(CancellationToken.None);
+        await StartedAsync(host);
 
-        // Let the worker finish its start-up render: it writes log lines of its own.
-        await host.WhenIdleAsync();
+        // Act
+        LogMessages(plugin, FloodOfMessages);
 
-        for (var i = 0; i < 2000; i++)
+        // Assert
+        Assert.That(host.RuntimeLogs.Count, Is.LessThanOrEqualTo(LogLimit));
+    }
+
+    [Test]
+    public async Task RuntimeLogs_MoreMessagesThanTheLimit_KeepsTheNewestMessage()
+    {
+        // Arrange
+        var (host, plugin, _, store) = Create();
+        await using var _ = host;
+        using var __ = store;
+        await StartedAsync(host);
+
+        // Act
+        LogMessages(plugin, FloodOfMessages);
+
+        // Assert
+        Assert.That(host.RuntimeLogs.Last().Message, Is.EqualTo($"message {FloodOfMessages - 1}"));
+    }
+
+    private static void LogMessages(FakeDevicePlugin plugin, int count)
+    {
+        for (var i = 0; i < count; i++)
         {
             plugin.Context!.Log("Info", $"message {i}");
         }
-
-        Assert.True(host.RuntimeLogs.Count <= 500);
-        Assert.Equal("message 1999", host.RuntimeLogs.Last().Message);
     }
 }

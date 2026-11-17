@@ -19,6 +19,18 @@ public static class WorkflowNodeTypes
 {
     private static readonly NumberRange WaitRange = new(0, 10_000, 50) { Unit = "ms" };
 
+    /// <summary>Whose variable a node means: shared by everything, this profile's, or this control's.</summary>
+    private static ActionSettingDefinition ScopeSetting(SettingCondition? showWhen) =>
+        new(WorkflowKeys.Scope, "Shared by", ActionSettingKind.Choice, WorkflowKeys.ScopeGlobal, "Every workflow (global), only the workflows of this profile, or only this control's workflow.", Options:
+        [
+            new(WorkflowKeys.ScopeGlobal, "every workflow"),
+            new(WorkflowKeys.ScopeProfile, "this profile's workflows"),
+            new(WorkflowKeys.ScopeControl, "this control only"),
+        ])
+        {
+            ShowWhen = showWhen,
+        };
+
     public static WorkflowNodeType Trigger { get; } = new(
         WorkflowNodeKinds.Trigger,
         "When",
@@ -26,7 +38,7 @@ public static class WorkflowNodeTypes
         0xFF22C55E,
         Contracts.Icons.Bolt,
         [
-            new(WorkflowKeys.On, "When the control is", ActionSettingKind.Choice, WorkflowTriggers.Down, Options:
+            new(WorkflowKeys.On, "Starts when", ActionSettingKind.Choice, WorkflowTriggers.Down, Options:
             [
                 new(WorkflowTriggers.Down, "Pressed (right away)") { Requires = InputCapabilities.Press },
                 new(WorkflowTriggers.Up, "Released") { Requires = InputCapabilities.Release },
@@ -37,7 +49,29 @@ public static class WorkflowNodeTypes
                 new(WorkflowTriggers.RotateRight, "Turned right") { Requires = InputCapabilities.Rotate },
                 new(WorkflowTriggers.SwipeLeft, "Swiped left") { Requires = InputCapabilities.Swipe },
                 new(WorkflowTriggers.SwipeRight, "Swiped right") { Requires = InputCapabilities.Swipe },
+                new(WorkflowTriggers.ProfileShown, "The profile comes onto the device"),
+                new(WorkflowTriggers.AppInFront, "An app comes to the front"),
+                new(WorkflowTriggers.VariableChanged, "A variable changes"),
+                new(WorkflowTriggers.Timer, "Every so many seconds (while the profile is shown)"),
             ]),
+            new(WorkflowKeys.App, "App name contains", Placeholder: "e.g. obs", Description: "Where DeckHost can see the app in front (Windows, macOS, Linux on X11).")
+            {
+                ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.AppInFront),
+            },
+            new(WorkflowKeys.Name, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode", Description: "Names ignore case.")
+            {
+                ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.VariableChanged),
+            },
+            ScopeSetting(new(WorkflowKeys.On, WorkflowTriggers.VariableChanged)),
+            new(WorkflowKeys.Value, "Changes to", Placeholder: "any value", Description: "Leave empty to start on every change.")
+            {
+                ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.VariableChanged),
+            },
+            new(WorkflowKeys.Every, "Every", ActionSettingKind.Number, "60", Description: "The workflow starts again this many seconds after it last started, while its profile is shown on the device.")
+            {
+                Range = new(WorkflowKeys.MinEverySeconds, WorkflowKeys.MaxEverySeconds, 1) { Unit = "s" },
+                ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.Timer),
+            },
         ]);
 
     public static WorkflowNodeType Action { get; } = new(
@@ -47,6 +81,20 @@ public static class WorkflowNodeTypes
         0xFF3B82F6,
         Contracts.Icons.Play,
         []);
+
+    /// <summary>What an action node does when its action did not run (shown next to the action's own settings).</summary>
+    public static IReadOnlyList<ActionSettingDefinition> ActionFailureSettings { get; } =
+    [
+        new(WorkflowKeys.Retries, "Try again when it did not run", ActionSettingKind.Number, "0",
+            Description: "How many more times to try. Then the run goes on at the node's \"On error\" output if it has a link, else at \"Then\".")
+        {
+            Range = new(0, WorkflowKeys.MaxRetries, 1) { Unit = "times" },
+        },
+        new(WorkflowKeys.RetryDelay, "Wait between tries", ActionSettingKind.Number, "1000")
+        {
+            Range = WaitRange,
+        },
+    ];
 
     public static WorkflowNodeType Wait { get; } = new(
         WorkflowNodeKinds.Wait,
@@ -68,11 +116,17 @@ public static class WorkflowNodeTypes
                 new(WorkflowKeys.CheckVariable, "A variable"),
                 new(WorkflowKeys.CheckApp, "The app in front"),
                 new(WorkflowKeys.CheckTime, "The time of day"),
+                new(WorkflowKeys.CheckExpression, "An expression"),
             ]),
-            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode", Description: "Set it with a Set variable node; names ignore case.")
+            new(WorkflowKeys.Expression, "Expression", Placeholder: "e.g. [count] > 3 && hour() < 18", Description: "Variables are written [name] ([profile:name], [control:name]); the answer counts as Yes when it is true, a number other than 0, or text that isn't empty, \"false\" or \"0\". A bad expression goes to No and says why in the run log.")
+            {
+                ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckExpression),
+            },
+            new(WorkflowKeys.Name, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode", Description: "Set it with a Set variable node; names ignore case.")
             {
                 ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckVariable),
             },
+            ScopeSetting(new(WorkflowKeys.Check, WorkflowKeys.CheckVariable)),
             new(WorkflowKeys.Operation, "Is", ActionSettingKind.Choice, WorkflowKeys.IsEqual, Options:
             [
                 new(WorkflowKeys.IsEqual, "equal to"),
@@ -115,10 +169,46 @@ public static class WorkflowNodeTypes
     public static WorkflowNodeType Repeat { get; } = new(
         WorkflowNodeKinds.Repeat,
         "Repeat",
-        "Runs Each time a number of times, one round after the other, then Done.",
+        "Runs Each time round after round, then Done: a number of times, as many as a variable says, or while / until a variable condition holds, with an optional wait between rounds.",
         0xFFEC4899,
         Contracts.Icons.Repeat,
-        [new(WorkflowKeys.Count, "Times", ActionSettingKind.Number, "2") { Range = new NumberRange(1, 100) }]);
+        [
+            new(WorkflowKeys.Mode, "Repeat", ActionSettingKind.Choice, WorkflowKeys.ModeCount, Options:
+            [
+                new(WorkflowKeys.ModeCount, "a number of times"),
+                new(WorkflowKeys.ModeVariable, "as many times as a variable says"),
+                new(WorkflowKeys.ModeWhile, "while a variable condition is true"),
+                new(WorkflowKeys.ModeUntil, "until a variable condition is true"),
+            ]),
+            new(WorkflowKeys.Count, "Times", ActionSettingKind.Number, "2") { Range = new NumberRange(1, 100), ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeCount) },
+            new(WorkflowKeys.Times, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. rounds", Description: "Its value (a whole number, up to 1000) is how many times. Set it with a Set variable node.")
+            {
+                ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeVariable),
+            },
+            new(WorkflowKeys.Name, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode", Description: "Checked before every round; names ignore case. Stops after 10 000 rounds at most.")
+            {
+                ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil),
+            },
+            ScopeSetting(new(WorkflowKeys.Mode, WorkflowKeys.ModeVariable, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil)),
+            new(WorkflowKeys.Operation, "Is", ActionSettingKind.Choice, WorkflowKeys.IsEqual, Options:
+            [
+                new(WorkflowKeys.IsEqual, "equal to"),
+                new(WorkflowKeys.IsNotEqual, "not equal to"),
+                new(WorkflowKeys.IsGreater, "greater than"),
+                new(WorkflowKeys.IsLess, "less than"),
+                new(WorkflowKeys.Contains, "containing"),
+                new(WorkflowKeys.IsSet, "set (not empty)"),
+                new(WorkflowKeys.IsEmpty, "empty"),
+            ])
+            {
+                ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil),
+            },
+            new(WorkflowKeys.Value, "Value", Placeholder: "text or number")
+            {
+                ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil),
+            },
+            new(WorkflowKeys.Interval, "Wait between rounds", ActionSettingKind.Number, "0", Description: "0 runs the rounds right after each other. For while / until, the wait comes before the condition is checked again.") { Range = WaitRange },
+        ]);
 
     public static WorkflowNodeType SetVariable { get; } = new(
         WorkflowNodeKinds.SetVariable,
@@ -127,7 +217,8 @@ public static class WorkflowNodeTypes
         0xFF64748B,
         Contracts.Icons.Variable,
         [
-            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode"),
+            new(WorkflowKeys.Name, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode"),
+            ScopeSetting(null),
             new(WorkflowKeys.Operation, "Do", ActionSettingKind.Choice, WorkflowKeys.Set, Options:
             [
                 new(WorkflowKeys.Set, "Set to"),
@@ -135,11 +226,46 @@ public static class WorkflowNodeTypes
                 new(WorkflowKeys.Subtract, "Subtract"),
                 new(WorkflowKeys.Flip, "Flip true / false"),
                 new(WorkflowKeys.Clear, "Clear"),
+                new(WorkflowKeys.Calculate, "Calculate"),
             ]),
             new(WorkflowKeys.Value, "Value", Placeholder: "text or number (add: 1)")
             {
                 ShowWhen = new(WorkflowKeys.Operation, WorkflowKeys.Set, WorkflowKeys.Add, WorkflowKeys.Subtract),
             },
+            new(WorkflowKeys.Expression, "Expression", Placeholder: "e.g. [count] * 2 + 1", Description: "Variables are [name]; text, number and time functions are listed in the workflow guide. A result that can't be calculated leaves the variable as it was.")
+            {
+                ShowWhen = new(WorkflowKeys.Operation, WorkflowKeys.Calculate),
+            },
+            new(WorkflowKeys.As, "Store as", ActionSettingKind.Choice, WorkflowKeys.AsAuto, Description: "Number and true / false are checked: a value that doesn't fit leaves the variable as it was.", Options:
+            [
+                new(WorkflowKeys.AsAuto, "as it is"),
+                new(WorkflowKeys.AsText, "text"),
+                new(WorkflowKeys.AsNumber, "a number"),
+                new(WorkflowKeys.AsBool, "true / false"),
+            ])
+            {
+                ShowWhen = new(WorkflowKeys.Operation, WorkflowKeys.Set, WorkflowKeys.Calculate),
+            },
+        ]);
+
+    public static WorkflowNodeType Call { get; } = new(
+        WorkflowNodeKinds.Call,
+        "Call workflow",
+        "Runs a shared workflow from its When node on, then goes on. If it can't run, it goes on at On error when that has a link.",
+        0xFF0EA5E9,
+        Contracts.Icons.Stack,
+        [
+            new(WorkflowKeys.Workflow, "Workflow", Placeholder: "the id of a shared workflow", Description: "Save a workflow as shared in the editor, then choose it here."),
+        ]);
+
+    public static WorkflowNodeType Switch { get; } = new(
+        WorkflowNodeKinds.Switch,
+        "Switch",
+        "Goes on at the output of the first case that equals the value, else at Else.",
+        0xFF06B6D4,
+        Contracts.Icons.Branch,
+        [
+            new(WorkflowKeys.Expression, "Switch on", Placeholder: "e.g. [mode]  or  [count] % 3", Description: "Variables are [name]. Numbers compare as numbers, text ignores case; the first case that matches wins. A broken expression goes to Else and says why in the run log."),
         ]);
 
     public static WorkflowNodeType Stop { get; } = new(
@@ -151,7 +277,7 @@ public static class WorkflowNodeTypes
         []);
 
     /// <summary>All kinds, in the order the editor's palette lists them.</summary>
-    public static IReadOnlyList<WorkflowNodeType> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Stop];
+    public static IReadOnlyList<WorkflowNodeType> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Call, Switch, Stop];
 
     public static WorkflowNodeType Of(string kind) => All.FirstOrDefault(type => type.Kind == kind) ?? Action;
 
@@ -166,27 +292,58 @@ public static class WorkflowNodeTypes
 
         return node.Kind switch
         {
-            WorkflowNodeKinds.Trigger => $"When {WorkflowTriggers.Describe(settings.Get(WorkflowKeys.On, WorkflowTriggers.Down)).ToLowerInvariant()}",
+            WorkflowNodeKinds.Trigger => SummarizeTrigger(settings),
             WorkflowNodeKinds.Action => node.Action?.ActionName ?? "Choose an action",
             WorkflowNodeKinds.Wait => $"Wait {WorkflowEngine.FormatDuration(Math.Clamp(settings.GetInt(WorkflowKeys.Milliseconds, 500), 0, WorkflowKeys.MaxWaitMs))}",
             WorkflowNodeKinds.If => settings.Get(WorkflowKeys.Check, WorkflowKeys.CheckVariable) switch
             {
                 WorkflowKeys.CheckApp => $"If {Or(settings.Get(WorkflowKeys.App), "…")} is in front",
                 WorkflowKeys.CheckTime => $"If between {Or(settings.Get(WorkflowKeys.From), "…")} and {Or(settings.Get(WorkflowKeys.To), "…")}",
+                WorkflowKeys.CheckExpression => $"If {Or(settings.Get(WorkflowKeys.Expression), "…")}",
                 _ => $"If {Or(settings.Get(WorkflowKeys.Name), "…")} {DescribeComparison(settings)}",
             },
             WorkflowNodeKinds.Toggle => "Toggle",
-            WorkflowNodeKinds.Repeat => $"Repeat {Math.Clamp(settings.GetInt(WorkflowKeys.Count, 2), 1, WorkflowKeys.MaxRepeat)}×",
+            WorkflowNodeKinds.Repeat => SummarizeRepeat(settings),
             WorkflowNodeKinds.SetVariable => settings.Get(WorkflowKeys.Operation, WorkflowKeys.Set) switch
             {
                 WorkflowKeys.Add => $"{Or(settings.Get(WorkflowKeys.Name), "…")} + {Or(settings.Get(WorkflowKeys.Value), "1")}",
                 WorkflowKeys.Subtract => $"{Or(settings.Get(WorkflowKeys.Name), "…")} − {Or(settings.Get(WorkflowKeys.Value), "1")}",
                 WorkflowKeys.Flip => $"Flip {Or(settings.Get(WorkflowKeys.Name), "…")}",
                 WorkflowKeys.Clear => $"Clear {Or(settings.Get(WorkflowKeys.Name), "…")}",
+                WorkflowKeys.Calculate => $"{Or(settings.Get(WorkflowKeys.Name), "…")} = {Or(settings.Get(WorkflowKeys.Expression), "…")}",
                 _ => $"{Or(settings.Get(WorkflowKeys.Name), "…")} = {Or(settings.Get(WorkflowKeys.Value), "\"\"")}",
             },
+            WorkflowNodeKinds.Call => $"Call {Or(settings.Get(WorkflowKeys.Workflow), "…")}",
+            WorkflowNodeKinds.Switch => $"Switch on {Or(settings.Get(WorkflowKeys.Expression), "…")}",
             WorkflowNodeKinds.Stop => "Stop",
             _ => node.Kind,
+        };
+    }
+
+    private static string SummarizeTrigger(ActionSettings settings)
+    {
+        var on = settings.Get(WorkflowKeys.On, WorkflowTriggers.Down);
+        return on switch
+        {
+            WorkflowTriggers.ProfileShown => "When the profile is shown",
+            WorkflowTriggers.AppInFront => $"When {Or(settings.Get(WorkflowKeys.App), "an app")} comes to the front",
+            WorkflowTriggers.VariableChanged => settings.Get(WorkflowKeys.Value).Length == 0
+                ? $"When {Or(settings.Get(WorkflowKeys.Name), "…")} changes"
+                : $"When {Or(settings.Get(WorkflowKeys.Name), "…")} becomes {settings.Get(WorkflowKeys.Value).Trim()}",
+            WorkflowTriggers.Timer => $"Every {WorkflowEngine.FormatDuration(Math.Clamp(settings.GetInt(WorkflowKeys.Every, 60), WorkflowKeys.MinEverySeconds, WorkflowKeys.MaxEverySeconds) * 1000)}",
+            _ => $"When {WorkflowTriggers.Describe(on).ToLowerInvariant()}",
+        };
+    }
+
+    private static string SummarizeRepeat(ActionSettings settings)
+    {
+        var every = Math.Clamp(settings.GetInt(WorkflowKeys.Interval, 0), 0, WorkflowKeys.MaxWaitMs) is > 0 and var ms ? $", every {WorkflowEngine.FormatDuration(ms)}" : string.Empty;
+        return settings.Get(WorkflowKeys.Mode, WorkflowKeys.ModeCount) switch
+        {
+            WorkflowKeys.ModeVariable => $"Repeat {Or(settings.Get(WorkflowKeys.Times), "…")}×{every}",
+            WorkflowKeys.ModeWhile => $"Repeat while {Or(settings.Get(WorkflowKeys.Name), "…")} {DescribeComparison(settings)}{every}",
+            WorkflowKeys.ModeUntil => $"Repeat until {Or(settings.Get(WorkflowKeys.Name), "…")} {DescribeComparison(settings)}{every}",
+            _ => $"Repeat {Math.Clamp(settings.GetInt(WorkflowKeys.Count, 2), 1, WorkflowKeys.MaxRepeat)}×{every}",
         };
     }
 

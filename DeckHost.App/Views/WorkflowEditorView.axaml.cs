@@ -77,19 +77,119 @@ public partial class WorkflowEditorView : UserControl, IWidePage
         }
     }
 
-    private void ActionSearch_OnTextChanged(object? sender, TextChangedEventArgs e)
+    // ---------------------------------------------------------------- switch cases
+
+    private void CaseUp_OnClick(object? sender, RoutedEventArgs e) => WithCase(sender, static (vm, row) => vm.MoveCase(row, -1));
+
+    private void CaseDown_OnClick(object? sender, RoutedEventArgs e) => WithCase(sender, static (vm, row) => vm.MoveCase(row, 1));
+
+    private void CaseRemove_OnClick(object? sender, RoutedEventArgs e) => WithCase(sender, static (vm, row) => vm.RemoveCase(row));
+
+    private void WithCase(object? sender, Action<WorkflowEditorViewModel, CaseRow> action)
     {
-        if (DataContext is not WorkflowEditorViewModel vm)
+        if (sender is Control { DataContext: CaseRow row } && DataContext is WorkflowEditorViewModel vm)
+        {
+            action(vm, row);
+        }
+    }
+
+    // ---------------------------------------------------------------- shared workflows
+
+    private void OpenShared_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: SharedWorkflowRow row } && DataContext is WorkflowEditorViewModel vm)
+        {
+            vm.OpenSharedRowCommand.Execute(row);
+        }
+    }
+
+    private void DeleteShared_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: SharedWorkflowRow row } && DataContext is WorkflowEditorViewModel vm)
+        {
+            vm.DeleteSharedRowCommand.Execute(row);
+        }
+    }
+
+    // ---------------------------------------------------------------- sharing
+
+    private static readonly FilePickerFileType WorkflowFiles = new("DeckHost workflow") { Patterns = ["*.deckhostworkflow"] };
+
+    private async void Export_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not WorkflowEditorViewModel vm || TopLevel.GetTopLevel(this) is not { } top)
         {
             return;
         }
 
-        var query = ActionSearch.Text?.Trim() ?? string.Empty;
-        ActionList.ItemsSource = query.Length == 0
-            ? vm.AvailableActions
-            : vm.AvailableActions.Where(action =>
-                action.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                action.PluginName.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        try
+        {
+            var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export workflow",
+                SuggestedFileName = vm.ExportFileName,
+                DefaultExtension = "deckhostworkflow",
+                FileTypeChoices = [WorkflowFiles],
+            });
+            if (file is null)
+            {
+                return;
+            }
+
+            await using var stream = await file.OpenWriteAsync();
+            stream.SetLength(0);
+            await using var writer = new System.IO.StreamWriter(stream, new System.Text.UTF8Encoding(false));
+            await writer.WriteAsync(vm.ExportText());
+            StatusText.Text = $"Exported to {file.Name}.";
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = "Couldn't save the file: " + ex.Message;
+        }
+    }
+
+    private async void Import_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not WorkflowEditorViewModel vm || TopLevel.GetTopLevel(this) is not { } top)
+        {
+            return;
+        }
+
+        try
+        {
+            var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import workflow",
+                AllowMultiple = false,
+                FileTypeFilter = [WorkflowFiles, FilePickerFileTypes.All],
+            });
+            if (files.Count == 0)
+            {
+                return;
+            }
+
+            await using var stream = await files[0].OpenReadAsync();
+            if (stream.CanSeek && stream.Length > 4 * 1024 * 1024)
+            {
+                StatusText.Text = "That file is too big to be a workflow.";
+                return;
+            }
+
+            using var reader = new System.IO.StreamReader(stream);
+            var problem = vm.Import(await reader.ReadToEndAsync());
+            if (problem is null)
+            {
+                Canvas.FitToView();
+            }
+            else
+            {
+                StatusText.Text = problem;
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = "Couldn't read the file: " + ex.Message;
+        }
     }
 
     // ---------------------------------------------------------------- setting fields

@@ -2,6 +2,8 @@
 
 The main window is laid out like the Stream Deck app: the device at the top, the selected control's editor below it, and the actions on the right.
 
+![The editor: a profile on the N4 Pro, the selected key's settings below and the actions grouped by plugin on the right](images/editor.png)
+
 ## Putting actions on controls
 
 - **Drag** an action from the list onto a control. A control that already has one gets the new action; a Multi Action or workflow gets it added.

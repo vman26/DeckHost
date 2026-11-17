@@ -37,7 +37,10 @@ public partial class PluginStoreViewModel : ViewModelBase
 
     private readonly PluginCatalog _catalog;
     private readonly PluginStore _store = new(Http);
-    private readonly StoreMedia _media = new(MediaHttp);
+    /// <summary>Icons and READMEs, shared with the plugin documentation pages (one cache).</summary>
+    internal static StoreMedia SharedMedia { get; } = new(MediaHttp);
+
+    private readonly StoreMedia _media = SharedMedia;
     private readonly List<StoreItemViewModel> _all = [];
     private string _searchText = string.Empty;
     private string _selectedSource = AllSources;
@@ -55,13 +58,139 @@ public partial class PluginStoreViewModel : ViewModelBase
         _catalogUrlsText = string.Join(Environment.NewLine, _store.DeckHostCatalogUrls);
     }
 
+    /// <summary>
+    /// The plugin stores of the ecosystems DeckHost runs plugins from, to browse in the browser:
+    /// a plugin downloaded there installs with Install plugin….
+    /// </summary>
+    public IReadOnlyList<PluginDocsLink> OtherStores { get; } =
+    [
+        new("Elgato Marketplace", "https://marketplace.elgato.com/stream-deck/plugins"),
+        new("MiraBox Space", "https://space.mirabox.net/"),
+        new("OpenAction", "https://openactionapi.github.io/plugins/"),
+    ];
+
+    private string _gitHubUrl = string.Empty;
+    private bool _isInstallingFromGitHub;
+
+    /// <summary>A GitHub repository to install a plugin from (its newest release's plugin file).</summary>
+    public string GitHubUrl
+    {
+        get => _gitHubUrl;
+        set
+        {
+            if (SetProperty(ref _gitHubUrl, value))
+            {
+                InstallFromGitHubCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool IsInstallingFromGitHub
+    {
+        get => _isInstallingFromGitHub;
+        private set
+        {
+            if (SetProperty(ref _isInstallingFromGitHub, value))
+            {
+                InstallFromGitHubCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    private bool CanInstallFromGitHub() => !IsInstallingFromGitHub && GitHubLocation.Parse(GitHubUrl) is not null;
+
+    /// <summary>Installs the plugin file of a GitHub repository's newest release (checked against GitHub's sha256).</summary>
+    [RelayCommand(CanExecute = nameof(CanInstallFromGitHub))]
+    private async Task InstallFromGitHubAsync()
+    {
+        IsInstallingFromGitHub = true;
+        string? package = null;
+        try
+        {
+            StatusReported?.Invoke("Looking for the newest release on GitHub…", false);
+            var entry = await Task.Run(() => _store.FromGitHubAsync(GitHubUrl));
+            StatusReported?.Invoke($"Downloading {entry.Name} {entry.Version}…", false);
+            package = await Task.Run(() => _store.DownloadAsync(entry, Path.Combine(Path.GetTempPath(), "DeckHost", "downloads"), null, CancellationToken.None));
+            var installed = await Task.Run(() => _catalog.Install(package, entry.Id, null, PluginStore.GitHubSource));
+            StatusReported?.Invoke(
+                installed.Error is null
+                    ? $"Installed {installed.Name} {installed.Version} from GitHub. Its actions are in the action list now."
+                    : $"Installed {installed.Name}, but it can't run: {installed.Error}",
+                installed.Error is not null);
+            GitHubUrl = string.Empty;
+        }
+        catch (Exception ex) when (ex is PluginException or HttpRequestException or IOException or TaskCanceledException or InvalidDataException)
+        {
+            StatusReported?.Invoke($"Could not install from GitHub: {ex.Message}", true);
+        }
+        finally
+        {
+            IsInstallingFromGitHub = false;
+            if (package is not null)
+            {
+                try
+                {
+                    File.Delete(package);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+    }
+
+    [RelayCommand]
+    private static void OpenStore(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https")
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
+        }
+    }
+
     /// <summary>Icons and READMEs of the listed plugins.</summary>
     internal StoreMedia Media => _media;
 
     /// <summary>Reports install results to the Plugin Manager's status line.</summary>
     public event Action<string, bool>? StatusReported;
 
-    public ObservableCollection<StoreItemViewModel> Items { get; } = [];
+    /// <summary>The plugins shown: the first <see cref="Shown"/> matches.</summary>
+    public BulkObservableCollection<StoreItemViewModel> Items { get; } = [];
+
+    /// <summary>How many cards a page of results has; <see cref="ShowMore"/> adds another page.</summary>
+    internal const int PageSize = 40;
+
+    private int _limit = PageSize;
+    private int _matchCount;
+    private System.Threading.CancellationTokenSource? _filterDelay;
+
+    /// <summary>How long typing has to pause before the list is filtered (zero: at once, for tests).</summary>
+    internal TimeSpan SearchDelay { get; set; } = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>How many plugins match the search and filters.</summary>
+    public int MatchCount
+    {
+        get => _matchCount;
+        private set
+        {
+            if (SetProperty(ref _matchCount, value))
+            {
+                OnPropertyChanged(nameof(HasMore));
+                OnPropertyChanged(nameof(ShowMoreLabel));
+            }
+        }
+    }
+
+    public bool HasMore => MatchCount > Items.Count;
+
+    public string ShowMoreLabel => $"Show more ({MatchCount - Items.Count} more)";
+
+    [RelayCommand]
+    private void ShowMore()
+    {
+        _limit += PageSize;
+        ApplyFilter(keepLimit: true);
+    }
 
     public IReadOnlyList<string> Sources { get; } =
         [AllSources, PluginStore.DeckHostSource, PluginStore.OpenActionSource, PluginStore.ElgatoArchiveSource];
@@ -77,7 +206,7 @@ public partial class PluginStoreViewModel : ViewModelBase
         {
             if (SetProperty(ref _searchText, value))
             {
-                ApplyFilter();
+                ScheduleFilter();
             }
         }
     }
@@ -268,7 +397,7 @@ public partial class PluginStoreViewModel : ViewModelBase
         }
     }
 
-    private static List<string> LoadCatalogUrls()
+    internal static List<string> LoadCatalogUrls()
     {
         try
         {
@@ -320,23 +449,63 @@ public partial class PluginStoreViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedCategory));
     }
 
-    private void ApplyFilter()
+    /// <summary>Filters after typing has paused, so each keystroke doesn't rebuild the list.</summary>
+    private void ScheduleFilter()
     {
-        var search = SearchText.Trim();
-        Items.Clear();
-        foreach (var item in _all
-                     .Where(item => SelectedSource == AllSources || item.Entry.Source.StartsWith(SelectedSource, StringComparison.Ordinal))
-                     .Where(item => SelectedCategory == AllCategories || string.Equals(item.Category, SelectedCategory, StringComparison.CurrentCultureIgnoreCase))
-                     .Where(item => SelectedStatus == AllStatuses || (SelectedStatus == InstalledStatus) == item.IsInstalled)
-                     .Where(item => search.Length == 0 ||
-                                    item.Entry.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
-                                    (item.Entry.Author?.Contains(search, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
-                                    (item.Entry.Description?.Contains(search, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
-                                    item.Entry.Id.Contains(search, StringComparison.OrdinalIgnoreCase))
-                     .Take(500))
+        _filterDelay?.Cancel();
+        if (SearchDelay <= TimeSpan.Zero)
         {
-            Items.Add(item);
+            ApplyFilter();
+            return;
         }
+
+        var delay = _filterDelay = new System.Threading.CancellationTokenSource();
+        _ = Task.Delay(SearchDelay, delay.Token).ContinueWith(
+            task =>
+            {
+                if (!task.IsCanceled)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyFilter());
+                }
+            },
+            TaskScheduler.Default);
+    }
+
+    private void ApplyFilter(bool keepLimit = false)
+    {
+        _filterDelay?.Cancel();
+        if (!keepLimit)
+        {
+            _limit = PageSize;
+        }
+
+        var matches = Filter(_all, SearchText, SelectedSource, SelectedCategory, SelectedStatus);
+        MatchCount = matches.Count;
+        Items.ReplaceAll(matches.Take(_limit));
+        OnPropertyChanged(nameof(HasMore));
+        OnPropertyChanged(nameof(ShowMoreLabel));
+    }
+
+    /// <summary>
+    /// The plugins matching the source, category, status and search: every word of the search must
+    /// be in the name, author, description or id (ordinal, ignoring case, on a key built once per plugin).
+    /// </summary>
+    internal static List<StoreItemViewModel> Filter(IEnumerable<StoreItemViewModel> items, string search, string source, string category, string status)
+    {
+        var terms = (search ?? string.Empty).Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(static term => term.ToLowerInvariant()).ToArray();
+        var matches = new List<StoreItemViewModel>();
+        foreach (var item in items)
+        {
+            if ((source == AllSources || item.Entry.Source.StartsWith(source, StringComparison.Ordinal)) &&
+                (category == AllCategories || string.Equals(item.Category, category, StringComparison.CurrentCultureIgnoreCase)) &&
+                (status == AllStatuses || (status == InstalledStatus) == item.IsInstalled) &&
+                terms.All(term => item.SearchKey.Contains(term, StringComparison.Ordinal)))
+            {
+                matches.Add(item);
+            }
+        }
+
+        return matches;
     }
 
     private static HttpClient CreateMediaClient()
@@ -373,6 +542,11 @@ public partial class StoreItemViewModel : ViewModelBase
     }
 
     public StoreEntry Entry { get; }
+
+    private string? _searchKey;
+
+    /// <summary>Name, author, description and id in lower case, built once, for the search.</summary>
+    internal string SearchKey => _searchKey ??= string.Join('\n', Entry.Name, Entry.Author, Entry.Description, Entry.Id).ToLowerInvariant();
 
     public string Name => Entry.Name;
 

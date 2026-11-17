@@ -21,6 +21,8 @@ public sealed class SettingsEditorViewModel : ViewModelBase
         var inputs = ControlInputs.Of(controlInputs);
         var splitByInput = inputs.Count > 1 && definitions.Any(static definition => definition.PerInput);
 
+        _stored = [.. current.Select(static pair => pair.Key)];
+
         // Values no field shows (a Folder key's folder id, values a plugin stored) are kept as they are.
         _preserved = [.. current.Where(pair => !definitions.Any(definition =>
             pair.Key == definition.Key || pair.Key.StartsWith(definition.Key + "@", StringComparison.Ordinal)))];
@@ -79,6 +81,7 @@ public sealed class SettingsEditorViewModel : ViewModelBase
             ActionSettingKind.Choice => new ChoiceSettingField(definition, value, controlInputs),
             ActionSettingKind.FilePath => new FilePathSettingField(definition, value),
             ActionSettingKind.Hotkey => new HotkeySettingField(definition, value),
+            ActionSettingKind.Variable => new VariableSettingField(definition, value),
             ActionSettingKind.Secret => new SecretSettingField(definition, value),
             ActionSettingKind.Number => new NumberSettingField(definition, value),
             _ => new TextSettingField(definition, value),
@@ -97,11 +100,17 @@ public sealed class SettingsEditorViewModel : ViewModelBase
 
     public bool HasErrors => Fields.Any(static settingField => settingField.Error is not null);
 
+    /// <summary>
+    /// The values to store: what was stored before or was changed. A field still on its default that
+    /// was never stored stays out, so opening the editor doesn't write defaults into the binding.
+    /// </summary>
     public ActionSettings ToSettings() =>
-        new(_preserved.Concat(Fields.Where(static field => field.Error is null && !string.IsNullOrEmpty(field.Value))
+        new(_preserved.Concat(Fields.Where(field => field.Error is null && !string.IsNullOrEmpty(field.Value) &&
+                (_stored.Contains(field.Definition.Key) || !string.Equals(field.Value, field.Definition.DefaultValue, StringComparison.Ordinal)))
             .Select(static field => new KeyValuePair<string, string>(field.Definition.Key, field.Value))));
 
     private readonly IReadOnlyList<KeyValuePair<string, string>> _preserved;
+    private readonly HashSet<string> _stored;
 }
 
 public abstract class SettingFieldViewModel(ActionSettingDefinition definition, string value) : ViewModelBase
@@ -171,6 +180,13 @@ public abstract class SettingFieldViewModel(ActionSettingDefinition definition, 
 public sealed class TextSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value);
 
 public sealed class SecretSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value);
+
+/// <summary>A variable's name: typed freely, or picked from the variables DeckHost knows (see <see cref="VariableSuggestions"/>).</summary>
+public sealed class VariableSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value)
+{
+    /// <summary>The names to offer, read when the editor is built.</summary>
+    public IReadOnlyList<string> Suggestions { get; } = VariableSuggestions.Names();
+}
 
 public sealed class FilePathSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value);
 

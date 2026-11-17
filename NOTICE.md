@@ -38,6 +38,8 @@ You may remove this additional permission from your own changed versions of Deck
 
 DeckHost uses third-party packages under their own licenses (MIT, BSD, Apache-2.0); see the
 [architecture page](docs/maintainers/architecture.md#third-party-code). The StreamDock SDK
-(`native/StreamDock-SDK`) is © MiraboxSpace, MIT License.
+(`native/StreamDock-SDK`) is © MiraboxSpace, MIT License. The workflow expression engine is
+[NCalc](https://github.com/ncalc/ncalc) (the `NCalcSync` package), MIT License, © its contributors; it is
+used behind `WorkflowExpression` and not exposed to plugins.
 
 *This notice isn't legal advice; for questions about using DeckHost commercially, open an issue.*

@@ -10,5 +10,6 @@
 
 - [ ] `dotnet test DeckHost.Tests` passes
 - [ ] Docs updated where behavior changed (`docs/`, `README.md`, `CLAUDE.md`)
+- [ ] A line in `CHANGELOG.md` under Unreleased, if users notice the change
 - [ ] If the plugin API (`DeckHost.Contracts`) changed: `ContractsApi.txt` updated (`UPDATE_API_BASELINE=1`)
 - [ ] AI-assisted? Say so below, and confirm you've read and tested the changes yourself

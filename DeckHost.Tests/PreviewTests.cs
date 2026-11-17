@@ -9,59 +9,137 @@ namespace DeckHost.Tests;
 
 public class PreviewTests
 {
-    [Fact]
-    public async Task Frames_are_reported_for_the_preview_even_without_a_device()
+    private const string PluginId = "p";
+    private const string ActionId = "a";
+    private const string FirstKey = "key.0";
+    private const string SecondKey = "key.1";
+    private const string Green = "#00FF00";
+    private const string Red = "#FF0000";
+    private static readonly byte[] GreenPixel = [0, 255, 0, 255];
+    private static readonly byte[] RedPixel = [255, 0, 0, 255];
+
+    private static DeviceProfile ProfileWithKey(params ControlBinding[] bindings) => new("one", "One", FakeDevicePlugin.DeviceId, bindings);
+
+    private static async Task<ConcurrentDictionary<string, ControlFrame>> FramesOfAGreenProfileWithARedKeyAsync()
     {
-        var plugin = new FakeDevicePlugin(connected: false);
         using var store = new VariableStore();
-        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin("p", new RecordingAction("a"))], store);
-        var frames = new ConcurrentBag<ControlFrame>();
-        host.ControlFrameRendered += frames.Add;
-        host.SetProfiles([new DeviceProfile("one", "One", FakeDevicePlugin.DeviceId, [Bindings.Single("key.0", "p", "a")])]);
-
-        await host.StartAsync(CancellationToken.None);
-        await host.WhenIdleAsync();
-
-        Assert.Equal(["key.0", "key.1"], frames.Select(frame => frame.ControlId).Order());
-        Assert.Empty(plugin.PushedImages);
-    }
-
-    [Fact]
-    public async Task Profile_and_control_backgrounds_are_drawn()
-    {
-        var plugin = new FakeDevicePlugin();
-        using var store = new VariableStore();
-        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin("p", new RecordingAction("a"))], store);
+        await using var host = new DeviceHostService([new FakeDevicePlugin()], [new TestApplicationPlugin(PluginId, new RecordingAction(ActionId))], store);
         var frames = new ConcurrentDictionary<string, ControlFrame>();
         host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
-        var redKey = new ControlBinding("key.1", ProfileActionKind.Single, Bindings.Reference("p", "missing"), new ControlAppearance(BackgroundColor: "#FF0000"), []);
-        host.SetProfiles([new DeviceProfile("one", "One", FakeDevicePlugin.DeviceId, [redKey], Background: new ProfileBackground("#00FF00"))]);
-
+        var redKey = new ControlBinding(SecondKey, ProfileActionKind.Single, Bindings.Reference(PluginId, "missing"), new ControlAppearance(BackgroundColor: Red), []);
+        host.SetProfiles([ProfileWithKey(redKey) with { Background = new ProfileBackground(Green) }]);
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
-
-        // Corner pixels (RGBA): key.0 shows the green profile background, key.1 its own red background.
-        Assert.Equal(new byte[] { 0, 255, 0, 255 }, frames["key.0"].Rgba[..4]);
-        Assert.Equal(new byte[] { 255, 0, 0, 255 }, frames["key.1"].Rgba[..4]);
+        return frames;
     }
 
-    [Fact]
-    public async Task Simulated_input_runs_actions_and_is_reported()
+    [Test]
+    public async Task StartAsync_DeviceNotPlugged_ReportsAFrameForEveryControlWithAnImage()
     {
-        var plugin = new FakeDevicePlugin();
-        var action = new RecordingAction("a");
+        // Arrange
+        var plugin = new FakeDevicePlugin(connected: false);
         using var store = new VariableStore();
-        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin("p", action)], store);
-        var inputs = new ConcurrentBag<DeviceInputEvent>();
-        host.InputReceived += inputs.Add;
-        host.SetProfiles([new DeviceProfile("one", "One", FakeDevicePlugin.DeviceId, [Bindings.Single("key.0", "p", "a")])]);
-        await host.StartAsync(CancellationToken.None);
+        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin(PluginId, new RecordingAction(ActionId))], store);
+        var frames = new ConcurrentBag<ControlFrame>();
+        host.ControlFrameRendered += frames.Add;
+        host.SetProfiles([ProfileWithKey(Bindings.Single(FirstKey, PluginId, ActionId))]);
 
-        host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1));
-        host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, "key.1", InputCapabilities.Press, 1));
+        // Act
+        await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
 
-        Assert.Single(action.Executions);
-        Assert.Equal(2, inputs.Count);
+        // Assert
+        Assert.That(frames.Select(frame => frame.ControlId).Order(), Is.EqualTo(new[] { FirstKey, SecondKey }));
+    }
+
+    [Test]
+    public async Task StartAsync_DeviceNotPlugged_PushesNothingToTheDevice()
+    {
+        // Arrange
+        var plugin = new FakeDevicePlugin(connected: false);
+        using var store = new VariableStore();
+        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin(PluginId, new RecordingAction(ActionId))], store);
+        host.SetProfiles([ProfileWithKey(Bindings.Single(FirstKey, PluginId, ActionId))]);
+
+        // Act
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(plugin.PushedImages, Is.Empty);
+    }
+
+    [Test]
+    public async Task StartAsync_ProfileBackgroundGreen_DrawsAKeyWithoutItsOwnBackgroundInGreen()
+    {
+        // Arrange (a green profile background and a key with a red background of its own)
+
+        // Act
+        var frames = await FramesOfAGreenProfileWithARedKeyAsync();
+
+        // Assert (corner pixels, RGBA)
+        Assert.That(frames[FirstKey].Rgba[..4], Is.EqualTo(GreenPixel));
+    }
+
+    [Test]
+    public async Task StartAsync_KeyWithABackgroundOfItsOwn_DrawsItInThatColor()
+    {
+        // Arrange (a green profile background and a key with a red background of its own)
+
+        // Act
+        var frames = await FramesOfAGreenProfileWithARedKeyAsync();
+
+        // Assert (corner pixels, RGBA)
+        Assert.That(frames[SecondKey].Rgba[..4], Is.EqualTo(RedPixel));
+    }
+
+    private static async Task<(DeviceHostService Host, RecordingAction Action, ConcurrentBag<DeviceInputEvent> Inputs, VariableStore Store)> StartedWithInputsReportedAsync()
+    {
+        var action = new RecordingAction(ActionId);
+        var store = new VariableStore();
+        var host = new DeviceHostService([new FakeDevicePlugin()], [new TestApplicationPlugin(PluginId, action)], store);
+        var inputs = new ConcurrentBag<DeviceInputEvent>();
+        host.InputReceived += inputs.Add;
+        host.SetProfiles([ProfileWithKey(Bindings.Single(FirstKey, PluginId, ActionId))]);
+        await host.StartAsync(CancellationToken.None);
+        return (host, action, inputs, store);
+    }
+
+    private static void PressBothKeys(DeviceHostService host)
+    {
+        host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, FirstKey, InputCapabilities.Press, 1));
+        host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, SecondKey, InputCapabilities.Press, 1));
+    }
+
+    [Test]
+    public async Task SimulateInput_PressOnABoundKey_RunsItsAction()
+    {
+        // Arrange
+        var (host, action, _, store) = await StartedWithInputsReportedAsync();
+        await using var _ = host;
+        using var __ = store;
+
+        // Act
+        PressBothKeys(host);
+        await host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(action.Executions, Has.Exactly(1).Items);
+    }
+
+    [Test]
+    public async Task SimulateInput_PressOnTwoKeys_ReportsBothInputs()
+    {
+        // Arrange
+        var (host, _, inputs, store) = await StartedWithInputsReportedAsync();
+        await using var _ = host;
+        using var __ = store;
+
+        // Act
+        PressBothKeys(host);
+        await host.WhenIdleAsync();
+
+        // Assert
+        Assert.That(inputs.Count, Is.EqualTo(2));
     }
 }

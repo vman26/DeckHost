@@ -79,6 +79,58 @@ public class ActionItemViewModel : ViewModelBase
 
     public string Summary => Description ?? $"{InputsLabel} / {OutputsLabel}";
 
+    private bool _isCompatible = true;
+    private string? _incompatibleReason;
+
+    /// <summary>False while a control is selected that this action doesn't fit (it is shown dimmed, or hidden by the filter).</summary>
+    public bool IsCompatible
+    {
+        get => _isCompatible;
+        private set
+        {
+            if (SetProperty(ref _isCompatible, value))
+            {
+                OnPropertyChanged(nameof(ListOpacity));
+                OnPropertyChanged(nameof(ListToolTip));
+            }
+        }
+    }
+
+    /// <summary>The action list dims an action that doesn't fit the selected control.</summary>
+    public double ListOpacity => _isCompatible ? 1 : 0.4;
+
+    /// <summary>The summary, and why the action doesn't fit the selected control when it doesn't.</summary>
+    public string ListToolTip => _isCompatible || _incompatibleReason is null ? Summary : $"{Summary}\n{_incompatibleReason}";
+
+    /// <summary>Works out whether the action fits <paramref name="control"/> (null: nothing selected, everything fits).</summary>
+    public void UpdateFit(PhysicalControl? control)
+    {
+        _incompatibleReason = control is null || FitsControl(control) ? null : WhyNotOn(control);
+        IsCompatible = _incompatibleReason is null;
+        OnPropertyChanged(nameof(ListToolTip));
+    }
+
+    private string WhyNotOn(PhysicalControl control)
+    {
+        if (RequiresOutputCapableControl && control.Outputs == OutputCapabilities.None && !control.HasLinkedDisplay)
+        {
+            return "Needs a control with a display.";
+        }
+
+        var missingInputs = Action.RequiredInputs & ~control.Inputs;
+        if (RequiresInteractiveInput && control.Inputs == InputCapabilities.None)
+        {
+            return "Needs a control that can be pressed or turned.";
+        }
+
+        if (missingInputs != InputCapabilities.None)
+        {
+            return $"This control can't send: {CapabilityFormatter.Format(missingInputs, string.Empty)}.";
+        }
+
+        return "Needs a control with a display of its own.";
+    }
+
     private ListIcon? _icon;
 
     /// <summary>The icon in the action list and on the drag ghost (made when first shown).</summary>

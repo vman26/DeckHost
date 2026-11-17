@@ -8,6 +8,9 @@ namespace DeckHost.Device.Web;
 /// <summary>The web deck's grid of keys and the messages between DeckHost and the page, as pure functions.</summary>
 public static class WebDeckLayout
 {
+    /// <summary>The browser page's display id in the descriptor.</summary>
+    public const string DisplayId = "browser";
+
     public const int MinSize = 1;
     public const int MaxColumns = 8;
     public const int MaxRows = 6;
@@ -33,7 +36,10 @@ public static class WebDeckLayout
                 OutputCapabilities.ColorImage | OutputCapabilities.Text,
                 KeyPixels,
                 KeyPixels,
-                HardwareId: index.ToString(CultureInfo.InvariantCulture)));
+                HardwareId: index.ToString(CultureInfo.InvariantCulture))
+            {
+                DisplayId = DisplayId,
+            });
         }
 
         return controls;

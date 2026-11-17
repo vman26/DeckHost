@@ -11,6 +11,13 @@ namespace DeckHost.Tests;
 
 public sealed class PluginCatalogTests : IDisposable
 {
+    private const string ObsId = "deckhost.plugin.obs";
+    private const string Required = "system.required";
+    private const string Optional = "system.optional";
+    private const string GoodId = "good.id";
+    private const string GoodManifest = """{"id":"good.id","name":"x","version":"1","assembly":"x.dll"}""";
+    private const int ChangesInTheInstallLifecycle = 4;
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"deckhost-plugins-{Guid.NewGuid():N}");
 
     private static string ObsPackagePath
@@ -46,46 +53,147 @@ public sealed class PluginCatalogTests : IDisposable
         return catalog;
     }
 
-    [Fact]
-    public void System_plugins_can_be_disabled_unless_required_but_never_uninstalled()
+    private static bool IsEnabled(PluginCatalog catalog, string id) => catalog.EnabledApplicationPlugins.Any(plugin => plugin.Id == id);
+
+    [Test]
+    public void SetEnabled_OptionalSystemPlugin_DisablesIt()
     {
+        // Arrange
         using var catalog = CreateCatalog();
 
-        catalog.SetEnabled("system.optional", false);
-        Assert.DoesNotContain(catalog.EnabledApplicationPlugins, plugin => plugin.Id == "system.optional");
-        Assert.Throws<PluginException>(() => catalog.SetEnabled("system.required", false));
-        Assert.Throws<PluginException>(() => catalog.Uninstall("system.optional"));
+        // Act
+        catalog.SetEnabled(Optional, false);
 
-        // The disabled state survives a restart.
-        using var reloaded = CreateCatalog();
-        Assert.DoesNotContain(reloaded.EnabledApplicationPlugins, plugin => plugin.Id == "system.optional");
+        // Assert
+        Assert.That(IsEnabled(catalog, Optional), Is.False);
     }
 
-    [Fact]
-    public void Installs_disables_and_uninstalls_a_plugin_package()
+    [Test]
+    public void SetEnabled_RequiredSystemPlugin_Throws()
     {
-        Assert.True(File.Exists(ObsPackagePath), $"Build the OBS plugin first: {ObsPackagePath}");
+        // Arrange
+        using var catalog = CreateCatalog();
+
+        // Act
+        var disable = () => catalog.SetEnabled(Required, false);
+
+        // Assert
+        Assert.Throws<PluginException>(() => disable());
+    }
+
+    [Test]
+    public void Uninstall_SystemPlugin_Throws()
+    {
+        // Arrange
+        using var catalog = CreateCatalog();
+
+        // Act
+        var uninstall = () => catalog.Uninstall(Optional);
+
+        // Assert
+        Assert.Throws<PluginException>(() => uninstall());
+    }
+
+    [Test]
+    public void Load_AfterDisablingAPluginAndRestarting_KeepsItDisabled()
+    {
+        // Arrange
+        using (var catalog = CreateCatalog())
+        {
+            catalog.SetEnabled(Optional, false);
+        }
+
+        // Act
+        using var reloaded = CreateCatalog();
+
+        // Assert
+        Assert.That(IsEnabled(reloaded, Optional), Is.False);
+    }
+
+    private static void AssertObsPackageIsBuilt() =>
+        Assert.That(File.Exists(ObsPackagePath), Is.True, $"Build the OBS plugin first: {ObsPackagePath}");
+
+    [Test]
+    public void Install_ObsPackage_ListsAnUninstallablePlugin()
+    {
+        // Arrange
+        AssertObsPackageIsBuilt();
+        using var catalog = CreateCatalog();
+
+        // Act
+        var entry = catalog.Install(ObsPackagePath);
+
+        // Assert
+        Assert.That(entry.Id, Is.EqualTo(ObsId));
+        Assert.That(entry.CanUninstall, Is.True);
+    }
+
+    [Test]
+    public void Install_ObsPackage_EnablesItsActionsWithTheirSettings()
+    {
+        // Arrange
+        AssertObsPackageIsBuilt();
+        using var catalog = CreateCatalog();
+
+        // Act
+        catalog.Install(ObsPackagePath);
+
+        // Assert
+        var plugin = Expect.Single(catalog.EnabledApplicationPlugins, candidate => candidate.Id == ObsId);
+        Assert.That(plugin.Actions.Any(action => action.Id == "obs.scene" && action.Settings.Any(setting => setting.Key == "scene")), Is.True);
+    }
+
+    [Test]
+    public void SetEnabled_InstalledPlugin_DisablesAndEnablesIt()
+    {
+        // Arrange
+        AssertObsPackageIsBuilt();
+        using var catalog = CreateCatalog();
+        catalog.Install(ObsPackagePath);
+
+        // Act
+        catalog.SetEnabled(ObsId, false);
+        var disabled = !IsEnabled(catalog, ObsId);
+        catalog.SetEnabled(ObsId, true);
+
+        // Assert
+        Assert.That(disabled, Is.True);
+        Assert.That(IsEnabled(catalog, ObsId), Is.True);
+    }
+
+    [Test]
+    public void Uninstall_InstalledPlugin_DeletesItsFilesAtOnceAndUnlistsIt()
+    {
+        // Arrange
+        AssertObsPackageIsBuilt();
+        using var catalog = CreateCatalog();
+        catalog.Install(ObsPackagePath);
+
+        // Act (the assemblies are loaded from memory, so the files can be deleted right away)
+        catalog.Uninstall(ObsId);
+
+        // Assert
+        Assert.That(Directory.Exists(Path.Combine(catalog.InstallDirectory, ObsId)), Is.False);
+        Assert.That(catalog.Entries.Any(candidate => candidate.Id == ObsId), Is.False);
+    }
+
+    [Test]
+    public void Changed_InstallDisableEnableUninstall_IsRaisedForEachStep()
+    {
+        // Arrange
+        AssertObsPackageIsBuilt();
         using var catalog = CreateCatalog();
         var changes = 0;
         catalog.Changed += (_, _) => changes++;
 
+        // Act
         var entry = catalog.Install(ObsPackagePath);
-
-        Assert.Equal("deckhost.plugin.obs", entry.Id);
-        Assert.True(entry.CanUninstall);
-        var plugin = Assert.Single(catalog.EnabledApplicationPlugins, candidate => candidate.Id == "deckhost.plugin.obs");
-        Assert.Contains(plugin.Actions, action => action.Id == "obs.scene" && action.Settings.Any(setting => setting.Key == "scene"));
-
         catalog.SetEnabled(entry.Id, false);
-        Assert.DoesNotContain(catalog.EnabledApplicationPlugins, candidate => candidate.Id == entry.Id);
         catalog.SetEnabled(entry.Id, true);
-        Assert.Contains(catalog.EnabledApplicationPlugins, candidate => candidate.Id == entry.Id);
-
-        // Assemblies are loaded from memory, so the files can be deleted right away.
         catalog.Uninstall(entry.Id);
-        Assert.False(Directory.Exists(Path.Combine(catalog.InstallDirectory, entry.Id)));
-        Assert.DoesNotContain(catalog.Entries, candidate => candidate.Id == entry.Id);
-        Assert.Equal(4, changes);
+
+        // Assert
+        Assert.That(changes, Is.EqualTo(ChangesInTheInstallLifecycle));
     }
 
     /// <summary>The OBS package with its version (and optionally more of plugin.json) changed.</summary>
@@ -108,95 +216,245 @@ public sealed class PluginCatalogTests : IDisposable
         return copy;
     }
 
-    [Fact]
-    public void An_update_keeps_the_previous_version_which_can_be_rolled_back_and_forth()
+    [Test]
+    public void Install_FirstVersion_HasNoPreviousVersion()
     {
+        // Arrange
+        using var catalog = CreateCatalog();
+
+        // Act
+        catalog.Install(ObsPackageWithVersion("1.0.0"));
+
+        // Assert
+        Assert.That(catalog.Entries.Single(entry => entry.Id == ObsId).PreviousVersion, Is.Null);
+    }
+
+    [Test]
+    public void Install_Update_KeepsThePreviousVersion()
+    {
+        // Arrange
         using var catalog = CreateCatalog();
         catalog.Install(ObsPackageWithVersion("1.0.0"));
-        Assert.Null(catalog.Entries.Single(entry => entry.Id == "deckhost.plugin.obs").PreviousVersion);
 
+        // Act
         var updated = catalog.Install(ObsPackageWithVersion("1.1.0"));
-        Assert.Equal("1.1.0", updated.Version);
-        Assert.Equal("1.0.0", updated.PreviousVersion);
 
-        var back = catalog.RollBack("deckhost.plugin.obs");
-        Assert.Equal("1.0.0", back.Version);
-        Assert.Equal("1.1.0", back.PreviousVersion);
-        Assert.Contains(catalog.EnabledApplicationPlugins, plugin => plugin.Id == "deckhost.plugin.obs");
-
-        catalog.Uninstall("deckhost.plugin.obs");
-        Assert.Throws<PluginException>(() => catalog.RollBack("deckhost.plugin.obs"));
+        // Assert
+        Assert.That(updated.Version, Is.EqualTo("1.1.0"));
+        Assert.That(updated.PreviousVersion, Is.EqualTo("1.0.0"));
     }
 
-    [Fact]
-    public void A_package_declares_its_permissions_and_diagnostics_find_what_is_wrong()
+    [Test]
+    public void RollBack_AfterAnUpdate_GoesBackToThePreviousVersionAndKeepsTheNewOneToRollForward()
     {
+        // Arrange
         using var catalog = CreateCatalog();
-        var entry = catalog.Install(ObsPackagePath);
-        Assert.Equal(["network"], entry.Permissions);
-        Assert.Equal("It can use the network.", PluginPermissions.Describe(entry.Permissions));
-        Assert.Empty(entry.Warnings ?? []);
-        Assert.Empty(PluginDiagnostics.Check(ObsPackagePath));
+        catalog.Install(ObsPackageWithVersion("1.0.0"));
+        catalog.Install(ObsPackageWithVersion("1.1.0"));
 
-        var broken = CreatePackage(
-            ("plugin.json", """{"id":"good.id","name":"x","version":"one","assembly":"x.dll","icon":"icon.png","permissions":["network","telepathy"]}"""),
-            ("DeckHost.Contracts.dll", "x"));
-        var problems = PluginDiagnostics.Check(broken).Select(static problem => problem.ToString()).ToList();
-        Assert.Contains(problems, static problem => problem.StartsWith("error:", StringComparison.Ordinal) && problem.Contains("x.dll", StringComparison.Ordinal));
-        Assert.Contains(problems, static problem => problem.Contains("'one'", StringComparison.Ordinal));
-        Assert.Contains(problems, static problem => problem.Contains("icon.png", StringComparison.Ordinal));
-        Assert.Contains(problems, static problem => problem.Contains("telepathy", StringComparison.Ordinal));
-        Assert.Contains(problems, static problem => problem.Contains("DeckHost.Contracts.dll", StringComparison.Ordinal));
-        Assert.Contains(problems, static problem => problem.Contains("author", StringComparison.Ordinal));
+        // Act
+        var back = catalog.RollBack(ObsId);
+
+        // Assert
+        Assert.That(back.Version, Is.EqualTo("1.0.0"));
+        Assert.That(back.PreviousVersion, Is.EqualTo("1.1.0"));
+        Assert.That(IsEnabled(catalog, ObsId), Is.True);
     }
 
-    [Fact]
-    public void Installed_plugins_load_again_after_a_restart()
+    [Test]
+    public void RollBack_AfterUninstalling_Throws()
     {
+        // Arrange
+        using var catalog = CreateCatalog();
+        catalog.Install(ObsPackageWithVersion("1.0.0"));
+        catalog.Install(ObsPackageWithVersion("1.1.0"));
+        catalog.Uninstall(ObsId);
+
+        // Act
+        var rollBack = () => catalog.RollBack(ObsId);
+
+        // Assert
+        Assert.Throws<PluginException>(() => rollBack());
+    }
+
+    [Test]
+    public void Install_PackageThatDeclaresPermissions_ListsThem()
+    {
+        // Arrange
+        using var catalog = CreateCatalog();
+
+        // Act
+        var entry = catalog.Install(ObsPackagePath);
+
+        // Assert
+        Assert.That(entry.Permissions, Is.EqualTo(new[] { "network" }));
+        Assert.That(PluginPermissions.Describe(entry.Permissions), Is.EqualTo("It can use the network."));
+    }
+
+    [Test]
+    public void Check_ObsPackage_FindsNoProblem()
+    {
+        // Arrange
+        AssertObsPackageIsBuilt();
+
+        // Act
+        var problems = PluginDiagnostics.Check(ObsPackagePath);
+
+        // Assert
+        Assert.That(problems, Is.Empty);
+    }
+
+    [Test]
+    public void Install_ObsPackage_HasNoWarnings()
+    {
+        // Arrange
+        using var catalog = CreateCatalog();
+
+        // Act
+        var entry = catalog.Install(ObsPackagePath);
+
+        // Assert
+        Assert.That(entry.Warnings ?? [], Is.Empty);
+    }
+
+    private IReadOnlyList<string> ProblemsOfABrokenPackage() => [.. PluginDiagnostics.Check(CreatePackage(
+        ("plugin.json", """{"id":"good.id","name":"x","version":"one","assembly":"x.dll","icon":"icon.png","permissions":["network","telepathy"]}"""),
+        ("DeckHost.Contracts.dll", "x"))).Select(static problem => problem.ToString())];
+
+    [Test]
+    public void Check_MissingAssembly_IsAnError()
+    {
+        // Arrange
+        var problems = ProblemsOfABrokenPackage();
+
+        // Act
+        var found = problems.Any(static problem => problem.StartsWith("error:", StringComparison.Ordinal) && problem.Contains("x.dll", StringComparison.Ordinal));
+
+        // Assert
+        Assert.That(found, Is.True);
+    }
+
+    [TestCase("'one'")]
+    [TestCase("icon.png")]
+    [TestCase("telepathy")]
+    [TestCase("DeckHost.Contracts.dll")]
+    [TestCase("author")]
+    public void Check_BrokenPackage_MentionsWhatIsWrong(string mention)
+    {
+        // Arrange
+        var problems = ProblemsOfABrokenPackage();
+
+        // Act
+        var found = problems.Any(problem => problem.Contains(mention, StringComparison.Ordinal));
+
+        // Assert
+        Assert.That(found, Is.True);
+    }
+
+    [Test]
+    public void Load_AfterInstallingAndRestarting_LoadsThePluginAgain()
+    {
+        // Arrange
         using (var catalog = CreateCatalog())
         {
             catalog.Install(ObsPackagePath);
         }
 
+        // Act
         using var reloaded = CreateCatalog();
-        Assert.Contains(reloaded.EnabledApplicationPlugins, plugin => plugin.Id == "deckhost.plugin.obs");
+
+        // Assert
+        Assert.That(IsEnabled(reloaded, ObsId), Is.True);
     }
 
-    [Theory]
-    [InlineData("""{"id":"Bad Id!","name":"x","version":"1","assembly":"x.dll"}""", "plugin id")]
-    [InlineData("""{"id":"good.id","name":"x","version":"1","assembly":"../evil.dll"}""", "assembly")]
-    [InlineData("""{"id":"good.id","name":"x","version":"1","assembly":"x.dll","hostApiVersion":99}""", "host API")]
-    [InlineData("""{"id":"system.optional","name":"x","version":"1","assembly":"x.dll"}""", "system plugin")]
-    public void Rejects_invalid_packages(string manifest, string expectedMessage)
+    [TestCase("""{"id":"Bad Id!","name":"x","version":"1","assembly":"x.dll"}""", "plugin id")]
+    [TestCase("""{"id":"good.id","name":"x","version":"1","assembly":"../evil.dll"}""", "assembly")]
+    [TestCase("""{"id":"good.id","name":"x","version":"1","assembly":"x.dll","hostApiVersion":99}""", "host API")]
+    [TestCase("""{"id":"system.optional","name":"x","version":"1","assembly":"x.dll"}""", "system plugin")]
+    public void Install_InvalidPackage_IsRejectedWithAMessage(string manifest, string expectedMessage)
     {
+        // Arrange
         using var catalog = CreateCatalog();
         var package = CreatePackage(("plugin.json", manifest));
 
-        var error = Assert.Throws<PluginException>(() => catalog.Install(package));
-        Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(Directory.Exists(Path.Combine(catalog.InstallDirectory, "good.id")));
+        // Act
+        var install = () => catalog.Install(package);
+
+        // Assert
+        var error = Assert.Throws<PluginException>(() => install());
+        Assert.That(error.Message, Does.Contain(expectedMessage).IgnoreCase);
     }
 
-    [Fact]
-    public void Rejects_packages_that_escape_the_install_folder()
+    [TestCase("""{"id":"Bad Id!","name":"x","version":"1","assembly":"x.dll"}""")]
+    [TestCase("""{"id":"good.id","name":"x","version":"1","assembly":"../evil.dll"}""")]
+    [TestCase("""{"id":"good.id","name":"x","version":"1","assembly":"x.dll","hostApiVersion":99}""")]
+    public void Install_InvalidPackage_LeavesNoFolderBehind(string manifest)
     {
+        // Arrange
         using var catalog = CreateCatalog();
-        var package = CreatePackage(
-            ("plugin.json", """{"id":"good.id","name":"x","version":"1","assembly":"x.dll"}"""),
-            ("../outside.dll", "x"));
+        var package = CreatePackage(("plugin.json", manifest));
 
+        // Act
         Assert.Throws<PluginException>(() => catalog.Install(package));
-        Assert.False(File.Exists(Path.Combine(_root, "outside.dll")));
+
+        // Assert
+        Assert.That(Directory.Exists(Path.Combine(catalog.InstallDirectory, GoodId)), Is.False);
     }
 
-    [Fact]
-    public void Rejects_packages_without_a_plugin_assembly()
+    [Test]
+    public void Install_PackageThatEscapesTheInstallFolder_IsRejected()
     {
+        // Arrange
         using var catalog = CreateCatalog();
-        var package = CreatePackage(("plugin.json", """{"id":"good.id","name":"x","version":"1","assembly":"x.dll"}"""));
+        var package = CreatePackage(("plugin.json", GoodManifest), ("../outside.dll", "x"));
 
+        // Act
+        var install = () => catalog.Install(package);
+
+        // Assert
+        Assert.Throws<PluginException>(() => install());
+    }
+
+    [Test]
+    public void Install_PackageThatEscapesTheInstallFolder_WritesNothingOutside()
+    {
+        // Arrange
+        using var catalog = CreateCatalog();
+        var package = CreatePackage(("plugin.json", GoodManifest), ("../outside.dll", "x"));
+
+        // Act
         Assert.Throws<PluginException>(() => catalog.Install(package));
-        Assert.DoesNotContain(catalog.Entries, entry => entry.Id == "good.id");
+
+        // Assert
+        Assert.That(File.Exists(Path.Combine(_root, "outside.dll")), Is.False);
+    }
+
+    [Test]
+    public void Install_PackageWithoutAPluginAssembly_IsRejected()
+    {
+        // Arrange
+        using var catalog = CreateCatalog();
+        var package = CreatePackage(("plugin.json", GoodManifest));
+
+        // Act
+        var install = () => catalog.Install(package);
+
+        // Assert
+        Assert.Throws<PluginException>(() => install());
+    }
+
+    [Test]
+    public void Install_PackageWithoutAPluginAssembly_IsNotListed()
+    {
+        // Arrange
+        using var catalog = CreateCatalog();
+        var package = CreatePackage(("plugin.json", GoodManifest));
+
+        // Act
+        Assert.Throws<PluginException>(() => catalog.Install(package));
+
+        // Assert
+        Assert.That(catalog.Entries.Any(entry => entry.Id == GoodId), Is.False);
     }
 
     private string CreatePackage(params (string Name, string Content)[] entries)
@@ -216,79 +474,196 @@ public sealed class PluginCatalogTests : IDisposable
 
 public class ActionSettingsTests
 {
-    [Fact]
-    public void Settings_compare_by_value_and_round_trip_through_json()
-    {
-        var settings = new ActionSettings([new("path", @"C:\app.exe"), new("arguments", "--x")]);
+    private const string PathKey = "path";
+    private const string AppPath = @"C:\app.exe";
 
-        Assert.Equal(settings, settings.With("other", null));
-        Assert.NotEqual(settings, settings.With("path", "y"));
-        Assert.Equal(settings, JsonSerializer.Deserialize<ActionSettings>(JsonSerializer.Serialize(settings)));
-        Assert.Equal(12, new ActionSettings([new("n", "12")]).GetInt("n", 0));
-        Assert.Equal("fallback", ActionSettings.Empty.Get("missing", "fallback"));
+    private static ActionSettings AppSettings() => new([new(PathKey, AppPath), new("arguments", "--x")]);
+
+    [Test]
+    public void With_NullValueForAnUnsetKey_IsEqualToTheOriginal()
+    {
+        // Arrange
+        var settings = AppSettings();
+
+        // Act
+        var changed = settings.With("other", null);
+
+        // Assert
+        Assert.That(changed, Is.EqualTo(settings));
     }
 
-    [Fact]
-    public void Bindings_with_settings_survive_the_profile_store()
+    [Test]
+    public void With_AnotherValue_IsNotEqualToTheOriginal()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}.json");
-        try
-        {
-            var reference = Bindings.Reference("p", "launch") with { Settings = new ActionSettings([new("path", @"C:\Tools\app.exe")]) };
-            var binding = new ControlBinding("key.0", ProfileActionKind.Single, reference, new ControlAppearance(), []);
-            var store = new ProfileStore(path);
-            store.Save(new ProfileDocument(1, null, [new DeviceProfile("p1", "P", "dev", [binding])]));
+        // Arrange
+        var settings = AppSettings();
 
-            var loaded = Assert.Single(Assert.Single(store.Load()!.Profiles).Bindings);
-            Assert.Equal(@"C:\Tools\app.exe", loaded.Action.EffectiveSettings.Get("path"));
-            Assert.Equal(binding.Action, loaded.Action);
-        }
-        finally
-        {
-            File.Delete(path);
-        }
+        // Act
+        var changed = settings.With(PathKey, "y");
+
+        // Assert
+        Assert.That(changed, Is.Not.EqualTo(settings));
+    }
+
+    [Test]
+    public void Deserialize_SerializedSettings_AreEqualToTheOriginal()
+    {
+        // Arrange
+        var settings = AppSettings();
+
+        // Act
+        var loaded = JsonSerializer.Deserialize<ActionSettings>(JsonSerializer.Serialize(settings));
+
+        // Assert
+        Assert.That(loaded, Is.EqualTo(settings));
+    }
+
+    [Test]
+    public void GetInt_ValueWrittenAsText_IsTheNumber()
+    {
+        // Arrange
+        var settings = new ActionSettings([new("n", "12")]);
+
+        // Act
+        var number = settings.GetInt("n", 0);
+
+        // Assert
+        Assert.That(number, Is.EqualTo(12));
+    }
+
+    [Test]
+    public void Get_MissingKey_IsTheFallback()
+    {
+        // Arrange
+        var settings = ActionSettings.Empty;
+
+        // Act
+        var value = settings.Get("missing", "fallback");
+
+        // Assert
+        Assert.That(value, Is.EqualTo("fallback"));
+    }
+
+    private static string TempFile() => Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}.json");
+
+    private static ControlBinding LaunchBinding()
+    {
+        var reference = Bindings.Reference("p", "launch") with { Settings = new ActionSettings([new(PathKey, @"C:\Tools\app.exe")]) };
+        return new ControlBinding("key.0", ProfileActionKind.Single, reference, new ControlAppearance(), []);
+    }
+
+    private static ControlBinding SavedAndLoaded(ControlBinding binding, string path)
+    {
+        var store = new ProfileStore(path);
+        store.Save(new ProfileDocument(1, null, [new DeviceProfile("p1", "P", "dev", [binding])]));
+        return Expect.Single(Expect.Single(store.Load()!.Profiles).Bindings);
+    }
+
+    [Test]
+    public void Load_BindingSavedWithSettings_KeepsTheSettings()
+    {
+        // Arrange
+        var path = TempFile();
+
+        // Act
+        var loaded = SavedAndLoaded(LaunchBinding(), path);
+
+        // Assert
+        Assert.That(loaded.Action.EffectiveSettings.Get(PathKey), Is.EqualTo(@"C:\Tools\app.exe"));
+        File.Delete(path);
+    }
+
+    [Test]
+    public void Load_BindingSavedWithSettings_KeepsTheWholeActionReference()
+    {
+        // Arrange
+        var path = TempFile();
+        var binding = LaunchBinding();
+
+        // Act
+        var loaded = SavedAndLoaded(binding, path);
+
+        // Assert
+        Assert.That(loaded.Action, Is.EqualTo(binding.Action));
+        File.Delete(path);
     }
 }
 
 public class ActionHostTests
 {
-    [Fact]
-    public async Task Actions_receive_their_settings_and_can_switch_profiles()
+    private const string PluginId = "p";
+    private const string FirstKey = "key.0";
+    private const string Next = "next";
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(5);
+
+    private static DeviceProfile[] TwoProfilesWithASwitchKey(ActionReference reference) =>
+    [
+        new DeviceProfile("one", "One", FakeDevicePlugin.DeviceId, [new ControlBinding(FirstKey, ProfileActionKind.Single, reference, new ControlAppearance(), [])]),
+        new DeviceProfile("two", "Two", FakeDevicePlugin.DeviceId, []),
+    ];
+
+    private static async Task<(FakeDevicePlugin Plugin, RecordingAction Action, DeviceHostService Host, VariableStore Store, TaskCompletionSource<string> Switched)> StartedWithASwitchActionAsync()
     {
         var plugin = new FakeDevicePlugin();
         var action = new RecordingAction("switch") { OnExecute = context => context.Host.ActivateRelativeProfile(context.DeviceId, 1) };
-        using var store = new VariableStore();
-        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin("p", action)], store);
-        var reference = Bindings.Reference("p", "switch") with { Settings = new ActionSettings([new("mode", "next")]) };
-        host.SetProfiles(
-        [
-            new DeviceProfile("one", "One", FakeDevicePlugin.DeviceId, [new ControlBinding("key.0", ProfileActionKind.Single, reference, new ControlAppearance(), [])]),
-            new DeviceProfile("two", "Two", FakeDevicePlugin.DeviceId, []),
-        ]);
+        var store = new VariableStore();
+        var host = new DeviceHostService([plugin], [new TestApplicationPlugin(PluginId, action)], store);
+        var reference = Bindings.Reference(PluginId, "switch") with { Settings = new ActionSettings([new("mode", Next)]) };
+        host.SetProfiles(TwoProfilesWithASwitchKey(reference));
         var switched = new TaskCompletionSource<string>();
         host.ActiveProfileChanged += (_, profileId) => switched.TrySetResult(profileId);
         await host.StartAsync(CancellationToken.None);
-
-        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1);
-
-        Assert.Equal("two", await switched.Task.WaitAsync(TimeSpan.FromSeconds(5)));
-        Assert.Equal("next", Assert.Single(action.Executions).Settings.Get("mode"));
+        return (plugin, action, host, store, switched);
     }
 
-    [Fact]
-    public async Task Disabling_a_plugin_unbinds_its_actions_at_runtime()
+    [Test]
+    public async Task ReportInput_ActionThatSwitchesProfiles_ActivatesTheNextProfile()
     {
+        // Arrange
+        var (plugin, _, host, store, switched) = await StartedWithASwitchActionAsync();
+        await using var _ = host;
+        using var __ = store;
+
+        // Act
+        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, FirstKey, InputCapabilities.Press, 1);
+
+        // Assert
+        Assert.That(await switched.Task.WaitAsync(Patience), Is.EqualTo("two"));
+    }
+
+    [Test]
+    public async Task ReportInput_BoundAction_ReceivesItsSettings()
+    {
+        // Arrange
+        var (plugin, action, host, store, switched) = await StartedWithASwitchActionAsync();
+        await using var _ = host;
+        using var __ = store;
+
+        // Act
+        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, FirstKey, InputCapabilities.Press, 1);
+        await switched.Task.WaitAsync(Patience);
+
+        // Assert
+        Assert.That(Expect.Single(action.Executions).Settings.Get("mode"), Is.EqualTo(Next));
+    }
+
+    [Test]
+    public async Task SetApplicationPlugins_NoPlugins_UnbindsTheirActions()
+    {
+        // Arrange
         var plugin = new FakeDevicePlugin();
         var action = new RecordingAction("a");
         using var store = new VariableStore();
-        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin("p", action)], store);
-        host.SetProfiles([new DeviceProfile("one", "One", FakeDevicePlugin.DeviceId, [Bindings.Single("key.0", "p", "a")])]);
+        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin(PluginId, action)], store);
+        host.SetProfiles([new DeviceProfile("one", "One", FakeDevicePlugin.DeviceId, [Bindings.Single(FirstKey, PluginId, "a")])]);
         await host.StartAsync(CancellationToken.None);
 
+        // Act
         host.SetApplicationPlugins([]);
-        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1);
+        plugin.Context!.ReportInputEvent(FakeDevicePlugin.DeviceId, FirstKey, InputCapabilities.Press, 1);
         await host.WhenIdleAsync();
 
-        Assert.Empty(action.Executions);
+        // Assert
+        Assert.That(action.Executions, Is.Empty);
     }
 }

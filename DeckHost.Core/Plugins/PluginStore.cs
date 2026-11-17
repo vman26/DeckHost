@@ -46,7 +46,10 @@ public sealed record StoreEntry(
 /// plugins (https://openactionapi.github.io/plugins/catalogue.json). Packages come from the
 /// entry's download_url or the repository's latest GitHub release.</item>
 /// <item><see cref="ElgatoArchiveSource"/>: a community archive of Elgato Marketplace plugins
-/// (https://plugins.amankhanna.me/catalogue.json). Elgato itself offers no public catalog API.</item>
+/// (https://plugins.amankhanna.me/catalogue.json). Elgato itself offers no public catalog API.
+/// Plugins whose source repository has an open-source license may also be copied to the
+/// <c>deckhost-plugins</c> mirror (<see cref="ElgatoMirrorCatalogUrl"/>): those entries download
+/// from there, with a checksum, and the rest keep the archive's download.</item>
 /// </list>
 /// </summary>
 public sealed class PluginStore(HttpClient http)
@@ -54,6 +57,7 @@ public sealed class PluginStore(HttpClient http)
     public const string DeckHostSource = "DeckHost";
     public const string OpenActionSource = "OpenAction";
     public const string ElgatoArchiveSource = "Elgato (community archive)";
+    public const string GitHubSource = "GitHub";
 
     private const string OpenActionCatalogUrl = "https://openactionapi.github.io/plugins/catalogue.json";
     private const string OpenActionIconUrl = "https://openactionapi.github.io/plugins/icons/{0}.png";
@@ -62,6 +66,13 @@ public sealed class PluginStore(HttpClient http)
     private const string ElgatoIconUrl = "https://plugins.amankhanna.me/icons/{0}.png";
     private const string ElgatoCatalogUrl = "https://plugins.amankhanna.me/catalogue.json";
     private const string ElgatoDownloadUrl = "https://plugins.amankhanna.me/rezipped/{0}.zip";
+    /// <summary>
+    /// The mirror's catalog (deckhost-plugins' GitHub Pages, made by its mirror workflow): per plugin the
+    /// license, a copy of the package and its SHA-256 where the license allows one. Read next to the archive
+    /// while <see cref="IncludeOfficialCatalog"/> is on; missing (404) or unreadable it is simply empty.
+    /// </summary>
+    public const string ElgatoMirrorCatalogUrl = "https://vman26.github.io/deckhost-plugins/mirror/catalog.json";
+
     private const string ElgatoMarketplaceSearchUrl = "https://marketplace.elgato.com/stream-deck/plugins?search={0}";
     private const int MaxFolderScanDepth = 6;
     private static readonly string[] PackageExtensions = [".zip", ".dhplugin", ".streamdeckplugin"];
@@ -94,7 +105,7 @@ public sealed class PluginStore(HttpClient http)
         var sources = new List<Task<(IReadOnlyList<StoreEntry> Entries, string? Error)>>
         {
             LoadSourceAsync(OpenActionSource, async token => ParseOpenActionCatalog(await http.GetStringAsync(OpenActionCatalogUrl, token).ConfigureAwait(false)), cancellationToken),
-            LoadSourceAsync(ElgatoArchiveSource, async token => ParseElgatoArchiveCatalog(await http.GetStringAsync(ElgatoCatalogUrl, token).ConfigureAwait(false)), cancellationToken),
+            LoadSourceAsync(ElgatoArchiveSource, LoadElgatoAsync, cancellationToken),
         };
 
         if (IncludeOfficialCatalog && !DeckHostCatalogUrls.Contains(OfficialCatalogUrl, StringComparer.OrdinalIgnoreCase))
@@ -200,6 +211,99 @@ public sealed class PluginStore(HttpClient http)
     internal static IReadOnlyList<StoreEntry> ParseOpenActionCatalog(string json) =>
         ParseKeyedOrArray(json, OpenActionSource, OpenActionIconUrl);
 
+    /// <summary>The archive, with the mirror's checksummed copies in place of its downloads; the mirror alone when the archive is down.</summary>
+    private async Task<IReadOnlyList<StoreEntry>> LoadElgatoAsync(CancellationToken cancellationToken)
+    {
+        var mirrored = IncludeOfficialCatalog ? ReadElgatoMirrorAsync(cancellationToken) : Task.FromResult<IReadOnlyList<StoreEntry>>([]);
+        IReadOnlyList<StoreEntry> archive;
+        try
+        {
+            archive = ParseElgatoArchiveCatalog(await http.GetStringAsync(ElgatoCatalogUrl, cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            var copies = await mirrored.ConfigureAwait(false);
+            if (copies.Count == 0)
+            {
+                throw;
+            }
+
+            return copies;
+        }
+
+        return MergeElgatoMirror(archive, await mirrored.ConfigureAwait(false));
+    }
+
+    private async Task<IReadOnlyList<StoreEntry>> ReadElgatoMirrorAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await http.GetAsync(ElgatoMirrorCatalogUrl, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? ParseElgatoMirrorCatalog(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false))
+                : [];
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            return []; // the mirror only improves on the archive; without it nothing is lost
+        }
+    }
+
+    /// <summary>The archive's entries, each replaced by its mirrored copy (same id) when there is one. A plugin only the mirror has is not added: the archive decides what is listed.</summary>
+    internal static IReadOnlyList<StoreEntry> MergeElgatoMirror(IReadOnlyList<StoreEntry> archive, IReadOnlyList<StoreEntry> mirror)
+    {
+        if (mirror.Count == 0)
+        {
+            return archive;
+        }
+
+        var copies = mirror.GroupBy(static entry => entry.Id, StringComparer.OrdinalIgnoreCase).ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+        return [.. archive.Select(entry => copies.TryGetValue(entry.Id, out var copy) ? copy : entry)];
+    }
+
+    /// <summary>
+    /// The copies in the mirror's catalog: entries marked <c>mirrored</c> with an https download and a
+    /// SHA-256 (anything less is left to the archive). The license is shown in the description.
+    /// </summary>
+    internal static IReadOnlyList<StoreEntry> ParseElgatoMirrorCatalog(string json)
+    {
+        var entries = new List<StoreEntry>();
+        if (JsonNode.Parse(json) is not JsonArray catalog)
+        {
+            return entries;
+        }
+
+        foreach (var plugin in catalog.OfType<JsonObject>())
+        {
+            if (Text(plugin, "id") is not { } id ||
+                plugin["mirrored"]?.GetValueKind() is not System.Text.Json.JsonValueKind.True ||
+                Text(plugin, "download_url") is not { } download || !download.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                Text(plugin, "sha256") is not { Length: 64 } sha || !sha.All(char.IsAsciiHexDigit))
+            {
+                continue;
+            }
+
+            var name = Text(plugin, "name") ?? id;
+            entries.Add(new StoreEntry(
+                id,
+                name,
+                Text(plugin, "author"),
+                Text(plugin, "license") is { } license ? $"Copy kept by the DeckHost plugin repository, under the {license} license." : null,
+                ElgatoArchiveSource,
+                Text(plugin, "version"),
+                Text(plugin, "icon"),
+                Text(plugin, "source_repository"),
+                download,
+                PluginCategories.Resolve(Text(plugin, "category"), name, null, id),
+                Text(plugin, "marketplace_url"))
+            {
+                Sha256 = sha,
+            });
+        }
+
+        return entries;
+    }
+
     internal static IReadOnlyList<StoreEntry> ParseElgatoArchiveCatalog(string json)
     {
         var entries = new List<StoreEntry>();
@@ -300,20 +404,89 @@ public sealed class PluginStore(HttpClient http)
         }
 
         var releasesJson = await http.GetStringAsync($"https://api.github.com/repos/{path[0]}/{path[1]}/releases", cancellationToken).ConfigureAwait(false);
+        return PickReleaseAsset(releasesJson)?.Url;
+    }
+
+    /// <summary>
+    /// "Install from GitHub": the newest release of a GitHub repository with a plugin file
+    /// (<c>.streamDeckPlugin</c>, <c>.dhplugin</c> or <c>.zip</c>) as an entry to download, checked
+    /// against the SHA-256 GitHub publishes for release files. Throws <see cref="PluginException"/>
+    /// with a message for the user when there is none.
+    /// </summary>
+    public async Task<StoreEntry> FromGitHubAsync(string repositoryUrl, CancellationToken cancellationToken = default)
+    {
+        if (GitHubLocation.Parse(repositoryUrl) is not { } location)
+        {
+            throw new PluginException("That isn't a GitHub repository address, like https://github.com/owner/plugin.");
+        }
+
+        string releasesJson;
+        try
+        {
+            releasesJson = await http.GetStringAsync(
+                $"https://api.github.com/repos/{Uri.EscapeDataString(location.Owner)}/{Uri.EscapeDataString(location.Repository)}/releases?per_page=20",
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new PluginException(ex.StatusCode switch
+            {
+                System.Net.HttpStatusCode.NotFound => $"GitHub has no public repository {location.Owner}/{location.Repository}.",
+                System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.TooManyRequests => "GitHub is limiting requests from this computer for a while; try again later.",
+                _ => $"Couldn't reach GitHub: {ex.Message}",
+            }, ex);
+        }
+
+        var asset = PickReleaseAsset(releasesJson)
+            ?? throw new PluginException($"{location.Owner}/{location.Repository} has no release with a plugin file (.streamDeckPlugin, .dhplugin or .zip).");
+        return new StoreEntry(
+            location.Repository,
+            location.Repository,
+            location.Owner,
+            null,
+            GitHubSource,
+            asset.Version,
+            null,
+            $"https://github.com/{location.Owner}/{location.Repository}",
+            asset.Url)
+        {
+            Sha256 = asset.Sha256,
+        };
+    }
+
+    /// <summary>
+    /// The plugin file of the newest release in GitHub's releases JSON (stable before pre-release,
+    /// no drafts; .streamDeckPlugin, then .dhplugin, then .zip), with GitHub's sha256 digest when given.
+    /// </summary>
+    internal static (string Version, string Url, string? Sha256)? PickReleaseAsset(string releasesJson)
+    {
         if (JsonNode.Parse(releasesJson) is not JsonArray releases)
         {
             return null;
         }
 
-        var release = releases.OfType<JsonObject>().FirstOrDefault(static release => release["prerelease"]?.GetValue<bool>() != true)
-            ?? releases.OfType<JsonObject>().FirstOrDefault();
+        static int Rank(string name) =>
+            name.EndsWith(".streamdeckplugin", StringComparison.OrdinalIgnoreCase) ? 0
+            : name.EndsWith(".dhplugin", StringComparison.OrdinalIgnoreCase) ? 1
+            : name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ? 2
+            : -1;
 
-        return (release?["assets"] as JsonArray)?.OfType<JsonObject>()
-            .Where(static asset => Text(asset, "name") is { } name &&
-                (name.EndsWith(".streamdeckplugin", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
-            .OrderByDescending(static asset => Text(asset, "name")!.EndsWith(".streamdeckplugin", StringComparison.OrdinalIgnoreCase))
-            .Select(static asset => Text(asset, "browser_download_url"))
-            .FirstOrDefault();
+        var published = releases.OfType<JsonObject>().Where(static release => release["draft"]?.GetValue<bool>() != true).ToList();
+        foreach (var release in published.Where(static release => release["prerelease"]?.GetValue<bool>() != true).Concat(published.Where(static release => release["prerelease"]?.GetValue<bool>() == true)))
+        {
+            var asset = (release["assets"] as JsonArray)?.OfType<JsonObject>()
+                .Where(static asset => Text(asset, "name") is { } name && Rank(name) >= 0)
+                .OrderBy(static asset => Rank(Text(asset, "name")!))
+                .FirstOrDefault();
+            if (asset is not null && Text(asset, "browser_download_url") is { } url)
+            {
+                var digest = Text(asset, "digest");
+                var sha256 = digest is not null && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? digest["sha256:".Length..] : null;
+                return ((Text(release, "tag_name") ?? "?").TrimStart('v', 'V'), url, sha256);
+            }
+        }
+
+        return null;
     }
 
     private static bool IsWebUrl(string value) =>

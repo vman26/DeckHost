@@ -62,11 +62,17 @@ public partial class PluginManagerViewModel : ViewModelBase
         _catalog.EnabledApplicationPlugins.FirstOrDefault(plugin => string.Equals(plugin.Id, pluginId, StringComparison.OrdinalIgnoreCase))?
             .Actions.Select(static action => action.ListIcon).FirstOrDefault(static icon => !string.IsNullOrWhiteSpace(icon));
 
-    public PluginManagerViewModel(PluginCatalog catalog, IDeviceHostService host, DeviceSettingsService? deviceSettings = null)
+    public PluginManagerViewModel(PluginCatalog catalog, IDeviceHostService host, DeviceSettingsService? deviceSettings = null, PluginUpdatesViewModel? updates = null)
     {
         _catalog = catalog;
         _host = host;
         _deviceSettings = deviceSettings;
+        Updates = updates;
+        if (updates is not null)
+        {
+            updates.Changed += OnUpdatesChanged;
+        }
+
         _catalog.Changed += OnCatalogChanged;
         _host.DevicesChanged += OnDevicesChanged;
         Store = new PluginStoreViewModel(catalog);
@@ -76,8 +82,13 @@ public partial class PluginManagerViewModel : ViewModelBase
 
     public PluginStoreViewModel Store { get; }
 
+    /// <summary>Plugins that connect hardware (and the Web Deck): what DeckHost can talk to.</summary>
+    public ObservableCollection<PluginEntryViewModel> DevicePlugins { get; } = [];
+
+    /// <summary>Action plugins that ship with DeckHost.</summary>
     public ObservableCollection<PluginEntryViewModel> SystemPlugins { get; } = [];
 
+    /// <summary>Action plugins the user installed (DeckHost, Stream Deck and OpenAction plugins).</summary>
     public ObservableCollection<PluginEntryViewModel> InstalledPlugins { get; } = [];
 
     public ObservableCollection<DeviceInfoViewModel> Devices { get; } = [];
@@ -158,8 +169,20 @@ public partial class PluginManagerViewModel : ViewModelBase
             plugin);
     }
 
+    /// <summary>Plugin updates (check, update one or all, automatic); null in tests.</summary>
+    public PluginUpdatesViewModel? Updates { get; }
+
+    public bool HasUpdatesPanel => Updates is not null;
+
+    private void OnUpdatesChanged(object? sender, EventArgs e) => Refresh();
+
     public void Detach()
     {
+        if (Updates is not null)
+        {
+            Updates.Changed -= OnUpdatesChanged;
+        }
+
         _catalog.Changed -= OnCatalogChanged;
         _host.DevicesChanged -= OnDevicesChanged;
     }
@@ -276,11 +299,12 @@ public partial class PluginManagerViewModel : ViewModelBase
 
     private void Refresh()
     {
+        DevicePlugins.Clear();
         SystemPlugins.Clear();
         InstalledPlugins.Clear();
         foreach (var entry in _catalog.Entries)
         {
-            (entry.IsSystem ? SystemPlugins : InstalledPlugins).Add(new PluginEntryViewModel(this, entry));
+            (entry.Kind == PluginKind.Device ? DevicePlugins : entry.IsSystem ? SystemPlugins : InstalledPlugins).Add(new PluginEntryViewModel(this, entry));
         }
 
         OnPropertyChanged(nameof(HasInstalledPlugins));
@@ -344,6 +368,18 @@ public partial class PluginEntryViewModel : ViewModelBase
 
     public string Version => $"v{Entry.Version}";
 
+    /// <summary>A newer version in the store, found by the last update check.</summary>
+    public PluginUpdate? Update => _owner.Updates?.For(Entry.Id);
+
+    public bool HasUpdate => Update is not null;
+
+    public string UpdateLabel => Update is { } update ? $"Update to v{update.ToVersion}" : string.Empty;
+
+    /// <summary>Connects devices (a device plugin) rather than adding actions.</summary>
+    public bool IsDevicePlugin => Entry.Kind == PluginKind.Device;
+
+    public string KindLabel => IsDevicePlugin ? "Devices" : "Actions";
+
     public string Details => string.Join(" · ", new[]
     {
         Entry.Kind == PluginKind.Device ? "Device plugin" : Entry.Source == PluginCatalog.StreamDeckSource ? "Stream Deck plugin" : "Action plugin",
@@ -353,7 +389,7 @@ public partial class PluginEntryViewModel : ViewModelBase
     }.Where(static part => part is not null));
 
     /// <summary>Where it came from: a store source, "File" or "Built into DeckHost".</summary>
-    public string Origin => Entry.Kind == PluginKind.Device ? "Built into DeckHost" : Entry.Origin ?? "File";
+    public string Origin => Entry.Kind == PluginKind.Device && Entry.IsSystem ? "Built into DeckHost" : Entry.Origin ?? "File";
 
     public string OriginColor => Origin switch
     {
@@ -410,7 +446,7 @@ public partial class PluginEntryViewModel : ViewModelBase
 
     public bool IsLocked => !Entry.CanDisable;
 
-    public string LockedReason => Entry.Kind == PluginKind.Device ? "Always on" : "Required";
+    public string LockedReason => Entry.Kind == PluginKind.Device && Entry.IsSystem ? "Always on" : "Required";
 
     public bool CanUninstall => Entry.CanUninstall;
 
@@ -546,4 +582,30 @@ public sealed class DeviceInfoViewModel(DeviceDefinition device, string? status,
         : $"Firmware {firmware.Version}. " + (firmware.CanUpdate ? "Updates: Settings… → Firmware." : firmware.Detail ?? "DeckHost can't update it.");
 
     public bool HasFirmwareText => FirmwareText.Length > 0;
+
+    /// <summary>Maker and model from the device's descriptor: "MiraBox StreamDock N4 Pro · USB".</summary>
+    public string IdentityText => device.Identity is { } identity
+        ? string.Join(" · ", new[] { string.Join(' ', new[] { identity.Manufacturer, identity.Model }.Where(static part => !string.IsNullOrWhiteSpace(part))), identity.Connection }
+            .Where(static part => !string.IsNullOrWhiteSpace(part)))
+        : string.Empty;
+
+    public bool HasIdentityText => IdentityText.Length > 0;
+
+    /// <summary>What the device can do, from its descriptor: "Screens · Touch · RGB lights".</summary>
+    public string CapabilitiesText => DescribeCapabilities(device.Capabilities);
+
+    public bool HasCapabilitiesText => CapabilitiesText.Length > 0;
+
+    internal static string DescribeCapabilities(DeviceCapabilities capabilities) => string.Join(" · ", new (DeviceCapabilities Flag, string Text)[]
+    {
+        (DeviceCapabilities.Images, "Screens"),
+        (DeviceCapabilities.AnimatedImages, "Animations on the device"),
+        (DeviceCapabilities.Touch, "Touch"),
+        (DeviceCapabilities.MultiTouch, "Multi-touch"),
+        (DeviceCapabilities.Brightness, "Brightness"),
+        (DeviceCapabilities.RgbLights, "RGB lights"),
+        (DeviceCapabilities.Haptics, "Vibration"),
+        (DeviceCapabilities.Backdrop, "Screen background"),
+        (DeviceCapabilities.Firmware, "Firmware info"),
+    }.Where(item => capabilities.HasFlag(item.Flag)).Select(static item => item.Text));
 }

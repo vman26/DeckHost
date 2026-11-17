@@ -17,6 +17,7 @@ public static class WorkflowConverter
     public static Workflow Starter() => new()
     {
         Nodes = [Trigger("n1", WorkflowTriggers.Down, 0)],
+        WhileRunning = WorkflowConcurrency.Restart,
     };
 
     public static Workflow FromBinding(ControlBinding binding)
@@ -176,6 +177,6 @@ public static class WorkflowConverter
             }
         }
 
-        public Workflow Build() => new() { Nodes = [.. _nodes], Links = [.. _links] };
+        public Workflow Build() => new() { Nodes = [.. _nodes], Links = [.. _links], WhileRunning = WorkflowConcurrency.Restart };
     }
 }
