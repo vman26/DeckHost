@@ -35,6 +35,10 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   with its keys, knobs, touch strips, images, LED colors and vibration, so you can set up and try a
   device without having it.
 
+- Devices from OpenAction device plugins (the Mirabox, Ajazz and other plugins made for OpenDeck):
+  install the plugin like any other and the devices it finds appear in the device picker, with
+  their keys and knobs, images, brightness and input.
+
 ### Changed
 
 - DeckHost is one public repository under GPL-3.0-or-later; issues, releases and source are in the
@@ -44,6 +48,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- Right-clicking a control offers **Try it** (runs its action) instead of a Customize entry that
+  did nothing, since clicking a control already opens its editor.
+- The Plugins page says what each device plugin supports (the Elgato one said "Supports .").
 - The plugin store's search no longer freezes while you type: it waits for you to pause, shows a
   page of results at a time (**Show more** adds the next) and matches every word you type.
 - Add a USB device: a key you pressed to look at what the device sends could not be added with

@@ -256,9 +256,10 @@
 													ToolTip.Tip="{Binding ToolTipText}">
 												<Border.ContextMenu>
 													<ContextMenu DataContext="{Binding}">
-														<MenuItem Header="Customize"
-																  IsEnabled="{Binding SupportsCustomization}"
-																  Click="ControlCustomize_OnClick" />
+														<MenuItem Header="Try it"
+																  IsEnabled="{Binding HasAssignment}"
+																  ToolTip.Tip="Runs its action as if the control was pressed (or swiped), like a double-click"
+																  Click="ControlTry_OnClick" />
 														<MenuItem Header="Remove Assignment"
 																  IsEnabled="{Binding HasAssignment}"
 																  Click="ControlRemove_OnClick" />

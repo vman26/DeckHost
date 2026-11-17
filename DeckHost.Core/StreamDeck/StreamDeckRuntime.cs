@@ -57,6 +57,27 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
     /// <summary>Raised (on a background thread, with the plugin's UUID) when a plugin stopped, restarted or gave up.</summary>
     public event Action<string>? StatusChanged;
 
+    /// <summary>An OpenAction device plugin (UUID) sent a device message: registerDevice, keyDown, … (the whole message).</summary>
+    public event Action<string, string, JsonObject>? DevicePluginMessage;
+
+    /// <summary>A device plugin connected (its devices may register now).</summary>
+    public event Action<string>? DevicePluginConnected;
+
+    /// <summary>A device plugin's connection ended: its devices are no longer there.</summary>
+    public event Action<string>? DevicePluginDisconnected;
+
+    /// <summary>A device plugin is no longer connected (stopped, ended or closed its socket): its devices are gone.</summary>
+    private void NotifyDevicePluginGone(RunningPlugin running)
+    {
+        if (running.Manifest.IsDevicePlugin)
+        {
+            DevicePluginDisconnected?.Invoke(running.Manifest.Uuid);
+        }
+    }
+
+    /// <summary>Sends a message to an OpenAction device plugin (setImage, setBrightness); queued until it connects.</summary>
+    public void SendToDevicePlugin(string pluginUuid, JsonObject message) => Send(pluginUuid, message);
+
     /// <summary>"Runs in its own process (pid 1234)", "Restarting…"; null for a plugin that isn't running.</summary>
     public string? StatusOf(string pluginUuid) => _plugins.TryGetValue(pluginUuid, out var running) ? running.Status : null;
 
@@ -168,6 +189,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
 
         running.Connection = null;
+        NotifyDevicePluginGone(running);
         running.Reappear = true;
         if (!running.Registered)
         {
@@ -304,6 +326,8 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
 
         running.Connection?.Close();
+        running.Connection = null;
+        NotifyDevicePluginGone(running);
         foreach (var key in _instances.Where(pair => string.Equals(pair.Value.PluginUuid, pluginUuid, StringComparison.OrdinalIgnoreCase)).Select(static pair => pair.Key).ToList())
         {
             _instances.TryRemove(key, out _);
@@ -514,7 +538,13 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                     running.Connection = connection;
                     running.Registered = true;
                     _log("Info", $"Stream Deck plugin {running.Manifest.Name} connected.");
-                    foreach (var device in DevicesProvider())
+                    if (running.Manifest.IsDevicePlugin)
+                    {
+                        DevicePluginConnected?.Invoke(uuid);
+                    }
+
+                    // A device plugin drives its own devices; the other devices are none of its business.
+                    foreach (var device in running.Manifest.IsDevicePlugin ? [] : DevicesProvider())
                     {
                         await connection.SendAsync(DeviceDidConnect(device)).ConfigureAwait(false);
                     }
@@ -573,6 +603,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             if (pluginUuid is not null && _plugins.TryGetValue(pluginUuid, out var running) && ReferenceEquals(running.Connection, connection))
             {
                 running.Connection = null;
+                NotifyDevicePluginGone(running);
             }
         }
     }
@@ -637,6 +668,10 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                 break;
             case "openUrl":
                 OpenUrl(payload?["url"]?.GetValue<string>());
+                break;
+            case "registerDevice" or "deregisterDevice" or "rerenderImages" or "keyDown" or "keyUp" or "encoderChange" or "encoderDown" or "encoderUp"
+                when _plugins.TryGetValue(pluginUuid, out var devicePlugin) && devicePlugin.Manifest.IsDevicePlugin:
+                DevicePluginMessage?.Invoke(pluginUuid, eventName, message);
                 break;
             case "logMessage":
                 _log("Debug", $"[{pluginUuid}] {payload?["message"]?.GetValue<string>()}");
@@ -794,7 +829,8 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             ["highlightColor"] = "#F7821BFF",
             ["mouseDownColor"] = "#CF6304FF",
         },
-        ["devices"] = new JsonArray([.. DevicesProvider().Select(static device => (JsonNode)DeviceInfo(device))]),
+        // A device plugin gets none: the devices of others aren't its own (it would treat them as connected).
+        ["devices"] = new JsonArray([.. manifest.IsDevicePlugin ? [] : DevicesProvider().Select(static device => (JsonNode)DeviceInfo(device))]),
     };
 
     private static JsonObject DeviceInfo(DeviceDefinition device) => new()

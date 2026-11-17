@@ -616,12 +616,26 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         return controlId.Length > 0;
     }
 
-    private void ControlCustomize_OnClick(object? sender, RoutedEventArgs e)
+    /// <summary>Right-click → Try it: the action runs as if the control was pressed (a swipe bar: swiped right).</summary>
+    private void ControlTry_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel vm && TryGetMenuControl(sender, out var controlItem))
+        if (DataContext is not MainViewModel vm || !TryGetMenuControl(sender, out var controlItem))
         {
-            // The editor below the device shows the selected control.
-            vm.SelectControl(controlItem.Control);
+            return;
+        }
+
+        var inputs = controlItem.Control.Inputs;
+        if (inputs.HasFlag(InputCapabilities.Press))
+        {
+            vm.Simulate(controlItem, InputCapabilities.Press, 1);
+            if (inputs.HasFlag(InputCapabilities.Release))
+            {
+                vm.Simulate(controlItem, InputCapabilities.Release, 0);
+            }
+        }
+        else if (inputs.HasFlag(InputCapabilities.Swipe))
+        {
+            vm.Simulate(controlItem, InputCapabilities.Swipe, 1);
         }
     }
 

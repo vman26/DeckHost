@@ -260,6 +260,11 @@ public partial class App : Application
         services.AddSingleton<DeckHost.Device.Web.WebDeckPlugin>();
         services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Web.WebDeckPlugin>());
 
+        // Devices of OpenAction device plugins (OpenDeck's Mirabox, Ajazz, ... plugins): the runtime
+        // runs the plugin, this turns the devices it registers into DeckHost devices.
+        services.AddSingleton(provider => new OpenActionDevicePlugin(provider.GetRequiredService<StreamDeckRuntime>(), Path.Combine(appData, "devices")));
+        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<OpenActionDevicePlugin>());
+
         // The device simulator (DeckHost --simulator) connects here and can be any model the other
         // device plugins describe; they are asked when a simulator connects, not now. Only listens
         // with DeckHost settings → Developer → Device simulator on.

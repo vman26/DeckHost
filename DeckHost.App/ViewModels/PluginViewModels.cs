@@ -389,7 +389,7 @@ public partial class PluginEntryViewModel : ViewModelBase
     }.Where(static part => part is not null));
 
     /// <summary>Where it came from: a store source, "File" or "Built into DeckHost".</summary>
-    public string Origin => Entry.Kind == PluginKind.Device ? "Built into DeckHost" : Entry.Origin ?? "File";
+    public string Origin => Entry.Kind == PluginKind.Device && Entry.IsSystem ? "Built into DeckHost" : Entry.Origin ?? "File";
 
     public string OriginColor => Origin switch
     {
@@ -446,7 +446,7 @@ public partial class PluginEntryViewModel : ViewModelBase
 
     public bool IsLocked => !Entry.CanDisable;
 
-    public string LockedReason => Entry.Kind == PluginKind.Device ? "Always on" : "Required";
+    public string LockedReason => Entry.Kind == PluginKind.Device && Entry.IsSystem ? "Always on" : "Required";
 
     public bool CanUninstall => Entry.CanUninstall;
 

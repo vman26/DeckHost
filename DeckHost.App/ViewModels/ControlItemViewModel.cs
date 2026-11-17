@@ -54,7 +54,6 @@ public class ControlItemViewModel : ViewModelBase
     public bool SupportsLight => Control.HasLight;
 
     /// <summary>Every control can be customized: appearance, action settings, Multi Action steps or its LED.</summary>
-    public bool SupportsCustomization => true;
 
     /// <summary>Thin controls (the swipe bar) only show their name.</summary>
     public bool IsCompact => Height < CompactHeight;

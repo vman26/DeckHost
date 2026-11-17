@@ -23,6 +23,7 @@ public sealed class StreamDeckManifest
         Icon = Get(json, "Icon");
         Url = Get(json, "URL");
         PropertyInspectorPath = Get(json, "PropertyInspectorPath");
+        DeviceNamespace = Get(json, "DeviceNamespace");
         CodePath = SelectCodePath(json, out var unsupported);
         UnsupportedReason = unsupported;
 
@@ -64,6 +65,15 @@ public sealed class StreamDeckManifest
     public string? Url { get; }
 
     public string? PropertyInspectorPath { get; }
+
+    /// <summary>
+    /// OpenAction device plugins (OpenDeck's: Mirabox, Ajazz, ...) name the prefix of the ids of
+    /// the devices they drive. Such a plugin has no actions: it registers devices and reports
+    /// their input (<see cref="OpenActionDevicePlugin"/>).
+    /// </summary>
+    public string? DeviceNamespace { get; }
+
+    public bool IsDevicePlugin => !string.IsNullOrWhiteSpace(DeviceNamespace);
 
     /// <summary>Path (relative to <see cref="Directory"/>) of the plugin program for this OS, or null.</summary>
     public string? CodePath { get; }

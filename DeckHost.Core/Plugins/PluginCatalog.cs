@@ -854,7 +854,7 @@ public sealed class PluginCatalog : IDisposable
             slot.Manifest?.Version ?? sd?.Version ?? instance?.Version ?? "?",
             slot.Manifest?.Author ?? sd?.Author ?? instance?.Author,
             slot.Manifest?.Description ?? sd?.Description ?? instance?.Description,
-            PluginKind.Application,
+            sd is { IsDevicePlugin: true } ? PluginKind.Device : PluginKind.Application,
             slot.Kind == SlotKind.System,
             IsEnabled: !_disabled.Contains(slot.Id) && (slot.Error is null || slot.Kind == SlotKind.StreamDeck),
             CanDisable: !slot.IsRequired,
