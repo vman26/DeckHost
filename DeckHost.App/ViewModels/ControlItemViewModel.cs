@@ -15,16 +15,18 @@ public class ControlItemViewModel : ViewModelBase
     private ControlBindingViewModel? _assignedBinding;
     private bool _isSelected;
 
-    public ControlItemViewModel(PhysicalControl control)
+    /// <param name="placed">Where it is drawn on the canvas (<see cref="Views.DeviceGeometry"/>); its layout bounds when not given.</param>
+    public ControlItemViewModel(PhysicalControl control, Rect? placed = null)
     {
         Control = control;
         Id = control.Id;
         DisplayName = control.DisplayName;
         Type = control.Type;
-        X = control.Bounds.X;
-        Y = control.Bounds.Y;
-        Width = control.Bounds.Width;
-        Height = control.Bounds.Height;
+        var rect = placed ?? control.Bounds;
+        X = rect.X;
+        Y = rect.Y;
+        Width = rect.Width;
+        Height = rect.Height;
         InputsLabel = CapabilityFormatter.Format(control.Inputs, "None");
         OutputsLabel = CapabilityFormatter.Format(control.Outputs, "None");
         SupportsAppearance = control.Outputs != OutputCapabilities.None || control.HasLinkedDisplay;

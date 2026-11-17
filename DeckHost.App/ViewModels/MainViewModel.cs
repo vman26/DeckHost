@@ -481,9 +481,16 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
     }
 
-    public double CanvasWidth => ControlItems.Count == 0 ? 0d : ControlItems.Max(static control => control.X + control.Width) + 24;
+    /// <summary>Where the device's body, screens and controls are drawn (as in the device simulator).</summary>
+    public Views.DeviceGeometry CanvasGeometry
+    {
+        get => _canvasGeometry;
+        private set => SetProperty(ref _canvasGeometry, value);
+    }
 
-    public double CanvasHeight => ControlItems.Count == 0 ? 0d : ControlItems.Max(static control => control.Y + control.Height) + 24;
+    public double CanvasWidth => CanvasGeometry.Width;
+
+    public double CanvasHeight => CanvasGeometry.Height;
 
     public string SelectedControlName => SelectedControl?.DisplayName ?? "No control selected";
 
@@ -748,6 +755,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     private bool _applyingFromEditor;
     private bool _showDebugPanel;
     private bool _showDeviceSimulator;
+    private Views.DeviceGeometry _canvasGeometry = Views.DeviceGeometry.Empty;
 
     /// <summary>
     /// The editor below the device for the selected control (what the Customize window was). Edits
@@ -1889,7 +1897,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         SelectedDevice = device;
         ControlItems.Clear();
         _controlsById.Clear();
-        foreach (var control in device.Controls.Select(static control => new ControlItemViewModel(control)))
+        var geometry = Views.DeviceGeometry.Of(device);
+        CanvasGeometry = geometry;
+        foreach (var control in device.Controls.Select(control => new ControlItemViewModel(control, geometry.Place(control))))
         {
             ControlItems.Add(control);
             _controlsById[control.Id] = control;

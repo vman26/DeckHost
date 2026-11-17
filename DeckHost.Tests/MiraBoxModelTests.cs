@@ -211,6 +211,15 @@ public class MiraBoxModelTests
     }
 
     [Test]
+    public void The_N3_has_its_knobs_to_the_right_of_its_keys()
+    {
+        var device = MiraBoxModels.N3.Describe("mirabox.n3", "N3", null, false, null);
+        var rightOfKeys = device.Controls.Where(static control => control.Type is ControlType.Key or ControlType.Button).Max(static control => control.Bounds.X + control.Bounds.Width);
+
+        Expect.All(device.Controls.Where(static control => control.Type == ControlType.Encoder), knob => Assert.That(knob.Bounds.X, Is.GreaterThan(rightOfKeys)));
+    }
+
+    [Test]
     public void The_N1_knob_shows_on_the_third_small_display()
     {
         var device = MiraBoxModels.N1.Describe("mirabox.n1", "N1", null, false, null);

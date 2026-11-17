@@ -9,6 +9,8 @@
     -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
+                <SolidColorBrush x:Key="C.1B1E25" Color="#1B1E25" />
+                <SolidColorBrush x:Key="C.2C313C" Color="#2C313C" />
                 <SolidColorBrush x:Key="C.0B0D12" Color="#0B0D12" />
                 <SolidColorBrush x:Key="C.0B1120" Color="#0B1120" />
                 <SolidColorBrush x:Key="C.0B1220" Color="#0B1220" />
@@ -55,6 +57,8 @@
                 <SolidColorBrush x:Key="C.FFFFFF" Color="#FFFFFF" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
+                <SolidColorBrush x:Key="C.1B1E25" Color="#D1D5DB" />
+                <SolidColorBrush x:Key="C.2C313C" Color="#9CA3AF" />
                 <SolidColorBrush x:Key="C.0B0D12" Color="#E5E7EB" />
                 <SolidColorBrush x:Key="C.0B1120" Color="#F1F5F9" />
                 <SolidColorBrush x:Key="C.0B1220" Color="#F1F5F9" />

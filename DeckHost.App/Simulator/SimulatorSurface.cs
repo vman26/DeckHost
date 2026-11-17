@@ -20,7 +20,6 @@ namespace DeckHost.App.Simulator;
 /// </summary>
 public sealed class SimulatorSurface : Control
 {
-    private const double BodyPadding = 18;
     private const double SwipeDistance = 24;
 
     private static readonly IBrush Body = new SolidColorBrush(Color.Parse("#1B1E25"));
@@ -50,59 +49,28 @@ public sealed class SimulatorSurface : Control
 
     // ---------------------------------------------------------------- layout
 
-    /// <summary>Where things go on screen: the device body around the front controls, side controls on its edges.</summary>
-    private sealed record Geometry(double Scale, Point Offset, Rect Body)
+    /// <summary>Where things go on screen: <see cref="Views.DeviceGeometry"/> (shared with the editor), scaled to fit.</summary>
+    private sealed record Geometry(double Scale, Point Offset, Views.DeviceGeometry Device)
     {
+        public Rect Body => ToScreen(Device.Body);
+
         public Rect ToScreen(LayoutRect rect) =>
             new((rect.X * Scale) + Offset.X, (rect.Y * Scale) + Offset.Y, rect.Width * Scale, rect.Height * Scale);
 
-        /// <summary>A front control where the layout puts it; a side control as a wheel sticking out of that edge of the body.</summary>
-        public Rect Place(PhysicalControl control)
-        {
-            var rect = ToScreen(control.Bounds);
-            var depth = SideDepth * Scale;
-            return control.Side switch
-            {
-                DeviceSide.Left => new Rect(Body.Left - (depth * 0.7), rect.Y, depth, rect.Height),
-                DeviceSide.Right => new Rect(Body.Right - (depth * 0.3), rect.Y, depth, rect.Height),
-                DeviceSide.Top => new Rect(rect.X, Body.Top - (depth * 0.7), rect.Width, depth),
-                DeviceSide.Bottom => new Rect(rect.X, Body.Bottom - (depth * 0.3), rect.Width, depth),
-                _ => rect,
-            };
-        }
+        public Rect Place(PhysicalControl control) => ToScreen(Device.Place(control));
     }
-
-    /// <summary>How far a side control sticks out (layout units).</summary>
-    private const double SideDepth = 22;
 
     private Geometry? Layout()
     {
-        var controls = _viewModel.Device?.Controls ?? [];
-        var front = controls.Where(static control => control.Side is DeviceSide.Front or DeviceSide.Back).ToList();
-        if (front.Count == 0)
-        {
-            front = [.. controls];
-        }
-
-        if (front.Count == 0)
+        if (_viewModel.Device is not { Controls.Count: > 0 } device)
         {
             return null;
         }
 
-        var body = Union(front);
-        body = new LayoutRect(body.X - BodyPadding, body.Y - BodyPadding, body.Width + (2 * BodyPadding), body.Height + (2 * BodyPadding));
-
-        // Room for what sticks out of the sides.
-        var extra = SideDepth;
-        var area = new LayoutRect(
-            body.X - (controls.Any(static control => control.Side == DeviceSide.Left) ? extra : 0),
-            body.Y - (controls.Any(static control => control.Side == DeviceSide.Top) ? extra : 0),
-            body.Width + (controls.Any(static control => control.Side == DeviceSide.Left) ? extra : 0) + (controls.Any(static control => control.Side == DeviceSide.Right) ? extra : 0),
-            body.Height + (controls.Any(static control => control.Side == DeviceSide.Top) ? extra : 0) + (controls.Any(static control => control.Side == DeviceSide.Bottom) ? extra : 0));
-        var scale = Math.Max(0.1, Math.Min((Bounds.Width - 32) / area.Width, (Bounds.Height - 32) / area.Height));
-        var offset = new Point(((Bounds.Width - (area.Width * scale)) / 2) - (area.X * scale), ((Bounds.Height - (area.Height * scale)) / 2) - (area.Y * scale));
-        var geometry = new Geometry(scale, offset, default);
-        return geometry with { Body = geometry.ToScreen(body) };
+        var shape = Views.DeviceGeometry.Of(device);
+        var scale = Math.Max(0.1, Math.Min((Bounds.Width - 32) / shape.Width, (Bounds.Height - 32) / shape.Height));
+        var offset = new Point((Bounds.Width - (shape.Width * scale)) / 2, (Bounds.Height - (shape.Height * scale)) / 2);
+        return new Geometry(scale, offset, shape);
     }
 
     private PhysicalControl? HitTest(Point point) =>
@@ -128,7 +96,7 @@ public sealed class SimulatorSurface : Control
         }
 
         // Side controls first: the body covers their inner part, so they stick out of its edge.
-        foreach (var control in device.Controls.Where(static control => control.Side is not (DeviceSide.Front or DeviceSide.Back)))
+        foreach (var control in device.Controls.Where(static control => !Views.DeviceGeometry.IsFront(control)))
         {
             DrawSideWheel(context, control, geometry.Place(control));
         }
@@ -137,20 +105,16 @@ public sealed class SimulatorSurface : Control
 
         // The screens behind the keys, in the color DeckHost sets (its backdrop).
         var backdrop = new SolidColorBrush(_viewModel.Backdrop);
-        foreach (var display in device.Displays)
+        foreach (var screen in geometry.Device.Displays)
         {
-            var onDisplay = device.Controls.Where(control => display.ControlIds.Contains(control.Id)).ToList();
-            if (onDisplay.Count > 0)
-            {
-                context.DrawRectangle(backdrop, null, geometry.ToScreen(Union(onDisplay)).Inflate(6 * geometry.Scale), 6, 6);
-            }
+            context.DrawRectangle(backdrop, null, geometry.ToScreen(screen), 6, 6);
         }
 
         var dim = new SolidColorBrush(Colors.Black, 1 - (Math.Clamp(_viewModel.Brightness, 0, 100) / 100.0));
         foreach (var control in device.Controls)
         {
             var rect = geometry.Place(control);
-            if (control.Side is not (DeviceSide.Front or DeviceSide.Back))
+            if (!Views.DeviceGeometry.IsFront(control))
             {
                 // Drawn before the body; only the press shows on top.
                 if (ReferenceEquals(control, _pressed))
@@ -279,15 +243,6 @@ public sealed class SimulatorSurface : Control
             : control.DisplayName;
         var text = Text(caption, Math.Max(9, Math.Min(14, rect.Height * 0.35)), Label);
         context.DrawText(text, new Point(rect.X + ((rect.Width - text.Width) / 2), rect.Y + ((rect.Height - text.Height) / 2)));
-    }
-
-    private static LayoutRect Union(IReadOnlyList<PhysicalControl> controls)
-    {
-        var left = controls.Min(static control => control.Bounds.X);
-        var top = controls.Min(static control => control.Bounds.Y);
-        var right = controls.Max(static control => control.Bounds.X + control.Bounds.Width);
-        var bottom = controls.Max(static control => control.Bounds.Y + control.Bounds.Height);
-        return new LayoutRect(left, top, right - left, bottom - top);
     }
 
     private static FormattedText Text(string text, double size, IBrush brush) =>

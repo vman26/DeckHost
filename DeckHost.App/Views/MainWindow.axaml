@@ -223,12 +223,15 @@
 					<!-- The device, at a fixed size: opening plugins or the editor doesn't resize it. -->
 					<Grid Background="{DynamicResource C.111318}">
 						<Viewbox Stretch="Uniform" StretchDirection="Both" Margin="24,16,24,64" HorizontalAlignment="Center" VerticalAlignment="Center">
-							<Border Padding="18" Background="{DynamicResource C.0B0D12}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1" CornerRadius="24">
-								<!-- The background is the color the device shows between its controls for this profile. -->
+							<Panel Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}">
+								<!-- The device as the simulator draws it: its body, and its screens in the profile's background color. -->
+								<local:DeviceBodyView Geometry="{Binding CanvasGeometry}"
+													  Screen="{Binding CanvasBackground}"
+													  Body="{DynamicResource C.1B1E25}"
+													  Edge="{DynamicResource C.2C313C}" />
 								<ItemsControl ItemsSource="{Binding ControlItems}"
 											  Width="{Binding CanvasWidth}"
-											  Height="{Binding CanvasHeight}"
-											  Background="{Binding CanvasBackground}">
+											  Height="{Binding CanvasHeight}">
 									<ItemsControl.ItemsPanel>
 										<ItemsPanelTemplate>
 											<Canvas Background="Transparent" />
@@ -319,7 +322,7 @@
 										</DataTemplate>
 									</ItemsControl.ItemTemplate>
 								</ItemsControl>
-							</Border>
+							</Panel>
 						</Viewbox>
 						<!-- Pages of the profile (and where an open folder is), like the Stream Deck app's page dots. -->
 						<StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="20,0,20,6" Spacing="4">
