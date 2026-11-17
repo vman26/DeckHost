@@ -22,6 +22,10 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Variable names are picked from a list (or typed) in workflow nodes, Show Variable and the background that follows a
   variable.
 
+- USB device creator: controls snap to each other's edges, centers and even spacing while you drag (hold Alt to
+  place freely), Ctrl or Shift and a click select several to line up or spread evenly, and **Arrange** keeps every
+  key and knob on its own number. Right-click the device in the editor for **Add a USB device**.
+
 - Plugin store: open-source Elgato plugins can come from a checksummed copy kept in DeckHost's plugin
   repository instead of the community archive (the copying itself stays off for now).
 - Linux: an AppImage next to the tar.gz, one file that runs without installing. DeckHost doesn't replace it

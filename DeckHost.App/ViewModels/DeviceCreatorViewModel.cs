@@ -380,10 +380,149 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
                     value.IsSelected = true;
                 }
 
+                foreach (var other in Controls.Where(control => !ReferenceEquals(control, value) && control.IsSelected))
+                {
+                    other.IsSelected = false;
+                }
+
                 OnPropertyChanged(nameof(HasSelectedControl));
                 OnPropertyChanged(nameof(SelectedIsKnob));
+                OnSelectionChanged();
             }
         }
+    }
+
+    /// <summary>Selects just this control, also when it is the one that was selected last in a several selection.</summary>
+    public void SelectOnly(CreatorControlViewModel control)
+    {
+        SelectedControl = control;
+        control.IsSelected = true;
+        foreach (var other in Controls.Where(other => !ReferenceEquals(other, control) && other.IsSelected))
+        {
+            other.IsSelected = false;
+        }
+
+        OnSelectionChanged();
+    }
+
+    /// <summary>Every selected control (Ctrl or Shift and a click adds one).</summary>
+    public IReadOnlyList<CreatorControlViewModel> SelectedControls => [.. Controls.Where(static control => control.IsSelected)];
+
+    /// <summary>Two or more are selected: they can be lined up.</summary>
+    public bool HasSeveralSelected => Controls.Count(static control => control.IsSelected) >= 2;
+
+    /// <summary>Three or more are selected: they can be spread evenly.</summary>
+    public bool CanDistribute => Controls.Count(static control => control.IsSelected) >= 3;
+
+    /// <summary>Adds the control to the selection, or takes it out when it is already in.</summary>
+    public void ToggleSelection(CreatorControlViewModel control)
+    {
+        if (!control.IsSelected)
+        {
+            control.IsSelected = true;
+            _selectedControl = control;
+        }
+        else if (Controls.Count(static other => other.IsSelected) > 1)
+        {
+            control.IsSelected = false;
+            if (ReferenceEquals(_selectedControl, control))
+            {
+                _selectedControl = Controls.LastOrDefault(static other => other.IsSelected);
+            }
+        }
+
+        OnPropertyChanged(nameof(SelectedControl));
+        OnPropertyChanged(nameof(HasSelectedControl));
+        OnPropertyChanged(nameof(SelectedIsKnob));
+        OnSelectionChanged();
+    }
+
+    private void OnSelectionChanged()
+    {
+        OnPropertyChanged(nameof(HasSeveralSelected));
+        OnPropertyChanged(nameof(CanDistribute));
+    }
+
+    /// <summary>The snap lines to draw while something is being dragged.</summary>
+    public ObservableCollection<CreatorGuide> Guides { get; } = [];
+
+    /// <summary>
+    /// Moves the dragged control (and the rest of the selection with it) to where the pointer puts it, snapping its edges and
+    /// centers to the other controls and to even spacing unless <paramref name="snap"/> is off.
+    /// </summary>
+    public void DragTo(CreatorControlViewModel dragged, double x, double y, bool snap)
+    {
+        var group = dragged.IsSelected ? SelectedControls : [dragged];
+        var left = group.Min(static control => control.X);
+        var top = group.Min(static control => control.Y);
+        var right = group.Max(static control => control.X + control.Width);
+        var bottom = group.Max(static control => control.Y + control.Height);
+        var wantedX = Math.Max(0, x) - dragged.X + left;
+        var wantedY = Math.Max(0, y) - dragged.Y + top;
+        var rect = new SnapRect(wantedX, wantedY, right - left, bottom - top);
+
+        Guides.Clear();
+        if (snap)
+        {
+            var others = Controls.Where(control => !group.Contains(control)).Select(static control => new SnapRect(control.X, control.Y, control.Width, control.Height)).ToList();
+            var result = LayoutSnapping.Snap(rect, others);
+            foreach (var guide in result.Guides)
+            {
+                Guides.Add(guide.Vertical
+                    ? new CreatorGuide(guide.Position, guide.From, 1, guide.To - guide.From)
+                    : new CreatorGuide(guide.From, guide.Position, guide.To - guide.From, 1));
+            }
+
+            rect = rect with { X = result.X, Y = result.Y };
+        }
+
+        // Without snapping the group's corner goes on the 4-unit grid; what snapped is placed exactly. Either way the controls keep their places in the group.
+        var dx = (snap ? Math.Round(rect.X) : Math.Round(rect.X / 4) * 4) - left;
+        var dy = (snap ? Math.Round(rect.Y) : Math.Round(rect.Y / 4) * 4) - top;
+        foreach (var control in group)
+        {
+            control.MoveTo(control.X + dx, control.Y + dy, toGrid: false);
+        }
+    }
+
+    /// <summary>The drag ended: the guides go and the ids follow the new reading order.</summary>
+    public void EndDrag()
+    {
+        Guides.Clear();
+        Rebuild();
+    }
+
+    /// <summary>Lines the selected controls up (<c>Left</c>, <c>CenterHorizontally</c>, <c>Right</c>, <c>Top</c>, <c>CenterVertically</c>, <c>Bottom</c>).</summary>
+    [RelayCommand]
+    private void Align(string alignment)
+    {
+        if (!Enum.TryParse<LayoutAlignment>(alignment, out var mode))
+        {
+            return;
+        }
+
+        var group = SelectedControls;
+        var moved = LayoutSnapping.Align([.. group.Select(static control => new SnapRect(control.X, control.Y, control.Width, control.Height))], mode);
+        Place(group, moved);
+    }
+
+    /// <summary>Spreads three or more selected controls evenly (<c>Horizontally</c> or <c>Vertically</c>).</summary>
+    [RelayCommand]
+    private void Distribute(string direction)
+    {
+        var group = SelectedControls;
+        var moved = LayoutSnapping.Distribute([.. group.Select(static control => new SnapRect(control.X, control.Y, control.Width, control.Height))], direction == "Horizontally");
+        Place(group, moved);
+    }
+
+    private void Place(IReadOnlyList<CreatorControlViewModel> group, IReadOnlyList<(double X, double Y)> positions)
+    {
+        for (var index = 0; index < group.Count; index++)
+        {
+            group[index].MoveTo(positions[index].X, positions[index].Y, toGrid: false);
+        }
+
+        Rebuild();
     }
 
     public bool HasSelectedControl => _selectedControl is not null;
@@ -751,15 +890,15 @@ public sealed partial class CreatorControlViewModel : ViewModelBase
     public string Summary => Input.Describe() + (Press is { } press ? $"; push: {press.Describe()}" : string.Empty);
 
     /// <summary>Moves it (snapped to a 4-unit grid, never off the canvas's top-left).</summary>
-    public void MoveTo(double x, double y)
+    public void MoveTo(double x, double y, bool toGrid = true)
     {
-        X = Math.Max(0, Math.Round(x / 4) * 4);
-        Y = Math.Max(0, Math.Round(y / 4) * 4);
+        X = Math.Max(0, toGrid ? Math.Round(x / 4) * 4 : Math.Round(x));
+        Y = Math.Max(0, toGrid ? Math.Round(y / 4) * 4 : Math.Round(y));
         _owner.OnControlMoved();
     }
 
     /// <summary>A drag ended: ids follow the new reading order.</summary>
-    public void Dropped() => _owner.Rebuild();
+    public void Dropped() => _owner.EndDrag();
 
     internal void ShowInput(HidInputEvent input)
     {
@@ -779,3 +918,6 @@ public sealed partial class CreatorControlViewModel : ViewModelBase
 
     public HidControl ToModel() => new(Id, Name.Trim().Length == 0 ? Id : Name.Trim(), Kind, X, Y, Width, Height, Input) { Press = Press };
 }
+
+/// <summary>A thin line the creator draws while a control snaps (position and size on the canvas).</summary>
+public sealed record CreatorGuide(double Left, double Top, double Width, double Height);

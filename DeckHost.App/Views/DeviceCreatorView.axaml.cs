@@ -11,6 +11,8 @@ public partial class DeviceCreatorView : UserControl, IWidePage
 {
     private CreatorControlViewModel? _dragging;
     private Point _grab;
+    private bool _moved;
+    private bool _collapseOnRelease;
 
     public DeviceCreatorView()
     {
@@ -37,8 +39,18 @@ public partial class DeviceCreatorView : UserControl, IWidePage
             return;
         }
 
-        creator.SelectedControl = control;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift) || e.KeyModifiers.HasFlag(KeyModifiers.Meta))
+        {
+            creator.ToggleSelection(control);
+        }
+        else if (!control.IsSelected)
+        {
+            creator.SelectedControl = control;
+        }
+
         _dragging = control;
+        _moved = false;
+        _collapseOnRelease = control.IsSelected && creator.HasSeveralSelected && e.KeyModifiers == KeyModifiers.None;
         _grab = e.GetPosition(border);
         e.Pointer.Capture(border);
         e.Handled = true;
@@ -52,7 +64,9 @@ public partial class DeviceCreatorView : UserControl, IWidePage
         }
 
         var position = e.GetPosition(canvas);
-        _dragging.MoveTo(position.X - _grab.X, position.Y - _grab.Y);
+        _moved = true;
+        // Alt held: place freely, without snapping to the other controls.
+        (DataContext as DeviceCreatorViewModel)?.DragTo(_dragging, position.X - _grab.X, position.Y - _grab.Y, snap: !e.KeyModifiers.HasFlag(KeyModifiers.Alt));
     }
 
     private void Control_OnPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -62,6 +76,12 @@ public partial class DeviceCreatorView : UserControl, IWidePage
             _dragging = null;
             e.Pointer.Capture(null);
             control.Dropped();
+
+            // A plain click on one of several selected controls selects just that one (a drag moved them all).
+            if (_collapseOnRelease && !_moved && DataContext is DeviceCreatorViewModel creator)
+            {
+                creator.SelectOnly(control);
+            }
         }
     }
 }

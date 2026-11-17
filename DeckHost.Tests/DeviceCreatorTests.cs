@@ -339,6 +339,125 @@ public sealed class DeviceCreatorTests : IDisposable
     }
 
     [Test]
+    public void DragTo_KeyNearAnotherKeysTopEdge_SnapsAndShowsAGuide()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        var second = creator.View.Controls.Single(static control => control.Name == SecondKeyName);
+        second.MoveTo(second.X, 120, toGrid: false);
+
+        // Act
+        creator.View.DragTo(second, second.X, 2, snap: true);
+
+        // Assert
+        Assert.That(second.Y, Is.EqualTo(0));
+        Assert.That(creator.View.Guides, Is.Not.Empty);
+    }
+
+    [Test]
+    public void DragTo_WithSnappingOff_PlacesTheKeyOnTheGridWithoutGuides()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        var second = creator.View.Controls.Single(static control => control.Name == SecondKeyName);
+
+        // Act
+        creator.View.DragTo(second, second.X, 3, snap: false);
+
+        // Assert
+        Assert.That(second.Y, Is.EqualTo(4));
+        Assert.That(creator.View.Guides, Is.Empty);
+    }
+
+    [Test]
+    public void EndDrag_AfterASnap_RemovesTheGuides()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        var second = creator.View.Controls.Single(static control => control.Name == SecondKeyName);
+        creator.View.DragTo(second, second.X, 2, snap: true);
+
+        // Act
+        creator.View.EndDrag();
+
+        // Assert
+        Assert.That(creator.View.Guides, Is.Empty);
+    }
+
+    [Test]
+    public void ToggleSelection_ACtrlClickOnAnotherKey_SelectsBothAndOffersAligning()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        creator.View.SelectedControl = creator.View.Controls[0];
+
+        // Act
+        creator.View.ToggleSelection(creator.View.Controls[1]);
+
+        // Assert
+        Assert.That(creator.View.SelectedControls, Has.Count.EqualTo(2));
+        Assert.That(creator.View.HasSeveralSelected, Is.True);
+        Assert.That(creator.View.CanDistribute, Is.False);
+    }
+
+    [Test]
+    public void SelectOnly_AfterASeveralSelection_SelectsOnlyThatKey()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        creator.View.SelectedControl = creator.View.Controls[0];
+        creator.View.ToggleSelection(creator.View.Controls[1]);
+
+        // Act
+        creator.View.SelectOnly(creator.View.Controls[1]);
+
+        // Assert
+        Assert.That(creator.View.SelectedControls, Is.EqualTo(new[] { creator.View.Controls[1] }));
+    }
+
+    [Test]
+    public void DragTo_ADraggedKeyInASeveralSelection_MovesTheWholeSelectionTogether()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        var (first, second) = (creator.View.Controls[0], creator.View.Controls[1]);
+        creator.View.SelectedControl = first;
+        creator.View.ToggleSelection(second);
+        var gap = second.X - first.X;
+
+        // Act
+        creator.View.DragTo(first, first.X, 200, snap: false);
+
+        // Assert
+        Assert.That(first.Y, Is.EqualTo(200));
+        Assert.That(second.Y, Is.EqualTo(200));
+        Assert.That(second.X - first.X, Is.EqualTo(gap));
+    }
+
+    [Test]
+    public void Align_SelectedKeysAtDifferentHeights_PutsTheirTopsOnTheSameLine()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        creator.View.Controls[1].MoveTo(creator.View.Controls[1].X, 100, toGrid: false);
+        creator.View.SelectedControl = creator.View.Controls[0];
+        creator.View.ToggleSelection(creator.View.Controls[1]);
+
+        // Act
+        creator.View.AlignCommand.Execute("Top");
+
+        // Assert
+        Assert.That(creator.View.Controls[1].Y, Is.EqualTo(creator.View.Controls[0].Y));
+    }
+
+    [Test]
     public void Save_PushableKnob_KeepsWhatWasLearnedForTurningAndPressing()
     {
         // Arrange

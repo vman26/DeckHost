@@ -101,22 +101,34 @@
 		</ScrollViewer>
 
 		<!-- Its controls: learn them, place them, save. -->
-		<Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="10">
+		<Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" RowSpacing="10">
 			<WrapPanel ItemSpacing="8" LineSpacing="8">
 				<TextBlock Classes="title" Text="2. Keys and knobs" VerticalAlignment="Center" Margin="0,0,8,0" />
 				<Button Content="Add key" Classes="accent" Command="{Binding AddKeyCommand}" IsEnabled="{Binding CanAdd}" />
 				<Button Content="Add knob" Command="{Binding AddKnobCommand}" IsEnabled="{Binding CanAdd}" />
 				<Button Content="Done turning" Classes="accent" Command="{Binding DoneTurningCommand}" IsVisible="{Binding IsLearningKnob}" />
 				<Button Content="Cancel" Command="{Binding CancelLearningCommand}" IsVisible="{Binding IsLearning}" />
-				<Button Content="Arrange" Command="{Binding ArrangeCommand}" IsEnabled="{Binding HasControls}" ToolTip.Tip="Keys in a grid, knobs in a row below" />
+				<Button Content="Arrange" Command="{Binding ArrangeCommand}" IsEnabled="{Binding HasControls}" ToolTip.Tip="Keys in a grid, knobs in a row below; each keeps its number" />
 				<NumericUpDown Value="{Binding ColumnsValue}" Minimum="1" Maximum="16" Increment="1" FormatString="0" Width="120" ToolTip.Tip="Keys per row for Arrange" />
 			</WrapPanel>
 
-			<Border Grid.Row="1" Padding="10,8" CornerRadius="8" Background="{DynamicResource C.172554}">
+			<WrapPanel Grid.Row="1" ItemSpacing="6" LineSpacing="6" IsVisible="{Binding HasSeveralSelected}">
+				<TextBlock Classes="hint" Text="Selected controls:" VerticalAlignment="Center" />
+				<Button Content="⇤ Left" Command="{Binding AlignCommand}" CommandParameter="Left" ToolTip.Tip="Line up their left edges" />
+				<Button Content="↔ Center" Command="{Binding AlignCommand}" CommandParameter="CenterHorizontally" ToolTip.Tip="Line up their centers, side to side" />
+				<Button Content="⇥ Right" Command="{Binding AlignCommand}" CommandParameter="Right" ToolTip.Tip="Line up their right edges" />
+				<Button Content="⤒ Top" Command="{Binding AlignCommand}" CommandParameter="Top" ToolTip.Tip="Line up their top edges" />
+				<Button Content="↕ Middle" Command="{Binding AlignCommand}" CommandParameter="CenterVertically" ToolTip.Tip="Line up their centers, top to bottom" />
+				<Button Content="⤓ Bottom" Command="{Binding AlignCommand}" CommandParameter="Bottom" ToolTip.Tip="Line up their bottom edges" />
+				<Button Content="Spread across" Command="{Binding DistributeCommand}" CommandParameter="Horizontally" IsEnabled="{Binding CanDistribute}" ToolTip.Tip="Equal gaps from left to right (three or more)" />
+				<Button Content="Spread down" Command="{Binding DistributeCommand}" CommandParameter="Vertically" IsEnabled="{Binding CanDistribute}" ToolTip.Tip="Equal gaps from top to bottom (three or more)" />
+			</WrapPanel>
+
+			<Border Grid.Row="2" Padding="10,8" CornerRadius="8" Background="{DynamicResource C.172554}">
 				<TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="{DynamicResource C.DBEAFE}" />
 			</Border>
 
-			<Border Grid.Row="2" Classes="card" Padding="0">
+			<Border Grid.Row="3" Classes="card" Padding="0">
 				<ScrollViewer HorizontalScrollBarVisibility="Auto">
 					<Panel>
 						<TextBlock Classes="hint" Margin="20" IsVisible="{Binding !HasControls}"
@@ -152,11 +164,30 @@
 								</DataTemplate>
 							</ItemsControl.ItemTemplate>
 						</ItemsControl>
+						<!-- The lines a control snaps to while it's dragged. -->
+						<ItemsControl ItemsSource="{Binding Guides}" Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}" Margin="16" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<Canvas />
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+							<ItemsControl.Styles>
+								<Style Selector="ContentPresenter" x:DataType="vm:CreatorGuide">
+									<Setter Property="Canvas.Left" Value="{Binding Left}" />
+									<Setter Property="Canvas.Top" Value="{Binding Top}" />
+								</Style>
+							</ItemsControl.Styles>
+							<ItemsControl.ItemTemplate>
+								<DataTemplate x:DataType="vm:CreatorGuide">
+									<Border Width="{Binding Width}" Height="{Binding Height}" Background="{DynamicResource C.93C5FD}" Opacity="0.8" />
+								</DataTemplate>
+							</ItemsControl.ItemTemplate>
+						</ItemsControl>
 					</Panel>
 				</ScrollViewer>
 			</Border>
 
-			<Border Grid.Row="3" Classes="card" IsVisible="{Binding HasSelectedControl}">
+			<Border Grid.Row="4" Classes="card" IsVisible="{Binding HasSelectedControl}">
 				<Grid ColumnDefinitions="Auto,220,*,Auto,Auto" ColumnSpacing="10">
 					<TextBlock Text="Name" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
 					<TextBox Grid.Column="1" Text="{Binding SelectedControl.Name, FallbackValue=''}" />
@@ -166,9 +197,9 @@
 				</Grid>
 			</Border>
 
-			<StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="10">
+			<StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="10">
 				<Button Content="Save device" Classes="accent" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}" />
-				<TextBlock Classes="hint" VerticalAlignment="Center" Text="Keys and knobs are numbered by where they sit (left to right, top to bottom). The device only sends input: it has no screens or lights DeckHost could use." />
+				<TextBlock Classes="hint" VerticalAlignment="Center" Text="Keys and knobs are numbered by where they sit (left to right, top to bottom). Drag to snap to the others (hold Alt to place freely); Ctrl or Shift and a click selects several to line up or spread. The device only sends input: it has no screens or lights DeckHost could use." />
 			</StackPanel>
 		</Grid>
 	</Grid>
