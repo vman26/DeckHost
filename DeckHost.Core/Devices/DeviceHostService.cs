@@ -72,6 +72,11 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     // Workflow event triggers (a variable changes, an app comes to the front, a timer, the profile is shown).
     private readonly WorkflowEventThrottle _eventThrottle = new();
+
+    // Backgrounds with layers that follow a variable: the variables, and the redraw they ask for (at most one per AnimationInterval).
+    private volatile HashSet<string> _backgroundKeys = [];
+    private int _backgroundPending;
+    private int _backgroundScheduled;
     private readonly Dictionary<string, string> _eventValues = new(StringComparer.Ordinal);
     private readonly Dictionary<(string DeviceId, string ControlId, string NodeId), DateTime> _timerLastStart = [];
     private IDisposable? _variableChanges;
@@ -137,12 +142,20 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         if (variableStore is State.VariableStore observable)
         {
             _variableChanges = observable.Changes
-                .Where(static change => change.Key == VariableKeys.ForegroundApp || change.Key.StartsWith("vars.", StringComparison.Ordinal))
+                .Where(change => IsEventVariable(change.Key) || _backgroundKeys.Contains(change.Key))
                 .Subscribe(change =>
                 {
                     var key = change.Key;
-                    var value = change.Value?.ToString() ?? string.Empty;
-                    Enqueue(() => OnEventVariable(key, value));
+                    if (_backgroundKeys.Contains(key))
+                    {
+                        RequestBackgroundRedraw();
+                    }
+
+                    if (IsEventVariable(key))
+                    {
+                        var value = change.Value?.ToString() ?? string.Empty;
+                        Enqueue(() => OnEventVariable(key, value));
+                    }
                 });
         }
 
@@ -801,6 +814,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             _profilesById[profile.Id] = profile;
         }
 
+        _backgroundKeys = profiles.SelectMany(static profile => BackgroundLayers.BoundVariables(profile.Background)).ToHashSet(StringComparer.Ordinal);
+
         // Keep the active profile per device when it still exists, else fall back to the first one.
         foreach (var deviceId in _activeProfilesByDeviceId.Keys.ToList())
         {
@@ -845,6 +860,44 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
 
         FireEvent(WorkflowTriggers.ProfileShown, null, profile.DeviceId);
+    }
+
+    // ---------------------------------------------------------------- reactive backgrounds
+
+    private static bool IsEventVariable(string key) => key == VariableKeys.ForegroundApp || key.StartsWith("vars.", StringComparison.Ordinal);
+
+    /// <summary>A variable a background layer follows changed: draw the devices that show such a background again, soon (not on every value).</summary>
+    private void RequestBackgroundRedraw()
+    {
+        Volatile.Write(ref _backgroundPending, 1);
+        if (Interlocked.Exchange(ref _backgroundScheduled, 1) == 0)
+        {
+            Enqueue(FlushBackgroundRedraw);
+        }
+    }
+
+    private void FlushBackgroundRedraw()
+    {
+        Volatile.Write(ref _backgroundPending, 0);
+        foreach (var deviceId in _devicesById.Keys)
+        {
+            if (BackgroundLayers.IsReactive(GetActiveProfile(deviceId)?.Background))
+            {
+                _dirtyDevices.Add(deviceId);
+            }
+        }
+
+        // The next redraw is at least one animation interval away; a value that changed meanwhile gets it.
+        _ = Task.Delay(AnimationInterval).ContinueWith(
+            _ => Enqueue(() =>
+            {
+                Volatile.Write(ref _backgroundScheduled, 0);
+                if (Volatile.Read(ref _backgroundPending) == 1)
+                {
+                    RequestBackgroundRedraw();
+                }
+            }),
+            TaskScheduler.Default);
     }
 
     // ---------------------------------------------------------------- event triggers

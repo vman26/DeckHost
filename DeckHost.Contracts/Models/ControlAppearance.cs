@@ -59,5 +59,80 @@ public sealed record TileStyle(string? From = null, string? To = null, double? C
 
 public sealed record ProfileBackground(string? Color = null, string? ImagePath = null)
 {
-    public bool IsEmpty => string.IsNullOrWhiteSpace(Color) && string.IsNullOrWhiteSpace(ImagePath);
+    /// <summary>
+    /// More layers, drawn over <see cref="Color"/> and <see cref="ImagePath"/> (which are the bottom ones), in this
+    /// order. An init property, so the record's constructor stays binary-compatible.
+    /// </summary>
+    public IReadOnlyList<BackgroundLayer>? Layers { get; init; }
+
+    public bool IsEmpty => string.IsNullOrWhiteSpace(Color) && string.IsNullOrWhiteSpace(ImagePath) && Layers is not { Count: > 0 };
+}
+
+/// <summary>The kinds of <see cref="BackgroundLayer"/> DeckHost draws; an unknown kind is kept in the file and not drawn.</summary>
+public static class BackgroundLayerKinds
+{
+    /// <summary>One color over the whole layout.</summary>
+    public const string Solid = "solid";
+
+    /// <summary>A gradient across the whole layout, from <see cref="BackgroundLayer.Color"/> to <see cref="BackgroundLayer.ToColor"/> at <see cref="BackgroundLayer.Angle"/> degrees.</summary>
+    public const string Gradient = "gradient";
+
+    /// <summary>A picture (or animated GIF) spread over the whole layout, every control showing its slice.</summary>
+    public const string Image = "image";
+
+    public static IReadOnlyList<string> Known { get; } = [Solid, Gradient, Image];
+}
+
+/// <summary>What a bound property of a layer follows.</summary>
+public static class BackgroundBindingTargets
+{
+    /// <summary>The layer's color (a solid layer's color, a gradient's end color) goes from <see cref="BackgroundBinding.FromColor"/> to <see cref="BackgroundBinding.ToColor"/>.</summary>
+    public const string Color = "color";
+
+    /// <summary>The layer's opacity goes from 0 to the layer's own <see cref="BackgroundLayer.Opacity"/>.</summary>
+    public const string Opacity = "opacity";
+
+    /// <summary>The layer shows while the variable is at or above <see cref="BackgroundBinding.Min"/> (true counts as 1).</summary>
+    public const string Visible = "visible";
+
+    public static IReadOnlyList<string> All { get; } = [Color, Opacity, Visible];
+}
+
+/// <summary>
+/// One layer of a profile background, drawn over the layers before it. <paramref name="Kind"/> is text so a layer of a
+/// kind this version doesn't know survives a save.
+/// </summary>
+/// <param name="Visible">Off keeps the layer but doesn't draw it.</param>
+/// <param name="Opacity">0 to 1.</param>
+public sealed record BackgroundLayer(string Kind, bool Visible = true, double Opacity = 1)
+{
+    /// <summary>#RRGGBB or #AARRGGBB: a solid layer's color, a gradient's start.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>A gradient's end color.</summary>
+    public string? ToColor { get; init; }
+
+    /// <summary>A gradient's direction in degrees: 0 left to right, 90 top to bottom.</summary>
+    public double? Angle { get; init; }
+
+    public string? ImagePath { get; init; }
+
+    /// <summary>Makes a property of the layer follow a variable (the CPU load, a Set variable node's value, …).</summary>
+    public BackgroundBinding? Binding { get; init; }
+}
+
+/// <summary>
+/// A layer property that follows a variable. The value is read as a number between <paramref name="Min"/> and
+/// <paramref name="Max"/> (<c>true</c> counts as 1, anything unreadable as <see cref="Fallback"/>, else 0).
+/// </summary>
+public sealed record BackgroundBinding(string Variable, string Target = BackgroundBindingTargets.Color, double Min = 0, double Max = 100)
+{
+    /// <summary>The color at <see cref="Min"/> (target color).</summary>
+    public string? FromColor { get; init; }
+
+    /// <summary>The color at <see cref="Max"/> (target color).</summary>
+    public string? ToColor { get; init; }
+
+    /// <summary>The value to use while the variable has none (or isn't a number).</summary>
+    public double? Fallback { get; init; }
 }

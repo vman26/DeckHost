@@ -44,11 +44,7 @@ internal static class ControlRenderer
 
         if (profileBackground is not null)
         {
-            context.FillColor(profileBackground.Color);
-            if (!string.IsNullOrWhiteSpace(profileBackground.ImagePath))
-            {
-                context.DrawLayoutSlice(profileBackground.ImagePath, layoutBounds, controlBounds);
-            }
+            context.DrawBackgroundLayers(BackgroundLayers.Resolve(profileBackground, context.Variables), layoutBounds, controlBounds);
         }
 
         if (linked is null)

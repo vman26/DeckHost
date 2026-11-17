@@ -21,6 +21,7 @@ public class ProfileItemViewModel : ViewModelBase
         DeviceId = deviceId;
         BackgroundColor = background?.Color ?? string.Empty;
         BackgroundImagePath = background?.ImagePath ?? string.Empty;
+        BackgroundLayers = background?.Layers ?? [];
         AutoSwitchApps = new ObservableCollection<string>(autoSwitchApps ?? []);
         AutoSwitchApps.CollectionChanged += (_, _) =>
         {
@@ -94,6 +95,9 @@ public class ProfileItemViewModel : ViewModelBase
     /// <summary>Profile background image or GIF; spans all controls.</summary>
     public string BackgroundImagePath { get; set; }
 
+    /// <summary>More background layers over the color and image (gradients, pictures, layers that follow a variable).</summary>
+    public IReadOnlyList<BackgroundLayer> BackgroundLayers { get; set; }
+
     /// <summary>Process names that make this profile active while their window has focus.</summary>
     public ObservableCollection<string> AutoSwitchApps { get; }
 
@@ -163,9 +167,9 @@ public class ProfileItemViewModel : ViewModelBase
             .. _unresolvedBindings.Values,
         ],
         AutoSwitchApps.Count == 0 ? null : [.. AutoSwitchApps],
-        string.IsNullOrWhiteSpace(BackgroundColor) && string.IsNullOrWhiteSpace(BackgroundImagePath)
+        string.IsNullOrWhiteSpace(BackgroundColor) && string.IsNullOrWhiteSpace(BackgroundImagePath) && BackgroundLayers.Count == 0
             ? null
-            : new ProfileBackground(NullIfEmpty(BackgroundColor), NullIfEmpty(BackgroundImagePath)))
+            : new ProfileBackground(NullIfEmpty(BackgroundColor), NullIfEmpty(BackgroundImagePath)) { Layers = BackgroundLayers.Count == 0 ? null : [.. BackgroundLayers] })
     {
         ParentId = ParentId,
         Kind = Kind,

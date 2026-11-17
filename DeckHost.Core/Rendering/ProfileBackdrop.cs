@@ -18,10 +18,31 @@ public static class ProfileBackdrop
     public static (byte Red, byte Green, byte Blue) GetColor(ProfileBackground? profileBackground)
     {
         var color = new SKColor(ControlRenderer.BackgroundColor);
-        if (!string.IsNullOrWhiteSpace(profileBackground?.Color) && SKColor.TryParse(profileBackground.Color.Trim(), out var parsed))
+
+        // Only what stays the same: layers that follow a variable would change the device's backdrop on every
+        // value, so they show on the controls only. A gradient counts as the color half way along it.
+        var steady = profileBackground is null
+            ? null
+            : profileBackground with { Layers = profileBackground.Layers?.Where(static layer => layer.Binding is null).ToList() };
+        foreach (var layer in BackgroundLayers.Resolve(steady, null))
         {
-            var alpha = parsed.Alpha / 255f;
-            color = new SKColor(Blend(parsed.Red, color.Red, alpha), Blend(parsed.Green, color.Green, alpha), Blend(parsed.Blue, color.Blue, alpha));
+            SKColor top;
+            switch (layer.Kind)
+            {
+                case BackgroundLayerKinds.Solid:
+                    top = layer.Color;
+                    break;
+                case BackgroundLayerKinds.Gradient:
+                    top = new SKColor(
+                        (byte)((layer.Color.Red + layer.ToColor.Red) / 2), (byte)((layer.Color.Green + layer.ToColor.Green) / 2),
+                        (byte)((layer.Color.Blue + layer.ToColor.Blue) / 2), (byte)((layer.Color.Alpha + layer.ToColor.Alpha) / 2));
+                    break;
+                default:
+                    continue;
+            }
+
+            var alpha = top.Alpha / 255f * (float)layer.Opacity;
+            color = new SKColor(Blend(top.Red, color.Red, alpha), Blend(top.Green, color.Green, alpha), Blend(top.Blue, color.Blue, alpha));
         }
 
         return (color.Red, color.Green, color.Blue);

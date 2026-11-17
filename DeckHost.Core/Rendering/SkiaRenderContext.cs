@@ -409,6 +409,57 @@ namespace DeckHost.Core.Rendering
             return true;
         }
 
+        /// <summary>Draws the background's layers over this control's part of the layout, bottom to top.</summary>
+        public void DrawBackgroundLayers(IReadOnlyList<ResolvedLayer> layers, Rect layout, Rect control)
+        {
+            foreach (var layer in layers)
+            {
+                switch (layer.Kind)
+                {
+                    case BackgroundLayerKinds.Solid:
+                        FillSolid(layer.Color, layer.Opacity);
+                        break;
+                    case BackgroundLayerKinds.Gradient:
+                        DrawLayoutGradient(layer, layout, control);
+                        break;
+                    case BackgroundLayerKinds.Image when !string.IsNullOrWhiteSpace(layer.ImagePath):
+                        DrawLayoutSlice(layer.ImagePath, layout, control, layer.Opacity);
+                        break;
+                }
+            }
+        }
+
+        private void FillSolid(SKColor color, double opacity)
+        {
+            var paint = _resources.FillPaint;
+            paint.Color = color.WithAlpha((byte)Math.Round(color.Alpha * Math.Clamp(opacity, 0, 1)));
+            _canvas.DrawRect(0, 0, Width, Height, paint);
+        }
+
+        /// <summary>A gradient across the whole layout at an angle (0 left to right, 90 top to bottom); this control draws its part.</summary>
+        private void DrawLayoutGradient(ResolvedLayer layer, Rect layout, Rect control)
+        {
+            if (layout.Width <= 0 || layout.Height <= 0 || control.Width <= 0 || control.Height <= 0)
+            {
+                return;
+            }
+
+            var radians = layer.Angle * Math.PI / 180d;
+            var (dx, dy) = (Math.Cos(radians), Math.Sin(radians));
+            var half = ((Math.Abs(layout.Width * dx)) + Math.Abs(layout.Height * dy)) / 2d;
+            var (cx, cy) = (layout.X + (layout.Width / 2d), layout.Y + (layout.Height / 2d));
+            SKPoint ToControl(double x, double y) => new((float)((x - control.X) * Width / control.Width), (float)((y - control.Y) * Height / control.Height));
+
+            var alpha = Math.Clamp(layer.Opacity, 0, 1);
+            using var shader = SKShader.CreateLinearGradient(
+                ToControl(cx - (dx * half), cy - (dy * half)),
+                ToControl(cx + (dx * half), cy + (dy * half)),
+                [layer.Color.WithAlpha((byte)Math.Round(layer.Color.Alpha * alpha)), layer.ToColor.WithAlpha((byte)Math.Round(layer.ToColor.Alpha * alpha))],
+                SKShaderTileMode.Clamp);
+            using var paint = new SKPaint { IsAntialias = false, Style = SKPaintStyle.Fill, Shader = shader };
+            _canvas.DrawRect(0, 0, Width, Height, paint);
+        }
+
         /// <summary>Fills the control with a #RRGGBB / #AARRGGBB color. Returns false for an invalid color.</summary>
         public bool FillColor(string? color)
         {
@@ -428,7 +479,7 @@ namespace DeckHost.Core.Rendering
         /// picture spans all controls. <paramref name="layout"/> and <paramref name="control"/>
         /// are in the device's layout coordinates.
         /// </summary>
-        public bool DrawLayoutSlice(string path, Rect layout, Rect control)
+        public bool DrawLayoutSlice(string path, Rect layout, Rect control, double opacity = 1)
         {
             var image = _resources.GetImage(path, Clock);
             if (image is null || layout.Width <= 0 || layout.Height <= 0 || control.Width <= 0 || control.Height <= 0)
@@ -446,7 +497,18 @@ namespace DeckHost.Core.Rendering
                 (float)(control.Width / cover),
                 (float)(control.Height / cover));
 
-            _canvas.DrawImage(image, source, SKRect.Create(0, 0, Width, Height), _resources.ImageSampling, _resources.ImagePaint);
+            var paint = _resources.ImagePaint;
+            var before = paint.Color;
+            paint.Color = before.WithAlpha((byte)Math.Round(before.Alpha * Math.Clamp(opacity, 0, 1)));
+            try
+            {
+                _canvas.DrawImage(image, source, SKRect.Create(0, 0, Width, Height), _resources.ImageSampling, paint);
+            }
+            finally
+            {
+                paint.Color = before;
+            }
+
             return true;
         }
 

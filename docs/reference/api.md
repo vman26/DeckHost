@@ -420,6 +420,59 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `bool TryGetValue(string key, string value)` |  |
 | `ActionSettings With(string key, string value)` |  |
 
+### BackgroundBinding
+
+*record* — A layer property that follows a variable. The value is read as a number between `Min` and `Max` (`true` counts as 1, anything unreadable as `Fallback`, else 0).
+
+| Member | |
+|---|---|
+| `BackgroundBinding(string Variable, string Target = "color", double Min = 0, double Max = 100)` | A layer property that follows a variable. The value is read as a number between `Min` and `Max` (`true` counts as 1, anything unreadable as `Fallback`, else 0). |
+| `double? Fallback { get; init; }` | The value to use while the variable has none (or isn't a number). |
+| `string FromColor { get; init; }` | The color at `Min` (target color). |
+| `double Max { get; init; }` |  |
+| `double Min { get; init; }` |  |
+| `string Target { get; init; }` |  |
+| `string ToColor { get; init; }` | The color at `Max` (target color). |
+| `string Variable { get; init; }` |  |
+
+### BackgroundBindingTargets
+
+*static class* — What a bound property of a layer follows.
+
+| Member | |
+|---|---|
+| `IReadOnlyList<string> All` |  |
+| `const string Color` | The layer's color (a solid layer's color, a gradient's end color) goes from `FromColor` to `ToColor`. |
+| `const string Opacity` | The layer's opacity goes from 0 to the layer's own `Opacity`. |
+| `const string Visible` | The layer shows while the variable is at or above `Min` (true counts as 1). |
+
+### BackgroundLayer
+
+*record* — One layer of a profile background, drawn over the layers before it. `Kind` is text so a layer of a kind this version doesn't know survives a save.
+
+| Member | |
+|---|---|
+| `BackgroundLayer(string Kind, bool Visible = true, double Opacity = 1)` | One layer of a profile background, drawn over the layers before it. `Kind` is text so a layer of a kind this version doesn't know survives a save. |
+| `double? Angle { get; init; }` | A gradient's direction in degrees: 0 left to right, 90 top to bottom. |
+| `BackgroundBinding Binding { get; init; }` | Makes a property of the layer follow a variable (the CPU load, a Set variable node's value, …). |
+| `string Color { get; init; }` | #RRGGBB or #AARRGGBB: a solid layer's color, a gradient's start. |
+| `string ImagePath { get; init; }` |  |
+| `string Kind { get; init; }` |  |
+| `double Opacity { get; init; }` | 0 to 1. |
+| `string ToColor { get; init; }` | A gradient's end color. |
+| `bool Visible { get; init; }` | Off keeps the layer but doesn't draw it. |
+
+### BackgroundLayerKinds
+
+*static class* — The kinds of `BackgroundLayer` DeckHost draws; an unknown kind is kept in the file and not drawn.
+
+| Member | |
+|---|---|
+| `IReadOnlyList<string> Known` |  |
+| `const string Gradient` | A gradient across the whole layout, from `Color` to `ToColor` at `Angle` degrees. |
+| `const string Image` | A picture (or animated GIF) spread over the whole layout, every control showing its slice. |
+| `const string Solid` | One color over the whole layout. |
+
 ### ControlAppearance
 
 *record* — Visual appearance of a control, drawn under the action's own content.
@@ -817,6 +870,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `string Color { get; init; }` |  |
 | `string ImagePath { get; init; }` |  |
 | `bool IsEmpty` |  |
+| `IReadOnlyList<BackgroundLayer> Layers { get; init; }` | More layers, drawn over `Color` and `ImagePath` (which are the bottom ones), in this order. An init property, so the record's constructor stays binary-compatible. |
 
 ### ProfileKinds
 

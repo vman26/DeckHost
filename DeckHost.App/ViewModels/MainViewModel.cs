@@ -55,6 +55,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         _deviceHostService = deviceHostService;
         _workflowBreakpoints = new WorkflowBreakpoints(deviceHostService);
+        _systemData = new Platform.SystemDataPublisher(deviceHostService);
         _pluginCatalog = pluginCatalog;
         _profileStore = profileStore;
         _pluginState = pluginState;
@@ -937,6 +938,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     }
 
     private readonly WorkflowBreakpoints _workflowBreakpoints;
+    private readonly Platform.SystemDataPublisher _systemData;
 
     /// <summary>Gives an editor what it needs from the app: the shared workflows, opening one, and the shared breakpoints.</summary>
     private WorkflowEditorViewModel Configure(WorkflowEditorViewModel editor, string fromControlId)
@@ -1200,6 +1202,19 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private string _defaultBackgroundColor = string.Empty;
     private string _defaultBackgroundImage = string.Empty;
+    private IReadOnlyList<BackgroundLayer> _defaultBackgroundLayers = [];
+
+    /// <summary>More layers for the default background (over its color and image).</summary>
+    public IReadOnlyList<BackgroundLayer> DefaultBackgroundLayers
+    {
+        get => _defaultBackgroundLayers;
+        set
+        {
+            _defaultBackgroundLayers = value ?? [];
+            OnPropertyChanged();
+            SyncProfilesToHost();
+        }
+    }
 
     /// <summary>Background color for every profile that has none of its own (Profile Manager); empty for DeckHost's dark blue.</summary>
     public string DefaultBackgroundColor
@@ -1234,7 +1249,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         {
             var color = System.Text.RegularExpressions.Regex.IsMatch(_defaultBackgroundColor.Trim(), "^#?[0-9A-Fa-f]{6}$") ? _defaultBackgroundColor.Trim() : null;
             var image = string.IsNullOrWhiteSpace(_defaultBackgroundImage) ? null : _defaultBackgroundImage.Trim();
-            return color is null && image is null ? null : new ProfileBackground(color, image);
+            return color is null && image is null && _defaultBackgroundLayers.Count == 0
+                ? null
+                : new ProfileBackground(color, image) { Layers = _defaultBackgroundLayers.Count == 0 ? null : [.. _defaultBackgroundLayers] };
         }
     }
 
@@ -1749,6 +1766,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             _autoSwitchEnabled = document?.AutoSwitchEnabled ?? true;
             _defaultBackgroundColor = document?.DefaultBackground?.Color ?? string.Empty;
             _defaultBackgroundImage = document?.DefaultBackground?.ImagePath ?? string.Empty;
+            _defaultBackgroundLayers = document?.DefaultBackground?.Layers ?? [];
             _deviceLights.Clear();
             foreach (var (deviceId, style) in document?.DeviceLights ?? new Dictionary<string, LightStyle>())
             {
@@ -1770,7 +1788,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
         _deviceHostService.SetSharedWorkflows([.. _sharedWorkflows]);
-        _deviceHostService.SetProfiles(EveryLayout.Select(ToHostModel).ToList());
+        var hostModels = EveryLayout.Select(ToHostModel).ToList();
+        _deviceHostService.SetProfiles(hostModels);
+        _systemData.Want(hostModels.SelectMany(static profile => Core.Rendering.BackgroundLayers.BoundVariables(profile.Background)));
         if (SelectedProfile is not null)
         {
             _deviceHostService.SetActiveProfile(SelectedProfile.Id);

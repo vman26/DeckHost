@@ -224,6 +224,43 @@
   DeckHost.Contracts.Models.ActionSettings.TryGetValue(System.String key, System.String& value) : System.Boolean
   DeckHost.Contracts.Models.ActionSettings.Values : System.Collections.Generic.IEnumerable<System.String>
   DeckHost.Contracts.Models.ActionSettings.With(System.String key, System.String value) : DeckHost.Contracts.Models.ActionSettings
+  DeckHost.Contracts.Models.BackgroundBinding(System.String Variable, System.String Target, System.Double Min, System.Double Max)
+  DeckHost.Contracts.Models.BackgroundBinding.<Clone>$() : DeckHost.Contracts.Models.BackgroundBinding
+  DeckHost.Contracts.Models.BackgroundBinding.Deconstruct(System.String& Variable, System.String& Target, System.Double& Min, System.Double& Max) : System.Void
+  DeckHost.Contracts.Models.BackgroundBinding.Equals(DeckHost.Contracts.Models.BackgroundBinding other) : System.Boolean
+  DeckHost.Contracts.Models.BackgroundBinding.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.BackgroundBinding.Fallback : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundBinding.FromColor : System.String {set}
+  DeckHost.Contracts.Models.BackgroundBinding.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.BackgroundBinding.Max : System.Double {set}
+  DeckHost.Contracts.Models.BackgroundBinding.Min : System.Double {set}
+  DeckHost.Contracts.Models.BackgroundBinding.Target : System.String {set}
+  DeckHost.Contracts.Models.BackgroundBinding.ToColor : System.String {set}
+  DeckHost.Contracts.Models.BackgroundBinding.ToString() : System.String
+  DeckHost.Contracts.Models.BackgroundBinding.Variable : System.String {set}
+  DeckHost.Contracts.Models.BackgroundBindingTargets.All : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.BackgroundBindingTargets.Color : System.String const
+  DeckHost.Contracts.Models.BackgroundBindingTargets.Opacity : System.String const
+  DeckHost.Contracts.Models.BackgroundBindingTargets.Visible : System.String const
+  DeckHost.Contracts.Models.BackgroundLayer(System.String Kind, System.Boolean Visible, System.Double Opacity)
+  DeckHost.Contracts.Models.BackgroundLayer.<Clone>$() : DeckHost.Contracts.Models.BackgroundLayer
+  DeckHost.Contracts.Models.BackgroundLayer.Angle : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Binding : DeckHost.Contracts.Models.BackgroundBinding {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Color : System.String {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Deconstruct(System.String& Kind, System.Boolean& Visible, System.Double& Opacity) : System.Void
+  DeckHost.Contracts.Models.BackgroundLayer.Equals(DeckHost.Contracts.Models.BackgroundLayer other) : System.Boolean
+  DeckHost.Contracts.Models.BackgroundLayer.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.BackgroundLayer.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.BackgroundLayer.ImagePath : System.String {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Kind : System.String {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Opacity : System.Double {set}
+  DeckHost.Contracts.Models.BackgroundLayer.ToColor : System.String {set}
+  DeckHost.Contracts.Models.BackgroundLayer.ToString() : System.String
+  DeckHost.Contracts.Models.BackgroundLayer.Visible : System.Boolean {set}
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Gradient : System.String const
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Image : System.String const
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Known : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Solid : System.String const
   DeckHost.Contracts.Models.ControlAppearance(System.String Text, System.String ImagePath, DeckHost.Contracts.Models.RgbFeedback RgbFeedback, System.String BackgroundColor, DeckHost.Contracts.Models.TextStyle TextStyle)
   DeckHost.Contracts.Models.ControlAppearance.<Clone>$() : DeckHost.Contracts.Models.ControlAppearance
   DeckHost.Contracts.Models.ControlAppearance.BackgroundColor : System.String {set}
@@ -556,6 +593,7 @@
   DeckHost.Contracts.Models.ProfileBackground.GetHashCode() : System.Int32
   DeckHost.Contracts.Models.ProfileBackground.ImagePath : System.String {set}
   DeckHost.Contracts.Models.ProfileBackground.IsEmpty : System.Boolean
+  DeckHost.Contracts.Models.ProfileBackground.Layers : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.BackgroundLayer> {set}
   DeckHost.Contracts.Models.ProfileBackground.ToString() : System.String
   DeckHost.Contracts.Models.ProfileKinds.Folder : System.String const
   DeckHost.Contracts.Models.ProfileKinds.Page : System.String const
@@ -833,6 +871,8 @@ class DeckHost.Contracts.Models.ActionReference
 class DeckHost.Contracts.Models.ActionSettingDefinition
 class DeckHost.Contracts.Models.ActionSettingOption
 class DeckHost.Contracts.Models.ActionSettings
+class DeckHost.Contracts.Models.BackgroundBinding
+class DeckHost.Contracts.Models.BackgroundLayer
 class DeckHost.Contracts.Models.ControlAppearance
 class DeckHost.Contracts.Models.ControlBinding
 class DeckHost.Contracts.Models.DeviceDefinition
@@ -886,6 +926,8 @@ interface DeckHost.Contracts.Interfaces.IDeviceSettingActions
 interface DeckHost.Contracts.Interfaces.IRenderContext
 interface DeckHost.Contracts.Interfaces.IVariableStore
 static class DeckHost.Contracts.Icons
+static class DeckHost.Contracts.Models.BackgroundBindingTargets
+static class DeckHost.Contracts.Models.BackgroundLayerKinds
 static class DeckHost.Contracts.Models.ControlInputs
 static class DeckHost.Contracts.Models.LightEffects
 static class DeckHost.Contracts.Models.ProfileKinds

@@ -85,6 +85,33 @@ public sealed class ProfileFileTests : IDisposable
     }
 
     [Test]
+    public void The_images_of_background_layers_travel_with_the_profile_and_other_layers_are_kept()
+    {
+        var picture = Path.Combine(_root, "layer.png");
+        File.WriteAllBytes(picture, [9, 9, 9]);
+        var profile = new DeviceProfile("p", "Studio", "dev", [], Background: new ProfileBackground("#123456")
+        {
+            Layers =
+            [
+                new BackgroundLayer(BackgroundLayerKinds.Image, Opacity: 0.5) { ImagePath = picture },
+                new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = "#FF0000", ToColor = "#0000FF", Angle = 30 },
+            ],
+        });
+        var file = Path.Combine(_root, "layers" + ProfileBundle.Extension);
+
+        ProfileBundle.Export([profile], file);
+        File.Delete(picture);
+        var imported = ProfileBundle.Import(file, "dev", Path.Combine(_root, "assets"));
+
+        var layers = imported[0].Background!.Layers!;
+        Assert.That(layers, Has.Count.EqualTo(2));
+        Assert.That(File.ReadAllBytes(layers[0].ImagePath!), Is.EqualTo(new byte[] { 9, 9, 9 }), "the picture came along");
+        Assert.That(layers[0].Opacity, Is.EqualTo(0.5));
+        Assert.That(layers[1].Angle, Is.EqualTo(30));
+        Assert.That(imported[0].Background!.Color, Is.EqualTo("#123456"));
+    }
+
+    [Test]
     public void A_profile_travels_with_its_pages_folders_and_images()
     {
         var image = Path.Combine(_root, "photo.png");

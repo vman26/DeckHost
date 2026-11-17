@@ -199,7 +199,13 @@ public static class ProfileBundle
     /// <summary>A layout with every image path passed through <paramref name="map"/>.</summary>
     internal static DeviceProfile MapFiles(DeviceProfile layout, Func<string?, string?> map) => layout with
     {
-        Background = layout.Background is { } background ? background with { ImagePath = map(background.ImagePath) } : null,
+        Background = layout.Background is { } background
+            ? background with
+            {
+                ImagePath = map(background.ImagePath),
+                Layers = background.Layers?.Select(layer => layer.ImagePath is null ? layer : layer with { ImagePath = map(layer.ImagePath) }).ToList(),
+            }
+            : null,
         Bindings = [.. layout.Bindings.Select(binding => binding with
         {
             Appearance = binding.Appearance with
