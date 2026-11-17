@@ -18,6 +18,10 @@ public sealed class WorkflowExpressionTests
     private static WorkflowExpressionResult Eval(string expression, DateTime? now = null) =>
         WorkflowExpression.Evaluate(expression, name => Variables.GetValueOrDefault(name, string.Empty), now is { } at ? () => at : null);
 
+    private const string NightMode = "night";
+
+    // ---------------------------------------------------------------- arithmetic
+
     [TestCase("1 + 2 * 3", "7")]
     [TestCase("(1 + 2) * 3", "9")]
     [TestCase("10 % 4", "2")]
@@ -28,14 +32,18 @@ public sealed class WorkflowExpressionTests
     [TestCase("round(2.567, 1)", "2.6")]
     [TestCase("clamp([count], 0, 3)", "3")]
     [TestCase("0.1 + 0.2", "0.3")]
-    public void Arithmetic_follows_precedence_with_invariant_numbers(string expression, string expected)
+    public void Evaluate_Arithmetic_FollowsPrecedenceWithInvariantNumbers(string expression, string expected)
     {
+        // Act
         var result = Eval(expression);
 
+        // Assert
         Assert.That(result.Ok, Is.True, result.Error);
         Assert.That(result.Value.Kind, Is.EqualTo(WorkflowValueKind.Number));
         Assert.That(result.Value.Text, Is.EqualTo(expected));
     }
+
+    // ---------------------------------------------------------------- comparisons and logic
 
     [TestCase("[count] > 3", true)]
     [TestCase("[count] == 5", true)]
@@ -48,14 +56,18 @@ public sealed class WorkflowExpressionTests
     [TestCase("endswith([name], 'x')", false)]
     [TestCase("[count] in (1, 5, 7)", true)]
     [TestCase("[count] > 3 || 1 / 0 > 1", true)]
-    public void Comparisons_and_logic_give_true_or_false(string expression, bool expected)
+    public void Evaluate_ComparisonsAndLogic_GiveTrueOrFalse(string expression, bool expected)
     {
+        // Act
         var result = Eval(expression);
 
+        // Assert
         Assert.That(result.Ok, Is.True, result.Error);
         Assert.That(result.Value.Kind, Is.EqualTo(WorkflowValueKind.Bool));
         Assert.That(result.Value.Bool, Is.EqualTo(expected));
     }
+
+    // ---------------------------------------------------------------- text
 
     [TestCase("[name] + '!'", "Marco!")]
     [TestCase("[count] + ' taps'", "5 taps")]
@@ -67,47 +79,142 @@ public sealed class WorkflowExpressionTests
     [TestCase("text([count])", "5")]
     [TestCase("[count] > 3 ? 'big' : 'small'", "big")]
     [TestCase("if([count] > 9, 'a', 'b')", "b")]
-    public void Text_functions_and_joining_work_and_a_number_joins_text_with_plus(string expression, string expected)
+    public void Evaluate_TextFunctionsAndJoining_GiveText(string expression, string expected)
     {
+        // Act
         var result = Eval(expression);
 
+        // Assert
         Assert.That(result.Ok, Is.True, result.Error);
         Assert.That(result.Value.Text, Is.EqualTo(expected));
         Assert.That(result.Value.Kind, Is.EqualTo(WorkflowValueKind.Text));
     }
 
-    [Test]
-    public void Functions_accept_any_of_three_spellings_and_conversion_functions_convert()
+    // ---------------------------------------------------------------- functions
+
+    [TestCase("len('abc')")]
+    [TestCase("LEN('abc')")]
+    [TestCase("Len('abc')")]
+    public void Evaluate_AFunctionInAnyOfThreeSpellings_Works(string expression)
     {
-        Assert.That(Eval("len('abc')").Value.Number, Is.EqualTo(3));
-        Assert.That(Eval("LEN('abc')").Value.Number, Is.EqualTo(3));
-        Assert.That(Eval("Len('abc')").Value.Number, Is.EqualTo(3));
-        Assert.That(Eval("number('4') + 1").Value.Number, Is.EqualTo(5));
-        Assert.That(Eval("number('') + 1").Value.Number, Is.EqualTo(1), "an empty variable is 0");
-        Assert.That(Eval("bool('yes')").Value.Bool, Is.True);
-        Assert.That(Eval("bool('off')").Value.Bool, Is.False);
-        Assert.That(Eval("bool('maybe')").Ok, Is.False);
+        // Act
+        var result = Eval(expression);
+
+        // Assert
+        Assert.That(result.Value.Number, Is.EqualTo(3));
+    }
+
+    [TestCase("number('4') + 1", 5)]
+    [TestCase("number('') + 1", 1)] // an empty variable is 0
+    public void Evaluate_NumberConversion_ReadsTextAsANumber(string expression, double expected)
+    {
+        // Act
+        var result = Eval(expression);
+
+        // Assert
+        Assert.That(result.Value.Number, Is.EqualTo(expected));
+    }
+
+    [TestCase("bool('yes')", true)]
+    [TestCase("bool('off')", false)]
+    public void Evaluate_BoolConversion_ReadsWordsAsTrueOrFalse(string expression, bool expected)
+    {
+        // Act
+        var result = Eval(expression);
+
+        // Assert
+        Assert.That(result.Value.Bool, Is.EqualTo(expected));
     }
 
     [Test]
-    public void Variables_in_brackets_can_name_a_scope_and_an_unset_variable_is_empty()
+    public void Evaluate_BoolConversionOfAnUnknownWord_IsNotOk()
     {
-        Assert.That(Eval("[profile:mode]").Value.Text, Is.EqualTo("night"));
-        Assert.That(Eval("[control:taps] + 1").Value.Number, Is.EqualTo(4));
-        Assert.That(Eval("len([nothing])").Value.Number, Is.EqualTo(0));
-        Assert.That(Eval("[nothing] == ''").Value.Bool, Is.True);
+        // Act
+        var result = Eval("bool('maybe')");
+
+        // Assert
+        Assert.That(result.Ok, Is.False);
+    }
+
+    // ---------------------------------------------------------------- variables
+
+    [Test]
+    public void Evaluate_ABracketedVariableWithAScope_ReadsThatScope()
+    {
+        // Act
+        var result = Eval("[profile:mode]");
+
+        // Assert
+        Assert.That(result.Value.Text, Is.EqualTo(NightMode));
     }
 
     [Test]
-    public void The_time_functions_read_the_clock_and_number_monday_as_one()
+    public void Evaluate_AControlScopedNumber_CanBeAddedTo()
     {
-        var sunday = new DateTime(2026, 11, 22, 17, 45, 0);
-        Assert.That(Eval("hour()", sunday).Value.Number, Is.EqualTo(17));
-        Assert.That(Eval("minute()", sunday).Value.Number, Is.EqualTo(45));
-        Assert.That(Eval("weekday()", sunday).Value.Number, Is.EqualTo(7));
-        Assert.That(Eval("weekday()", sunday.AddDays(1)).Value.Number, Is.EqualTo(1));
-        Assert.That(Eval("hour() >= 9 && hour() < 18", sunday).Value.Bool, Is.True);
+        // Act
+        var result = Eval("[control:taps] + 1");
+
+        // Assert
+        Assert.That(result.Value.Number, Is.EqualTo(4));
     }
+
+    [TestCase("len([nothing])", 0)]
+    public void Evaluate_AnUnsetVariable_HasNoText(string expression, double expected)
+    {
+        // Act
+        var result = Eval(expression);
+
+        // Assert
+        Assert.That(result.Value.Number, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Evaluate_AnUnsetVariable_EqualsTheEmptyText()
+    {
+        // Act
+        var result = Eval("[nothing] == ''");
+
+        // Assert
+        Assert.That(result.Value.Bool, Is.True);
+    }
+
+    // ---------------------------------------------------------------- time
+
+    private static readonly DateTime Sunday = new(2026, 11, 22, 17, 45, 0);
+
+    [TestCase("hour()", 17)]
+    [TestCase("minute()", 45)]
+    [TestCase("weekday()", 7)]
+    public void Evaluate_ATimeFunction_ReadsTheClockAndNumbersSundayAsSeven(string expression, double expected)
+    {
+        // Act
+        var result = Eval(expression, Sunday);
+
+        // Assert
+        Assert.That(result.Value.Number, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Evaluate_WeekdayOnAMonday_IsOne()
+    {
+        // Act
+        var result = Eval("weekday()", Sunday.AddDays(1));
+
+        // Assert
+        Assert.That(result.Value.Number, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Evaluate_AWorkingHoursCheck_IsTrueDuringTheDay()
+    {
+        // Act
+        var result = Eval("hour() >= 9 && hour() < 18", Sunday);
+
+        // Assert
+        Assert.That(result.Value.Bool, Is.True);
+    }
+
+    // ---------------------------------------------------------------- bad input
 
     [TestCase("")]
     [TestCase("   ")]
@@ -120,31 +227,39 @@ public sealed class WorkflowExpressionTests
     [TestCase("max(1, 'a')")]
     [TestCase("len()")]
     [TestCase("substr('a')")]
-    public void A_bad_expression_is_a_message_never_an_exception(string expression)
+    public void Evaluate_ABadExpression_IsAMessageNeverAnException(string expression)
     {
+        // Act
         var result = Eval(expression);
 
+        // Assert
         Assert.That(result.Ok, Is.False);
         Assert.That(result.Error, Is.Not.Null.And.Not.Empty);
     }
 
     [Test]
-    public void An_overlong_expression_is_refused_before_it_is_parsed()
+    public void Evaluate_AnOverlongExpression_IsRefusedBeforeItIsParsed()
     {
+        // Act
         var result = Eval(new string('1', WorkflowExpression.MaxLength + 1));
 
+        // Assert
         Assert.That(result.Ok, Is.False);
         Assert.That(result.Error, Does.Contain("longer than"));
     }
 
     [Test]
-    public void Only_the_listed_functions_exist_and_the_error_names_the_unknown_one()
+    public void Evaluate_AFunctionThatIsNotListed_IsRefusedAndNamed()
     {
+        // Act
         var result = Eval("system('rm')");
 
+        // Assert
         Assert.That(result.Ok, Is.False);
         Assert.That(result.Error, Does.Contain("system"));
     }
+
+    // ---------------------------------------------------------------- stored values
 
     [TestCase("true", WorkflowValueKind.Bool)]
     [TestCase("FALSE", WorkflowValueKind.Bool)]
@@ -155,8 +270,14 @@ public sealed class WorkflowExpressionTests
     [TestCase("", WorkflowValueKind.Text)]
     [TestCase("NaN", WorkflowValueKind.Text)]
     [TestCase("hello", WorkflowValueKind.Text)]
-    public void Stored_text_is_read_back_with_its_type(string stored, WorkflowValueKind expected) =>
-        Assert.That(WorkflowValue.Parse(stored).Kind, Is.EqualTo(expected));
+    public void Parse_StoredText_IsReadBackWithItsType(string stored, WorkflowValueKind expected)
+    {
+        // Act
+        var kind = WorkflowValue.Parse(stored).Kind;
+
+        // Assert
+        Assert.That(kind, Is.EqualTo(expected));
+    }
 
     [TestCase("true", true)]
     [TestCase("1", true)]
@@ -164,6 +285,12 @@ public sealed class WorkflowExpressionTests
     [TestCase("", false)]
     [TestCase("false", false)]
     [TestCase("something", true)]
-    public void What_an_If_node_makes_of_a_value(string stored, bool expected) =>
-        Assert.That(WorkflowValue.Parse(stored).IsTrue, Is.EqualTo(expected));
+    public void IsTrue_AStoredValue_IsWhatAnIfNodeMakesOfIt(string stored, bool expected)
+    {
+        // Act
+        var isTrue = WorkflowValue.Parse(stored).IsTrue;
+
+        // Assert
+        Assert.That(isTrue, Is.EqualTo(expected));
+    }
 }
