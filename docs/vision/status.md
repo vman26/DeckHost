@@ -13,11 +13,11 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Simple and advanced automation | ✅ | Multi Action, Key Logic, Switch; node workflows |
 | Windows, Linux, macOS | ✅ | `build.yml`, `release.yml` |
 | No cloud dependency | ✅ | Everything local; store and updates optional |
-| Static, animated, reactive backgrounds | ✅ | Color, image, gradient and solid layers with opacity, default background, per control; GIF animation; layers that follow `system.cpu`, `system.memory` or a workflow variable |
-| Background Studio | 🟡 | The layer list on the Profiles page (add, reorder, opacity, bindings); no live device preview or asset manager yet |
+| Static, animated, reactive backgrounds | ✅ | Color, image, solid, multi-color linear and radial gradient layers with opacity, a default background and a per-profile override; GIF animation; layers that follow `system.cpu`, `system.memory` or a workflow variable |
+| Background Studio | 🟡 | The layer list (add, reorder, opacity, gradient stops, bindings) with a live preview of the device; no asset manager yet |
 | Marketplace: discovery, install/remove, updates, rollback, integrity | ✅ | Store, `PluginUpdater`, `.previous` rollback, sha256 |
 | Marketplace: dependency resolution, publisher verification, signatures | ⬜ | sha256 only; no signatures, no dependencies |
-| Marketplace: Elgato archive mirror | 🟡 | Built (`tools/mirror.py` in deckhost-plugins; the store prefers a checksummed copy of open-source plugins); the workflow stays off until Elgato's terms are confirmed |
+| Marketplace: Elgato archive mirror | ✅ | `tools/mirror.py` in deckhost-plugins copies open-source plugins with the community archive's notice and credit, behind a licence gate; the store prefers a checksummed copy |
 | Marketplace: purchase and entitlements | 🟡 | A Buy link; no entitlements |
 | Marketplace content beyond plugins (profiles, themes, icon packs, backgrounds, drivers, templates) | ⬜ | Icon packs install from files, not the store |
 
@@ -127,8 +127,8 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 10.3 Preview, drag and drop, properties, live preview, undo/redo, action configuration | ✅ | |
 | 10.3 Alignment guides, layers, reusable styles, copy and paste, asset manager | ⬜ | |
 | 10.5 Incremental updates, caches | ✅ | Pixel-diff per frame, image/paint caches |
-| 10.5 Dirty regions, independent scheduling | 🟡 | Per device, not per region |
-| 10.6 Background system and Studio | 🟡 | Layers and bindings, the Studio list; per-control dirty tracking, a live preview and the asset manager are not built |
+| 10.5 Dirty regions, independent scheduling | 🟡 | Per control (`DirtySet`); no sub-control regions |
+| 10.6 Background system and Studio | 🟡 | Layers and bindings, the Studio list with a live preview, per-control dirty tracking; the asset manager is not built |
 
 ## 11. Profiles
 

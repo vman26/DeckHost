@@ -2429,6 +2429,12 @@ product and are kept as it grows.
 - **Device creator:** teach DeckHost any USB HID device without code: press each key and turn each
   knob, DeckHost learns the report bits (per-bit noise, relative and absolute knobs), and you lay
   the controls out by dragging. The result is a device description file (`devices/hid/<id>.json`).
+- **Device list management:** a Devices page lists every device, plugged in or not, with Remove; new
+  devices are added by themselves (a setting) or wait under Found for Add or Keep ignoring, and a
+  removed device that is plugged in again is offered again. The decisions are kept in
+  `devices/roster.json`; DeckHost always keeps one device in the list.
+- **Creator snapping:** the device creator snaps dragged controls to the others' edges, centers and
+  even spacing, and lines up or spreads a multi-selection.
 - **Linked displays:** a control without a screen (a knob) can use another control's screen (its
   touch zone): the knob's action fills the zone or shares it as a strip, and a tap on the zone
   presses the knob.
