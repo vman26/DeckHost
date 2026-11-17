@@ -25,37 +25,47 @@ public sealed class VariableSuggestionsTests : IDisposable
     [Test]
     public void Names_WithUserAndSystemVariables_ListsOnlyUserNamesGlobalFirst()
     {
+        // Act
         var names = VariableSuggestions.Names();
 
+        // Assert
         Assert.That(names, Is.EqualTo(new[] { "mode", "mode2", "round" }));
     }
 
     [Test]
     public void Keys_WithUserAndSystemVariables_ListsEveryKey()
     {
+        // Act
         var keys = VariableSuggestions.Keys();
 
+        // Assert
         Assert.That(keys, Does.Contain("system.cpu").And.Contain("vars.mode"));
     }
 
     [Test]
     public void Names_WithoutASource_IsEmpty()
     {
+        // Arrange
         VariableSuggestions.Source = null;
 
+        // Act
         var names = VariableSuggestions.Names();
 
+        // Assert
         Assert.That(names, Is.Empty);
     }
 
     [Test]
     public void Editor_ForAVariableSetting_OffersTheNamesAndKeepsATypedOne()
     {
+        // Arrange
         var definition = new ActionSettingDefinition("name", "Variable", ActionSettingKind.Variable);
         var editor = new SettingsEditorViewModel([definition], new ActionSettings([new("name", "brand-new")]));
 
+        // Act
         var field = (VariableSettingField)editor.Fields.Single();
 
+        // Assert
         Assert.That(field.Suggestions, Does.Contain("mode"));
         Assert.That(field.Value, Is.EqualTo("brand-new"));
         Assert.That(editor.ToSettings().Get("name", string.Empty), Is.EqualTo("brand-new"));

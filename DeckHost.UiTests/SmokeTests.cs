@@ -8,14 +8,18 @@ namespace DeckHost.UiTests;
 public sealed class SmokeTests
 {
     [AvaloniaTest]
-    public void The_headless_platform_renders_a_window()
+    public void CaptureRenderedFrame_AWindowWithText_ReturnsAFrameOfTheWindowsSize()
     {
-        var window = new Window { Width = 200, Height = 100, Content = new TextBlock { Text = "hello" } };
+        // Arrange
+        const int width = 200;
+        var window = new Window { Width = width, Height = 100, Content = new TextBlock { Text = "hello" } };
         window.Show();
 
+        // Act
         using var frame = window.CaptureRenderedFrame();
 
+        // Assert
         Assert.That(frame, Is.Not.Null);
-        Assert.That(frame!.PixelSize.Width, Is.EqualTo(200));
+        Assert.That(frame!.PixelSize.Width, Is.EqualTo(width));
     }
 }

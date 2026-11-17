@@ -29,8 +29,10 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     [Test]
     public void Constructor_TwoDevicesAutoAdded_ListsBothUnderYourDevices()
     {
+        // Act
         using var page = new DeviceManagerViewModel(_host);
 
+        // Assert
         Assert.That(page.Listed.Select(static row => row.Id), Is.EquivalentTo(new[] { Plugged, Unplugged }));
         Assert.That(page.HasDiscovered, Is.False);
         Assert.That(page.HasIgnored, Is.False);
@@ -39,12 +41,15 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     [Test]
     public async Task Remove_AListedDevice_MovesItToRemoved()
     {
+        // Arrange
         using var page = new DeviceManagerViewModel(_host);
 
+        // Act
         page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
         page.Refresh();
 
+        // Assert
         Assert.That(page.Listed.Select(static row => row.Id), Is.EqualTo(new[] { Plugged }));
         Assert.That(page.Ignored.Select(static row => row.Id), Is.EqualTo(new[] { Unplugged }));
         Assert.That(page.HasIgnored, Is.True);
@@ -53,15 +58,18 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     [Test]
     public async Task Add_ARemovedDevice_PutsItBackInTheList()
     {
+        // Arrange
         using var page = new DeviceManagerViewModel(_host);
         page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
         page.Refresh();
 
+        // Act
         page.Ignored.Single().AddCommand.Execute(null);
         await _host.WhenIdleAsync();
         page.Refresh();
 
+        // Assert
         Assert.That(page.Listed.Select(static row => row.Id), Is.EquivalentTo(new[] { Plugged, Unplugged }));
         Assert.That(page.Ignored, Is.Empty);
     }
@@ -69,12 +77,15 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     [Test]
     public async Task CanRemove_OnlyOneDeviceListed_IsFalseForIt()
     {
+        // Arrange
         using var page = new DeviceManagerViewModel(_host);
         page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
 
+        // Act
         page.Refresh();
 
+        // Assert
         Assert.That(page.Listed.Single().CanRemove, Is.False);
         Assert.That(page.Listed.Single().RemoveTip, Does.Contain("always keeps one"));
     }
@@ -82,13 +93,16 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     [Test]
     public async Task AutoAdd_TurnedOff_LeavesANewPluggedInDeviceUnderFound()
     {
+        // Arrange
         using var page = new DeviceManagerViewModel(_host);
         page.AutoAdd = false;
         var newcomer = new FakeDevicePlugin(connected: true, deviceId: "new.device");
         await using var host = new DeviceHostService([new FakeDevicePlugin(connected: false, deviceId: Unplugged), newcomer], [], _store, _roster);
 
+        // Act
         using var second = new DeviceManagerViewModel(host);
 
+        // Assert
         Assert.That(second.Discovered.Select(static row => row.Id), Is.EqualTo(new[] { "new.device" }));
         Assert.That(second.HasDiscovered, Is.True);
     }
@@ -96,15 +110,18 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     [Test]
     public async Task KeepIgnoring_AFoundDevice_MovesItToRemoved()
     {
+        // Arrange
         _roster.AutoAdd = false;
         var newcomer = new FakeDevicePlugin(connected: true, deviceId: "new.device");
         await using var host = new DeviceHostService([new FakeDevicePlugin(connected: false, deviceId: Unplugged), newcomer], [], _store, _roster);
         using var page = new DeviceManagerViewModel(host);
 
+        // Act
         page.Discovered.Single().KeepIgnoringCommand.Execute(null);
         await host.WhenIdleAsync();
         page.Refresh();
 
+        // Assert
         Assert.That(page.Discovered, Is.Empty);
         Assert.That(page.Ignored.Select(static row => row.Id), Is.EqualTo(new[] { "new.device" }));
     }

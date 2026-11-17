@@ -20,10 +20,13 @@ public sealed class ActionFitTests
     [Test]
     public void UpdateFit_NothingSelected_EveryActionIsCompatible()
     {
+        // Arrange
         var action = KeyImageAction();
 
+        // Act
         action.UpdateFit(null);
 
+        // Assert
         Assert.That(action.IsCompatible, Is.True);
         Assert.That(action.ListOpacity, Is.EqualTo(1));
     }
@@ -31,10 +34,13 @@ public sealed class ActionFitTests
     [Test]
     public void UpdateFit_ControlWithoutADisplay_DimsAnActionThatNeedsOne()
     {
+        // Arrange
         var action = KeyImageAction();
 
+        // Act
         action.UpdateFit(Pushbutton);
 
+        // Assert
         Assert.That(action.IsCompatible, Is.False);
         Assert.That(action.ListOpacity, Is.LessThan(1));
     }
@@ -42,21 +48,27 @@ public sealed class ActionFitTests
     [Test]
     public void UpdateFit_ControlWithoutADisplay_ExplainsWhyInTheToolTip()
     {
+        // Arrange
         var action = KeyImageAction();
 
+        // Act
         action.UpdateFit(Pushbutton);
 
+        // Assert
         Assert.That(action.ListToolTip, Does.Contain("display"));
     }
 
     [Test]
     public void UpdateFit_ControlThatFits_KeepsTheActionBright()
     {
+        // Arrange
         var action = KeyImageAction();
         action.UpdateFit(Pushbutton);
 
+        // Act
         action.UpdateFit(KeyWithDisplay);
 
+        // Assert
         Assert.That(action.IsCompatible, Is.True);
         Assert.That(action.ListToolTip, Is.EqualTo(action.Summary));
     }

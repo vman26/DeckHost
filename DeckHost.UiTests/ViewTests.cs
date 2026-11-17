@@ -14,10 +14,14 @@ public sealed class ViewTests
             .OrderBy(static type => type.Name);
 
     [AvaloniaTest]
-    public void Every_view_loads_and_draws_a_frame_without_a_view_model()
+    public void CaptureRenderedFrame_EveryView_LoadsAndDrawsAFrameWithoutAViewModel()
     {
+        // Arrange
+        const int MinimumViews = 15;
         var failures = new List<string>();
-        Assert.That(ViewTypes().Count(), Is.GreaterThan(15), "the views were found");
+        Assert.That(ViewTypes().Count(), Is.GreaterThan(MinimumViews), "the views were found");
+
+        // Act
         foreach (var type in ViewTypes())
         {
             try
@@ -38,6 +42,7 @@ public sealed class ViewTests
             }
         }
 
+        // Assert
         Assert.That(failures, Is.Empty, string.Join(Environment.NewLine, failures));
     }
 }

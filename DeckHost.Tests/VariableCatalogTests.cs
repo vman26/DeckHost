@@ -16,8 +16,10 @@ public sealed class VariableCatalogTests
     [TestCase("hello", VariableTypes.Text)]
     public void Of_GivenAValue_NamesItsType(string value, string expected)
     {
+        // Act
         var type = VariableTypes.Of(value);
 
+        // Assert
         Assert.That(type, Is.EqualTo(expected));
     }
 
@@ -29,8 +31,10 @@ public sealed class VariableCatalogTests
     [TestCase(VariableTypes.Number, "", true)]
     public void Fits_GivenATypeAndAValue_SaysIfTheValueBelongs(string type, string value, bool expected)
     {
+        // Act
         var fits = VariableTypes.Fits(type, value);
 
+        // Assert
         Assert.That(fits, Is.EqualTo(expected));
     }
 
@@ -40,16 +44,20 @@ public sealed class VariableCatalogTests
     [TestCase("vars.control|dev|key.0|score", VariableScope.Control)]
     public void ScopeOf_GivenAKey_FindsWhereItLives(string key, VariableScope expected)
     {
+        // Act
         var scope = VariableCatalog.ScopeOf(key);
 
+        // Assert
         Assert.That(scope, Is.EqualTo(expected));
     }
 
     [Test]
     public void Describe_AProfileVariable_ShowsItsNameWithTheProfile()
     {
+        // Act
         var info = VariableCatalog.Describe("vars.profile|p1|score", "7");
 
+        // Assert
         Assert.That(info.Name, Is.EqualTo("score (profile p1)"));
         Assert.That(info.Type, Is.EqualTo(VariableTypes.Number));
         Assert.That(info.IsUser, Is.True);
@@ -58,13 +66,16 @@ public sealed class VariableCatalogTests
     [Test]
     public void Remove_APublishedVariable_DropsItFromTheSnapshotAndTellsObservers()
     {
+        // Arrange
         using var store = new VariableStore();
         store.Publish("vars.score", "5");
         var changes = new List<KeyValuePair<string, object?>>();
         using var subscription = store.Changes.Subscribe(changes.Add);
 
+        // Act
         var removed = store.Remove("vars.score");
 
+        // Assert
         Assert.That(removed, Is.True);
         Assert.That(store.Snapshot("vars."), Is.Empty);
         Assert.That(changes.Single().Value, Is.Null);
@@ -73,10 +84,13 @@ public sealed class VariableCatalogTests
     [Test]
     public void Remove_AnUnknownVariable_ReturnsFalse()
     {
+        // Arrange
         using var store = new VariableStore();
 
+        // Act
         var removed = store.Remove("vars.nothing");
 
+        // Assert
         Assert.That(removed, Is.False);
     }
 }

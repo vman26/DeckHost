@@ -26,8 +26,10 @@ public sealed class VariablesViewModelTests : IAsyncDisposable
     [Test]
     public void Constructor_WithNothingPublished_ListsDeckHostsOwnVariables()
     {
+        // Act
         var page = new VariablesViewModel(_host);
 
+        // Assert
         Assert.That(page.Rows.Select(static row => row.Key), Is.EquivalentTo(VariableCatalog.SystemKeys));
         Assert.That(page.Rows.All(static row => !row.IsUser), Is.True);
     }
@@ -35,12 +37,15 @@ public sealed class VariablesViewModelTests : IAsyncDisposable
     [Test]
     public async Task Create_WithANameAndAValue_AddsAGlobalUserVariable()
     {
+        // Arrange
         var page = new VariablesViewModel(_host) { NewName = Name, NewValue = "5", NewType = VariableTypes.Number };
 
+        // Act
         page.Create();
         await _host.WhenIdleAsync();
         page.Refresh();
 
+        // Assert
         var row = page.Rows.Single(static row => row.IsUser);
         Assert.That(row.Key, Is.EqualTo(VariableKeys.UserVariable(Name)));
         Assert.That(row.Type, Is.EqualTo(VariableTypes.Number));
@@ -50,10 +55,13 @@ public sealed class VariablesViewModelTests : IAsyncDisposable
     [Test]
     public void Create_WithAValueThatIsNotOfTheChosenType_ExplainsAndAddsNothing()
     {
+        // Arrange
         var page = new VariablesViewModel(_host) { NewName = Name, NewValue = "many", NewType = VariableTypes.Number };
 
+        // Act
         page.Create();
 
+        // Assert
         Assert.That(page.Status, Does.Contain("isn't a valid number"));
         Assert.That(page.Rows.Any(static row => row.IsUser), Is.False);
     }
@@ -63,10 +71,13 @@ public sealed class VariablesViewModelTests : IAsyncDisposable
     [TestCase("a|b")]
     public void Create_WithAnUnusableName_AddsNothing(string name)
     {
+        // Arrange
         var page = new VariablesViewModel(_host) { NewName = name, NewValue = "1" };
 
+        // Act
         page.Create();
 
+        // Assert
         Assert.That(page.Rows.Any(static row => row.IsUser), Is.False);
         Assert.That(page.Status, Is.Not.Empty);
     }
@@ -74,13 +85,16 @@ public sealed class VariablesViewModelTests : IAsyncDisposable
     [Test]
     public async Task Delete_AUserVariable_RemovesItFromThePageAndTheStore()
     {
+        // Arrange
         _store.Publish(VariableKeys.UserVariable(Name), "1");
         var page = new VariablesViewModel(_host);
         var row = page.Rows.Single(static row => row.IsUser);
 
+        // Act
         row.DeleteCommand.Execute(null);
         await _host.WhenIdleAsync();
 
+        // Assert
         Assert.That(page.Rows.Any(static row => row.IsUser), Is.False);
         Assert.That(_store.Snapshot("vars."), Is.Empty);
     }
@@ -88,15 +102,18 @@ public sealed class VariablesViewModelTests : IAsyncDisposable
     [Test]
     public async Task Refresh_WhileAValueIsBeingTyped_KeepsWhatWasTyped()
     {
+        // Arrange
         _store.Publish(VariableKeys.UserVariable(Name), "1");
         var page = new VariablesViewModel(_host);
         var row = page.Rows.Single(static row => row.IsUser);
         row.EditValue = "typed";
 
+        // Act
         _store.Publish(VariableKeys.UserVariable(Name), "2");
         await _host.WhenIdleAsync();
         page.Refresh();
 
+        // Assert
         Assert.That(row.EditValue, Is.EqualTo("typed"));
         Assert.That(row.Value, Is.EqualTo("2"));
     }
