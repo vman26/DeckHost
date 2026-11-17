@@ -458,6 +458,95 @@ public sealed class DeviceCreatorTests : IDisposable
     }
 
     [Test]
+    public void SelectWithin_AnAreaOverBothKeys_SelectsThem()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+
+        // Act
+        creator.View.SelectWithin(new SnapRect(0, 0, 500, 100), add: false);
+
+        // Assert
+        Assert.That(creator.View.SelectedControls, Has.Count.EqualTo(2));
+        Assert.That(creator.View.HasSeveralSelected, Is.True);
+    }
+
+    [Test]
+    public void SelectWithin_AnAreaTouchingOnlyTheSecondKey_SelectsOnlyIt()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        var second = creator.View.Controls[1];
+
+        // Act
+        creator.View.SelectWithin(new SnapRect(second.X + 2, second.Y + 2, 4, 4), add: false);
+
+        // Assert
+        Assert.That(creator.View.SelectedControls, Is.EqualTo(new[] { second }));
+    }
+
+    [Test]
+    public void SelectWithin_AnEmptyAreaWithAdd_KeepsTheSelection()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        creator.View.SelectedControl = creator.View.Controls[0];
+
+        // Act
+        creator.View.SelectWithin(new SnapRect(1000, 1000, 10, 10), add: true);
+
+        // Assert
+        Assert.That(creator.View.SelectedControls, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void SelectWithin_AnEmptyAreaWithoutAdd_ClearsTheSelection()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        creator.View.SelectedControl = creator.View.Controls[0];
+
+        // Act
+        creator.View.SelectWithin(new SnapRect(1000, 1000, 10, 10), add: false);
+
+        // Assert
+        Assert.That(creator.View.SelectedControls, Is.Empty);
+    }
+
+    [Test]
+    public void RemoveControl_SeveralSelected_RemovesAllOfThem()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        creator.View.SelectAllCommand.Execute(null);
+
+        // Act
+        creator.View.RemoveControlCommand.Execute(null);
+
+        // Assert
+        Assert.That(creator.View.Controls, Is.Empty);
+    }
+
+    [Test]
+    public void SelectAll_Command_SelectsEveryControl()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+
+        // Act
+        creator.View.SelectAllCommand.Execute(null);
+
+        // Assert
+        Assert.That(creator.View.SelectedControls, Has.Count.EqualTo(creator.View.Controls.Count));
+    }
+
+    [Test]
     public void Save_PushableKnob_KeepsWhatWasLearnedForTurningAndPressing()
     {
         // Arrange

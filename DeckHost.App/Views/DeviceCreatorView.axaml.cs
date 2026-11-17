@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using System;
 using DeckHost.App.ViewModels;
 
 namespace DeckHost.App.Views;
@@ -36,6 +38,17 @@ public partial class DeviceCreatorView : UserControl, IWidePage
     {
         if (sender is not Border { DataContext: CreatorControlViewModel control } border || DataContext is not DeviceCreatorViewModel creator)
         {
+            return;
+        }
+
+        if (e.GetCurrentPoint(border).Properties.IsRightButtonPressed)
+        {
+            // The context menu is for what is selected: a control outside the selection becomes the selection, no drag starts.
+            if (!control.IsSelected)
+            {
+                creator.SelectedControl = control;
+            }
+
             return;
         }
 
@@ -84,4 +97,71 @@ public partial class DeviceCreatorView : UserControl, IWidePage
             }
         }
     }
+
+    // ---------------------------------------------------------------- the canvas: drag selection and right-click menus
+
+    private Point? _marqueeStart;
+
+    private void Canvas_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(CanvasHost).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        // Shift and drag on the empty canvas selects what the rectangle touches; a plain click on it selects nothing.
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            _marqueeStart = e.GetPosition(ControlsCanvas);
+            e.Pointer.Capture(CanvasHost);
+            e.Handled = true;
+        }
+        else if (DataContext is DeviceCreatorViewModel creator)
+        {
+            creator.SelectWithin(new SnapRect(-1, -1, 0, 0), add: false);
+        }
+    }
+
+    private void Canvas_OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_marqueeStart is not { } start)
+        {
+            return;
+        }
+
+        var area = AreaBetween(start, e.GetPosition(ControlsCanvas));
+        Canvas.SetLeft(MarqueeRect, area.X);
+        Canvas.SetTop(MarqueeRect, area.Y);
+        MarqueeRect.Width = area.Width;
+        MarqueeRect.Height = area.Height;
+        MarqueeRect.IsVisible = true;
+    }
+
+    private void Canvas_OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_marqueeStart is not { } start)
+        {
+            return;
+        }
+
+        _marqueeStart = null;
+        e.Pointer.Capture(null);
+        MarqueeRect.IsVisible = false;
+        (DataContext as DeviceCreatorViewModel)?.SelectWithin(AreaBetween(start, e.GetPosition(ControlsCanvas)), add: e.KeyModifiers.HasFlag(KeyModifiers.Control));
+    }
+
+    private static SnapRect AreaBetween(Point from, Point to) =>
+        new(Math.Min(from.X, to.X), Math.Min(from.Y, to.Y), Math.Abs(to.X - from.X), Math.Abs(to.Y - from.Y));
+
+    private void CanvasAddKey_OnClick(object? sender, RoutedEventArgs e) => (DataContext as DeviceCreatorViewModel)?.AddKeyCommand.Execute(null);
+
+    private void CanvasAddKnob_OnClick(object? sender, RoutedEventArgs e) => (DataContext as DeviceCreatorViewModel)?.AddKnobCommand.Execute(null);
+
+    private void CanvasArrange_OnClick(object? sender, RoutedEventArgs e) => (DataContext as DeviceCreatorViewModel)?.ArrangeCommand.Execute(null);
+
+    private void CanvasSelectAll_OnClick(object? sender, RoutedEventArgs e) => (DataContext as DeviceCreatorViewModel)?.SelectAllCommand.Execute(null);
+
+    private void ControlLearnPush_OnClick(object? sender, RoutedEventArgs e) => (DataContext as DeviceCreatorViewModel)?.LearnPressCommand.Execute(null);
+
+    private void ControlRemove_OnClick(object? sender, RoutedEventArgs e) => (DataContext as DeviceCreatorViewModel)?.RemoveControlCommand.Execute(null);
 }

@@ -443,6 +443,38 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanDistribute));
     }
 
+    /// <summary>
+    /// Selects the controls that touch <paramref name="area"/> (a drag selection on the canvas); with <paramref name="add"/> they join the
+    /// controls that are selected already.
+    /// </summary>
+    public void SelectWithin(SnapRect area, bool add)
+    {
+        var hit = Controls.Where(control => control.X < area.Right && control.X + control.Width > area.X &&
+                                            control.Y < area.Bottom && control.Y + control.Height > area.Y).ToList();
+        if (!add)
+        {
+            foreach (var control in Controls.Where(control => control.IsSelected && !hit.Contains(control)))
+            {
+                control.IsSelected = false;
+            }
+        }
+
+        foreach (var control in hit)
+        {
+            control.IsSelected = true;
+        }
+
+        _selectedControl = hit.Count > 0 ? hit[^1] : Controls.LastOrDefault(static control => control.IsSelected);
+        OnPropertyChanged(nameof(SelectedControl));
+        OnPropertyChanged(nameof(HasSelectedControl));
+        OnPropertyChanged(nameof(SelectedIsKnob));
+        OnSelectionChanged();
+    }
+
+    /// <summary>Selects every key and knob (the canvas's right-click menu).</summary>
+    [RelayCommand]
+    public void SelectAll() => SelectWithin(new SnapRect(0, 0, double.MaxValue / 4, double.MaxValue / 4), add: false);
+
     /// <summary>The snap lines to draw while something is being dragged.</summary>
     public ObservableCollection<CreatorGuide> Guides { get; } = [];
 
@@ -566,17 +598,30 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
         return control;
     }
 
+    /// <summary>Removes the selected control, or all of them when several are selected.</summary>
     [RelayCommand]
-    private void RemoveControl()
+    public void RemoveControl()
     {
-        if (SelectedControl is { } control)
+        var selected = SelectedControls;
+        if (selected.Count == 0 && SelectedControl is { } single)
+        {
+            selected = [single];
+        }
+
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var control in selected)
         {
             Controls.Remove(control);
-            SelectedControl = Controls.LastOrDefault();
-            OnPropertyChanged(nameof(HasControls));
-            OnPropertyChanged(nameof(CanSave));
-            Rebuild();
         }
+
+        SelectedControl = Controls.LastOrDefault();
+        OnPropertyChanged(nameof(HasControls));
+        OnPropertyChanged(nameof(CanSave));
+        Rebuild();
     }
 
     /// <summary>

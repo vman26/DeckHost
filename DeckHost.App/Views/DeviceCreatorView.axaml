@@ -130,10 +130,22 @@
 
 			<Border Grid.Row="3" Classes="card" Padding="0">
 				<ScrollViewer HorizontalScrollBarVisibility="Auto">
-					<Panel>
+					<Panel x:Name="CanvasHost" Background="Transparent"
+						   PointerPressed="Canvas_OnPointerPressed"
+						   PointerMoved="Canvas_OnPointerMoved"
+						   PointerReleased="Canvas_OnPointerReleased">
+						<Panel.ContextMenu>
+							<ContextMenu>
+								<MenuItem Header="Add key" Click="CanvasAddKey_OnClick" />
+								<MenuItem Header="Add knob" Click="CanvasAddKnob_OnClick" />
+								<Separator />
+								<MenuItem Header="Arrange" Click="CanvasArrange_OnClick" ToolTip.Tip="Keys in a grid, knobs in a row below; each keeps its number" />
+								<MenuItem Header="Select all" Click="CanvasSelectAll_OnClick" ToolTip.Tip="Then line them up or spread them evenly" />
+							</ContextMenu>
+						</Panel.ContextMenu>
 						<TextBlock Classes="hint" Margin="20" IsVisible="{Binding !HasControls}"
 								   Text="Pick the device on the left, then click Add key and press a key on it. Add each key and knob the same way, then drag them where they sit on the device." />
-						<ItemsControl ItemsSource="{Binding Controls}" Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}" Margin="16" HorizontalAlignment="Left" VerticalAlignment="Top">
+						<ItemsControl x:Name="ControlsCanvas" ItemsSource="{Binding Controls}" Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}" Margin="16" HorizontalAlignment="Left" VerticalAlignment="Top">
 							<ItemsControl.ItemsPanel>
 								<ItemsPanelTemplate>
 									<Canvas />
@@ -152,10 +164,16 @@
 											Classes.down="{Binding IsDown}"
 											Width="{Binding Width}" Height="{Binding Height}"
 											CornerRadius="{Binding CornerRadius}"
-											ToolTip.Tip="{Binding Summary}"
 											PointerPressed="Control_OnPointerPressed"
 											PointerMoved="Control_OnPointerMoved"
-											PointerReleased="Control_OnPointerReleased">
+											PointerReleased="Control_OnPointerReleased"
+											ToolTip.Tip="{Binding Summary}">
+										<Border.ContextMenu>
+											<ContextMenu>
+												<MenuItem Header="Learn push" IsVisible="{Binding IsKnob}" Click="ControlLearnPush_OnClick" ToolTip.Tip="For a knob that can be pushed: push it after clicking" />
+												<MenuItem Header="Remove" Click="ControlRemove_OnClick" />
+											</ContextMenu>
+										</Border.ContextMenu>
 										<StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="2">
 											<TextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource C.E2E8F0}" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="64" />
 											<TextBlock Text="{Binding Activity}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" HorizontalAlignment="Center" IsVisible="{Binding IsKnob}" />
@@ -164,6 +182,10 @@
 								</DataTemplate>
 							</ItemsControl.ItemTemplate>
 						</ItemsControl>
+						<!-- The rectangle of a drag selection (Shift and drag on the empty canvas). -->
+						<Canvas Margin="16" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
+							<Border x:Name="MarqueeRect" IsVisible="False" BorderThickness="1" BorderBrush="{DynamicResource C.3B82F6}" Background="#223B82F6" />
+						</Canvas>
 						<!-- The lines a control snaps to while it's dragged. -->
 						<ItemsControl ItemsSource="{Binding Guides}" Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}" Margin="16" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
 							<ItemsControl.ItemsPanel>
@@ -199,7 +221,7 @@
 
 			<StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="10">
 				<Button Content="Save device" Classes="accent" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}" />
-				<TextBlock Classes="hint" VerticalAlignment="Center" Text="Keys and knobs are numbered by where they sit (left to right, top to bottom). Drag to snap to the others (hold Alt to place freely); Ctrl or Shift and a click selects several to line up or spread. The device only sends input: it has no screens or lights DeckHost could use." />
+				<TextBlock Classes="hint" VerticalAlignment="Center" Text="Keys and knobs are numbered by where they sit (left to right, top to bottom). Drag to snap to the others (hold Alt to place freely); Ctrl or Shift and a click selects several, and so does Shift and a drag over the empty canvas; then line them up or spread them. Right-click for more. The device only sends input: it has no screens or lights DeckHost could use." />
 			</StackPanel>
 		</Grid>
 	</Grid>

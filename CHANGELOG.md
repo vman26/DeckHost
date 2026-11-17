@@ -26,6 +26,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   place freely), Ctrl or Shift and a click select several to line up or spread evenly, and **Arrange** keeps every
   key and knob on its own number. Right-click the device in the editor for **Add a USB device**.
 
+- USB device creator: right-click the canvas (Add key, Add knob, Arrange, Select all) or a control (Learn push,
+  Remove), and Shift and drag over the empty canvas selects what the rectangle touches.
 - The action list dims the actions the selected control can't use (hover for why), and **Only actions that fit the
   selected control** hides them.
 
