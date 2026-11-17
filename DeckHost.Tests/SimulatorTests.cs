@@ -12,6 +12,18 @@ namespace DeckHost.Tests;
 /// <summary>The device simulator: the plugin's loopback endpoint and the client the simulator window uses.</summary>
 public sealed class SimulatorTests : IAsyncDisposable
 {
+    private const string N4ProModel = "deckhost.device.mirabox/mirabox.n4pro";
+    private const string XlModel = "deckhost.device.mirabox/mirabox.xl";
+    private const string MiniModel = "deckhost.device.mirabox/mirabox.mini";
+    private const string Model293 = "deckhost.device.mirabox/mirabox.293";
+    private const string N4ProDevice = "simulator.mirabox.n4pro";
+    private const string XlDevice = "simulator.mirabox.xl";
+    private const int KeySize = 112;
+    private const int DefaultBrightness = 100;
+    private const int NewBrightness = 40;
+    private const int InputsThatReachDeckHost = 4;
+    private const int InputSettleMilliseconds = 100;
+
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
     private readonly string _directory = Directory.CreateTempSubdirectory("deckhost-simulator").FullName;
@@ -38,76 +50,218 @@ public sealed class SimulatorTests : IAsyncDisposable
         Directory.Delete(_directory, recursive: true);
     }
 
+    private static IReadOnlyList<DeviceDefinition> EveryModel() =>
+    [
+        .. MiraBoxModels.All.Select(model => model.Describe(model.DefaultDeviceId, model.ShortName, null, false, null)),
+        .. StreamDeckModel.All.Select(model => model.Describe($"elgato.{model.ProductId:x4}", false, null, null, null)),
+    ];
+
+    private static DeviceDefinition AcrossTheWire(DeviceDefinition device) =>
+        SimulatorWire.Deserialize(SimulatorWire.Serialize(new SimulatorMessage { Type = SimulatorMessage.Attached, Device = device }))!.Device!;
+
+    private static IReadOnlyList<string> ModelsWhoseControlsChanged() =>
+        [.. EveryModel().Where(device => !AcrossTheWire(device).Controls.SequenceEqual(device.Controls)).Select(static device => device.Id)];
+
+    private static IReadOnlyList<string> ModelsWhoseCapabilitiesChanged() =>
+        [.. EveryModel().Where(device => AcrossTheWire(device).Capabilities != device.Capabilities).Select(static device => device.Id)];
+
+    private static IReadOnlyList<string> ModelsWhoseDisplaysChanged() =>
+        [.. EveryModel().Where(device => !AcrossTheWire(device).Displays.Select(static display => (display.Id, display.Width, display.Height))
+            .SequenceEqual(device.Displays.Select(static display => (display.Id, display.Width, display.Height)))).Select(static device => device.Id)];
+
+    private static IReadOnlyList<string> ModelsWhoseIdentityChanged() =>
+        [.. EveryModel().Where(device => AcrossTheWire(device).Identity != device.Identity).Select(static device => device.Id)];
+
     [Test]
-    public void Device_descriptions_survive_the_wire()
+    public void Deserialize_EveryModelsControls_SurviveTheWire()
     {
-        var models = MiraBoxModels.All.Select(model => model.Describe(model.DefaultDeviceId, model.ShortName, null, false, null))
-            .Concat(StreamDeckModel.All.Select(model => model.Describe($"elgato.{model.ProductId:x4}", false, null, null, null)));
+        // Arrange (every MiraBox and Stream Deck model)
 
-        foreach (var device in models)
-        {
-            var message = new SimulatorMessage { Type = SimulatorMessage.Attached, Device = device };
-            var back = SimulatorWire.Deserialize(SimulatorWire.Serialize(message))!.Device!;
+        // Act
+        var changed = ModelsWhoseControlsChanged();
 
-            Assert.That(back.Controls, Is.EqualTo(device.Controls), device.Id);
-            Assert.That(back.Capabilities, Is.EqualTo(device.Capabilities));
-            Assert.That(back.Displays.Select(static display => (display.Id, display.Width, display.Height)), Is.EqualTo(device.Displays.Select(static display => (display.Id, display.Width, display.Height))));
-            Assert.That(back.Identity, Is.EqualTo(device.Identity));
-        }
+        // Assert
+        Assert.That(changed, Is.Empty);
     }
 
     [Test]
-    public async Task A_simulator_lists_the_models_of_every_device_plugin_and_becomes_one()
+    public void Deserialize_EveryModelsCapabilities_SurviveTheWire()
+    {
+        // Arrange (every MiraBox and Stream Deck model)
+
+        // Act
+        var changed = ModelsWhoseCapabilitiesChanged();
+
+        // Assert
+        Assert.That(changed, Is.Empty);
+    }
+
+    [Test]
+    public void Deserialize_EveryModelsDisplays_SurviveTheWire()
+    {
+        // Arrange (every MiraBox and Stream Deck model)
+
+        // Act
+        var changed = ModelsWhoseDisplaysChanged();
+
+        // Assert
+        Assert.That(changed, Is.Empty);
+    }
+
+    [Test]
+    public void Deserialize_EveryModelsIdentity_SurvivesTheWire()
+    {
+        // Arrange (every MiraBox and Stream Deck model)
+
+        // Act
+        var changed = ModelsWhoseIdentityChanged();
+
+        // Assert
+        Assert.That(changed, Is.Empty);
+    }
+
+    [Test]
+    public async Task Connect_Simulator_ListsTheModelsOfEveryDevicePlugin()
+    {
+        // Arrange
+        var (_, messages) = await ConnectAsync();
+
+        // Act
+        var models = await messages.NextAsync(SimulatorMessage.ModelList);
+
+        // Assert
+        Assert.That(models.Models!.Select(static model => model.Key), Does.Contain(N4ProModel).And.Contain(XlModel));
+    }
+
+    private async Task<(SimulatorMessage Attached, SimulatorMessage Settings)> AttachedN4ProAsync()
     {
         var (client, messages) = await ConnectAsync();
-
-        var models = await messages.NextAsync(SimulatorMessage.ModelList);
-        Assert.That(models.Models!.Select(static model => model.Key), Does.Contain("deckhost.device.mirabox/mirabox.n4pro").And.Contain("deckhost.device.mirabox/mirabox.xl"));
-
-        client.Attach("deckhost.device.mirabox/mirabox.n4pro");
-        var attached = await messages.NextAsync(SimulatorMessage.Attached);
-        var settings = await messages.NextAsync(SimulatorMessage.Settings);
-
-        Assert.That((attached.Model, attached.DeviceId), Is.EqualTo(("deckhost.device.mirabox/mirabox.n4pro", "simulator.mirabox.n4pro")));
-        Assert.That(attached.Device!.Controls.Select(static control => control.Id), Is.EqualTo(MiraBoxModels.N4Pro.Controls.Select(static control => control.Id)));
-        Assert.That((settings.Brightness, settings.Vibrate), Is.EqualTo(((int?)100, (bool?)true)));
-        var device = Expect.Single(_plugin.Devices);
-        Assert.That((device.Id, device.IsConnected, device.Name), Is.EqualTo(("simulator.mirabox.n4pro", true, "Simulated MiraBox N4 Pro")));
-        Assert.That(_context.Statuses, Does.Contain(("simulator.mirabox.n4pro", "Connected")));
+        await messages.NextAsync(SimulatorMessage.ModelList);
+        client.Attach(N4ProModel);
+        return (await messages.NextAsync(SimulatorMessage.Attached), await messages.NextAsync(SimulatorMessage.Settings));
     }
 
     [Test]
-    public async Task Images_lights_and_the_backdrop_reach_the_simulator()
+    public async Task Attach_Model_BecomesADeviceOfThatModel()
     {
-        var (_, messages) = await AttachAsync("deckhost.device.mirabox/mirabox.n4pro");
-        var pixels = Enumerable.Range(0, 112 * 112 * 4).Select(static index => (byte)index).ToArray();
+        // Arrange (a connected simulator window)
 
-        Assert.That(_plugin.TrySetBackdrop("simulator.mirabox.n4pro", 10, 20, 30, out _), Is.True);
-        Assert.That(_plugin.TryPushImage("simulator.mirabox.n4pro", "key.0", pixels, 112, 112, out _), Is.True);
-        Assert.That(_plugin.TrySetLights("simulator.mirabox.n4pro", [new LightColor("encoder.1", 255, 0, 0)], out _), Is.True);
+        // Act
+        var (attached, _) = await AttachedN4ProAsync();
+
+        // Assert
+        Assert.That((attached.Model, attached.DeviceId), Is.EqualTo((N4ProModel, N4ProDevice)));
+        Assert.That(attached.Device!.Controls.Select(static control => control.Id), Is.EqualTo(MiraBoxModels.N4Pro.Controls.Select(static control => control.Id)));
+    }
+
+    [Test]
+    public async Task Attach_Model_SendsTheDefaultSettings()
+    {
+        // Arrange (a connected simulator window)
+
+        // Act
+        var (_, settings) = await AttachedN4ProAsync();
+
+        // Assert
+        Assert.That((settings.Brightness, settings.Vibrate), Is.EqualTo(((int?)DefaultBrightness, (bool?)true)));
+    }
+
+    [Test]
+    public async Task Attach_Model_ListsAConnectedSimulatedDevice()
+    {
+        // Arrange (a connected simulator window)
+
+        // Act
+        await AttachedN4ProAsync();
+
+        // Assert
+        var device = Expect.Single(_plugin.Devices);
+        Assert.That((device.Id, device.IsConnected, device.Name), Is.EqualTo((N4ProDevice, true, "Simulated MiraBox N4 Pro")));
+    }
+
+    [Test]
+    public async Task Attach_Model_ReportsTheDeviceConnected()
+    {
+        // Arrange (a connected simulator window)
+
+        // Act
+        await AttachedN4ProAsync();
+
+        // Assert
+        Assert.That(_context.Statuses, Does.Contain((N4ProDevice, "Connected")));
+    }
+
+    private async Task<IReadOnlyDictionary<string, SimulatorMessage>> SendBackdropImageAndLightAsync(byte[] pixels)
+    {
+        var (_, messages) = await AttachAsync(N4ProModel);
+        _plugin.TrySetBackdrop(N4ProDevice, 10, 20, 30, out _);
+        _plugin.TryPushImage(N4ProDevice, "key.0", pixels, KeySize, KeySize, out _);
+        _plugin.TrySetLights(N4ProDevice, [new LightColor("encoder.1", 255, 0, 0)], out _);
 
         // Images are coalesced per control and may overtake other messages.
-        var received = await messages.CollectAsync(SimulatorMessage.Backdrop, SimulatorMessage.LightsChanged, SimulatorMessage.Image);
-        var (backdrop, lights, image) = (received[SimulatorMessage.Backdrop], received[SimulatorMessage.LightsChanged], received[SimulatorMessage.Image]);
+        return await messages.CollectAsync(SimulatorMessage.Backdrop, SimulatorMessage.LightsChanged, SimulatorMessage.Image);
+    }
+
+    private static byte[] KeyPixels() => [.. Enumerable.Range(0, KeySize * KeySize * 4).Select(static index => (byte)index)];
+
+    [Test]
+    public async Task TrySetBackdrop_Color_ReachesTheSimulator()
+    {
+        // Arrange
+        var pixels = KeyPixels();
+
+        // Act
+        var received = await SendBackdropImageAndLightAsync(pixels);
+
+        // Assert
+        var backdrop = received[SimulatorMessage.Backdrop];
         Assert.That((backdrop.R, backdrop.G, backdrop.B), Is.EqualTo(((byte)10, (byte)20, (byte)30)));
-        Assert.That((image.Control, image.Width, image.Height), Is.EqualTo(("key.0", 112, 112)));
-        Assert.That(Convert.FromBase64String(image.Rgba!), Is.EqualTo(pixels));
-        Assert.That(Expect.Single(lights.Lights!), Is.EqualTo(new SimulatorLight("encoder.1", 255, 0, 0)));
     }
 
     [Test]
-    public async Task Input_from_the_simulator_reaches_DeckHost_like_hardware_input()
+    public async Task TryPushImage_KeyImage_ReachesTheSimulatorWithItsPixels()
     {
-        var (client, _) = await AttachAsync("deckhost.device.mirabox/mirabox.n4pro");
+        // Arrange
+        var pixels = KeyPixels();
 
+        // Act
+        var received = await SendBackdropImageAndLightAsync(pixels);
+
+        // Assert
+        var image = received[SimulatorMessage.Image];
+        Assert.That((image.Control, image.Width, image.Height), Is.EqualTo(("key.0", KeySize, KeySize)));
+        Assert.That(Convert.FromBase64String(image.Rgba!), Is.EqualTo(pixels));
+    }
+
+    [Test]
+    public async Task TrySetLights_OneColor_ReachesTheSimulator()
+    {
+        // Arrange
+        var pixels = KeyPixels();
+
+        // Act
+        var received = await SendBackdropImageAndLightAsync(pixels);
+
+        // Assert
+        Assert.That(Expect.Single(received[SimulatorMessage.LightsChanged].Lights!), Is.EqualTo(new SimulatorLight("encoder.1", 255, 0, 0)));
+    }
+
+    [Test]
+    public async Task SendInput_FromTheSimulator_ReachesDeckHostLikeHardwareInput()
+    {
+        // Arrange
+        var (client, _) = await AttachAsync(N4ProModel);
+
+        // Act
         client.SendInput("encoder.2", InputCapabilities.Rotate, -1);
         client.SendInput("key.3", InputCapabilities.Press, 1);
         client.SendInput("touch.swipe", InputCapabilities.Swipe, 1);
         client.SendInput("key.3", InputCapabilities.Rotate, 1); // a key can't turn: ignored
         client.SendInput("nothing", InputCapabilities.Press, 1);
+        await Until(() => _context.Inputs.Count >= InputsThatReachDeckHost);
+        await Task.Delay(InputSettleMilliseconds);
 
-        await Until(() => _context.Inputs.Count >= 4);
-        await Task.Delay(100);
+        // Assert
         Assert.That(_context.Inputs.Select(static input => (input.ControlId, input.Input)), Is.EqualTo(new[]
         {
             ("encoder.2", InputCapabilities.Rotate),
@@ -117,87 +271,193 @@ public sealed class SimulatorTests : IAsyncDisposable
         }));
     }
 
-    [Test]
-    public async Task Closing_the_window_removes_the_device_and_opening_it_again_brings_its_id_back()
+    private async Task AttachAndCloseTheXlWindowAsync()
     {
-        var (client, _) = await AttachAsync("deckhost.device.mirabox/mirabox.xl");
+        var (client, _) = await AttachAsync(XlModel);
         await client.DisposeAsync();
         _clients.Remove(client);
-
         await Until(() => _plugin.Devices.Count == 0);
-        Assert.That(_plugin.TryPushImage("simulator.mirabox.xl", "key.0", new byte[4], 1, 1, out var error), Is.False);
-        Assert.That(error, Is.Not.Null);
-
-        await AttachAsync("deckhost.device.mirabox/mirabox.xl");
-        var device = Expect.Single(_plugin.Devices);
-        Assert.That((device.Id, device.IsConnected), Is.EqualTo(("simulator.mirabox.xl", true)));
     }
 
     [Test]
-    public async Task Switched_off_nothing_can_connect_and_open_windows_are_closed()
+    public async Task DisposeAsync_ClosingTheWindow_RemovesTheDevice()
     {
-        await AttachAsync("deckhost.device.mirabox/mirabox.n4pro");
+        // Arrange
+        var (client, _) = await AttachAsync(XlModel);
 
-        _plugin.SetEnabled(false);
+        // Act
+        await client.DisposeAsync();
+        _clients.Remove(client);
 
+        // Assert
         await Until(() => _plugin.Devices.Count == 0);
+        Assert.That(_plugin.Devices, Is.Empty);
+    }
+
+    [Test]
+    public async Task TryPushImage_AfterTheWindowWasClosed_FailsWithAnError()
+    {
+        // Arrange
+        await AttachAndCloseTheXlWindowAsync();
+
+        // Act
+        var pushed = _plugin.TryPushImage(XlDevice, "key.0", new byte[4], 1, 1, out var error);
+
+        // Assert
+        Assert.That(pushed, Is.False);
+        Assert.That(error, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Attach_SameModelAgainAfterClosing_BringsTheSameIdBack()
+    {
+        // Arrange
+        await AttachAndCloseTheXlWindowAsync();
+
+        // Act
+        await AttachAsync(XlModel);
+
+        // Assert
+        var device = Expect.Single(_plugin.Devices);
+        Assert.That((device.Id, device.IsConnected), Is.EqualTo((XlDevice, true)));
+    }
+
+    [Test]
+    public async Task SetEnabled_SwitchedOff_RemovesTheDevicesAndTheEndpoint()
+    {
+        // Arrange
+        await AttachAsync(N4ProModel);
+
+        // Act
+        _plugin.SetEnabled(false);
+        await Until(() => _plugin.Devices.Count == 0);
+
+        // Assert
         Assert.That(SimulatorWire.ReadEndpoint(_directory), Is.Null);
         Assert.That(_plugin.Port, Is.Zero);
+    }
 
+    [Test]
+    public async Task SetEnabled_SwitchedOffAndOnAgain_AcceptsAWindowAgain()
+    {
+        // Arrange
+        await AttachAsync(N4ProModel);
+        _plugin.SetEnabled(false);
+        await Until(() => _plugin.Devices.Count == 0);
+
+        // Act
         _plugin.SetEnabled(true);
+        await AttachAsync(N4ProModel);
+
+        // Assert
         Assert.That(SimulatorWire.ReadEndpoint(_directory), Is.Not.Null);
-        await AttachAsync("deckhost.device.mirabox/mirabox.n4pro");
         Assert.That(Expect.Single(_plugin.Devices).IsConnected, Is.True);
     }
 
     [Test]
-    public async Task Off_from_the_start_there_is_no_endpoint()
+    public async Task InitializeAsync_SwitchedOffFromTheStart_HasNoEndpoint()
     {
-        using var plugin = new SimulatorDevicePlugin(Path.Combine(_directory, "off"), () => [_mirabox], enabled: false);
+        // Arrange
+        var offFolder = Path.Combine(_directory, "off");
+        using var plugin = new SimulatorDevicePlugin(offFolder, () => [_mirabox], enabled: false);
 
+        // Act
         await plugin.InitializeAsync(_context, CancellationToken.None);
 
-        Assert.That(SimulatorWire.ReadEndpoint(Path.Combine(_directory, "off")), Is.Null);
+        // Assert
+        Assert.That(SimulatorWire.ReadEndpoint(offFolder), Is.Null);
         Assert.That(plugin.Port, Is.Zero);
     }
 
     [Test]
-    public async Task Two_windows_of_one_model_are_two_devices()
+    public async Task Attach_TwoWindowsOfOneModel_AreTwoDevices()
     {
-        await AttachAsync("deckhost.device.mirabox/mirabox.mini");
-        await AttachAsync("deckhost.device.mirabox/mirabox.mini");
+        // Arrange
+        await AttachAsync(MiniModel);
 
+        // Act
+        await AttachAsync(MiniModel);
+
+        // Assert
         Assert.That(_plugin.Devices.Select(static device => device.Id), Is.EquivalentTo(new[] { "simulator.mirabox.mini", "simulator.mirabox.mini-2" }));
     }
 
     [Test]
-    public async Task A_wrong_token_is_refused()
+    public async Task ConnectAsync_WrongToken_IsRefusedWithAMessageAboutTheToken()
     {
+        // Arrange
         await _plugin.InitializeAsync(_context, CancellationToken.None);
         var endpoint = SimulatorWire.ReadEndpoint(_directory)!;
         var client = await SimulatorClient.ConnectAsync(endpoint with { Token = "guess" }, "test");
         _clients.Add(client);
         var messages = new Inbox(client);
 
+        // Act
         var refusal = await messages.NextAsync(SimulatorMessage.Failure);
 
+        // Assert
         Assert.That(refusal.Error, Does.Contain("token"));
-        Assert.That(_plugin.Devices, Is.Empty);
     }
 
     [Test]
-    public async Task Settings_go_to_the_window_and_vibration_only_where_the_model_vibrates()
+    public async Task ConnectAsync_WrongToken_ListsNoDevice()
     {
-        var (_, messages) = await AttachAsync("deckhost.device.mirabox/mirabox.n4pro");
+        // Arrange
+        await _plugin.InitializeAsync(_context, CancellationToken.None);
+        var endpoint = SimulatorWire.ReadEndpoint(_directory)!;
+        var client = await SimulatorClient.ConnectAsync(endpoint with { Token = "guess" }, "test");
+        _clients.Add(client);
+        var messages = new Inbox(client);
+        await messages.NextAsync(SimulatorMessage.Failure);
+
+        // Act
+        var devices = _plugin.Devices;
+
+        // Assert
+        Assert.That(devices, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetDeviceSettingDefinitions_ModelThatVibrates_OffersVibration()
+    {
+        // Arrange
+        await AttachAsync(N4ProModel);
+
+        // Act
+        var keys = _plugin.GetDeviceSettingDefinitions(N4ProDevice).Select(static setting => setting.Key);
+
+        // Assert
+        Assert.That(keys, Does.Contain(SimulatorDevicePlugin.VibrateSetting));
+    }
+
+    [Test]
+    public async Task GetDeviceSettingDefinitions_ModelThatDoesNotVibrate_OffersNoVibration()
+    {
+        // Arrange
+        await AttachAsync(Model293);
+
+        // Act
+        var keys = _plugin.GetDeviceSettingDefinitions("simulator.mirabox.293").Select(static setting => setting.Key);
+
+        // Assert
+        Assert.That(keys, Does.Not.Contain(SimulatorDevicePlugin.VibrateSetting));
+    }
+
+    [Test]
+    public async Task ApplyDeviceSettings_BrightnessAndVibration_GoToTheWindow()
+    {
+        // Arrange
+        var (_, messages) = await AttachAsync(N4ProModel);
         await messages.NextAsync(SimulatorMessage.Settings);
+        var settings = ActionSettings.Empty.With(SimulatorDevicePlugin.BrightnessSetting, NewBrightness.ToString(System.Globalization.CultureInfo.InvariantCulture)).With(SimulatorDevicePlugin.VibrateSetting, "off");
 
-        Assert.That(_plugin.GetDeviceSettingDefinitions("simulator.mirabox.n4pro").Select(static setting => setting.Key), Does.Contain(SimulatorDevicePlugin.VibrateSetting));
-        Assert.That(_plugin.ApplyDeviceSettings("simulator.mirabox.n4pro", ActionSettings.Empty.With(SimulatorDevicePlugin.BrightnessSetting, "40").With(SimulatorDevicePlugin.VibrateSetting, "off")), Is.Null);
-        var settings = await messages.NextAsync(SimulatorMessage.Settings);
-        Assert.That((settings.Brightness, settings.Vibrate), Is.EqualTo(((int?)40, (bool?)false)));
+        // Act
+        var error = _plugin.ApplyDeviceSettings(N4ProDevice, settings);
+        var sent = await messages.NextAsync(SimulatorMessage.Settings);
 
-        await AttachAsync("deckhost.device.mirabox/mirabox.293");
-        Assert.That(_plugin.GetDeviceSettingDefinitions("simulator.mirabox.293").Select(static setting => setting.Key), Does.Not.Contain(SimulatorDevicePlugin.VibrateSetting));
+        // Assert
+        Assert.That(error, Is.Null);
+        Assert.That((sent.Brightness, sent.Vibrate), Is.EqualTo(((int?)NewBrightness, (bool?)false)));
     }
 
     private async Task<(SimulatorClient Client, Inbox Messages)> ConnectAsync()
