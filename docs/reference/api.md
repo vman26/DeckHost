@@ -939,6 +939,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | Member | |
 |---|---|
 | `Workflow()` | Creates it with the positional properties. |
+| `string Id { get; init; }` | For a shared workflow (one that Call nodes run): the id they refer to. Null for a control's own workflow. |
 | `IReadOnlyList<WorkflowLink> Links { get; init; }` |  |
 | `string Name { get; init; }` | A name the user gave the workflow (shown in the editor; also the file name when it's shared). |
 | `IReadOnlyList<WorkflowNode> Nodes { get; init; }` |  |
@@ -984,6 +985,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string IsLess` |  |
 | `const string IsNotEqual` |  |
 | `const string IsSet` |  |
+| `const int MaxCallDepth` | The deepest a shared workflow may call another one. |
 | `const int MaxConditionRounds` | The most rounds a while / until Repeat runs (a condition that never changes can't run forever). |
 | `const int MaxEverySeconds` | The longest, in seconds (a day). |
 | `const int MaxRepeat` | The most times a Repeat node runs. |
@@ -1010,6 +1012,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Times` | Repeat (`ModeVariable`): the variable that holds the number of rounds. |
 | `const string To` |  |
 | `const string Value` |  |
+| `const string Workflow` | Call: the id of the shared workflow to run. |
 
 ### WorkflowLink
 
@@ -1046,6 +1049,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 |---|---|
 | `IReadOnlyList<string> All` |  |
 | `const string Action` | Runs an action (`Action`). |
+| `const string Call` | Runs a shared workflow (`Workflow`), then goes on. |
 | `const string If` | Continues at Yes or No depending on a condition. |
 | `const string Repeat` | Runs its Each output a number of times, one after the other, then continues at Done. |
 | `const string SetVariable` | Sets, adds to or flips a workflow variable. |

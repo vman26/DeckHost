@@ -14,6 +14,11 @@ public sealed record Workflow
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; init; }
 
+    /// <summary>For a shared workflow (one that Call nodes run): the id they refer to. Null for a control's own workflow.</summary>
+    [JsonPropertyName("id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Id { get; init; }
+
     [JsonPropertyName("nodes")]
     public IReadOnlyList<WorkflowNode> Nodes { get; init; } = [];
 
@@ -126,13 +131,16 @@ public static class WorkflowNodeKinds
     /// <summary>Runs its Each output a number of times, one after the other, then continues at Done.</summary>
     public const string Repeat = "repeat";
 
+    /// <summary>Runs a shared workflow (<see cref="WorkflowKeys.Workflow"/>), then goes on.</summary>
+    public const string Call = "call";
+
     /// <summary>Sets, adds to or flips a workflow variable.</summary>
     public const string SetVariable = "set-variable";
 
     /// <summary>Ends the run (waits still to come don't continue).</summary>
     public const string Stop = "stop";
 
-    public static IReadOnlyList<string> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Stop];
+    public static IReadOnlyList<string> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Call, Stop];
 
     /// <summary>The output ports of a kind, in the order the editor shows them.</summary>
     public static IReadOnlyList<string> OutputsOf(string kind) => kind switch
@@ -141,7 +149,7 @@ public static class WorkflowNodeKinds
         Toggle => [WorkflowPorts.First, WorkflowPorts.Second],
         Repeat => [WorkflowPorts.Each, WorkflowPorts.Done],
         Stop => [],
-        Action => [WorkflowPorts.Next, WorkflowPorts.Error],
+        Action or Call => [WorkflowPorts.Next, WorkflowPorts.Error],
         _ => [WorkflowPorts.Next],
     };
 
@@ -267,6 +275,12 @@ public static class WorkflowKeys
 
     /// <summary>Wait: how long, in milliseconds.</summary>
     public const string Milliseconds = "ms";
+
+    /// <summary>Call: the id of the shared workflow to run.</summary>
+    public const string Workflow = "workflow";
+
+    /// <summary>The deepest a shared workflow may call another one.</summary>
+    public const int MaxCallDepth = 8;
 
     /// <summary>Action: how many more times to try when it did not run (0 to <see cref="MaxRetries"/>).</summary>
     public const string Retries = "retries";

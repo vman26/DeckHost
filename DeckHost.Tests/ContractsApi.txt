@@ -645,6 +645,7 @@
   DeckHost.Contracts.Models.Workflow.Equals(System.Object obj) : System.Boolean
   DeckHost.Contracts.Models.Workflow.Find(System.String nodeId) : DeckHost.Contracts.Models.WorkflowNode
   DeckHost.Contracts.Models.Workflow.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.Workflow.Id : System.String {set}
   DeckHost.Contracts.Models.Workflow.Links : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.WorkflowLink> {set}
   DeckHost.Contracts.Models.Workflow.LinksFrom(System.String nodeId, System.String port) : System.Collections.Generic.IEnumerable<DeckHost.Contracts.Models.WorkflowLink>
   DeckHost.Contracts.Models.Workflow.Name : System.String {set}
@@ -676,6 +677,7 @@
   DeckHost.Contracts.Models.WorkflowKeys.IsLess : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsNotEqual : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsSet : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.MaxCallDepth : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxConditionRounds : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxEverySeconds : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxRepeat : System.Int32 const
@@ -702,6 +704,7 @@
   DeckHost.Contracts.Models.WorkflowKeys.Times : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.To : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Value : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Workflow : System.String const
   DeckHost.Contracts.Models.WorkflowLink(System.String From, System.String Port, System.String To)
   DeckHost.Contracts.Models.WorkflowLink.<Clone>$() : DeckHost.Contracts.Models.WorkflowLink
   DeckHost.Contracts.Models.WorkflowLink.Deconstruct(System.String& From, System.String& Port, System.String& To) : System.Void
@@ -729,6 +732,7 @@
   DeckHost.Contracts.Models.WorkflowNode.Y : System.Double {set}
   DeckHost.Contracts.Models.WorkflowNodeKinds.Action : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.All : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.WorkflowNodeKinds.Call : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.HasInput(System.String kind) : System.Boolean
   DeckHost.Contracts.Models.WorkflowNodeKinds.If : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.OutputsOf(System.String kind) : System.Collections.Generic.IReadOnlyList<System.String>

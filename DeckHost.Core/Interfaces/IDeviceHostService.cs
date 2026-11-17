@@ -74,6 +74,26 @@ public interface IDeviceHostService : IAsyncDisposable
     /// <summary>The variables workflows and actions have set (name and value; names are lower case), for the editor's variable view.</summary>
     IReadOnlyList<KeyValuePair<string, string>> UserVariables() => [];
 
+    /// <summary>The shared workflows Call nodes can run (replaces the previous list).</summary>
+    void SetSharedWorkflows(IReadOnlyList<Workflow> workflows)
+    {
+    }
+
+    /// <summary>Sets where the runs of a control's workflow stop (see <c>WorkflowEngine.BreakpointKey</c>).</summary>
+    void SetWorkflowBreakpoints(string deviceId, string controlId, IReadOnlyCollection<string> keys)
+    {
+    }
+
+    /// <summary>Lets a paused run go on until the next breakpoint.</summary>
+    void ContinueWorkflow(int runId)
+    {
+    }
+
+    /// <summary>Lets a paused run enter its next node, then holds it again.</summary>
+    void StepWorkflow(int runId)
+    {
+    }
+
     /// <summary>Stops every run of the workflow on a control.</summary>
     void StopWorkflows(string deviceId, string controlId)
     {

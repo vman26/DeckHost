@@ -228,6 +228,16 @@ public static class WorkflowNodeTypes
             },
         ]);
 
+    public static WorkflowNodeType Call { get; } = new(
+        WorkflowNodeKinds.Call,
+        "Call workflow",
+        "Runs a shared workflow from its When node on, then goes on. If it can't run, it goes on at On error when that has a link.",
+        0xFF0EA5E9,
+        Contracts.Icons.Stack,
+        [
+            new(WorkflowKeys.Workflow, "Workflow", Placeholder: "the id of a shared workflow", Description: "Save a workflow as shared in the editor, then choose it here."),
+        ]);
+
     public static WorkflowNodeType Stop { get; } = new(
         WorkflowNodeKinds.Stop,
         "Stop",
@@ -237,7 +247,7 @@ public static class WorkflowNodeTypes
         []);
 
     /// <summary>All kinds, in the order the editor's palette lists them.</summary>
-    public static IReadOnlyList<WorkflowNodeType> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Stop];
+    public static IReadOnlyList<WorkflowNodeType> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Call, Stop];
 
     public static WorkflowNodeType Of(string kind) => All.FirstOrDefault(type => type.Kind == kind) ?? Action;
 
@@ -271,6 +281,7 @@ public static class WorkflowNodeTypes
                 WorkflowKeys.Clear => $"Clear {Or(settings.Get(WorkflowKeys.Name), "…")}",
                 _ => $"{Or(settings.Get(WorkflowKeys.Name), "…")} = {Or(settings.Get(WorkflowKeys.Value), "\"\"")}",
             },
+            WorkflowNodeKinds.Call => $"Call {Or(settings.Get(WorkflowKeys.Workflow), "…")}",
             WorkflowNodeKinds.Stop => "Stop",
             _ => node.Kind,
         };

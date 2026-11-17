@@ -647,6 +647,161 @@ public sealed class WorkflowTests : IAsyncDisposable
         Assert.That(WorkflowScopes.Describe(VariableKeys.ControlVariable("mirabox.n4pro", "key.3", "Mode")), Is.EqualTo("mode (key.3 on mirabox.n4pro)"));
     }
 
+    private static Workflow Shared(string id, params WorkflowNode[] nodes) =>
+        new()
+        {
+            Id = id,
+            Name = "Shared " + id,
+            Nodes = [Trigger("t", WorkflowTriggers.Down), .. nodes],
+            Links = [.. Enumerable.Range(0, nodes.Length).Select(i => Link(i == 0 ? "t" : nodes[i - 1].Id, nodes[i].Id))],
+        };
+
+    private static WorkflowNode CallOf(string id, string shared) => Node(id, WorkflowNodeKinds.Call, (WorkflowKeys.Workflow, shared));
+
+    [Test]
+    public async Task A_call_node_runs_a_shared_workflow_then_goes_on()
+    {
+        _host.SetSharedWorkflows([Shared("s1", Run("x", "b"), Run("y", "c"))]);
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Run("1", "a"), CallOf("call", "s1"), Run("2", "a")],
+            Links = [Link("t", "1"), Link("1", "call"), Link("call", "2")],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Ran().Count >= 4);
+
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b", "c", "a" }));
+        Assert.That(Traces().Where(trace => trace.WorkflowId == "s1").Select(static trace => trace.NodeId), Is.EqualTo(new[] { "t", "x", "y" }).Or.Contain("x"), "steps inside the shared workflow say which one it is");
+        Assert.That(Traces().Any(trace => trace.Detail.StartsWith("Calling")), Is.True);
+    }
+
+    [Test]
+    public async Task A_call_that_cannot_run_goes_to_on_error_when_linked_and_to_next_otherwise()
+    {
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), CallOf("missing", "nope"), Run("ok", "a"), Run("bad", "b")],
+            Links = [Link("t", "missing"), Link("missing", "ok"), Link("missing", "bad", WorkflowPorts.Error)],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Ran().Count > 0);
+
+        Assert.That(Ran(), Is.EqualTo(new[] { "b" }));
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Failed && trace.Detail.Contains("is gone")), Is.True);
+    }
+
+    [Test]
+    public async Task A_shared_workflow_that_calls_itself_or_nests_too_deep_is_stopped_not_looped()
+    {
+        var chain = Enumerable.Range(0, 10).Select(i => Shared($"s{i}", i < 9 ? CallOf("next", $"s{i + 1}") : Run("end", "b"))).ToList();
+        chain.Add(Shared("self", CallOf("again", "self"), Run("after", "c")));
+        _host.SetSharedWorkflows(chain);
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), CallOf("deep", "s0"), CallOf("loop", "self")],
+            Links = [Link("t", "deep"), Link("deep", "loop")],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Traces().Any(trace => trace.Kind == WorkflowTraceKind.Finished));
+
+        Assert.That(Traces().Any(trace => trace.Detail.Contains("nested more than")), Is.True, "the chain of ten is cut at the depth limit");
+        Assert.That(Traces().Any(trace => trace.Detail.Contains("would call itself")), Is.True);
+        Assert.That(Ran(), Does.Not.Contain("b"), "the end of the too-deep chain was never reached");
+        Assert.That(Ran(), Contains.Item("c"), "a call that can't run goes on at Then, so what follows it runs");
+    }
+
+    private static Workflow ThreeSteps() => new()
+    {
+        Nodes = [Trigger("t", WorkflowTriggers.Down), Run("1", "a"), Run("2", "b"), Run("3", "c")],
+        Links = [Link("t", "1"), Link("1", "2"), Link("2", "3")],
+    };
+
+    private int PausedRun() => Traces().Last(trace => trace.Kind == WorkflowTraceKind.Paused).RunId;
+
+    [Test]
+    public async Task A_run_holds_in_front_of_a_breakpoint_and_goes_on_when_continued()
+    {
+        await Start(ThreeSteps());
+        _host.SetWorkflowBreakpoints(Device, "key.0", ["2"]);
+        await _host.WhenIdleAsync();
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Traces().Any(trace => trace.Kind == WorkflowTraceKind.Paused));
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" }), "stopped in front of node 2");
+        Assert.That(Traces().Last(trace => trace.Kind == WorkflowTraceKind.Paused).NodeId, Is.EqualTo("2"));
+
+        _host.ContinueWorkflow(PausedRun());
+        await WaitUntil(() => Ran().Count == 3);
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b", "c" }));
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Finished), Is.True);
+    }
+
+    [Test]
+    public async Task A_step_runs_one_node_and_holds_again_and_stop_ends_a_held_run()
+    {
+        await Start(ThreeSteps());
+        _host.SetWorkflowBreakpoints(Device, "key.0", ["2"]);
+        await _host.WhenIdleAsync();
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Traces().Any(trace => trace.Kind == WorkflowTraceKind.Paused));
+
+        _host.StepWorkflow(PausedRun());
+        await WaitUntil(() => Traces().Count(trace => trace.Kind == WorkflowTraceKind.Paused) == 2);
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b" }), "node 2 ran, node 3 is next");
+        Assert.That(Traces().Last(trace => trace.Kind == WorkflowTraceKind.Paused).NodeId, Is.EqualTo("3"));
+
+        _host.StopWorkflows(Device, "key.0");
+        await _host.WhenIdleAsync();
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Stopped), Is.True);
+        _host.ContinueWorkflow(PausedRun());
+        await _host.WhenIdleAsync();
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b" }), "a stopped run does not go on");
+    }
+
+    [Test]
+    public async Task Work_that_comes_due_while_a_run_is_held_waits_for_it_to_be_released()
+    {
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Node("w", WorkflowNodeKinds.Wait, (WorkflowKeys.Milliseconds, "50")), Run("late", "a"), Run("held", "b")],
+            Links = [Link("t", "w"), Link("w", "late"), Link("t", "held")],
+        });
+        _host.SetWorkflowBreakpoints(Device, "key.0", ["held"]);
+        await _host.WhenIdleAsync();
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Traces().Any(trace => trace.Kind == WorkflowTraceKind.Paused));
+        await Task.Delay(200);
+        await _host.WhenIdleAsync();
+        Assert.That(Ran(), Is.Empty, "the wait ended but the held run does not move");
+
+        _host.ContinueWorkflow(PausedRun());
+        await WaitUntil(() => Ran().Count == 2);
+        Assert.That(Ran(), Is.EquivalentTo(new[] { "a", "b" }));
+    }
+
+    [Test]
+    public async Task Breakpoints_inside_a_shared_workflow_are_keyed_by_its_id()
+    {
+        _host.SetSharedWorkflows([Shared("s1", Run("x", "b"))]);
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Run("x", "a"), CallOf("call", "s1")],
+            Links = [Link("t", "x"), Link("x", "call")],
+        });
+        _host.SetWorkflowBreakpoints(Device, "key.0", [WorkflowEngine.BreakpointKey("s1", "x")]);
+        await _host.WhenIdleAsync();
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Traces().Any(trace => trace.Kind == WorkflowTraceKind.Paused));
+
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" }), "the same node id in the control's own workflow did not stop it");
+        Assert.That(Traces().Last(trace => trace.Kind == WorkflowTraceKind.Paused).WorkflowId, Is.EqualTo("s1"));
+    }
+
     [Test]
     public void A_workflow_binding_survives_the_profile_file()
     {

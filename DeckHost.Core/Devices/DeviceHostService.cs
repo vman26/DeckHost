@@ -255,6 +255,48 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 .OrderBy(static pair => pair.Key, StringComparer.Ordinal)]
             : [];
 
+    public void SetSharedWorkflows(IReadOnlyList<Workflow> workflows)
+    {
+        var byId = workflows.Where(static workflow => !string.IsNullOrWhiteSpace(workflow.Id))
+            .GroupBy(static workflow => workflow.Id!, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.Ordinal);
+        Enqueue(() =>
+        {
+            if (_actionRouter is ActionRouter router)
+            {
+                router.Workflows.SharedWorkflows = id => byId.GetValueOrDefault(id);
+            }
+        });
+    }
+
+    public void SetWorkflowBreakpoints(string deviceId, string controlId, IReadOnlyCollection<string> keys)
+    {
+        var copy = keys.ToArray();
+        Enqueue(() =>
+        {
+            if (_actionRouter is ActionRouter router)
+            {
+                router.Workflows.SetBreakpoints(deviceId, controlId, copy);
+            }
+        });
+    }
+
+    public void ContinueWorkflow(int runId) => Enqueue(() =>
+    {
+        if (_actionRouter is ActionRouter router && router.Workflows.Continue(runId))
+        {
+            _dirtyDevices.UnionWith(_devicesById.Keys);
+        }
+    });
+
+    public void StepWorkflow(int runId) => Enqueue(() =>
+    {
+        if (_actionRouter is ActionRouter router && router.Workflows.Step(runId))
+        {
+            _dirtyDevices.UnionWith(_devicesById.Keys);
+        }
+    });
+
     public void StopWorkflows(string deviceId, string controlId) => Enqueue(() =>
     {
         if (_actionRouter is ActionRouter router)

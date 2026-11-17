@@ -40,6 +40,59 @@ public sealed class WorkflowEngine
 
     public event Action<WorkflowTrace>? Traced;
 
+    /// <summary>Finds a shared workflow by id (what a Call node runs); set by the host.</summary>
+    public Func<string, Workflow?>? SharedWorkflows { get; set; }
+
+    private readonly Dictionary<(string DeviceId, string ControlId), HashSet<string>> _breakpoints = [];
+
+    /// <summary>The key of a breakpoint on a node: its id, with the shared workflow's id in front when it is in one.</summary>
+    public static string BreakpointKey(string? workflowId, string nodeId) => workflowId is null ? nodeId : $"{workflowId}/{nodeId}";
+
+    /// <summary>Sets where the runs of a control's workflow stop (<see cref="BreakpointKey"/>s). Runs that are going keep to it from the next node on.</summary>
+    public void SetBreakpoints(string deviceId, string controlId, IReadOnlyCollection<string> keys)
+    {
+        var key = (deviceId.ToLowerInvariant(), controlId.ToLowerInvariant());
+        if (keys.Count == 0)
+        {
+            _breakpoints.Remove(key);
+        }
+        else
+        {
+            _breakpoints[key] = new HashSet<string>(keys, StringComparer.Ordinal);
+        }
+    }
+
+    /// <summary>The ids of the runs of a control's workflow that are held at a breakpoint or step.</summary>
+    public IReadOnlyList<int> PausedRuns(string deviceId, string controlId) =>
+        [.. _running.Where(pair => Same(pair.Key.DeviceId, deviceId) && Same(pair.Key.ControlId, controlId)).SelectMany(static pair => pair.Value).Where(static run => run.Paused).Select(static run => run.Id)];
+
+    /// <summary>Lets a paused run go on until the next breakpoint (or its end).</summary>
+    public bool Continue(int runId) => Release(runId, step: false);
+
+    /// <summary>Lets a paused run enter the node it waits in front of, then holds it before the next one.</summary>
+    public bool Step(int runId) => Release(runId, step: true);
+
+    private bool Release(int runId, bool step)
+    {
+        var run = _running.Values.SelectMany(static list => list).FirstOrDefault(candidate => candidate.Id == runId && candidate.Paused);
+        if (run?.Resume is not { } resume)
+        {
+            return false;
+        }
+
+        run.StepMode = step;
+        run.Paused = false;
+        run.Resume = null;
+        Trace(run, null, WorkflowTraceKind.Resumed, step ? "Step" : "Continue");
+        Post(run, resume);
+        return true;
+    }
+
+    private bool IsBreakpoint(Run run, Frame frame, WorkflowNode node) =>
+        _breakpoints.Count > 0 &&
+        _breakpoints.TryGetValue((run.Input.DeviceId.ToLowerInvariant(), run.Input.ControlId.ToLowerInvariant()), out var keys) &&
+        keys.Contains(BreakpointKey(frame.CallId, node.Id));
+
     /// <summary>Whether any run of the control's workflow is still going.</summary>
     public bool IsRunning(string deviceId, string controlId) =>
         _running.Any(pair => Same(pair.Key.DeviceId, deviceId) && Same(pair.Key.ControlId, controlId) && pair.Value.Count > 0);
@@ -115,7 +168,7 @@ public sealed class WorkflowEngine
 
             list.Add(started);
             Trace(started, node.Id, WorkflowTraceKind.Started, WorkflowTriggers.Describe(trigger));
-            Post(started, () => Enter(started, node, () => Finish(started)));
+            Post(started, () => Enter(started, new Frame(workflow, null, null), node, () => Finish(started)));
             handled = true;
         }
 
@@ -137,16 +190,25 @@ public sealed class WorkflowEngine
         }
     }
 
-    private void Enter(Run run, WorkflowNode node, Action done)
+    private void Enter(Run run, Frame frame, WorkflowNode node, Action done, bool skipGate = false)
     {
         if (run.Ended)
         {
             return;
         }
 
+        // A breakpoint, or a step that wants to stop at the next node, holds the run in front of this one.
+        if (!skipGate && (run.StepMode || IsBreakpoint(run, frame, node)))
+        {
+            run.Paused = true;
+            run.Resume = () => Enter(run, frame, node, done, skipGate: true);
+            Trace(run, frame, node.Id, WorkflowTraceKind.Paused, run.StepMode ? "Paused (step)" : "Paused at a breakpoint");
+            return;
+        }
+
         if (++run.NodesEntered > MaxNodesPerRun)
         {
-            Trace(run, node.Id, WorkflowTraceKind.Failed, $"Stopped after {MaxNodesPerRun} steps.");
+            Trace(run, frame, node.Id, WorkflowTraceKind.Failed, $"Stopped after {MaxNodesPerRun} steps.");
             End(run);
             return;
         }
@@ -155,20 +217,20 @@ public sealed class WorkflowEngine
         switch (node.Kind)
         {
             case WorkflowNodeKinds.Action:
-                RunAction(run, node, 1, done);
+                RunAction(run, frame, node, 1, done);
                 break;
 
             case WorkflowNodeKinds.Wait:
             {
                 var ms = Math.Clamp(settings.GetInt(WorkflowKeys.Milliseconds, 500), 0, WorkflowKeys.MaxWaitMs);
-                Trace(run, node.Id, WorkflowTraceKind.Node, $"Waiting {FormatDuration(ms)}", ms > 0 ? TimeSpan.FromMilliseconds(ms) : null);
+                Trace(run, frame, node.Id, WorkflowTraceKind.Node, $"Waiting {FormatDuration(ms)}", ms > 0 ? TimeSpan.FromMilliseconds(ms) : null);
                 if (ms > 0 && Scheduler is { } schedule)
                 {
-                    schedule(run.Input.DeviceId, TimeSpan.FromMilliseconds(ms), () => Post(run, () => Follow(run, node, WorkflowPorts.Next, done)));
+                    schedule(run.Input.DeviceId, TimeSpan.FromMilliseconds(ms), () => Post(run, () => Follow(run, frame, node, WorkflowPorts.Next, done)));
                 }
                 else
                 {
-                    Follow(run, node, WorkflowPorts.Next, done);
+                    Follow(run, frame, node, WorkflowPorts.Next, done);
                 }
 
                 break;
@@ -177,8 +239,8 @@ public sealed class WorkflowEngine
             case WorkflowNodeKinds.If:
             {
                 var yes = Evaluate(settings, run.Scope);
-                Trace(run, node.Id, WorkflowTraceKind.Node, yes ? "Yes" : "No");
-                Follow(run, node, yes ? WorkflowPorts.Yes : WorkflowPorts.No, done);
+                Trace(run, frame, node.Id, WorkflowTraceKind.Node, yes ? "Yes" : "No");
+                Follow(run, frame, node, yes ? WorkflowPorts.Yes : WorkflowPorts.No, done);
                 break;
             }
 
@@ -187,8 +249,8 @@ public sealed class WorkflowEngine
                 var key = ToggleKey(run.Input.DeviceId, run.Input.ControlId, node.Id);
                 var second = _variables.TryGetValue<bool>(key, out var state) && state;
                 _variables.Publish(key, !second);
-                Trace(run, node.Id, WorkflowTraceKind.Node, second ? "2nd" : "1st");
-                Follow(run, node, second ? WorkflowPorts.Second : WorkflowPorts.First, done);
+                Trace(run, frame, node.Id, WorkflowTraceKind.Node, second ? "2nd" : "1st");
+                Follow(run, frame, node, second ? WorkflowPorts.Second : WorkflowPorts.First, done);
                 break;
             }
 
@@ -215,17 +277,17 @@ public sealed class WorkflowEngine
                     if (Another())
                     {
                         round++;
-                        Trace(run, node.Id, WorkflowTraceKind.Node, times is { } total ? $"Round {round} of {total}" : $"Round {round}");
-                        Follow(run, node, WorkflowPorts.Each, Pause);
+                        Trace(run, frame, node.Id, WorkflowTraceKind.Node, times is { } total ? $"Round {round} of {total}" : $"Round {round}");
+                        Follow(run, frame, node, WorkflowPorts.Each, Pause);
                     }
                     else
                     {
                         if (times is null && round >= WorkflowKeys.MaxConditionRounds)
                         {
-                            Trace(run, node.Id, WorkflowTraceKind.Failed, $"Stopped after {WorkflowKeys.MaxConditionRounds} rounds.");
+                            Trace(run, frame, node.Id, WorkflowTraceKind.Failed, $"Stopped after {WorkflowKeys.MaxConditionRounds} rounds.");
                         }
 
-                        Follow(run, node, WorkflowPorts.Done, done);
+                        Follow(run, frame, node, WorkflowPorts.Done, done);
                     }
                 }
 
@@ -235,7 +297,7 @@ public sealed class WorkflowEngine
                     var last = times is { } fixedTimes && round >= fixedTimes;
                     if (interval > 0 && !last && Scheduler is { } schedule)
                     {
-                        Trace(run, node.Id, WorkflowTraceKind.Node, $"Next round in {FormatDuration(interval)}", TimeSpan.FromMilliseconds(interval));
+                        Trace(run, frame, node.Id, WorkflowTraceKind.Node, $"Next round in {FormatDuration(interval)}", TimeSpan.FromMilliseconds(interval));
                         schedule(run.Input.DeviceId, TimeSpan.FromMilliseconds(interval), () => Post(run, Loop));
                     }
                     else
@@ -249,12 +311,16 @@ public sealed class WorkflowEngine
             }
 
             case WorkflowNodeKinds.SetVariable:
-                Trace(run, node.Id, WorkflowTraceKind.Node, Apply(settings, run.Scope));
-                Follow(run, node, WorkflowPorts.Next, done);
+                Trace(run, frame, node.Id, WorkflowTraceKind.Node, Apply(settings, run.Scope));
+                Follow(run, frame, node, WorkflowPorts.Next, done);
+                break;
+
+            case WorkflowNodeKinds.Call:
+                RunCall(run, frame, node, done);
                 break;
 
             case WorkflowNodeKinds.Stop:
-                Trace(run, node.Id, WorkflowTraceKind.Node, "Stop");
+                Trace(run, frame, node.Id, WorkflowTraceKind.Node, "Stop");
                 Cancel(run, "Ended by a Stop node.");
                 break;
 
@@ -262,12 +328,36 @@ public sealed class WorkflowEngine
                 // The trigger (and kinds from a newer version) just continue.
                 if (node.Kind != WorkflowNodeKinds.Trigger)
                 {
-                    Trace(run, node.Id, WorkflowTraceKind.Node, node.Kind);
+                    Trace(run, frame, node.Id, WorkflowTraceKind.Node, node.Kind);
                 }
 
-                Follow(run, node, WorkflowPorts.Next, done);
+                Follow(run, frame, node, WorkflowPorts.Next, done);
                 break;
         }
+    }
+
+    /// <summary>Runs a Call node: the shared workflow from its When node on, then goes on at Then (or On error when it can't run).</summary>
+    private void RunCall(Run run, Frame frame, WorkflowNode node, Action done)
+    {
+        var id = node.EffectiveSettings.Get(WorkflowKeys.Workflow).Trim();
+        var shared = id.Length == 0 ? null : SharedWorkflows?.Invoke(id);
+        var entry = shared?.Nodes.FirstOrDefault(static candidate => candidate.Kind == WorkflowNodeKinds.Trigger);
+        var problem = id.Length == 0 ? "No workflow chosen."
+            : shared is null ? $"The shared workflow '{id}' is gone."
+            : entry is null ? $"'{shared.Name ?? id}' has no When node to start at."
+            : frame.Calls(id) ? $"'{shared.Name ?? id}' would call itself."
+            : frame.Depth >= WorkflowKeys.MaxCallDepth ? $"Calls are nested more than {WorkflowKeys.MaxCallDepth} deep."
+            : null;
+        if (problem is not null)
+        {
+            var onError = frame.Workflow.LinksFrom(node.Id, WorkflowPorts.Error).Any();
+            Trace(run, frame, node.Id, WorkflowTraceKind.Failed, onError ? problem + " Going on at \"On error\"." : problem);
+            Follow(run, frame, node, onError ? WorkflowPorts.Error : WorkflowPorts.Next, done);
+            return;
+        }
+
+        Trace(run, frame, node.Id, WorkflowTraceKind.Node, $"Calling {shared!.Name ?? id}");
+        Enter(run, new Frame(shared, frame, id), entry!, () => Follow(run, frame, node, WorkflowPorts.Next, done));
     }
 
     /// <summary>Continues at every node linked from a port; <paramref name="done"/> runs once they all finished.</summary>
@@ -275,7 +365,7 @@ public sealed class WorkflowEngine
     /// Runs an action node. When the action did not run it is tried again as many times as the node says,
     /// then the run goes on at the node's error output when that is linked, else at its next one.
     /// </summary>
-    private void RunAction(Run run, WorkflowNode node, int attempt, Action done)
+    private void RunAction(Run run, Frame frame, WorkflowNode node, int attempt, Action done)
     {
         if (run.Ended)
         {
@@ -288,25 +378,25 @@ public sealed class WorkflowEngine
         if (!ran && node.Action is { } failed && attempt <= retries && Scheduler is { } schedule)
         {
             var delay = Math.Clamp(settings.GetInt(WorkflowKeys.RetryDelay, 1000), 0, WorkflowKeys.MaxWaitMs);
-            Trace(run, node.Id, WorkflowTraceKind.Node,
+            Trace(run, frame, node.Id, WorkflowTraceKind.Node,
                 $"{failed.ActionName} did not run; trying again in {FormatDuration(delay)} (try {attempt + 1} of {retries + 1})",
                 delay > 0 ? TimeSpan.FromMilliseconds(delay) : null);
-            schedule(run.Input.DeviceId, TimeSpan.FromMilliseconds(delay), () => Post(run, () => RunAction(run, node, attempt + 1, done)));
+            schedule(run.Input.DeviceId, TimeSpan.FromMilliseconds(delay), () => Post(run, () => RunAction(run, frame, node, attempt + 1, done)));
             return;
         }
 
         var line = node.Action is null
             ? "No action chosen."
             : ran ? node.Action.ActionName : $"{node.Action.ActionName} did not run (not loaded, or it failed).";
-        var onError = !ran && run.Workflow.LinksFrom(node.Id, WorkflowPorts.Error).Any();
-        Trace(run, node.Id, ran ? WorkflowTraceKind.Node : WorkflowTraceKind.Failed, onError ? line + " Going on at \"On error\"." : line);
-        Follow(run, node, onError ? WorkflowPorts.Error : WorkflowPorts.Next, done);
+        var onError = !ran && frame.Workflow.LinksFrom(node.Id, WorkflowPorts.Error).Any();
+        Trace(run, frame, node.Id, ran ? WorkflowTraceKind.Node : WorkflowTraceKind.Failed, onError ? line + " Going on at \"On error\"." : line);
+        Follow(run, frame, node, onError ? WorkflowPorts.Error : WorkflowPorts.Next, done);
     }
 
-    private void Follow(Run run, WorkflowNode node, string port, Action done)
+    private void Follow(Run run, Frame frame, WorkflowNode node, string port, Action done)
     {
-        var targets = run.Workflow.LinksFrom(node.Id, port)
-            .Select(link => run.Workflow.Find(link.To))
+        var targets = frame.Workflow.LinksFrom(node.Id, port)
+            .Select(link => frame.Workflow.Find(link.To))
             .OfType<WorkflowNode>()
             .ToList();
         if (targets.Count == 0)
@@ -318,7 +408,7 @@ public sealed class WorkflowEngine
         var remaining = targets.Count;
         foreach (var target in targets)
         {
-            Post(run, () => Enter(run, target, () =>
+            Post(run, () => Enter(run, frame, target, () =>
             {
                 if (--remaining == 0)
                 {
@@ -337,7 +427,7 @@ public sealed class WorkflowEngine
         }
 
         run.Work.Enqueue(work);
-        if (run.Pumping)
+        if (run.Pumping || run.Paused)
         {
             return;
         }
@@ -345,7 +435,7 @@ public sealed class WorkflowEngine
         run.Pumping = true;
         try
         {
-            while (!run.Ended && run.Work.TryDequeue(out var next))
+            while (!run.Ended && !run.Paused && run.Work.TryDequeue(out var next))
             {
                 next();
             }
@@ -495,7 +585,10 @@ public sealed class WorkflowEngine
         }
     }
 
-    private void Trace(Run run, string? nodeId, WorkflowTraceKind kind, string detail, TimeSpan? wait = null)
+    private void Trace(Run run, Frame frame, string? nodeId, WorkflowTraceKind kind, string detail, TimeSpan? wait = null) =>
+        Trace(run, nodeId, kind, detail, wait, frame.CallId);
+
+    private void Trace(Run run, string? nodeId, WorkflowTraceKind kind, string detail, TimeSpan? wait = null, string? workflowId = null)
     {
         var handler = Traced;
         if (handler is null)
@@ -505,7 +598,7 @@ public sealed class WorkflowEngine
 
         try
         {
-            handler(new WorkflowTrace(run.Input.DeviceId, run.ProfileId, run.Input.ControlId, run.Id, nodeId, kind, detail, DateTimeOffset.Now) { Wait = wait });
+            handler(new WorkflowTrace(run.Input.DeviceId, run.ProfileId, run.Input.ControlId, run.Id, nodeId, kind, detail, DateTimeOffset.Now) { Wait = wait, WorkflowId = workflowId });
         }
         catch
         {
@@ -565,5 +658,29 @@ public sealed class WorkflowEngine
         public bool Ended { get; set; }
 
         public int NodesEntered { get; set; }
+
+        /// <summary>Held in front of a node (a breakpoint or a step); the work queue doesn't run until it is released.</summary>
+        public bool Paused { get; set; }
+
+        /// <summary>Stop in front of every node (after a Step).</summary>
+        public bool StepMode { get; set; }
+
+        /// <summary>What continues the run from where it is held.</summary>
+        public Action? Resume { get; set; }
+    }
+
+    /// <summary>The workflow a node runs in: the control's own (<see cref="CallId"/> null) or a shared one a Call node entered.</summary>
+    private sealed class Frame(Workflow workflow, Frame? parent, string? callId)
+    {
+        public Workflow Workflow { get; } = workflow;
+
+        public Frame? Parent { get; } = parent;
+
+        public string? CallId { get; } = callId;
+
+        public int Depth => Parent is null ? 0 : Parent.Depth + 1;
+
+        /// <summary>Whether the shared workflow <paramref name="id"/> is already being run up this chain of calls.</summary>
+        public bool Calls(string id) => CallId == id || Parent?.Calls(id) == true;
     }
 }
