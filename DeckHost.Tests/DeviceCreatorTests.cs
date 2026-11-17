@@ -304,6 +304,41 @@ public sealed class DeviceCreatorTests : IDisposable
     }
 
     [Test]
+    public void Arrange_KeysDraggedIntoANewOrder_KeepsEveryKeyOnItsId()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        DragKey2LeftOfKey1(creator);
+        var before = creator.View.Controls.ToDictionary(static control => control.Name, static control => control.Id);
+
+        // Act
+        creator.View.ArrangeCommand.Execute(null);
+        creator.View.Controls[0].Dropped();
+
+        // Assert
+        Assert.That(creator.View.Controls.ToDictionary(static control => control.Name, static control => control.Id), Is.EqualTo(before));
+    }
+
+    [Test]
+    public void Arrange_KeysDraggedIntoANewOrder_LaysThemOutInThatOrder()
+    {
+        // Arrange
+        using var creator = ListeningCreator();
+        LearnTwoKeys(creator);
+        DragKey2LeftOfKey1(creator);
+
+        // Act
+        creator.View.ArrangeCommand.Execute(null);
+
+        // Assert
+        var second = creator.View.Controls.Single(static control => control.Name == SecondKeyName);
+        var first = creator.View.Controls.Single(static control => control.Name == FirstKeyName);
+        Assert.That(second.X, Is.LessThan(first.X));
+        Assert.That(second.Y, Is.EqualTo(first.Y));
+    }
+
+    [Test]
     public void Save_PushableKnob_KeepsWhatWasLearnedForTurningAndPressing()
     {
         // Arrange

@@ -440,18 +440,21 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Keys in a grid of <see cref="Columns"/>, knobs in a row below.</summary>
+    /// <summary>
+    /// Tidies the layout: keys into a grid of <see cref="Columns"/>, knobs in a row below. The order the controls
+    /// have now (their reading order, which is what the ids follow) is kept, so no control changes its id.
+    /// </summary>
     [RelayCommand]
     public void Arrange()
     {
-        var keys = Controls.Where(static control => !control.IsKnob).ToList();
+        var keys = KeysInReadingOrder();
         for (var index = 0; index < keys.Count; index++)
         {
             keys[index].MoveTo((index % Columns) * (KeySize + Gap), (index / Columns) * (KeySize + Gap));
         }
 
         var top = Math.Max(1, (keys.Count + Columns - 1) / Columns) * (KeySize + Gap) + 8;
-        var knobs = Controls.Where(static control => control.IsKnob).ToList();
+        var knobs = KnobsInReadingOrder();
         for (var index = 0; index < knobs.Count; index++)
         {
             knobs[index].MoveTo(index * (KeySize + Gap) + ((KeySize - KnobSize) / 2), keys.Count == 0 ? 0 : top);
@@ -460,6 +463,14 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanvasWidth));
         OnPropertyChanged(nameof(CanvasHeight));
     }
+
+    private List<CreatorControlViewModel> KeysInReadingOrder() =>
+        [.. Controls.Where(static control => !control.IsKnob)
+            .OrderBy(static control => Math.Round(control.Y / (KeySize / 2)))
+            .ThenBy(static control => control.X)];
+
+    private List<CreatorControlViewModel> KnobsInReadingOrder() =>
+        [.. Controls.Where(static control => control.IsKnob).OrderBy(static control => control.X).ThenBy(static control => control.Y)];
 
     public double CanvasWidth => Math.Max(480, Controls.Select(static control => control.X + control.Width).DefaultIfEmpty(0).Max() + 40);
 
@@ -491,16 +502,13 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
     /// <summary>Ids by layout (keys in reading order, knobs left to right) and a fresh live parser.</summary>
     internal void Rebuild()
     {
-        var keys = Controls.Where(static control => !control.IsKnob)
-            .OrderBy(static control => Math.Round(control.Y / (KeySize / 2)))
-            .ThenBy(static control => control.X)
-            .ToList();
+        var keys = KeysInReadingOrder();
         for (var index = 0; index < keys.Count; index++)
         {
             keys[index].Id = string.Create(CultureInfo.InvariantCulture, $"key.{index}");
         }
 
-        var knobs = Controls.Where(static control => control.IsKnob).OrderBy(static control => control.X).ThenBy(static control => control.Y).ToList();
+        var knobs = KnobsInReadingOrder();
         for (var index = 0; index < knobs.Count; index++)
         {
             knobs[index].Id = string.Create(CultureInfo.InvariantCulture, $"encoder.{index}");
