@@ -130,6 +130,7 @@
 							<Flyout Placement="BottomEdgeAlignedLeft">
 								<StackPanel Width="250" Spacing="8" Margin="6">
 									<Button Content="Profiles" HorizontalAlignment="Stretch" Click="OpenProfileManager_OnClick" />
+									<Button Content="Variables" HorizontalAlignment="Stretch" Click="OpenVariables_OnClick" ToolTip.Tip="CPU, memory, the app in front and the variables your workflows set" />
 									<Button Content="Plugins and store" HorizontalAlignment="Stretch" Click="OpenPluginManager_OnClick" />
 									<Button Content="Device settings" HorizontalAlignment="Stretch" Click="OpenDeviceSettings_OnClick" />
 									<Button Content="Add a USB device" HorizontalAlignment="Stretch" Click="OpenDeviceCreator_OnClick" ToolTip.Tip="Make a button box, pedal, jog wheel or other USB device into a deck" />

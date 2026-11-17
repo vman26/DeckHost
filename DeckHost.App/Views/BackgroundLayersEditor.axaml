@@ -110,7 +110,7 @@
 								<StackPanel Spacing="8" IsVisible="{Binding IsBound}" Margin="22,0,0,0">
 									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
 										<TextBlock Text="Variable" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
-										<TextBox Grid.Column="1" Text="{Binding Variable, Mode=TwoWay}" PlaceholderText="system.cpu, system.memory or vars.name" />
+										<local:VariableNameBox Grid.Column="1" Text="{Binding Variable, Mode=TwoWay}" Items="{Binding Suggestions}" Watermark="system.cpu, system.memory or vars.name" />
 									</Grid>
 									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
 										<TextBlock Text="Changes" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />

@@ -370,6 +370,14 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         }
     }
 
+    private void OpenVariables_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>() is { } host)
+        {
+            OpenSingle("Variables", () => new VariablesView { DataContext = new VariablesViewModel(host) });
+        }
+    }
+
     private void OpenProfileManager_OnClick(object? sender, RoutedEventArgs e)
     {
         if (TryResolve<ProfileManagerViewModel>() is { } profiles)

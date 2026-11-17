@@ -258,6 +258,9 @@ public sealed class BackgroundLayerRowViewModel : ViewModelBase
         set => Set(ref _isBound, value);
     }
 
+    /// <summary>The variables to offer for <see cref="Variable"/>.</summary>
+    public System.Collections.Generic.IReadOnlyList<string> Suggestions => VariableSuggestions.Keys();
+
     /// <summary>The variable to follow: <c>system.cpu</c>, <c>system.memory</c> or <c>vars.name</c> (a Set variable node's variable).</summary>
     public string Variable
     {

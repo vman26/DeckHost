@@ -1,0 +1,17 @@
+<UserControl
+		xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:local="using:DeckHost.App.Views"
+		x:Class="DeckHost.App.Views.VariableNameBox">
+	<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+		<AutoCompleteBox Name="Box"
+						 FilterMode="ContainsOrdinal"
+						 MinimumPrefixLength="0"
+						 MaxDropDownHeight="260"
+						 Text="{Binding Text, RelativeSource={RelativeSource AncestorType=local:VariableNameBox}, Mode=TwoWay}"
+						 ItemsSource="{Binding Items, RelativeSource={RelativeSource AncestorType=local:VariableNameBox}}"
+						 PlaceholderText="{Binding Watermark, RelativeSource={RelativeSource AncestorType=local:VariableNameBox}}"
+						 GotFocus="Box_OnGotFocus" />
+		<Button Grid.Column="1" Content="▾" Padding="10,4" ToolTip.Tip="Pick one of the variables DeckHost knows (or type a new name)" Click="List_OnClick" />
+	</Grid>
+</UserControl>

@@ -279,6 +279,34 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 .OrderBy(static pair => pair.Key, StringComparer.Ordinal)]
             : [];
 
+    public IReadOnlyList<State.VariableInfo> Variables()
+    {
+        if (_variableStore is not State.VariableStore store)
+        {
+            return [];
+        }
+
+        var published = store.Snapshot("system.").Concat(store.Snapshot("vars."))
+            .ToDictionary(static pair => pair.Key, static pair => pair.Value?.ToString() ?? string.Empty, StringComparer.Ordinal);
+        foreach (var key in State.VariableCatalog.SystemKeys)
+        {
+            published.TryAdd(key, string.Empty);
+        }
+
+        return [.. published
+            .Select(static pair => State.VariableCatalog.Describe(pair.Key, pair.Value))
+            .OrderBy(static info => info.Scope)
+            .ThenBy(static info => info.Name, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    public void RemoveVariable(string key) => Enqueue(() =>
+    {
+        if (key.StartsWith("vars.", StringComparison.Ordinal) && _variableStore is State.VariableStore store)
+        {
+            store.Remove(key);
+        }
+    });
+
     public void SetSharedWorkflows(IReadOnlyList<Workflow> workflows)
     {
         var byId = workflows.Where(static workflow => !string.IsNullOrWhiteSpace(workflow.Id))

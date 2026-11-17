@@ -15,6 +15,13 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Backgrounds: gradients can have more than two colors (add, reorder, set where each starts) and there are radial
   gradients; the CPU glow preset is visible at ordinary load (full at 60 %) and the CPU value is read right away.
 
+- A **Layout** button next to Back (and Ctrl+Home) closes every open page and returns to the device, instead of
+  clicking Back page after page.
+- A **Variables** page (☰): DeckHost's own variables (CPU, memory, the app in front) and the ones your workflows set,
+  with scope, type and live value; create, change and remove your own.
+- Variable names are picked from a list (or typed) in workflow nodes, Show Variable and the background that follows a
+  variable.
+
 - Plugin store: open-source Elgato plugins can come from a checksummed copy kept in DeckHost's plugin
   repository instead of the community archive (the copying itself stays off for now).
 - Linux: an AppImage next to the tar.gz, one file that runs without installing. DeckHost doesn't replace it

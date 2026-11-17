@@ -54,6 +54,7 @@ public partial class App : Application
 
             var services = ConfigureServices();
             Ioc.Default.ConfigureServices(services);
+            ViewModels.VariableSuggestions.Source = services.GetRequiredService<IDeviceHostService>().Variables;
 
             var logger = services.GetRequiredService<ILogger<App>>();
             var deviceHostService = services.GetRequiredService<DeviceHostService>();

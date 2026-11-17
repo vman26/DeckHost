@@ -387,6 +387,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `Choice` |  |
 | `FilePath` |  |
 | `Hotkey` | A key combination such as "Ctrl+Shift+M"; the editor can record it from a key press. |
+| `Variable` | The name of a variable (the ones workflows set, `vars.{name}`): typed freely, or picked from the variables DeckHost knows. The stored value is the name as typed. |
 
 ### ActionSettingOption
 

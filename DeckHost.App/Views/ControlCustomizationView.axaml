@@ -80,6 +80,13 @@
 				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
 			</StackPanel>
 		</DataTemplate>
+		<DataTemplate DataType="vm:VariableSettingField">
+			<StackPanel Spacing="4">
+				<TextBlock Classes="label" Text="{Binding Label}" />
+				<local:VariableNameBox Text="{Binding Value, Mode=TwoWay}" Items="{Binding Suggestions}" Watermark="{Binding Placeholder}" />
+				<TextBlock Classes="hint" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+			</StackPanel>
+		</DataTemplate>
 		<DataTemplate DataType="vm:HotkeySettingField">
 			<StackPanel Spacing="4">
 				<TextBlock Classes="label" Text="{Binding Label}" />

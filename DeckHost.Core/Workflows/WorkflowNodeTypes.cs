@@ -58,7 +58,7 @@ public static class WorkflowNodeTypes
             {
                 ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.AppInFront),
             },
-            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode", Description: "Names ignore case.")
+            new(WorkflowKeys.Name, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode", Description: "Names ignore case.")
             {
                 ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.VariableChanged),
             },
@@ -122,7 +122,7 @@ public static class WorkflowNodeTypes
             {
                 ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckExpression),
             },
-            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode", Description: "Set it with a Set variable node; names ignore case.")
+            new(WorkflowKeys.Name, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode", Description: "Set it with a Set variable node; names ignore case.")
             {
                 ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckVariable),
             },
@@ -181,11 +181,11 @@ public static class WorkflowNodeTypes
                 new(WorkflowKeys.ModeUntil, "until a variable condition is true"),
             ]),
             new(WorkflowKeys.Count, "Times", ActionSettingKind.Number, "2") { Range = new NumberRange(1, 100), ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeCount) },
-            new(WorkflowKeys.Times, "Variable", Placeholder: "e.g. rounds", Description: "Its value (a whole number, up to 1000) is how many times. Set it with a Set variable node.")
+            new(WorkflowKeys.Times, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. rounds", Description: "Its value (a whole number, up to 1000) is how many times. Set it with a Set variable node.")
             {
                 ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeVariable),
             },
-            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode", Description: "Checked before every round; names ignore case. Stops after 10 000 rounds at most.")
+            new(WorkflowKeys.Name, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode", Description: "Checked before every round; names ignore case. Stops after 10 000 rounds at most.")
             {
                 ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil),
             },
@@ -217,7 +217,7 @@ public static class WorkflowNodeTypes
         0xFF64748B,
         Contracts.Icons.Variable,
         [
-            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode"),
+            new(WorkflowKeys.Name, "Variable", ActionSettingKind.Variable, Placeholder: "e.g. mode"),
             ScopeSetting(null),
             new(WorkflowKeys.Operation, "Do", ActionSettingKind.Choice, WorkflowKeys.Set, Options:
             [

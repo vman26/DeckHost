@@ -81,6 +81,7 @@ public sealed class SettingsEditorViewModel : ViewModelBase
             ActionSettingKind.Choice => new ChoiceSettingField(definition, value, controlInputs),
             ActionSettingKind.FilePath => new FilePathSettingField(definition, value),
             ActionSettingKind.Hotkey => new HotkeySettingField(definition, value),
+            ActionSettingKind.Variable => new VariableSettingField(definition, value),
             ActionSettingKind.Secret => new SecretSettingField(definition, value),
             ActionSettingKind.Number => new NumberSettingField(definition, value),
             _ => new TextSettingField(definition, value),
@@ -179,6 +180,13 @@ public abstract class SettingFieldViewModel(ActionSettingDefinition definition, 
 public sealed class TextSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value);
 
 public sealed class SecretSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value);
+
+/// <summary>A variable's name: typed freely, or picked from the variables DeckHost knows (see <see cref="VariableSuggestions"/>).</summary>
+public sealed class VariableSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value)
+{
+    /// <summary>The names to offer, read when the editor is built.</summary>
+    public IReadOnlyList<string> Suggestions { get; } = VariableSuggestions.Names();
+}
 
 public sealed class FilePathSettingField(ActionSettingDefinition definition, string value) : SettingFieldViewModel(definition, value);
 

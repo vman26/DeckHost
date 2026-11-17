@@ -196,6 +196,7 @@
   DeckHost.Contracts.Models.ActionSettingKind.Secret = 1
   DeckHost.Contracts.Models.ActionSettingKind.Text = 0
   DeckHost.Contracts.Models.ActionSettingKind.Toggle = 3
+  DeckHost.Contracts.Models.ActionSettingKind.Variable = 7
   DeckHost.Contracts.Models.ActionSettingKind.value__ : System.Int32
   DeckHost.Contracts.Models.ActionSettingOption(System.String Value, System.String Label)
   DeckHost.Contracts.Models.ActionSettingOption.<Clone>$() : DeckHost.Contracts.Models.ActionSettingOption

@@ -74,6 +74,14 @@ public interface IDeviceHostService : IAsyncDisposable
     /// <summary>The variables workflows and actions have set (name and value; names are lower case), for the editor's variable view.</summary>
     IReadOnlyList<KeyValuePair<string, string>> UserVariables() => [];
 
+    /// <summary>Every variable the app knows: DeckHost's own (<c>system.*</c>) and the ones workflows set, with scope, type and value.</summary>
+    IReadOnlyList<State.VariableInfo> Variables() => [];
+
+    /// <summary>Removes a user variable (<c>vars.*</c>) from the store.</summary>
+    void RemoveVariable(string key)
+    {
+    }
+
     /// <summary>The shared workflows Call nodes can run (replaces the previous list).</summary>
     void SetSharedWorkflows(IReadOnlyList<Workflow> workflows)
     {

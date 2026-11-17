@@ -50,6 +50,22 @@ namespace DeckHost.Core.State
         public IReadOnlyList<KeyValuePair<string, object?>> Snapshot(string prefix) =>
             [.. _variables.Where(pair => pair.Key.StartsWith(prefix, StringComparison.Ordinal)).Select(static pair => new KeyValuePair<string, object?>(pair.Key, pair.Value.Value))];
 
+        /// <summary>Takes a variable out of the store (what is listed and followed), telling observers it has no value any more.</summary>
+        public bool Remove(string key)
+        {
+            ArgumentNullException.ThrowIfNull(key);
+            if (!_variables.TryRemove(key, out var subject))
+            {
+                return false;
+            }
+
+            subject.OnNext(null);
+            subject.OnCompleted();
+            subject.Dispose();
+            _changes.OnNext(new KeyValuePair<string, object?>(key, null));
+            return true;
+        }
+
         public void Dispose()
         {
             _changes.OnCompleted();

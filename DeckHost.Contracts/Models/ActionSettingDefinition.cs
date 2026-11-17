@@ -14,6 +14,12 @@ public enum ActionSettingKind
 
     /// <summary>A key combination such as "Ctrl+Shift+M"; the editor can record it from a key press.</summary>
     Hotkey,
+
+    /// <summary>
+    /// The name of a variable (the ones workflows set, <c>vars.{name}</c>): typed freely, or picked from the variables DeckHost
+    /// knows. The stored value is the name as typed.
+    /// </summary>
+    Variable,
 }
 
 public sealed record ActionSettingOption(string Value, string Label)
