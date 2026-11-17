@@ -7,6 +7,10 @@ namespace DeckHost.Tests;
 /// <summary>A plugin's documentation page: its links, its README and local pictures.</summary>
 public sealed class PluginDocsTests : IDisposable
 {
+    private const string Website = "https://example.com/docs";
+    private const string Repository = "https://github.com/you/plugin";
+    private const string OtherSite = "https://example.com";
+
     private readonly string _folder = Directory.CreateTempSubdirectory("deckhost-docs").FullName;
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
@@ -16,45 +20,110 @@ public sealed class PluginDocsTests : IDisposable
             InstallDirectory: system ? null : _folder, Url: url, Repository: repository);
 
     [Test]
-    public void An_installed_plugin_links_its_website_its_source_and_its_folder()
+    public void BuildLinks_InstalledPluginWithAWebsiteAndASource_LinksTheWebsiteTheSourceAndTheFolder()
     {
-        var links = PluginDocsViewModel.BuildLinks(Entry("https://example.com/docs", "https://github.com/you/plugin"));
+        // Arrange
+        var entry = Entry(Website, Repository);
 
+        // Act
+        var links = PluginDocsViewModel.BuildLinks(entry);
+
+        // Assert
         Assert.That(links.Select(static link => link.Label), Is.EqualTo(new[] { "Website", "Source code", "Plugin folder" }));
     }
 
     [Test]
-    public void A_github_website_is_the_source()
+    public void RepositoryOf_GithubWebsite_IsTheSource()
     {
-        Assert.That(PluginDocsViewModel.RepositoryOf(Entry("https://github.com/you/plugin")), Is.EqualTo("https://github.com/you/plugin"));
-        Assert.That(PluginDocsViewModel.RepositoryOf(Entry("https://example.com")), Is.Null);
+        // Arrange
+        var entry = Entry(Repository);
+
+        // Act
+        var repository = PluginDocsViewModel.RepositoryOf(entry);
+
+        // Assert
+        Assert.That(repository, Is.EqualTo(Repository));
     }
 
     [Test]
-    public void A_built_in_plugin_links_DeckHosts_documentation()
+    public void RepositoryOf_OtherWebsite_IsNull()
     {
-        var link = Expect.Single(PluginDocsViewModel.BuildLinks(Entry(system: true)));
+        // Arrange
+        var entry = Entry(OtherSite);
 
+        // Act
+        var repository = PluginDocsViewModel.RepositoryOf(entry);
+
+        // Assert
+        Assert.That(repository, Is.Null);
+    }
+
+    [Test]
+    public void BuildLinks_BuiltInPlugin_LinksDeckHostsActionReference()
+    {
+        // Arrange
+        var entry = Entry(system: true);
+
+        // Act
+        var link = Expect.Single(PluginDocsViewModel.BuildLinks(entry));
+
+        // Assert
         Assert.That(link.Url, Does.EndWith("/reference/actions/"));
     }
 
     [Test]
-    public void The_readme_in_the_plugin_folder_is_found_whatever_its_case()
+    public void ReadmePath_FolderWithoutAReadme_IsNull()
     {
-        Assert.That(Entry().ReadmePath, Is.Null);
-        File.WriteAllText(Path.Combine(_folder, "readme.MD"), "# Hi");
+        // Arrange
+        var entry = Entry();
 
-        Assert.That(Path.GetFileName(Entry().ReadmePath), Is.EqualTo("readme.MD"));
+        // Act
+        var path = entry.ReadmePath;
+
+        // Assert
+        Assert.That(path, Is.Null);
     }
 
     [Test]
-    public void A_local_readme_shows_pictures_from_its_own_folder_only()
+    public void ReadmePath_ReadmeInAnyCase_IsFound()
     {
-        var folder = new Uri(_folder + Path.DirectorySeparatorChar);
+        // Arrange
+        File.WriteAllText(Path.Combine(_folder, "readme.MD"), "# Hi");
 
-        Assert.That(MarkdownView.Resolve("img/a.png", folder), Is.EqualTo(new Uri(Path.Combine(_folder, "img", "a.png")).AbsoluteUri));
-        Assert.That(MarkdownView.Resolve("../secret.png", folder), Is.Null);
-        Assert.That(MarkdownView.Resolve("/etc/passwd", folder), Is.Null);
-        Assert.That(MarkdownView.Resolve("file:///etc/passwd", folder), Is.Null);
+        // Act
+        var path = Entry().ReadmePath;
+
+        // Assert
+        Assert.That(Path.GetFileName(path), Is.EqualTo("readme.MD"));
+    }
+
+    private Uri ReadmeFolder() => new(_folder + Path.DirectorySeparatorChar);
+
+    [Test]
+    public void Resolve_PictureInsideTheReadmesFolder_IsAFileUri()
+    {
+        // Arrange
+        var folder = ReadmeFolder();
+
+        // Act
+        var resolved = MarkdownView.Resolve("img/a.png", folder);
+
+        // Assert
+        Assert.That(resolved, Is.EqualTo(new Uri(Path.Combine(_folder, "img", "a.png")).AbsoluteUri));
+    }
+
+    [TestCase("../secret.png")]
+    [TestCase("/etc/passwd")]
+    [TestCase("file:///etc/passwd")]
+    public void Resolve_PictureOutsideTheReadmesFolder_IsNull(string source)
+    {
+        // Arrange
+        var folder = ReadmeFolder();
+
+        // Act
+        var resolved = MarkdownView.Resolve(source, folder);
+
+        // Assert
+        Assert.That(resolved, Is.Null);
     }
 }

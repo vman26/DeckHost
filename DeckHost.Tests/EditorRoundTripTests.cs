@@ -23,27 +23,70 @@ public class EditorRoundTripTests
         yield return new TestCaseData(new ControlBinding("key.3", ProfileActionKind.Single, clock.ToActionReference(), new ControlAppearance(Text: "Time"), [])).SetName("Clock with text");
     }
 
-    [TestCaseSource(nameof(Bindings))]
-    public void An_untouched_editor_builds_the_same_binding(ControlBinding model)
+    private static readonly System.Text.Json.JsonSerializerOptions Options = new() { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
+
+    private static ControlBinding BuiltByAnUntouchedEditor(ControlBinding model)
     {
         var item = Actions.First(action => action.ToActionReference().ActionId == model.Action.ActionId);
         var editor = new ControlCustomizationViewModel(Key(), new ControlBindingViewModel(model, item, []), Actions, null);
+        return editor.BuildBinding()!;
+    }
 
-        var built = editor.BuildBinding();
+    [TestCaseSource(nameof(Bindings))]
+    public void BuildBinding_UntouchedEditor_SerializesLikeTheGivenBinding(ControlBinding model)
+    {
+        // Arrange (an editor opened on the binding)
 
-        var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
-        Assert.That(System.Text.Json.JsonSerializer.Serialize(built, options), Is.EqualTo(System.Text.Json.JsonSerializer.Serialize(model, options)));
+        // Act
+        var built = BuiltByAnUntouchedEditor(model);
+
+        // Assert
+        Assert.That(System.Text.Json.JsonSerializer.Serialize(built, Options), Is.EqualTo(System.Text.Json.JsonSerializer.Serialize(model, Options)));
+    }
+
+    [TestCaseSource(nameof(Bindings))]
+    public void SameBinding_UntouchedEditorsBinding_IsTheGivenBinding(ControlBinding model)
+    {
+        // Arrange (an editor opened on the binding)
+
+        // Act
+        var built = BuiltByAnUntouchedEditor(model);
+
+        // Assert
         Assert.That(MainViewModel.SameBinding(model, built), Is.True);
     }
 
-    [Test]
-    public void No_settings_and_empty_settings_are_the_same_binding()
+    private static (ControlBinding FromFile, ActionReference Play) PlayWithoutSettings()
     {
         var play = Actions.First(action => action.Name == "Play / Pause").ToActionReference();
-        var fromFile = new ControlBinding("key.3", ProfileActionKind.Single, play with { Settings = null }, new ControlAppearance(), []);
+        return (new ControlBinding("key.3", ProfileActionKind.Single, play with { Settings = null }, new ControlAppearance(), []), play);
+    }
+
+    [Test]
+    public void SameBinding_NoSettingsAndEmptySettings_AreTheSameBinding()
+    {
+        // Arrange
+        var (fromFile, play) = PlayWithoutSettings();
         var fromEditor = fromFile with { Action = play with { Settings = new ActionSettings([]) } };
 
-        Assert.That(MainViewModel.SameBinding(fromFile, fromEditor), Is.True);
-        Assert.That(MainViewModel.SameBinding(fromFile, fromEditor with { Action = play with { Settings = new ActionSettings([new("trigger", "release")]) } }), Is.False);
+        // Act
+        var same = MainViewModel.SameBinding(fromFile, fromEditor);
+
+        // Assert
+        Assert.That(same, Is.True);
+    }
+
+    [Test]
+    public void SameBinding_EmptySettingsAndASetting_AreDifferentBindings()
+    {
+        // Arrange
+        var (fromFile, play) = PlayWithoutSettings();
+        var withASetting = fromFile with { Action = play with { Settings = new ActionSettings([new("trigger", "release")]) } };
+
+        // Act
+        var same = MainViewModel.SameBinding(fromFile, withASetting);
+
+        // Assert
+        Assert.That(same, Is.False);
     }
 }

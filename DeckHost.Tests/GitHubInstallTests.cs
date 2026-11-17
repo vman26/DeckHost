@@ -7,6 +7,10 @@ namespace DeckHost.Tests;
 /// <summary>Installing a plugin from a GitHub repository's releases.</summary>
 public sealed class GitHubInstallTests
 {
+    private const string RepositoryLink = "https://github.com/you/clock-plugin";
+    private const string StableUrl = "https://example.com/stable";
+    private const string Checksum = "ABC123";
+
     private const string Releases = """
         [
           { "tag_name": "v3.0.0", "draft": true, "prerelease": false,
@@ -22,45 +26,107 @@ public sealed class GitHubInstallTests
         ]
         """;
 
-    [Test]
-    public void The_newest_stable_release_and_its_plugin_file_are_picked()
-    {
-        var picked = PluginStore.PickReleaseAsset(Releases);
+    private const string OnlyAPreRelease = """[ { "tag_name": "v0.1-rc", "prerelease": true, "assets": [ { "name": "a.dhplugin", "browser_download_url": "https://example.com/a" } ] } ]""";
+    private const string ReleaseWithoutAPluginFile = """[ { "tag_name": "v1", "assets": [ { "name": "notes.txt", "browser_download_url": "https://example.com/n" } ] } ]""";
 
-        Assert.That(picked, Is.EqualTo(("2.0.0", "https://example.com/stable", "ABC123")));
+    [Test]
+    public void PickReleaseAsset_SeveralReleases_PicksTheNewestStableOneAndItsPluginFile()
+    {
+        // Arrange
+        var releases = Releases;
+
+        // Act
+        var picked = PluginStore.PickReleaseAsset(releases);
+
+        // Assert
+        Assert.That(picked, Is.EqualTo(("2.0.0", StableUrl, Checksum)));
     }
 
     [Test]
-    public void A_pre_release_is_used_when_there_is_nothing_else()
+    public void PickReleaseAsset_OnlyAPreRelease_UsesIt()
     {
-        var picked = PluginStore.PickReleaseAsset("""[ { "tag_name": "v0.1-rc", "prerelease": true, "assets": [ { "name": "a.dhplugin", "browser_download_url": "https://example.com/a" } ] } ]""");
+        // Arrange
+        var releases = OnlyAPreRelease;
 
+        // Act
+        var picked = PluginStore.PickReleaseAsset(releases);
+
+        // Assert
         Assert.That(picked, Is.EqualTo(("0.1-rc", "https://example.com/a", (string?)null)));
-        Assert.That(PluginStore.PickReleaseAsset("""[ { "tag_name": "v1", "assets": [ { "name": "notes.txt", "browser_download_url": "https://example.com/n" } ] } ]"""), Is.Null);
     }
 
     [Test]
-    public async Task A_repository_link_becomes_a_download_with_githubs_checksum()
+    public void PickReleaseAsset_ReleaseWithoutAPluginFile_IsNull()
     {
-        string? asked = null;
-        var store = new PluginStore(new HttpClient(new UpdateCheckerTests.FakeHandler(request =>
+        // Arrange
+        var releases = ReleaseWithoutAPluginFile;
+
+        // Act
+        var picked = PluginStore.PickReleaseAsset(releases);
+
+        // Assert
+        Assert.That(picked, Is.Null);
+    }
+
+    private static PluginStore StoreAnsweringWithTheReleases(Action<string> onRequest) =>
+        new(new HttpClient(new UpdateCheckerTests.FakeHandler(request =>
         {
-            asked = request.RequestUri!.AbsoluteUri;
+            onRequest(request.RequestUri!.AbsoluteUri);
             return Encoding.UTF8.GetBytes(Releases);
         })));
 
-        var entry = await store.FromGitHubAsync("https://github.com/you/clock-plugin");
+    [Test]
+    public async Task FromGitHubAsync_RepositoryLink_AsksTheReleasesOfThatRepository()
+    {
+        // Arrange
+        string? asked = null;
+        var store = StoreAnsweringWithTheReleases(uri => asked = uri);
 
+        // Act
+        await store.FromGitHubAsync(RepositoryLink);
+
+        // Assert
         Assert.That(asked, Does.StartWith("https://api.github.com/repos/you/clock-plugin/releases"));
-        Assert.That((entry.Id, entry.Version, entry.DownloadUrl, entry.Sha256, entry.Source), Is.EqualTo(("clock-plugin", "2.0.0", "https://example.com/stable", "ABC123", PluginStore.GitHubSource)));
     }
 
     [Test]
-    public async Task Clear_messages_for_wrong_addresses_and_missing_repositories()
+    public async Task FromGitHubAsync_RepositoryLink_BecomesADownloadWithGitHubsChecksum()
     {
-        var store = new PluginStore(new HttpClient(new UpdateCheckerTests.FakeHandler(_ => null, HttpStatusCode.NotFound)));
+        // Arrange
+        var store = StoreAnsweringWithTheReleases(_ => { });
 
-        Assert.That((Assert.ThrowsAsync<PluginException>(() => store.FromGitHubAsync("https://example.com/x"))).Message, Does.Contain("isn't a GitHub repository"));
-        Assert.That((Assert.ThrowsAsync<PluginException>(() => store.FromGitHubAsync("https://github.com/you/missing"))).Message, Does.Contain("no public repository you/missing"));
+        // Act
+        var entry = await store.FromGitHubAsync(RepositoryLink);
+
+        // Assert
+        Assert.That((entry.Id, entry.Version, entry.DownloadUrl, entry.Sha256, entry.Source), Is.EqualTo(("clock-plugin", "2.0.0", StableUrl, Checksum, PluginStore.GitHubSource)));
+    }
+
+    private static PluginStore StoreThatFindsNothing() => new(new HttpClient(new UpdateCheckerTests.FakeHandler(_ => null, HttpStatusCode.NotFound)));
+
+    [Test]
+    public void FromGitHubAsync_AddressThatIsNotGitHub_SaysSo()
+    {
+        // Arrange
+        var store = StoreThatFindsNothing();
+
+        // Act
+        var install = () => store.FromGitHubAsync("https://example.com/x");
+
+        // Assert
+        Assert.That(Assert.ThrowsAsync<PluginException>(() => install()).Message, Does.Contain("isn't a GitHub repository"));
+    }
+
+    [Test]
+    public void FromGitHubAsync_MissingRepository_NamesTheRepository()
+    {
+        // Arrange
+        var store = StoreThatFindsNothing();
+
+        // Act
+        var install = () => store.FromGitHubAsync("https://github.com/you/missing");
+
+        // Assert
+        Assert.That(Assert.ThrowsAsync<PluginException>(() => install()).Message, Does.Contain("no public repository you/missing"));
     }
 }
