@@ -16,6 +16,17 @@ namespace DeckHost.Tests;
 /// </summary>
 public sealed class PluginProcessTests : IDisposable
 {
+    private const string ObsId = "deckhost.plugin.obs";
+    private const string SceneAction = "obs.scene";
+    private const string Key = "key.0";
+    private const string Device = "dev";
+    private const string Profile = "profile";
+    private const string ObsLabel = "OBS";
+    private const uint ErrorColor = 0xFFFCA5A5;
+    private const int PatienceMilliseconds = 10_000;
+    private const int RefreshMilliseconds = 1000;
+    private const uint DrawnColor = 0xFF112233;
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"deckhost-isolated-{Guid.NewGuid():N}");
     private readonly VariableStore _variables = new();
 
@@ -124,131 +135,342 @@ public sealed class PluginProcessTests : IDisposable
         return true;
     }
 
-    [Test]
-    public void Descriptors_values_and_drawings_survive_the_wire()
+    private static ActionSettingDefinition SpeedSetting() =>
+        new("speed", "Speed", ActionSettingKind.Number, Placeholder: "5") { Range = new NumberRange(1, 10) { Unit = "x" } };
+
+    private static Message ReadyMessage(ActionSettingDefinition setting) => new(Message.Ready)
     {
-        var setting = new ActionSettingDefinition("speed", "Speed", ActionSettingKind.Number, Placeholder: "5") { Range = new NumberRange(1, 10) { Unit = "x" } };
-        var message = new Message(Message.Ready)
-        {
-            Plugin = new PluginDescriptor("p", "P", "1.0", null, null, [new ActionDescriptor("a", "A", InputCapabilities.Press, OutputCapabilities.ColorImage, "d", [setting], true, null, true, 1000, false, false)]),
-            Commands = [new DrawCommand("rect") { X = 1, W = 2, Color = 0xFF112233 }],
-        };
+        Plugin = new PluginDescriptor("p", "P", "1.0", null, null, [new ActionDescriptor("a", "A", InputCapabilities.Press, OutputCapabilities.ColorImage, "d", [setting], true, null, true, RefreshMilliseconds, false, false)]),
+        Commands = [new DrawCommand("rect") { X = 1, W = 2, Color = DrawnColor }],
+    };
 
-        var back = Wire.Decode(Wire.Encode(message))!;
-        var action = back.Plugin!.Actions.Single();
-        Assert.That(action.Settings.Single().Range, Is.EqualTo(setting.Range));
-        Assert.That(action.RefreshIntervalMs, Is.EqualTo(1000));
-        Assert.That(back.Commands!.Single().Color, Is.EqualTo(0xFF112233u));
+    private static Message AcrossTheWire(Message message) => Wire.Decode(Wire.Encode(message))!;
 
-        foreach (var value in new object?[] { "text", true, 42, 42L, 1.5, 2.5f, DateTimeOffset.UnixEpoch, null })
-        {
-            Assert.That(WireValue.From(value)!.ToObject(), Is.EqualTo(value));
-        }
+    public static IEnumerable<object?> WireValues =>
+    [
+        "text", true, 42, 42L, 1.5, 2.5f, DateTimeOffset.UnixEpoch, null,
+    ];
 
-        Assert.That(WireValue.From(new object()), Is.Null);
+    [Test]
+    public void Decode_ActionSettingWithARange_KeepsTheRange()
+    {
+        // Arrange
+        var setting = SpeedSetting();
 
+        // Act
+        var back = AcrossTheWire(ReadyMessage(setting));
+
+        // Assert
+        Assert.That(back.Plugin!.Actions.Single().Settings.Single().Range, Is.EqualTo(setting.Range));
+    }
+
+    [Test]
+    public void Decode_ActionWithARefreshInterval_KeepsIt()
+    {
+        // Arrange
+        var message = ReadyMessage(SpeedSetting());
+
+        // Act
+        var back = AcrossTheWire(message);
+
+        // Assert
+        Assert.That(back.Plugin!.Actions.Single().RefreshIntervalMs, Is.EqualTo(RefreshMilliseconds));
+    }
+
+    [Test]
+    public void Decode_DrawCommand_KeepsItsColor()
+    {
+        // Arrange
+        var message = ReadyMessage(SpeedSetting());
+
+        // Act
+        var back = AcrossTheWire(message);
+
+        // Assert
+        Assert.That(back.Commands!.Single().Color, Is.EqualTo(DrawnColor));
+    }
+
+    [TestCaseSource(nameof(WireValues))]
+    public void ToObject_ValueSentThroughWireValue_IsTheSameValue(object? value)
+    {
+        // Arrange
+        var wire = WireValue.From(value)!;
+
+        // Act
+        var back = wire.ToObject();
+
+        // Assert
+        Assert.That(back, Is.EqualTo(value));
+    }
+
+    [Test]
+    public void From_ObjectThatCannotBeSent_IsNull()
+    {
+        // Arrange
+        var value = new object();
+
+        // Act
+        var wire = WireValue.From(value);
+
+        // Assert
+        Assert.That(wire, Is.Null);
+    }
+
+    [Test]
+    public void Replay_RecordedDrawing_ProducesTheSameCommands()
+    {
+        // Arrange
         var recorded = Surface();
         recorded.FillRoundedRect(1, 2, 3, 4, 5, 0xFF000000);
         recorded.DrawLabel("Hi");
         recorded.DrawIcon("M0 0h1v1Z", 10, 10, 12);
         var copy = Surface();
+
+        // Act
         DisplayList.Replay(copy, recorded.Commands);
+
+        // Assert
         Assert.That(JsonSerializer.Serialize(copy.Commands, Wire.Options), Is.EqualTo(JsonSerializer.Serialize(recorded.Commands, Wire.Options)));
     }
 
-    [Test]
-    public async Task A_plugin_in_its_own_process_draws_runs_and_publishes_through_DeckHost()
+    private (PluginCatalog Catalog, IDeckAction Scene, RecordingHost Host, ActionContext Context) InstalledScene(InProcessLauncher launcher)
     {
-        var launcher = new InProcessLauncher();
-        using var catalog = CreateCatalog(launcher);
-        var entry = catalog.Install(ObsPackagePath);
-
-        Assert.That(entry.RunsInOwnProcess, Is.True);
-        Assert.That(entry.ProcessStatus, Does.Contain("own process"));
-        var plugin = Expect.IsType<IsolatedApplicationPlugin>(Expect.Single(catalog.EnabledApplicationPlugins, candidate => candidate.Id == "deckhost.plugin.obs"));
-        var scene = plugin.Actions.Single(action => action.Id == "obs.scene");
-        Assert.That(scene.Settings.Any(setting => setting.Key == "scene"), Is.True);
-
+        var catalog = CreateCatalog(launcher);
+        catalog.Install(ObsPackagePath);
+        var plugin = Expect.IsType<IsolatedApplicationPlugin>(Expect.Single(catalog.EnabledApplicationPlugins, candidate => candidate.Id == ObsId));
+        var scene = plugin.Actions.Single(action => action.Id == SceneAction);
         var host = new RecordingHost();
-        var context = new ActionContext("dev", "key.0", _variables) { Host = host, ProfileId = "profile", Settings = new ActionSettings([new("scene", "Live"), new("port", "1")]) };
+        var context = new ActionContext(Device, Key, _variables) { Host = host, ProfileId = Profile, Settings = new ActionSettings([new("scene", "Live"), new("port", "1")]) };
         scene.OnAppear(context);
-
-        // The first render asks for a picture; when it arrives, DeckHost is asked to draw again.
-        var first = Surface();
-        scene.Render(first);
-        Assert.That(first.Commands, Is.Empty);
-        Assert.That(await host.Renders.WaitAsync(10_000), Is.True);
-        var second = Surface();
-        scene.Render(second);
-        Assert.That(second.Commands.Any(command => command.Text == "OBS"), Is.True);
-
-        // A press: the plugin can't reach OBS, publishes the error and asks for a redraw.
-        scene.Execute(context with { EventType = InputCapabilities.Press, Value = 1 });
-        var errorKey = VariableKeys.For("dev", "key.0", VariableKeys.LastError);
-        Assert.That(await Until(() => _variables.TryGetValue<string>(errorKey, out var error) && !string.IsNullOrEmpty(error)), Is.True);
-        string? drawn = null;
-        Assert.That(
-            await Until(() =>
-        {
-            var surface = Surface();
-            scene.Render(surface);
-            drawn = surface.Commands.LastOrDefault()?.Text;
-            return surface.Commands.Any(command => command.Color == 0xFFFCA5A5);
-        }),
-            Is.True,
-            $"last drawn: {drawn}");
+        return (catalog, scene, host, context);
     }
 
     [Test]
-    public async Task A_crashed_plugin_process_is_restarted_and_draws_again()
+    public void Install_ObsPackage_RunsInItsOwnProcess()
     {
-        var launcher = new InProcessLauncher();
-        using var catalog = CreateCatalog(launcher);
-        catalog.Install(ObsPackagePath);
-        var scene = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == "deckhost.plugin.obs").Actions.Single(action => action.Id == "obs.scene");
-        var host = new RecordingHost();
-        scene.OnAppear(new ActionContext("dev", "key.0", _variables) { Host = host, ProfileId = "profile" });
-        var changes = 0;
-        catalog.Changed += (_, _) => Interlocked.Increment(ref changes);
+        // Arrange
+        using var catalog = CreateCatalog(new InProcessLauncher());
 
-        // Installing ran a trial process first; the last one started is the plugin's.
-        launcher.Started.Last().Kill();
+        // Act
+        var entry = catalog.Install(ObsPackagePath);
 
-        Assert.That(await Until(() => catalog.Entries.Single(entry => entry.Id == "deckhost.plugin.obs").ProcessStatus?.Contains("restarted 1", StringComparison.Ordinal) == true), Is.True);
-        // The status is read live; the Changed events for it arrive a moment later.
-        Assert.That(await Until(() => Volatile.Read(ref changes) >= 2), Is.True);
+        // Assert
+        Assert.That(entry.RunsInOwnProcess, Is.True);
+        Assert.That(entry.ProcessStatus, Does.Contain("own process"));
+    }
+
+    [Test]
+    public void Actions_IsolatedObsPlugin_DescribesTheSceneSetting()
+    {
+        // Arrange
+        var (catalog, scene, _, _) = InstalledScene(new InProcessLauncher());
+        using var _ = catalog;
+
+        // Act
+        var settings = scene.Settings;
+
+        // Assert
+        Assert.That(settings.Any(setting => setting.Key == "scene"), Is.True);
+    }
+
+    [Test]
+    public void Render_FirstTime_DrawsNothingYetAsThePictureIsRequested()
+    {
+        // Arrange
+        var (catalog, scene, _, _) = InstalledScene(new InProcessLauncher());
+        using var _ = catalog;
+        var first = Surface();
+
+        // Act
+        scene.Render(first);
+
+        // Assert
+        Assert.That(first.Commands, Is.Empty);
+    }
+
+    [Test]
+    public async Task Render_FirstTime_AsksDeckHostToDrawAgainWhenThePictureArrives()
+    {
+        // Arrange
+        var (catalog, scene, host, _) = InstalledScene(new InProcessLauncher());
+        using var _ = catalog;
+        scene.Render(Surface());
+
+        // Act
+        var asked = await host.Renders.WaitAsync(PatienceMilliseconds);
+
+        // Assert
+        Assert.That(asked, Is.True);
+    }
+
+    [Test]
+    public async Task Render_AfterThePictureArrived_DrawsTheObsLabel()
+    {
+        // Arrange
+        var (catalog, scene, host, _) = InstalledScene(new InProcessLauncher());
+        using var _ = catalog;
+        scene.Render(Surface());
+        await host.Renders.WaitAsync(PatienceMilliseconds);
+        var second = Surface();
+
+        // Act
+        scene.Render(second);
+
+        // Assert
+        Assert.That(second.Commands.Any(command => command.Text == ObsLabel), Is.True);
+    }
+
+    [Test]
+    public async Task Execute_PressWithoutAReachableObs_PublishesTheError()
+    {
+        // Arrange
+        var (catalog, scene, _, context) = InstalledScene(new InProcessLauncher());
+        using var _ = catalog;
+        var errorKey = VariableKeys.For(Device, Key, VariableKeys.LastError);
+
+        // Act
+        scene.Execute(context with { EventType = InputCapabilities.Press, Value = 1 });
+        var published = await Until(() => _variables.TryGetValue<string>(errorKey, out var error) && !string.IsNullOrEmpty(error));
+
+        // Assert
+        Assert.That(published, Is.True);
+    }
+
+    [Test]
+    public async Task Render_AfterTheErrorWasPublished_DrawsInTheErrorColor()
+    {
+        // Arrange
+        var (catalog, scene, _, context) = InstalledScene(new InProcessLauncher());
+        using var _ = catalog;
+        scene.Execute(context with { EventType = InputCapabilities.Press, Value = 1 });
+
+        // Act
+        var drawnInRed = await Until(() => DrawsAnythingIn(scene, ErrorColor));
+
+        // Assert
+        Assert.That(drawnInRed, Is.True);
+    }
+
+    private bool DrawsAnythingIn(IDeckAction scene, uint color)
+    {
+        var surface = Surface();
+        scene.Render(surface);
+        return surface.Commands.Any(command => command.Color == color);
+    }
+
+    private static void DrainRenderRequests(RecordingHost host)
+    {
         while (host.Renders.CurrentCount > 0)
         {
             host.Renders.Wait();
         }
+    }
 
-        scene.Render(Surface());
-        Assert.That(await host.Renders.WaitAsync(10_000), Is.True);
-        var surface = Surface();
-        scene.Render(surface);
-        Assert.That(surface.Commands.Any(command => command.Text == "OBS"), Is.True);
+    private static string ObsProcessStatus(PluginCatalog catalog) => catalog.Entries.Single(entry => entry.Id == ObsId).ProcessStatus ?? string.Empty;
+
+    [Test]
+    public async Task Kill_PluginProcessThatCrashed_IsRestarted()
+    {
+        // Arrange
+        var launcher = new InProcessLauncher();
+        var (catalog, _, _, _) = InstalledScene(launcher);
+        using var _ = catalog;
+
+        // Act (installing ran a trial process first; the last one started is the plugin's)
+        launcher.Started.Last().Kill();
+        var restarted = await Until(() => ObsProcessStatus(catalog).Contains("restarted 1", StringComparison.Ordinal));
+
+        // Assert
+        Assert.That(restarted, Is.True);
     }
 
     [Test]
-    public void A_plugin_can_be_moved_into_DeckHost_and_back_and_that_is_remembered()
+    public async Task Changed_PluginProcessThatCrashed_ArrivesForTheStatusChange()
     {
+        // Arrange
+        var launcher = new InProcessLauncher();
+        var (catalog, _, _, _) = InstalledScene(launcher);
+        using var _ = catalog;
+        var changes = 0;
+        catalog.Changed += (_, _) => Interlocked.Increment(ref changes);
+
+        // Act (the status is read live; the Changed events for it arrive a moment later)
+        launcher.Started.Last().Kill();
+        var changed = await Until(() => Volatile.Read(ref changes) >= 2);
+
+        // Assert
+        Assert.That(changed, Is.True);
+    }
+
+    [Test]
+    public async Task Render_AfterTheProcessWasRestarted_DrawsTheObsLabelAgain()
+    {
+        // Arrange
+        var launcher = new InProcessLauncher();
+        var (catalog, scene, host, _) = InstalledScene(launcher);
+        using var _ = catalog;
+        launcher.Started.Last().Kill();
+        await Until(() => ObsProcessStatus(catalog).Contains("restarted 1", StringComparison.Ordinal));
+        DrainRenderRequests(host);
+        scene.Render(Surface());
+        await host.Renders.WaitAsync(PatienceMilliseconds);
+        var surface = Surface();
+
+        // Act
+        scene.Render(surface);
+
+        // Assert
+        Assert.That(surface.Commands.Any(command => command.Text == ObsLabel), Is.True);
+    }
+
+    [Test]
+    public void SetRunInOwnProcess_False_RunsThePluginInsideDeckHost()
+    {
+        // Arrange
+        using var catalog = CreateCatalog(new InProcessLauncher());
+        catalog.Install(ObsPackagePath);
+
+        // Act
+        catalog.SetRunInOwnProcess(ObsId, ownProcess: false);
+
+        // Assert
+        var entry = catalog.Entries.Single(candidate => candidate.Id == ObsId);
+        Assert.That(entry.RunsInOwnProcess, Is.False);
+        Assert.That(entry.ProcessStatus, Is.EqualTo("Runs inside DeckHost"));
+        Assert.That(catalog.EnabledApplicationPlugins.Single(plugin => plugin.Id == ObsId), Is.Not.TypeOf<IsolatedApplicationPlugin>());
+    }
+
+    [Test]
+    public void Load_AfterMovingThePluginIntoDeckHost_RemembersIt()
+    {
+        // Arrange
         var launcher = new InProcessLauncher();
         using (var catalog = CreateCatalog(launcher))
         {
             catalog.Install(ObsPackagePath);
-            catalog.SetRunInOwnProcess("deckhost.plugin.obs", ownProcess: false);
-
-            var entry = catalog.Entries.Single(candidate => candidate.Id == "deckhost.plugin.obs");
-            Assert.That(entry.RunsInOwnProcess, Is.False);
-            Assert.That(entry.ProcessStatus, Is.EqualTo("Runs inside DeckHost"));
-            Assert.That(catalog.EnabledApplicationPlugins.Single(plugin => plugin.Id == "deckhost.plugin.obs"), Is.Not.TypeOf<IsolatedApplicationPlugin>());
+            catalog.SetRunInOwnProcess(ObsId, ownProcess: false);
         }
 
-        using (var reloaded = CreateCatalog(launcher))
-        {
-            Assert.That(reloaded.Entries.Single(candidate => candidate.Id == "deckhost.plugin.obs").RunsInOwnProcess, Is.False);
-            reloaded.SetRunInOwnProcess("deckhost.plugin.obs", ownProcess: true);
-            Assert.That(reloaded.EnabledApplicationPlugins.Single(plugin => plugin.Id == "deckhost.plugin.obs"), Is.TypeOf<IsolatedApplicationPlugin>());
-        }
+        // Act
+        using var reloaded = CreateCatalog(launcher);
+
+        // Assert
+        Assert.That(reloaded.Entries.Single(candidate => candidate.Id == ObsId).RunsInOwnProcess, Is.False);
+    }
+
+    [Test]
+    public void SetRunInOwnProcess_True_MovesThePluginBackToItsOwnProcess()
+    {
+        // Arrange
+        var launcher = new InProcessLauncher();
+        using var catalog = CreateCatalog(launcher);
+        catalog.Install(ObsPackagePath);
+        catalog.SetRunInOwnProcess(ObsId, ownProcess: false);
+
+        // Act
+        catalog.SetRunInOwnProcess(ObsId, ownProcess: true);
+
+        // Assert
+        Assert.That(catalog.EnabledApplicationPlugins.Single(plugin => plugin.Id == ObsId), Is.TypeOf<IsolatedApplicationPlugin>());
     }
 }

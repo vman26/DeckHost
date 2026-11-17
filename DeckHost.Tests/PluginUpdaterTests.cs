@@ -5,6 +5,11 @@ namespace DeckHost.Tests;
 /// <summary>Finding newer versions of installed plugins in the store catalogs.</summary>
 public sealed class PluginUpdaterTests
 {
+    private const string Clock = "com.example.clock";
+    private const string Same = "com.example.same";
+    private const string Other = "com.example.other";
+    private const string BuiltIn = "deckhost.plugin.builtin";
+
     [TestCase("1.2.0", "1.10.0", -1)]
     [TestCase("v2.0", "2.0.0", 0)]
     [TestCase("2.0.0.14", "2.0.0.9", 1)]
@@ -13,37 +18,96 @@ public sealed class PluginUpdaterTests
     [TestCase("1.4.0-alpha", "1.4.0-beta", -1)]
     [TestCase("1.0+build5", "1.0", 0)]
     [TestCase("1.0", null, 1)]
-    public void Versions_compare_as_plugins_write_them(string? left, string? right, int expected) =>
-        Assert.That(Math.Sign(PluginVersion.Compare(left, right)), Is.EqualTo(expected));
+    public void Compare_TwoVersionsAsPluginsWriteThem_OrdersThem(string? left, string? right, int expected)
+    {
+        // Arrange (the two versions)
+
+        // Act
+        var order = Math.Sign(PluginVersion.Compare(left, right));
+
+        // Assert
+        Assert.That(order, Is.EqualTo(expected));
+    }
+
+    private static IReadOnlyList<PluginUpdate> UpdatesForAClockAndASameVersion() => PluginUpdater.FindUpdates(
+        [Installed(Clock, "1.0.0"), Installed(Same, "2.0")],
+        [Offer(Clock, "1.2.0"), Offer(Same, "2.0.0"), Offer(Other, "9.0")]);
 
     [Test]
-    public void An_installed_plugin_with_a_newer_download_has_an_update()
+    public void FindUpdates_InstalledPluginWithANewerDownload_HasAnUpdate()
     {
-        var updates = PluginUpdater.FindUpdates(
-            [Installed("com.example.clock", "1.0.0"), Installed("com.example.same", "2.0")],
-            [Offer("com.example.clock", "1.2.0"), Offer("com.example.same", "2.0.0"), Offer("com.example.other", "9.0")]);
+        // Arrange (a clock 1.0.0 installed, 1.2.0 offered)
 
+        // Act
+        var updates = UpdatesForAClockAndASameVersion();
+
+        // Assert
         var update = Expect.Single(updates);
-        Assert.That((update.Id, update.FromVersion, update.ToVersion), Is.EqualTo(("com.example.clock", "1.0.0", "1.2.0")));
+        Assert.That((update.Id, update.FromVersion, update.ToVersion), Is.EqualTo((Clock, "1.0.0", "1.2.0")));
     }
 
     [Test]
-    public void The_highest_offer_of_several_catalogs_wins()
+    public void FindUpdates_PluginThatIsNotInstalled_GetsNoUpdate()
     {
-        var update = Expect.Single(PluginUpdater.FindUpdates(
-            [Installed("COM.example.clock", "1.0")],
-            [Offer("com.example.clock", "1.1"), Offer("com.example.clock", "1.3"), Offer("com.example.clock", "1.2")]));
+        // Arrange (an offer for a plugin nobody installed)
 
+        // Act
+        var updates = UpdatesForAClockAndASameVersion();
+
+        // Assert
+        Assert.That(updates.Select(static update => update.Id), Does.Not.Contain(Other));
+    }
+
+    [Test]
+    public void FindUpdates_SeveralCatalogsOffering_TheHighestOfferWins()
+    {
+        // Arrange
+        var installed = new[] { Installed("COM.example.clock", "1.0") };
+        var offers = new[] { Offer(Clock, "1.1"), Offer(Clock, "1.3"), Offer(Clock, "1.2") };
+
+        // Act
+        var update = Expect.Single(PluginUpdater.FindUpdates(installed, offers));
+
+        // Assert
         Assert.That(update.ToVersion, Is.EqualTo("1.3"));
     }
 
     [Test]
-    public void System_plugins_paid_plugins_and_entries_without_a_download_get_no_update()
+    public void FindUpdates_SystemPlugin_GetsNoUpdate()
     {
-        var updates = PluginUpdater.FindUpdates(
-            [Installed("deckhost.plugin.builtin", "0.1", system: true), Installed("paid", "1.0"), Installed("nofile", "1.0")],
-            [Offer("deckhost.plugin.builtin", "9.0"), Offer("paid", "2.0") with { PurchaseUrl = "https://example.com/buy" }, Offer("nofile", "2.0") with { DownloadUrl = null }]);
+        // Arrange
+        var installed = new[] { Installed(BuiltIn, "0.1", system: true) };
 
+        // Act
+        var updates = PluginUpdater.FindUpdates(installed, [Offer(BuiltIn, "9.0")]);
+
+        // Assert
+        Assert.That(updates, Is.Empty);
+    }
+
+    [Test]
+    public void FindUpdates_PaidPlugin_GetsNoUpdate()
+    {
+        // Arrange
+        var installed = new[] { Installed("paid", "1.0") };
+
+        // Act
+        var updates = PluginUpdater.FindUpdates(installed, [Offer("paid", "2.0") with { PurchaseUrl = "https://example.com/buy" }]);
+
+        // Assert
+        Assert.That(updates, Is.Empty);
+    }
+
+    [Test]
+    public void FindUpdates_EntryWithoutADownload_GetsNoUpdate()
+    {
+        // Arrange
+        var installed = new[] { Installed("nofile", "1.0") };
+
+        // Act
+        var updates = PluginUpdater.FindUpdates(installed, [Offer("nofile", "2.0") with { DownloadUrl = null }]);
+
+        // Assert
         Assert.That(updates, Is.Empty);
     }
 
@@ -57,51 +121,126 @@ public sealed class PluginUpdaterTests
 /// <summary>The Plugins page's update panel: check, update all, failures, the automatic setting.</summary>
 public sealed class PluginUpdatesViewModelTests
 {
+    private const string FailingId = "b";
+    private const string DiskFull = "disk full";
+
     private static PluginUpdate Update(string id, string to) =>
         new(new PluginEntry(id, id, "1.0", null, null, PluginKind.Application, false, true, true, true, 1, null),
             new StoreEntry(id, id, null, null, "test", to, null, null, $"https://example.com/{id}.zip"));
 
-    [Test]
-    public async Task Update_all_installs_every_update_and_reports_failures()
+    private sealed record Panel(DeckHost.App.ViewModels.PluginUpdatesViewModel View, List<string> Installed);
+
+    private static Panel PanelWithTwoUpdatesWhereTheSecondFails()
     {
         var installed = new List<string>();
         var settings = new DeckHost.App.Platform.AppSettingsData();
-        var updates = new DeckHost.App.ViewModels.PluginUpdatesViewModel(
-            () => Task.FromResult<IReadOnlyList<PluginUpdate>>([Update("a", "2.0"), Update("b", "3.0")]),
+        var view = new DeckHost.App.ViewModels.PluginUpdatesViewModel(
+            () => Task.FromResult<IReadOnlyList<PluginUpdate>>([Update("a", "2.0"), Update(FailingId, "3.0")]),
             (update, _) =>
             {
-                if (update.Id == "b")
-                {
-                    throw new IOException("disk full");
-                }
-
                 installed.Add(update.Id);
-                return Task.FromResult(update.Installed with { Version = update.ToVersion });
+                return update.Id == FailingId ? throw new IOException(DiskFull) : Task.FromResult(update.Installed with { Version = update.ToVersion });
             },
             () => settings,
             saved => settings = saved);
-
-        await updates.CheckAsync(manual: true);
-        Assert.That(updates.Available.Count, Is.EqualTo(2));
-        Assert.That(updates.UpdateAllLabel, Is.EqualTo("Update 2 plugins"));
-        Assert.That(updates.For("A"), Is.Not.Null);
-
-        await updates.UpdateAllAsync();
-
-        Assert.That(installed, Is.EqualTo(new[] { "a" }));
-        Assert.That(Expect.Single(updates.Available).Id, Is.EqualTo("b"));
-        Assert.That(updates.Status, Does.Contain("disk full"));
+        return new Panel(view, installed);
     }
 
     [Test]
-    public void Installing_automatically_is_saved()
+    public async Task CheckAsync_TwoUpdatesAvailable_ListsBoth()
     {
+        // Arrange
+        var panel = PanelWithTwoUpdatesWhereTheSecondFails();
+
+        // Act
+        await panel.View.CheckAsync(manual: true);
+
+        // Assert
+        Assert.That(panel.View.Available.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task UpdateAllLabel_TwoUpdatesAvailable_CountsThePlugins()
+    {
+        // Arrange
+        var panel = PanelWithTwoUpdatesWhereTheSecondFails();
+        await panel.View.CheckAsync(manual: true);
+
+        // Act
+        var label = panel.View.UpdateAllLabel;
+
+        // Assert
+        Assert.That(label, Is.EqualTo("Update 2 plugins"));
+    }
+
+    [Test]
+    public async Task For_PluginIdInAnotherCase_FindsItsUpdate()
+    {
+        // Arrange
+        var panel = PanelWithTwoUpdatesWhereTheSecondFails();
+        await panel.View.CheckAsync(manual: true);
+
+        // Act
+        var update = panel.View.For("A");
+
+        // Assert
+        Assert.That(update, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task UpdateAllAsync_OneUpdateFails_KeepsTheFailedOneAvailable()
+    {
+        // Arrange
+        var panel = PanelWithTwoUpdatesWhereTheSecondFails();
+        await panel.View.CheckAsync(manual: true);
+
+        // Act
+        await panel.View.UpdateAllAsync();
+
+        // Assert
+        Assert.That(Expect.Single(panel.View.Available).Id, Is.EqualTo(FailingId));
+    }
+
+    [Test]
+    public async Task UpdateAllAsync_OneUpdateFails_ReportsTheFailureInTheStatus()
+    {
+        // Arrange
+        var panel = PanelWithTwoUpdatesWhereTheSecondFails();
+        await panel.View.CheckAsync(manual: true);
+
+        // Act
+        await panel.View.UpdateAllAsync();
+
+        // Assert
+        Assert.That(panel.View.Status, Does.Contain(DiskFull));
+    }
+
+    [Test]
+    public async Task UpdateAllAsync_TwoUpdates_InstallsTheFirstOneAndTriesTheSecond()
+    {
+        // Arrange
+        var panel = PanelWithTwoUpdatesWhereTheSecondFails();
+        await panel.View.CheckAsync(manual: true);
+
+        // Act
+        await panel.View.UpdateAllAsync();
+
+        // Assert
+        Assert.That(panel.Installed, Is.EqualTo(new[] { "a", FailingId }));
+    }
+
+    [Test]
+    public void InstallAutomatically_Enabled_IsSaved()
+    {
+        // Arrange
         var settings = new DeckHost.App.Platform.AppSettingsData();
         var updates = new DeckHost.App.ViewModels.PluginUpdatesViewModel(
             () => Task.FromResult<IReadOnlyList<PluginUpdate>>([]), (update, _) => Task.FromResult(update.Installed), () => settings, saved => settings = saved);
 
+        // Act
         updates.InstallAutomatically = true;
 
+        // Assert
         Assert.That(settings.AutoUpdatePlugins, Is.True);
     }
 }
