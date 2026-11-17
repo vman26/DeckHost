@@ -666,6 +666,7 @@
   DeckHost.Contracts.Models.WorkflowKeys.Clear : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Contains : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Count : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Every : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Flip : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.From : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Interval : System.String const
@@ -676,9 +677,11 @@
   DeckHost.Contracts.Models.WorkflowKeys.IsNotEqual : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsSet : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.MaxConditionRounds : System.Int32 const
+  DeckHost.Contracts.Models.WorkflowKeys.MaxEverySeconds : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxRepeat : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxWaitMs : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.Milliseconds : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.MinEverySeconds : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.Mode : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.ModeCount : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.ModeUntil : System.String const
@@ -736,17 +739,22 @@
   DeckHost.Contracts.Models.WorkflowPorts.No : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Second : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Yes : System.String const
+  DeckHost.Contracts.Models.WorkflowTriggers.AppInFront : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Describe(System.String trigger) : System.String
   DeckHost.Contracts.Models.WorkflowTriggers.DoublePress : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Down : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Hold : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Immediate(DeckHost.Contracts.Enums.InputCapabilities eventType, System.Int32 value) : System.String
+  DeckHost.Contracts.Models.WorkflowTriggers.IsEvent(System.String trigger) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowTriggers.ProfileShown : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.RotateLeft : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.RotateRight : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.SwipeLeft : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.SwipeRight : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Tap : System.String const
+  DeckHost.Contracts.Models.WorkflowTriggers.Timer : System.String const
   DeckHost.Contracts.Models.WorkflowTriggers.Up : System.String const
+  DeckHost.Contracts.Models.WorkflowTriggers.VariableChanged : System.String const
   DeckHost.Contracts.RenderContextExtensions.DrawReading(DeckHost.Contracts.Interfaces.IRenderContext context, System.String label, System.String value, System.Nullable<System.Double> fraction, System.UInt32 barColor) : System.Void
   DeckHost.Contracts.RenderContextExtensions.DrawReading(DeckHost.Contracts.Interfaces.IRenderContext context, System.String label, System.String value, System.Nullable<System.Double> fraction, System.UInt32 barColor, System.String icon) : System.Void
   DeckHost.Contracts.RenderContextExtensions.DrawTile(DeckHost.Contracts.Interfaces.IRenderContext context, System.String icon, System.UInt32 fromArgb, System.UInt32 toArgb, System.String caption) : System.Void

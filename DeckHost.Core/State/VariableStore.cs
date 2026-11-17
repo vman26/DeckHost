@@ -12,6 +12,10 @@ namespace DeckHost.Core.State
     public sealed class VariableStore : IVariableStore, IDisposable
     {
         private readonly ConcurrentDictionary<string, BehaviorSubject<object?>> _variables = new(StringComparer.Ordinal);
+        private readonly Subject<KeyValuePair<string, object?>> _changes = new();
+
+        /// <summary>Every value published, with its key (what the workflow event triggers listen to).</summary>
+        public IObservable<KeyValuePair<string, object?>> Changes => _changes.AsObservable();
 
         public IObservable<T> Observe<T>(string key)
         {
@@ -27,6 +31,7 @@ namespace DeckHost.Core.State
             // subscribed to a subject that a racing Publish then replaces.
             var subject = GetSubject(key, value);
             subject.OnNext(value);
+            _changes.OnNext(new KeyValuePair<string, object?>(key, value));
         }
 
         public bool TryGetValue<T>(string key, out T value)
@@ -47,6 +52,8 @@ namespace DeckHost.Core.State
 
         public void Dispose()
         {
+            _changes.OnCompleted();
+            _changes.Dispose();
             foreach (var variable in _variables.Values)
             {
                 variable.OnCompleted();

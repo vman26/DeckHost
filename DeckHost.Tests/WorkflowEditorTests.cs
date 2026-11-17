@@ -338,8 +338,15 @@ public class WorkflowEditorTests
         var editor = new WorkflowEditorViewModel("device", "layout", knobless, "Touch 1", WorkflowConverter.Starter(), Actions, _ => false);
         editor.SelectNode("n1");
 
-        var choice = Expect.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.Single());
-        Assert.That(choice.Options.Select(option => option.Value), Is.EqualTo(new[] { WorkflowTriggers.Down }));
+        var choice = Expect.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.First());
+        Assert.That(choice.Options.Select(option => option.Value), Is.EqualTo(new[]
+        {
+            WorkflowTriggers.Down,
+            WorkflowTriggers.ProfileShown,
+            WorkflowTriggers.AppInFront,
+            WorkflowTriggers.VariableChanged,
+            WorkflowTriggers.Timer,
+        }), "the control's own input, and the events that need no input");
 
         editor.AddNode(WorkflowNodeKinds.Wait, 0, 0);
         Assert.That(editor.Status, Does.Contain("no longer has this workflow"));

@@ -55,8 +55,9 @@ public sealed class WorkflowEngine
     /// Starts a run at every trigger node of the binding's workflow that listens to
     /// <paramref name="trigger"/>, as the workflow's <see cref="Workflow.WhileRunning"/> allows.
     /// </summary>
+    /// <param name="accept">Narrows which of those trigger nodes start (an event trigger that also checks its settings).</param>
     /// <returns>Whether anything started or was stopped.</returns>
-    public bool Fire(DeviceProfile profile, ControlBinding binding, string trigger, DeviceInputEvent input, IActionHost host)
+    public bool Fire(DeviceProfile profile, ControlBinding binding, string trigger, DeviceInputEvent input, IActionHost host, Func<WorkflowNode, bool>? accept = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(binding);
@@ -70,11 +71,18 @@ public sealed class WorkflowEngine
         var handled = false;
         foreach (var node in workflow.Nodes.Where(node =>
                      node.Kind == WorkflowNodeKinds.Trigger &&
-                     node.EffectiveSettings.Get(WorkflowKeys.On, WorkflowTriggers.Down) == trigger))
+                     node.EffectiveSettings.Get(WorkflowKeys.On, WorkflowTriggers.Down) == trigger &&
+                     (accept is null || accept(node))))
         {
             var key = (input.DeviceId, binding.ControlId, node.Id);
             if (_running.TryGetValue(key, out var going) && going.Count > 0)
             {
+                // An event (a timer, a variable) never piles runs up or stops one: it waits for the run to end.
+                if (WorkflowTriggers.IsEvent(trigger))
+                {
+                    continue;
+                }
+
                 switch (workflow.WhileRunning)
                 {
                     case WorkflowConcurrency.Ignore:

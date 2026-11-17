@@ -106,7 +106,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Requirement | | Where / what's missing |
 |---|---|---|
 | 9.3 Triggers: control input | ✅ | down, up, tap, double, hold, rotate, swipe |
-| 9.3 Triggers: events, timers, app changes | ⬜ | |
+| 9.3 Triggers: events, timers, app changes | 🟡 | Profile shown, app in front, variable changed, timer (`WorkflowEvents`, host worker); no device-connected, hotkey or external (webhook) triggers |
 | 9.3 Logic, flow (if, sequence, parallel, repeat, wait) | ✅ | |
 | 9.3 Switch, expressions, transforms, events, error handling nodes | ⬜ | |
 | 9.3 History, cancellation | ✅ | Run log, Stop |

@@ -8,6 +8,7 @@ using DeckHost.Core.Rendering;
 using DeckHost.Core.Workflows;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using System.Reactive.Linq;
 
 namespace DeckHost.Core.Devices;
 
@@ -68,6 +69,12 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private bool _pluginsInitialized;
     private readonly IActionHost _actionHost;
     private readonly CancellationTokenSource _refreshCancellation = new();
+
+    // Workflow event triggers (a variable changes, an app comes to the front, a timer, the profile is shown).
+    private readonly WorkflowEventThrottle _eventThrottle = new();
+    private readonly Dictionary<string, string> _eventValues = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string DeviceId, string ControlId, string NodeId), DateTime> _timerLastStart = [];
+    private IDisposable? _variableChanges;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private Dictionary<string, (IDeckAction Action, ActionContext Context)> _appeared = new(StringComparer.Ordinal);
     private readonly Dictionary<(string DeviceId, string ControlId), DateTimeOffset> _nextLiveRender = [];
@@ -125,6 +132,18 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         if (_actionRouter is ActionRouter tracedRouter)
         {
             tracedRouter.Workflows.Traced += OnWorkflowTraced;
+        }
+
+        if (variableStore is State.VariableStore observable)
+        {
+            _variableChanges = observable.Changes
+                .Where(static change => change.Key == VariableKeys.ForegroundApp || change.Key.StartsWith("vars.", StringComparison.Ordinal))
+                .Subscribe(change =>
+                {
+                    var key = change.Key;
+                    var value = change.Value?.ToString() ?? string.Empty;
+                    Enqueue(() => OnEventVariable(key, value));
+                });
         }
 
         foreach (var duplicate in _actionRouter.DuplicateActionKeys)
@@ -342,6 +361,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 await InitializePluginsAsync(cancellationToken).ConfigureAwait(false);
                 _ = RunLiveRefreshAsync(_refreshCancellation.Token);
                 _ = RunLightLoopAsync(_refreshCancellation.Token);
+                _ = RunTimerLoopAsync(_refreshCancellation.Token);
+                FireEvent(WorkflowTriggers.ProfileShown, null);
                 completion.TrySetResult();
             }
             catch (OperationCanceledException)
@@ -397,6 +418,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             return ValueTask.CompletedTask;
         });
         _refreshCancellation.Cancel();
+        _variableChanges?.Dispose();
         _work.Writer.TryComplete();
 
         await Task.WhenAny(_worker, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
@@ -766,6 +788,147 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         Log("Info", $"Activated profile '{profile.Name}' for device '{profile.DeviceId}'.");
         OnActiveProfilesChanged();
         SafeInvoke(() => ActiveProfileChanged?.Invoke(profile.DeviceId, profile.Id));
+
+        // Timers count from when the profile came; its "profile shown" workflows start.
+        foreach (var key in _timerLastStart.Keys.Where(key => string.Equals(key.DeviceId, profile.DeviceId, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            _timerLastStart.Remove(key);
+        }
+
+        FireEvent(WorkflowTriggers.ProfileShown, null, profile.DeviceId);
+    }
+
+    // ---------------------------------------------------------------- event triggers
+
+    /// <summary>Starts the workflows of the shown profiles that listen to an event (and whose trigger node accepts it).</summary>
+    private void FireEvent(string trigger, Func<WorkflowNode, bool>? accept, string? onlyDeviceId = null)
+    {
+        if (_actionRouter is not ActionRouter router)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        foreach (var deviceId in _devicesById.Keys.ToList())
+        {
+            if ((onlyDeviceId is not null && !string.Equals(deviceId, onlyDeviceId, StringComparison.OrdinalIgnoreCase)) ||
+                GetActiveProfile(deviceId) is not { } profile)
+            {
+                continue;
+            }
+
+            foreach (var binding in profile.Bindings)
+            {
+                if (binding.ActionKind != ProfileActionKind.Workflow || !WorkflowEngine.TriggersOf(binding.Workflow).Contains(trigger))
+                {
+                    continue;
+                }
+
+                var throttleKey = $"{deviceId}|{binding.ControlId}|{trigger}";
+                if (!_eventThrottle.Allow(throttleKey, now, out var justPaused))
+                {
+                    if (justPaused)
+                    {
+                        Log("Warning", $"The workflow on '{binding.ControlId}' keeps starting itself ({WorkflowTriggers.Describe(trigger).ToLowerInvariant()}); its event trigger is paused for {WorkflowEventThrottle.Pause.TotalSeconds:0} seconds.");
+                    }
+
+                    continue;
+                }
+
+                if (router.Workflows.Fire(profile, binding, trigger, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Press, 1), _actionHost, accept))
+                {
+                    _dirtyDevices.Add(deviceId);
+                }
+            }
+        }
+    }
+
+    /// <summary>A user variable or the app in front changed: start the workflows that wait for it.</summary>
+    private void OnEventVariable(string key, string value)
+    {
+        if (_eventValues.TryGetValue(key, out var before) && before == value)
+        {
+            return;
+        }
+
+        _eventValues[key] = value;
+        if (key == VariableKeys.ForegroundApp)
+        {
+            FireEvent(WorkflowTriggers.AppInFront, node => WorkflowEvents.MatchesApp(node, value));
+        }
+        else
+        {
+            FireEvent(WorkflowTriggers.VariableChanged, node => WorkflowEvents.MatchesVariable(node, key, value));
+        }
+    }
+
+    /// <summary>Starts every timer trigger that is due (a timer counts from when its profile was shown).</summary>
+    internal void TickTimers(DateTime now)
+    {
+        if (_actionRouter is not ActionRouter router)
+        {
+            return;
+        }
+
+        foreach (var deviceId in _devicesById.Keys.ToList())
+        {
+            if (GetActiveProfile(deviceId) is not { } profile)
+            {
+                continue;
+            }
+
+            foreach (var binding in profile.Bindings)
+            {
+                if (binding.ActionKind != ProfileActionKind.Workflow || binding.Workflow is not { } workflow)
+                {
+                    continue;
+                }
+
+                foreach (var node in workflow.Nodes.Where(static node => node.Kind == WorkflowNodeKinds.Trigger &&
+                             node.EffectiveSettings.Get(WorkflowKeys.On, WorkflowTriggers.Down) == WorkflowTriggers.Timer))
+                {
+                    var key = (deviceId, binding.ControlId, node.Id);
+                    if (!_timerLastStart.TryGetValue(key, out var last))
+                    {
+                        _timerLastStart[key] = now;
+                        continue;
+                    }
+
+                    if (now - last < WorkflowEvents.EveryOf(node))
+                    {
+                        continue;
+                    }
+
+                    _timerLastStart[key] = now;
+                    if (router.Workflows.Fire(profile, binding, WorkflowTriggers.Timer, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Press, 1), _actionHost, candidate => candidate.Id == node.Id))
+                    {
+                        _dirtyDevices.Add(deviceId);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>Runs <see cref="TickTimers"/> on the worker at a given time (tests).</summary>
+    internal Task TickTimersAsync(DateTime now)
+    {
+        Enqueue(() => TickTimers(now));
+        return WhenIdleAsync();
+    }
+
+    private async Task RunTimerLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                Enqueue(() => TickTimers(DateTime.UtcNow));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private void ActivateProfileByIdOrName(string deviceId, string profileIdOrName)

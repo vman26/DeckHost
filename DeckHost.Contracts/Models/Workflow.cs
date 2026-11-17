@@ -193,6 +193,21 @@ public static class WorkflowTriggers
     public const string SwipeLeft = ControlInputs.SwipeLeft;
     public const string SwipeRight = ControlInputs.SwipeRight;
 
+    /// <summary>Event: the workflow's profile (page or folder) comes onto the device.</summary>
+    public const string ProfileShown = "profile";
+
+    /// <summary>Event: a variable changes (<see cref="WorkflowKeys.Name"/>, optionally to <see cref="WorkflowKeys.Value"/>).</summary>
+    public const string VariableChanged = "variable-changed";
+
+    /// <summary>Event: an app comes to the front (<see cref="WorkflowKeys.App"/>: part of its name).</summary>
+    public const string AppInFront = "app-in-front";
+
+    /// <summary>Event: every so many seconds (<see cref="WorkflowKeys.Every"/>) while the profile is shown.</summary>
+    public const string Timer = "timer";
+
+    /// <summary>Whether a trigger starts without the control being used: something happens instead (a timer, a variable, an app, the profile).</summary>
+    public static bool IsEvent(string trigger) => trigger is ProfileShown or VariableChanged or AppInFront or Timer;
+
     /// <summary>The triggers a raw input fires at once (tap, double press and hold need timing: the host decides those).</summary>
     public static string? Immediate(Enums.InputCapabilities eventType, int value) => eventType switch
     {
@@ -213,6 +228,10 @@ public static class WorkflowTriggers
         RotateRight => "Turned right",
         SwipeLeft => "Swiped left",
         SwipeRight => "Swiped right",
+        ProfileShown => "The profile is shown",
+        VariableChanged => "A variable changes",
+        AppInFront => "An app comes to the front",
+        Timer => "A timer is due",
         _ => trigger,
     };
 }
@@ -243,6 +262,15 @@ public static class WorkflowKeys
 
     /// <summary>Wait: how long, in milliseconds.</summary>
     public const string Milliseconds = "ms";
+
+    /// <summary>Trigger (timer): the seconds between runs.</summary>
+    public const string Every = "every";
+
+    /// <summary>The shortest time between a timer trigger's runs, in seconds.</summary>
+    public const int MinEverySeconds = 1;
+
+    /// <summary>The longest, in seconds (a day).</summary>
+    public const int MaxEverySeconds = 86_400;
 
     /// <summary>Repeat: how many times (<see cref="ModeCount"/>).</summary>
     public const string Count = "count";

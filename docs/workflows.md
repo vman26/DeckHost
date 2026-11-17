@@ -12,7 +12,7 @@ A run starts at a **When** node and follows the links from left to right. A node
 
 | Node | What it does |
 |---|---|
-| **When** | Starts the workflow: the control is pressed, released, tapped, double pressed, held down, turned left or right, or swiped left or right. A workflow can have several. |
+| **When** | Starts the workflow: the control is pressed, released, tapped, double pressed, held down, turned left or right, or swiped left or right, or something happens that has nothing to do with the control (see [Workflows that start by themselves](#workflows-that-start-by-themselves)). A workflow can have several. |
 | **Action** | Runs an action, with its own settings. Drop an action from the list on the left onto the canvas. |
 | **Wait** | Waits, then continues. The device keeps working. While a run waits the node fills up over the time it takes. |
 | **If** | Continues at **Yes** or **No**: a variable (equal to, greater than, containing, empty, …), the app in front (part of its name), or the time of day (also past midnight, 22:00–06:00). |
@@ -22,6 +22,19 @@ A run starts at a **When** node and follows the links from left to right. A node
 | **Stop** | Ends the run, including branches that are still waiting. |
 
 Variables are shared by all workflows (names ignore case). The **Show Variable** action shows one on a key. They start empty when DeckHost starts.
+
+## Workflows that start by themselves
+
+A When node can also start on an event, so a workflow can react without anyone pressing the control:
+
+| Starts when | Settings |
+|---|---|
+| **The profile comes onto the device** | Also when DeckHost starts. |
+| **An app comes to the front** | Part of the app's name (`obs` matches `obs64.exe`). Needs DeckHost to see the app in front: Windows, macOS, Linux on X11. |
+| **A variable changes** | The variable's name, and optionally the value it has to change to. Variables set by a Set variable node, another workflow or the **Show Variable** action count. A value that is set again without changing doesn't start it. |
+| **Every so many seconds** | From 1 second to a day, counted from when the profile was shown. |
+
+Event triggers run on a workflow whose profile (page or folder) is shown on a device; put the workflow on a control that isn't used for anything else. An event never piles runs up: it waits until the workflow's previous run is done. A workflow that keeps starting itself, such as one that changes the variable it starts on, is paused for half a minute after 20 starts within 5 seconds, and the log says so.
 
 ## While a run is going
 

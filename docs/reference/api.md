@@ -972,6 +972,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Clear` |  |
 | `const string Contains` |  |
 | `const string Count` | Repeat: how many times (`ModeCount`). |
+| `const string Every` | Trigger (timer): the seconds between runs. |
 | `const string Flip` |  |
 | `const string From` | If (time): from and to, "HH:mm" (may wrap past midnight). |
 | `const string Interval` | Repeat: how long to wait between rounds, in milliseconds (0: none). |
@@ -982,9 +983,11 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string IsNotEqual` |  |
 | `const string IsSet` |  |
 | `const int MaxConditionRounds` | The most rounds a while / until Repeat runs (a condition that never changes can't run forever). |
+| `const int MaxEverySeconds` | The longest, in seconds (a day). |
 | `const int MaxRepeat` | The most times a Repeat node runs. |
 | `const int MaxWaitMs` | The longest wait a node can have (ten minutes). |
 | `const string Milliseconds` | Wait: how long, in milliseconds. |
+| `const int MinEverySeconds` | The shortest time between a timer trigger's runs, in seconds. |
 | `const string Mode` | Repeat: how the rounds are decided (`ModeCount`, `ModeVariable`, `ModeWhile`, `ModeUntil`). |
 | `const string ModeCount` | A fixed number of rounds (`Count`); also what a Repeat node without a mode does. |
 | `const string ModeUntil` | Rounds until a variable condition holds, checked before each round. |
@@ -1065,14 +1068,19 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 
 | Member | |
 |---|---|
+| `const string AppInFront` | Event: an app comes to the front (`App`: part of its name). |
 | `const string DoublePress` |  |
 | `const string Down` | The key goes down (right away). |
 | `const string Hold` | Held down (the device's long press). |
+| `const string ProfileShown` | Event: the workflow's profile (page or folder) comes onto the device. |
 | `const string RotateLeft` |  |
 | `const string RotateRight` |  |
 | `const string SwipeLeft` |  |
 | `const string SwipeRight` |  |
 | `const string Tap` | A short press: on release, not after a hold, and not when a second press follows (with a Double trigger). |
+| `const string Timer` | Event: every so many seconds (`Every`) while the profile is shown. |
 | `const string Up` | The key comes up. |
+| `const string VariableChanged` | Event: a variable changes (`Name`, optionally to `Value`). |
 | `static string Describe(string trigger)` |  |
 | `static string Immediate(InputCapabilities eventType, int value)` | The triggers a raw input fires at once (tap, double press and hold need timing: the host decides those). |
+| `static bool IsEvent(string trigger)` | Whether a trigger starts without the control being used: something happens instead (a timer, a variable, an app, the profile). |

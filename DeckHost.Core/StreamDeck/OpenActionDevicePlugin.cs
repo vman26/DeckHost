@@ -389,7 +389,7 @@ public sealed class OpenActionDevicePlugin : IDevicePlugin, IDeviceOutput, IConf
         System.Runtime.InteropServices.Marshal.Copy(rgba[..(width * height * 4)].ToArray(), 0, source.GetPixels(), width * height * 4);
         using var surface = SKSurface.Create(new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Opaque));
         surface.Canvas.Clear(SKColors.Black);
-        surface.Canvas.DrawBitmap(source, 0, 0);
+        surface.Canvas.DrawBitmap(source, 0f, 0f, new SKSamplingOptions(), null);
         using var image = surface.Snapshot();
         using var data = image.Encode(SKEncodedImageFormat.Jpeg, 90);
         return data?.ToArray();

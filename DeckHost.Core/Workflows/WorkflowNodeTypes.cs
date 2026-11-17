@@ -26,7 +26,7 @@ public static class WorkflowNodeTypes
         0xFF22C55E,
         Contracts.Icons.Bolt,
         [
-            new(WorkflowKeys.On, "When the control is", ActionSettingKind.Choice, WorkflowTriggers.Down, Options:
+            new(WorkflowKeys.On, "Starts when", ActionSettingKind.Choice, WorkflowTriggers.Down, Options:
             [
                 new(WorkflowTriggers.Down, "Pressed (right away)") { Requires = InputCapabilities.Press },
                 new(WorkflowTriggers.Up, "Released") { Requires = InputCapabilities.Release },
@@ -37,7 +37,28 @@ public static class WorkflowNodeTypes
                 new(WorkflowTriggers.RotateRight, "Turned right") { Requires = InputCapabilities.Rotate },
                 new(WorkflowTriggers.SwipeLeft, "Swiped left") { Requires = InputCapabilities.Swipe },
                 new(WorkflowTriggers.SwipeRight, "Swiped right") { Requires = InputCapabilities.Swipe },
+                new(WorkflowTriggers.ProfileShown, "The profile comes onto the device"),
+                new(WorkflowTriggers.AppInFront, "An app comes to the front"),
+                new(WorkflowTriggers.VariableChanged, "A variable changes"),
+                new(WorkflowTriggers.Timer, "Every so many seconds (while the profile is shown)"),
             ]),
+            new(WorkflowKeys.App, "App name contains", Placeholder: "e.g. obs", Description: "Where DeckHost can see the app in front (Windows, macOS, Linux on X11).")
+            {
+                ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.AppInFront),
+            },
+            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode", Description: "Names ignore case.")
+            {
+                ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.VariableChanged),
+            },
+            new(WorkflowKeys.Value, "Changes to", Placeholder: "any value", Description: "Leave empty to start on every change.")
+            {
+                ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.VariableChanged),
+            },
+            new(WorkflowKeys.Every, "Every", ActionSettingKind.Number, "60", Description: "The workflow starts again this many seconds after it last started, while its profile is shown on the device.")
+            {
+                Range = new(WorkflowKeys.MinEverySeconds, WorkflowKeys.MaxEverySeconds, 1) { Unit = "s" },
+                ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.Timer),
+            },
         ]);
 
     public static WorkflowNodeType Action { get; } = new(
@@ -201,7 +222,7 @@ public static class WorkflowNodeTypes
 
         return node.Kind switch
         {
-            WorkflowNodeKinds.Trigger => $"When {WorkflowTriggers.Describe(settings.Get(WorkflowKeys.On, WorkflowTriggers.Down)).ToLowerInvariant()}",
+            WorkflowNodeKinds.Trigger => SummarizeTrigger(settings),
             WorkflowNodeKinds.Action => node.Action?.ActionName ?? "Choose an action",
             WorkflowNodeKinds.Wait => $"Wait {WorkflowEngine.FormatDuration(Math.Clamp(settings.GetInt(WorkflowKeys.Milliseconds, 500), 0, WorkflowKeys.MaxWaitMs))}",
             WorkflowNodeKinds.If => settings.Get(WorkflowKeys.Check, WorkflowKeys.CheckVariable) switch
@@ -222,6 +243,21 @@ public static class WorkflowNodeTypes
             },
             WorkflowNodeKinds.Stop => "Stop",
             _ => node.Kind,
+        };
+    }
+
+    private static string SummarizeTrigger(ActionSettings settings)
+    {
+        var on = settings.Get(WorkflowKeys.On, WorkflowTriggers.Down);
+        return on switch
+        {
+            WorkflowTriggers.ProfileShown => "When the profile is shown",
+            WorkflowTriggers.AppInFront => $"When {Or(settings.Get(WorkflowKeys.App), "an app")} comes to the front",
+            WorkflowTriggers.VariableChanged => settings.Get(WorkflowKeys.Value).Length == 0
+                ? $"When {Or(settings.Get(WorkflowKeys.Name), "…")} changes"
+                : $"When {Or(settings.Get(WorkflowKeys.Name), "…")} becomes {settings.Get(WorkflowKeys.Value).Trim()}",
+            WorkflowTriggers.Timer => $"Every {WorkflowEngine.FormatDuration(Math.Clamp(settings.GetInt(WorkflowKeys.Every, 60), WorkflowKeys.MinEverySeconds, WorkflowKeys.MaxEverySeconds) * 1000)}",
+            _ => $"When {WorkflowTriggers.Describe(on).ToLowerInvariant()}",
         };
     }
 

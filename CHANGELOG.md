@@ -44,6 +44,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   of times from a variable or while/until a variable has a value (with a pause between rounds), and
   a workflow can be named, exported to a `.deckhostworkflow` file and imported.
 
+- Workflows can start by themselves: when the profile comes onto the device, when an app comes to
+  the front, when a variable changes (optionally to a given value) and every so many seconds.
+
 ### Changed
 
 - DeckHost is one public repository under GPL-3.0-or-later; issues, releases and source are in the
