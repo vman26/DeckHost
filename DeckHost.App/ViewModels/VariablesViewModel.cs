@@ -20,11 +20,21 @@ public sealed partial class VariablesViewModel : ViewModelBase
     private string _newType = VariableTypes.Text;
     private string _status = string.Empty;
 
-    public VariablesViewModel(IDeviceHostService host)
+    private readonly Action<bool>? _wantSystemValues;
+
+    /// <param name="wantSystemValues">Asked to publish CPU and memory while the page is shown (they are only measured when something needs them).</param>
+    public VariablesViewModel(IDeviceHostService host, Action<bool>? wantSystemValues = null)
     {
         _host = host;
+        _wantSystemValues = wantSystemValues;
         Refresh();
     }
+
+    /// <summary>The page is shown: the live system values are published.</summary>
+    public void Start() => _wantSystemValues?.Invoke(true);
+
+    /// <summary>The page is closed: nothing needs measuring for it any more.</summary>
+    public void Stop() => _wantSystemValues?.Invoke(false);
 
     /// <summary>The variables, DeckHost's own first.</summary>
     public ObservableCollection<VariableItemViewModel> Rows { get; } = [];
@@ -168,7 +178,10 @@ public sealed partial class VariableItemViewModel : ViewModelBase
     public bool IsUser => _info.IsUser;
 
     /// <summary>The value as DeckHost has it now.</summary>
-    public string Value => _info.Value.Length == 0 ? "—" : _info.Value;
+    public string Value => _info.Value.Length == 0 ? "—" : IsPercent ? _info.Value + " %" : _info.Value;
+
+    /// <summary>CPU and memory are percentages.</summary>
+    private bool IsPercent => _info.Key is DeckHost.App.Platform.SystemDataPublisher.CpuKey or DeckHost.App.Platform.SystemDataPublisher.MemoryKey;
 
     /// <summary>What is typed in the edit box (user variables).</summary>
     public string EditValue

@@ -83,6 +83,21 @@ public sealed class VariablesViewModelTests : IAsyncDisposable
     }
 
     [Test]
+    public void StartAndStop_ThePageShownAndClosed_AskForTheSystemValuesAndGiveThemUp()
+    {
+        // Arrange
+        var asked = new List<bool>();
+        var page = new VariablesViewModel(_host, asked.Add);
+
+        // Act
+        page.Start();
+        page.Stop();
+
+        // Assert
+        Assert.That(asked, Is.EqualTo(new[] { true, false }));
+    }
+
+    [Test]
     public async Task Delete_AUserVariable_RemovesItFromThePageAndTheStore()
     {
         // Arrange

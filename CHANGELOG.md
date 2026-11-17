@@ -33,6 +33,11 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   under **Found** (Add or Keep ignoring) instead of being added by themselves, and a removed device that is plugged
   in again is offered again.
 
+- The Variables page publishes CPU and memory while it is open (they used to show nothing unless a background followed
+  them), once a second and in percent, in step with the System Info action.
+- When the built-in browser can't start, the plugin settings page now says why and offers **Try the built-in browser
+  again**; a "failed" mark left by an older DeckHost that was only a view torn down while starting is forgotten.
+
 - Plugin store: open-source Elgato plugins can come from a checksummed copy kept in DeckHost's plugin
   repository instead of the community archive (the copying itself stays off for now).
 - Linux: an AppImage next to the tar.gz, one file that runs without installing. DeckHost doesn't replace it

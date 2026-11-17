@@ -380,7 +380,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     {
         if (TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>() is { } host)
         {
-            OpenSingle("Variables", () => new VariablesView { DataContext = new VariablesViewModel(host) });
+            OpenSingle("Variables", () => new VariablesView { DataContext = new VariablesViewModel(host, (DataContext as MainViewModel)!.WantSystemValues) });
         }
     }
 

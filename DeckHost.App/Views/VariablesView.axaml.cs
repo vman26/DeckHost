@@ -19,12 +19,14 @@ public partial class VariablesView : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        (DataContext as VariablesViewModel)?.Start();
         _timer.Start();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _timer.Stop();
+        (DataContext as VariablesViewModel)?.Stop();
         base.OnDetachedFromVisualTree(e);
     }
 }

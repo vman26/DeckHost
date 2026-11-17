@@ -16,17 +16,19 @@ internal sealed class SystemDataPublisher(IDeviceHostService host) : IDisposable
     public const string CpuKey = "system.cpu";
     public const string MemoryKey = "system.memory";
 
-    private static readonly TimeSpan Interval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
 
     /// <summary>The CPU load is measured between two readings; this long after the first one the second is taken.</summary>
     private static readonly TimeSpan FirstReadingAfter = TimeSpan.FromMilliseconds(600);
 
     private CancellationTokenSource? _running;
-    private (bool Cpu, bool Memory) _wanted;
+    private (bool Cpu, bool Memory) _followed;
+    private bool _shown;
+    private (bool Cpu, bool Memory) _publishing;
 
     public bool IsRunning => _running is not null;
 
-    /// <summary>Starts or stops publishing for the variables something wants (anything else is ignored).</summary>
+    /// <summary>Starts or stops publishing for the variables something follows (a background layer; anything else is ignored).</summary>
     public void Want(IEnumerable<string> keys)
     {
         var cpu = false;
@@ -37,19 +39,33 @@ internal sealed class SystemDataPublisher(IDeviceHostService host) : IDisposable
             memory |= key == MemoryKey;
         }
 
-        // Called with every edit of the profiles: nothing restarts while the same values are wanted.
-        if (_wanted == (cpu, memory))
+        _followed = (cpu, memory);
+        Apply();
+    }
+
+    /// <summary>Publishes both values while the Variables page is shown, so it lists them live (and in step with the System Info action).</summary>
+    public void WantWhileShown(bool shown)
+    {
+        _shown = shown;
+        Apply();
+    }
+
+    // Called with every edit of the profiles: nothing restarts while the same values are wanted.
+    private void Apply()
+    {
+        var wanted = _shown ? (Cpu: true, Memory: true) : _followed;
+        if (_publishing == wanted)
         {
             return;
         }
 
-        _wanted = (cpu, memory);
+        _publishing = wanted;
         Stop();
-        if (cpu || memory)
+        if (wanted.Cpu || wanted.Memory)
         {
             var source = new CancellationTokenSource();
             _running = source;
-            _ = Task.Run(() => RunAsync(cpu, memory, source.Token));
+            _ = Task.Run(() => RunAsync(wanted.Cpu, wanted.Memory, source.Token));
         }
     }
 

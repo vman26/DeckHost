@@ -1961,6 +1961,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         _systemData.Want(hostModels.SelectMany(static profile => Core.Rendering.BackgroundLayers.BoundVariables(profile.Background))
             .Concat(Core.Rendering.BackgroundLayers.BoundVariables(DefaultBackground)));
 
+    /// <summary>The Variables page is shown (or closed): CPU and memory are published for it.</summary>
+    public void WantSystemValues(bool shown) => _systemData.WantWhileShown(shown);
+
     private void SyncProfilesToHost()
     {
         var hostModels = EveryLayout.Select(ToHostModel).ToList();
