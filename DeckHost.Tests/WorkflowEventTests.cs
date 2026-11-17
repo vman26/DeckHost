@@ -89,205 +89,569 @@ public sealed class WorkflowEventTests : IAsyncDisposable
         await _host.WhenIdleAsync();
     }
 
+    private const string ModeVariable = "mode";
+    private const string XVariable = "x";
+    private const string ObsApp = "obs";
+    private const string ChromeProcess = "chrome.exe";
+    private const string ObsProcess = "OBS64.exe";
+    private const int ThrottleWaitRounds = 40;
+    private const int RoundMilliseconds = 10;
+    private const int TimerEverySeconds = 30;
+
+    private static readonly string[] OnlyA = ["a"];
+
+    // ---------------------------------------------------------------- a variable changes
+
     [Test]
-    public async Task A_workflow_starts_when_its_variable_changes_and_not_for_another_variable()
+    public async Task VariableChanged_ForAnotherVariable_StartsNothing()
     {
+        // Arrange
         await Start(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "Mode"))));
 
+        // Act
         await Publish(VariableKeys.UserVariable("other"), "1");
+
+        // Assert
         Assert.That(Ran(), Is.Empty);
+    }
 
-        await Publish(VariableKeys.UserVariable("mode"), "on");
-        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
+    [Test]
+    public async Task VariableChanged_ForTheNamedVariable_StartsTheWorkflow()
+    {
+        // Arrange
+        await Start(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "Mode"))));
 
-        await Publish(VariableKeys.UserVariable("mode"), "off");
+        // Act
+        await Publish(VariableKeys.UserVariable(ModeVariable), "on");
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(OnlyA));
+    }
+
+    [Test]
+    public async Task VariableChanged_ForTheNamedVariableAgainWithAnotherValue_StartsItAgain()
+    {
+        // Arrange
+        await Start(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "Mode"))));
+        await Publish(VariableKeys.UserVariable(ModeVariable), "on");
+
+        // Act
+        await Publish(VariableKeys.UserVariable(ModeVariable), "off");
+
+        // Assert
         Assert.That(Ran(), Is.EqualTo(new[] { "a", "a" }));
     }
 
     [Test]
-    public async Task A_variable_trigger_can_listen_to_a_control_scoped_variable_of_its_own_control_only()
+    public async Task VariableChanged_AControlScopedTrigger_IgnoresAnotherControlsVariable()
     {
-        var own = Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "x"), (WorkflowKeys.Scope, WorkflowKeys.ScopeControl)));
+        // Arrange
+        var own = Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, XVariable), (WorkflowKeys.Scope, WorkflowKeys.ScopeControl)));
         await Start(new DeviceProfile("profile", "Profile", Device, [Binding(own, "key.0")]));
 
-        await Publish(VariableKeys.ControlVariable(Device, "key.1", "x"), "1");
-        Assert.That(Ran(), Is.Empty, "another control's variable");
-        await Publish(VariableKeys.UserVariable("x"), "1");
-        Assert.That(Ran(), Is.Empty, "the global one");
+        // Act
+        await Publish(VariableKeys.ControlVariable(Device, "key.1", XVariable), "1");
 
-        await Publish(VariableKeys.ControlVariable(Device, "key.0", "x"), "1");
-        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
+        // Assert
+        Assert.That(Ran(), Is.Empty);
     }
 
     [Test]
-    public async Task A_variable_trigger_can_wait_for_one_value_and_ignores_a_value_that_did_not_change()
+    public async Task VariableChanged_AControlScopedTrigger_IgnoresTheGlobalVariable()
     {
-        await Start(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "mode"), (WorkflowKeys.Value, "ON"))));
+        // Arrange
+        var own = Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, XVariable), (WorkflowKeys.Scope, WorkflowKeys.ScopeControl)));
+        await Start(new DeviceProfile("profile", "Profile", Device, [Binding(own, "key.0")]));
 
-        await Publish(VariableKeys.UserVariable("mode"), "off");
+        // Act
+        await Publish(VariableKeys.UserVariable(XVariable), "1");
+
+        // Assert
         Assert.That(Ran(), Is.Empty);
-
-        await Publish(VariableKeys.UserVariable("mode"), "on");
-        await Publish(VariableKeys.UserVariable("mode"), "on");
-        Assert.That(Ran(), Is.EqualTo(new[] { "a" }), "the same value again is no change");
     }
 
     [Test]
-    public async Task A_workflow_starts_when_the_app_it_names_comes_to_the_front()
+    public async Task VariableChanged_AControlScopedTrigger_StartsForItsOwnControlsVariable()
     {
-        await Start(Flow(Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, "obs"))));
+        // Arrange
+        var own = Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, XVariable), (WorkflowKeys.Scope, WorkflowKeys.ScopeControl)));
+        await Start(new DeviceProfile("profile", "Profile", Device, [Binding(own, "key.0")]));
 
-        await Publish(VariableKeys.ForegroundApp, "chrome.exe");
+        // Act
+        await Publish(VariableKeys.ControlVariable(Device, "key.0", XVariable), "1");
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(OnlyA));
+    }
+
+    [Test]
+    public async Task VariableChanged_WaitingForOneValue_IgnoresOtherValues()
+    {
+        // Arrange
+        await Start(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, ModeVariable), (WorkflowKeys.Value, "ON"))));
+
+        // Act
+        await Publish(VariableKeys.UserVariable(ModeVariable), "off");
+
+        // Assert
         Assert.That(Ran(), Is.Empty);
+    }
 
-        await Publish(VariableKeys.ForegroundApp, "OBS64.exe");
-        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
+    [Test]
+    public async Task VariableChanged_TheSameValueSetAgain_IsNoChange()
+    {
+        // Arrange
+        await Start(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, ModeVariable), (WorkflowKeys.Value, "ON"))));
 
-        await Publish(VariableKeys.ForegroundApp, "chrome.exe");
+        // Act
+        await Publish(VariableKeys.UserVariable(ModeVariable), "on");
+        await Publish(VariableKeys.UserVariable(ModeVariable), "on");
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(OnlyA));
+    }
+
+    // ---------------------------------------------------------------- an app comes to the front
+
+    [Test]
+    public async Task AppInFront_AnotherApp_StartsNothing()
+    {
+        // Arrange
+        await Start(Flow(Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, ObsApp))));
+
+        // Act
+        await Publish(VariableKeys.ForegroundApp, ChromeProcess);
+
+        // Assert
+        Assert.That(Ran(), Is.Empty);
+    }
+
+    [Test]
+    public async Task AppInFront_TheNamedApp_StartsTheWorkflow()
+    {
+        // Arrange
+        await Start(Flow(Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, ObsApp))));
+
+        // Act
+        await Publish(VariableKeys.ForegroundApp, ObsProcess);
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(OnlyA));
+    }
+
+    [Test]
+    public async Task AppInFront_TheAppComingBack_StartsItEachTime()
+    {
+        // Arrange
+        await Start(Flow(Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, ObsApp))));
+        await Publish(VariableKeys.ForegroundApp, ObsProcess);
+
+        // Act
+        await Publish(VariableKeys.ForegroundApp, ChromeProcess);
         await Publish(VariableKeys.ForegroundApp, "obs64.exe");
-        Assert.That(Ran(), Is.EqualTo(new[] { "a", "a" }), "each time it comes back");
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "a" }));
     }
 
     [Test]
-    public async Task An_app_trigger_without_an_app_name_starts_on_nothing()
+    public async Task AppInFront_WithoutAnAppName_StartsOnNothing()
     {
+        // Arrange
         await Start(Flow(Trigger(WorkflowTriggers.AppInFront)));
 
+        // Act
         await Publish(VariableKeys.ForegroundApp, "obs64.exe");
 
+        // Assert
         Assert.That(Ran(), Is.Empty);
     }
 
-    [Test]
-    public async Task A_workflow_starts_when_the_host_starts_and_when_its_profile_comes_back()
+    // ---------------------------------------------------------------- the profile is shown
+
+    private async Task StartTwoProfilesThatRunAnActionWhenShown()
     {
         var shown = Binding(Flow(Trigger(WorkflowTriggers.ProfileShown), "a"));
         var other = Binding(Flow(Trigger(WorkflowTriggers.ProfileShown), "b"));
         await Start(
             new DeviceProfile("one", "One", Device, [shown]),
             new DeviceProfile("two", "Two", Device, [other]));
-        Assert.That(Ran(), Is.EqualTo(new[] { "a" }), "the profile on the device at start");
+    }
 
+    [Test]
+    public async Task ProfileShown_TheHostStarting_RunsTheWorkflowOfTheProfileOnTheDevice()
+    {
+        // Act
+        await StartTwoProfilesThatRunAnActionWhenShown();
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(OnlyA));
+    }
+
+    [Test]
+    public async Task ProfileShown_AnotherProfileGetsActive_RunsThatProfilesWorkflow()
+    {
+        // Arrange
+        await StartTwoProfilesThatRunAnActionWhenShown();
+
+        // Act
         _host.SetActiveProfile("two");
         await _host.WhenIdleAsync();
-        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b" }));
 
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "b" }));
+    }
+
+    [Test]
+    public async Task ProfileShown_TheFirstProfileComesBack_RunsItsWorkflowAgain()
+    {
+        // Arrange
+        await StartTwoProfilesThatRunAnActionWhenShown();
+        _host.SetActiveProfile("two");
+        await _host.WhenIdleAsync();
+
+        // Act
         _host.SetActiveProfile("one");
         await _host.WhenIdleAsync();
+
+        // Assert
         Assert.That(Ran(), Is.EqualTo(new[] { "a", "b", "a" }));
     }
 
+    // ---------------------------------------------------------------- timers
+
+    private static readonly DateTime TimerStart = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    private async Task StartEveryThirtySeconds() =>
+        await Start(Flow(Trigger(WorkflowTriggers.Timer, (WorkflowKeys.Every, TimerEverySeconds.ToString()))));
+
     [Test]
-    public async Task A_timer_starts_the_workflow_every_so_many_seconds_counting_from_when_it_was_first_seen()
+    public async Task Timer_BeforeItsIntervalHasPassed_StartsNothing()
     {
-        await Start(Flow(Trigger(WorkflowTriggers.Timer, (WorkflowKeys.Every, "30"))));
-        var t0 = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        // Arrange
+        await StartEveryThirtySeconds();
 
-        await _host.TickTimersAsync(t0);
-        await _host.TickTimersAsync(t0.AddSeconds(29));
+        // Act
+        await _host.TickTimersAsync(TimerStart);
+        await _host.TickTimersAsync(TimerStart.AddSeconds(TimerEverySeconds - 1));
+
+        // Assert
         Assert.That(Ran(), Is.Empty, "it counts from the first tick");
-
-        await _host.TickTimersAsync(t0.AddSeconds(30));
-        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
-
-        await _host.TickTimersAsync(t0.AddSeconds(59));
-        Assert.That(Ran(), Has.Count.EqualTo(1));
-        await _host.TickTimersAsync(t0.AddSeconds(60));
-        Assert.That(Ran(), Has.Count.EqualTo(2));
     }
 
     [Test]
-    public async Task Event_triggers_do_nothing_for_a_profile_that_is_not_shown()
+    public async Task Timer_WhenItsIntervalHasPassed_StartsTheWorkflow()
     {
+        // Arrange
+        await StartEveryThirtySeconds();
+        await _host.TickTimersAsync(TimerStart);
+
+        // Act
+        await _host.TickTimersAsync(TimerStart.AddSeconds(TimerEverySeconds));
+
+        // Assert
+        Assert.That(Ran(), Is.EqualTo(OnlyA));
+    }
+
+    [Test]
+    public async Task Timer_AfterAnotherInterval_StartsTheWorkflowAgain()
+    {
+        // Arrange
+        await StartEveryThirtySeconds();
+        await _host.TickTimersAsync(TimerStart);
+        await _host.TickTimersAsync(TimerStart.AddSeconds(TimerEverySeconds));
+
+        // Act
+        await _host.TickTimersAsync(TimerStart.AddSeconds((2 * TimerEverySeconds) - 1));
+        var afterJustUnder = Ran().Count;
+        await _host.TickTimersAsync(TimerStart.AddSeconds(2 * TimerEverySeconds));
+
+        // Assert
+        Assert.That(afterJustUnder, Is.EqualTo(1));
+        Assert.That(Ran(), Has.Count.EqualTo(2));
+    }
+
+    // ---------------------------------------------------------------- shown profile only, and loops
+
+    [Test]
+    public async Task VariableChanged_OnAProfileThatIsNotShown_StartsNothing()
+    {
+        // Arrange
         await Start(
             new DeviceProfile("one", "One", Device, []),
-            new DeviceProfile("two", "Two", Device, [Binding(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "x"))))]));
+            new DeviceProfile("two", "Two", Device, [Binding(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, XVariable))))]));
         _host.SetActiveProfile("one");
         await _host.WhenIdleAsync();
 
-        await Publish(VariableKeys.UserVariable("x"), "1");
+        // Act
+        await Publish(VariableKeys.UserVariable(XVariable), "1");
 
+        // Assert
         Assert.That(Ran(), Is.Empty);
     }
 
     [Test]
-    public async Task A_workflow_that_changes_the_variable_it_starts_on_is_paused_instead_of_looping_forever()
+    public async Task VariableChanged_AWorkflowThatChangesTheVariableItStartsOn_IsPausedAtTheLimitInsteadOfLoopingForever()
     {
+        // Arrange
         var count = new WorkflowNode("1", WorkflowNodeKinds.SetVariable)
         {
             Settings = new ActionSettings(new Dictionary<string, string>
             {
-                [WorkflowKeys.Name] = "x",
+                [WorkflowKeys.Name] = XVariable,
                 [WorkflowKeys.Operation] = WorkflowKeys.Add,
                 [WorkflowKeys.Value] = "1",
             }),
         };
         await Start(new Workflow
         {
-            Nodes = [Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "x")), count],
+            Nodes = [Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, XVariable)), count],
             Links = [new("t", WorkflowPorts.Next, "1")],
         });
 
-        await Publish(VariableKeys.UserVariable("x"), "0");
-        for (var i = 0; i < 40; i++)
+        // Act
+        await Publish(VariableKeys.UserVariable(XVariable), "0");
+        for (var i = 0; i < ThrottleWaitRounds; i++)
         {
-            await Task.Delay(10);
+            await Task.Delay(RoundMilliseconds);
             await _host.WhenIdleAsync();
         }
 
+        // Assert
         List<WorkflowTrace> traces;
         lock (_traces)
         {
             traces = [.. _traces];
         }
 
-        var started = traces.Count(static trace => trace.Kind == WorkflowTraceKind.Started);
-        Assert.That(started, Is.EqualTo(WorkflowEventThrottle.Limit), "it stops at the limit");
+        Assert.That(traces.Count(static trace => trace.Kind == WorkflowTraceKind.Started), Is.EqualTo(WorkflowEventThrottle.Limit), "it stops at the limit");
     }
 
-    [Test]
-    public void The_throttle_allows_a_burst_up_to_its_limit_pauses_and_lets_the_trigger_back_in_later()
+    // ---------------------------------------------------------------- the throttle
+
+    private static readonly DateTime ThrottleStart = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private static WorkflowEventThrottle ThrottleUsedUpToItsLimit()
     {
         var throttle = new WorkflowEventThrottle();
-        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         for (var i = 0; i < WorkflowEventThrottle.Limit; i++)
         {
-            Assert.That(throttle.Allow("k", t0.AddMilliseconds(i), out _), Is.True);
+            throttle.Allow("k", ThrottleStart.AddMilliseconds(i), out _);
         }
 
-        Assert.That(throttle.Allow("k", t0.AddSeconds(1), out var paused), Is.False);
+        return throttle;
+    }
+
+    [Test]
+    public void Allow_ABurstUpToTheLimit_IsAllowed()
+    {
+        // Arrange
+        var throttle = new WorkflowEventThrottle();
+        var allowed = new List<bool>();
+
+        // Act
+        for (var i = 0; i < WorkflowEventThrottle.Limit; i++)
+        {
+            allowed.Add(throttle.Allow("k", ThrottleStart.AddMilliseconds(i), out _));
+        }
+
+        // Assert
+        Assert.That(allowed, Has.All.True);
+    }
+
+    [Test]
+    public void Allow_OneMoreThanTheLimit_PausesAndSaysSo()
+    {
+        // Arrange
+        var throttle = ThrottleUsedUpToItsLimit();
+
+        // Act
+        var allowed = throttle.Allow("k", ThrottleStart.AddSeconds(1), out var paused);
+
+        // Assert
+        Assert.That(allowed, Is.False);
         Assert.That(paused, Is.True, "the call that pauses says so");
-        Assert.That(throttle.Allow("k", t0.AddSeconds(2), out paused), Is.False);
-        Assert.That(paused, Is.False, "and only that one");
-        Assert.That(throttle.Allow("other", t0.AddSeconds(2), out _), Is.True, "other triggers are not affected");
-        Assert.That(throttle.Allow("k", t0.AddSeconds(1) + WorkflowEventThrottle.Pause + TimeSpan.FromSeconds(1), out _), Is.True);
     }
 
     [Test]
-    public void The_matching_checks_read_the_trigger_settings()
+    public void Allow_WhilePaused_IsRefusedWithoutSayingPausedAgain()
     {
+        // Arrange
+        var throttle = ThrottleUsedUpToItsLimit();
+        throttle.Allow("k", ThrottleStart.AddSeconds(1), out _);
+
+        // Act
+        var allowed = throttle.Allow("k", ThrottleStart.AddSeconds(2), out var paused);
+
+        // Assert
+        Assert.That(allowed, Is.False);
+        Assert.That(paused, Is.False, "only the first call says it");
+    }
+
+    [Test]
+    public void Allow_AnotherTriggerWhileOneIsPaused_IsNotAffected()
+    {
+        // Arrange
+        var throttle = ThrottleUsedUpToItsLimit();
+        throttle.Allow("k", ThrottleStart.AddSeconds(1), out _);
+
+        // Act
+        var allowed = throttle.Allow("other", ThrottleStart.AddSeconds(2), out _);
+
+        // Assert
+        Assert.That(allowed, Is.True);
+    }
+
+    [Test]
+    public void Allow_AfterThePauseHasEnded_LetsTheTriggerBackIn()
+    {
+        // Arrange
+        var throttle = ThrottleUsedUpToItsLimit();
+        throttle.Allow("k", ThrottleStart.AddSeconds(1), out _);
+
+        // Act
+        var allowed = throttle.Allow("k", ThrottleStart.AddSeconds(1) + WorkflowEventThrottle.Pause + TimeSpan.FromSeconds(1), out _);
+
+        // Assert
+        Assert.That(allowed, Is.True);
+    }
+
+    // ---------------------------------------------------------------- reading the trigger settings
+
+    [Test]
+    public void MatchesVariable_ANameAndValueWithSpacesAndOtherCase_StillMatches()
+    {
+        // Arrange
         var variable = Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, " Mode "), (WorkflowKeys.Value, "On"));
-        Assert.That(WorkflowEvents.MatchesVariable(variable, VariableKeys.UserVariable("mode"), " on "), Is.True);
-        Assert.That(WorkflowEvents.MatchesVariable(variable, VariableKeys.UserVariable("mode"), "off"), Is.False);
-        Assert.That(WorkflowEvents.MatchesVariable(Trigger(WorkflowTriggers.VariableChanged), VariableKeys.UserVariable("mode"), "on"), Is.False, "no name, no match");
 
-        Assert.That(WorkflowEvents.MatchesApp(Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, "Code")), "code.exe"), Is.True);
-        Assert.That(WorkflowEvents.MatchesApp(Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, "")), "code.exe"), Is.False);
+        // Act
+        var matches = WorkflowEvents.MatchesVariable(variable, VariableKeys.UserVariable(ModeVariable), " on ");
 
-        Assert.That(WorkflowEvents.EveryOf(Trigger(WorkflowTriggers.Timer, (WorkflowKeys.Every, "0"))), Is.EqualTo(TimeSpan.FromSeconds(1)));
-        Assert.That(WorkflowEvents.EveryOf(Trigger(WorkflowTriggers.Timer, (WorkflowKeys.Every, "999999"))), Is.EqualTo(TimeSpan.FromSeconds(WorkflowKeys.MaxEverySeconds)));
-        Assert.That(WorkflowEvents.EveryOf(Trigger(WorkflowTriggers.Timer)), Is.EqualTo(TimeSpan.FromSeconds(60)));
+        // Assert
+        Assert.That(matches, Is.True);
     }
 
     [Test]
-    public void The_trigger_node_describes_its_event()
+    public void MatchesVariable_ADifferentValue_DoesNotMatch()
     {
-        Assert.That(WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.ProfileShown)), Is.EqualTo("When the profile is shown"));
-        Assert.That(WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, "obs"))), Is.EqualTo("When obs comes to the front"));
-        Assert.That(WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "mode"))), Is.EqualTo("When mode changes"));
-        Assert.That(WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "mode"), (WorkflowKeys.Value, "on"))), Is.EqualTo("When mode becomes on"));
-        Assert.That(WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.Timer, (WorkflowKeys.Every, "90"))), Is.EqualTo("Every 90 s"));
-        Assert.That(WorkflowTriggers.IsEvent(WorkflowTriggers.Timer), Is.True);
-        Assert.That(WorkflowTriggers.IsEvent(WorkflowTriggers.Down), Is.False);
+        // Arrange
+        var variable = Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, " Mode "), (WorkflowKeys.Value, "On"));
+
+        // Act
+        var matches = WorkflowEvents.MatchesVariable(variable, VariableKeys.UserVariable(ModeVariable), "off");
+
+        // Assert
+        Assert.That(matches, Is.False);
+    }
+
+    [Test]
+    public void MatchesVariable_NoName_DoesNotMatch()
+    {
+        // Arrange
+        var variable = Trigger(WorkflowTriggers.VariableChanged);
+
+        // Act
+        var matches = WorkflowEvents.MatchesVariable(variable, VariableKeys.UserVariable(ModeVariable), "on");
+
+        // Assert
+        Assert.That(matches, Is.False);
+    }
+
+    [TestCase("Code", "code.exe", true)]
+    [TestCase("", "code.exe", false)]
+    public void MatchesApp_ANameAgainstTheAppInFront_MatchesPartOfItsNameIgnoringCase(string wanted, string app, bool expected)
+    {
+        // Arrange
+        var trigger = Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, wanted));
+
+        // Act
+        var matches = WorkflowEvents.MatchesApp(trigger, app);
+
+        // Assert
+        Assert.That(matches, Is.EqualTo(expected));
+    }
+
+    [TestCase("0", 1)]
+    [TestCase("999999", WorkflowKeys.MaxEverySeconds)]
+    public void EveryOf_AnIntervalOutOfRange_IsClamped(string every, int expectedSeconds)
+    {
+        // Act
+        var interval = WorkflowEvents.EveryOf(Trigger(WorkflowTriggers.Timer, (WorkflowKeys.Every, every)));
+
+        // Assert
+        Assert.That(interval, Is.EqualTo(TimeSpan.FromSeconds(expectedSeconds)));
+    }
+
+    [Test]
+    public void EveryOf_NoInterval_IsAMinute()
+    {
+        // Act
+        var interval = WorkflowEvents.EveryOf(Trigger(WorkflowTriggers.Timer));
+
+        // Assert
+        Assert.That(interval, Is.EqualTo(TimeSpan.FromSeconds(60)));
+    }
+
+    // ---------------------------------------------------------------- describing a trigger
+
+    [Test]
+    public void Summarize_AProfileShownTrigger_SaysWhenTheProfileIsShown()
+    {
+        // Act
+        var summary = WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.ProfileShown));
+
+        // Assert
+        Assert.That(summary, Is.EqualTo("When the profile is shown"));
+    }
+
+    [Test]
+    public void Summarize_AnAppTrigger_NamesTheApp()
+    {
+        // Act
+        var summary = WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.AppInFront, (WorkflowKeys.App, ObsApp)));
+
+        // Assert
+        Assert.That(summary, Is.EqualTo("When obs comes to the front"));
+    }
+
+    [Test]
+    public void Summarize_AVariableTriggerWithoutAValue_SaysWhenItChanges()
+    {
+        // Act
+        var summary = WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, ModeVariable)));
+
+        // Assert
+        Assert.That(summary, Is.EqualTo("When mode changes"));
+    }
+
+    [Test]
+    public void Summarize_AVariableTriggerWithAValue_SaysWhenItBecomesThatValue()
+    {
+        // Act
+        var summary = WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, ModeVariable), (WorkflowKeys.Value, "on")));
+
+        // Assert
+        Assert.That(summary, Is.EqualTo("When mode becomes on"));
+    }
+
+    [Test]
+    public void Summarize_ATimerTrigger_SaysHowOften()
+    {
+        // Act
+        var summary = WorkflowNodeTypes.Summarize(Trigger(WorkflowTriggers.Timer, (WorkflowKeys.Every, "90")));
+
+        // Assert
+        Assert.That(summary, Is.EqualTo("Every 90 s"));
+    }
+
+    [TestCase(WorkflowTriggers.Timer, true)]
+    [TestCase(WorkflowTriggers.Down, false)]
+    public void IsEvent_ATriggerKind_IsTrueOnlyForTheOnesThatStartByThemselves(string trigger, bool expected)
+    {
+        // Act
+        var isEvent = WorkflowTriggers.IsEvent(trigger);
+
+        // Assert
+        Assert.That(isEvent, Is.EqualTo(expected));
     }
 }
