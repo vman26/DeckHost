@@ -48,115 +48,274 @@ public sealed class ProfileFileTests : IDisposable
     private static Workflow SharedFlow(string id, params WorkflowNode[] nodes) =>
         new() { Id = id, Name = "Shared " + id, Nodes = [new WorkflowNode("t", WorkflowNodeKinds.Trigger), .. nodes] };
 
-    [Test]
-    public void A_profile_takes_the_shared_workflows_it_calls_along_with_new_ids_and_leaves_the_others()
+    private const string Dev = "dev";
+    private const string OtherDevice = "other-device";
+    private const string SharedA = "a";
+    private const string SharedB = "b";
+    private const string Unused = "unused";
+    private const string AssetsFolder = "assets";
+    private const string Blue = "#0000FF";
+    private const string Red = "#FF0000";
+    private const double HalfOpacity = 0.5;
+    private const int LayerAngle = 30;
+
+    private string AssetsPath => Path.Combine(_root, AssetsFolder);
+
+    private (DeviceProfile Profile, Workflow[] Shared, string File) SharedWorkflowsSetup()
     {
         var calling = new ControlBinding("key.0", ProfileActionKind.Workflow, Binding("key.0", WorkflowAction.ActionId).Action, new ControlAppearance(), [])
         {
-            Workflow = new Workflow { Nodes = [new WorkflowNode("t", WorkflowNodeKinds.Trigger), CallNode("c", "a")] },
+            Workflow = new Workflow { Nodes = [new WorkflowNode("t", WorkflowNodeKinds.Trigger), CallNode("c", SharedA)] },
         };
-        var profile = new DeviceProfile("p", "Studio", "dev", [calling]);
-        var shared = new[] { SharedFlow("a", CallNode("inner", "b")), SharedFlow("b"), SharedFlow("unused") };
-        var file = Path.Combine(_root, "shared" + ProfileBundle.Extension);
+        var profile = new DeviceProfile("p", "Studio", Dev, [calling]);
+        var shared = new[] { SharedFlow(SharedA, CallNode("inner", SharedB)), SharedFlow(SharedB), SharedFlow(Unused) };
+        return (profile, shared, Path.Combine(_root, "shared" + ProfileBundle.Extension));
+    }
 
+    [Test]
+    public void ImportBundle_AProfileThatCallsSharedWorkflows_BringsAlongTheOnesItUsesAndLeavesTheOthers()
+    {
+        // Arrange
+        var (profile, shared, file) = SharedWorkflowsSetup();
         ProfileBundle.Export([profile], file, shared);
-        var imported = ProfileBundle.ImportBundle(file, "dev", Path.Combine(_root, "assets"));
 
+        // Act
+        var imported = ProfileBundle.ImportBundle(file, Dev, AssetsPath);
+
+        // Assert
         Assert.That(imported.SharedWorkflows.Select(static workflow => workflow.Name), Is.EquivalentTo(new[] { "Shared a", "Shared b" }), "the one nothing calls stays behind");
+    }
+
+    [Test]
+    public void ImportBundle_SharedWorkflows_GetNewIdsSoAnImportNeverReplacesYours()
+    {
+        // Arrange
+        var (profile, shared, file) = SharedWorkflowsSetup();
+        ProfileBundle.Export([profile], file, shared);
+
+        // Act
+        var imported = ProfileBundle.ImportBundle(file, Dev, AssetsPath);
+
+        // Assert
+        var a = imported.SharedWorkflows.Single(static workflow => workflow.Name == "Shared a");
+        Assert.That(a.Id, Is.Not.EqualTo(SharedA).And.StartWith(SharedA + "."));
+    }
+
+    [Test]
+    public void ImportBundle_SharedWorkflows_KeepTheCallsBetweenThemAndFromTheProfileConnected()
+    {
+        // Arrange
+        var (profile, shared, file) = SharedWorkflowsSetup();
+        ProfileBundle.Export([profile], file, shared);
+
+        // Act
+        var imported = ProfileBundle.ImportBundle(file, Dev, AssetsPath);
+
+        // Assert
         var a = imported.SharedWorkflows.Single(static workflow => workflow.Name == "Shared a");
         var b = imported.SharedWorkflows.Single(static workflow => workflow.Name == "Shared b");
-        Assert.That(a.Id, Is.Not.EqualTo("a").And.StartWith("a."), "new ids, so an import never replaces yours");
         var calledFromProfile = imported.Layouts[0].Bindings[0].Workflow!.Nodes.Single(static node => node.Kind == WorkflowNodeKinds.Call).EffectiveSettings.Get(WorkflowKeys.Workflow);
         Assert.That(calledFromProfile, Is.EqualTo(a.Id), "the profile's Call node follows");
         Assert.That(a.Nodes.Single(static node => node.Kind == WorkflowNodeKinds.Call).EffectiveSettings.Get(WorkflowKeys.Workflow), Is.EqualTo(b.Id), "so does a call inside a shared workflow");
-        Assert.That(ProfileBundle.Import(file, "dev", Path.Combine(_root, "assets")), Has.Count.EqualTo(1), "the plain Import still works");
     }
 
     [Test]
-    public void A_bundle_without_shared_workflows_has_none_and_used_ones_are_found_through_calls_only()
+    public void Import_ABundleWithSharedWorkflows_StillImportsThePlainProfile()
     {
-        var plain = new DeviceProfile("p", "Plain", "dev", [Binding("key.0", FolderBackAction.ActionId)]);
-        var file = Path.Combine(_root, "plain" + ProfileBundle.Extension);
+        // Arrange
+        var (profile, shared, file) = SharedWorkflowsSetup();
+        ProfileBundle.Export([profile], file, shared);
 
-        ProfileBundle.Export([plain], file, [SharedFlow("a")]);
+        // Act
+        var layouts = ProfileBundle.Import(file, Dev, AssetsPath);
 
-        Assert.That(ProfileBundle.ImportBundle(file, "dev", Path.Combine(_root, "assets")).SharedWorkflows, Is.Empty);
-        Assert.That(ProfileBundle.SharedWorkflowsUsed([plain], [SharedFlow("a")]), Is.Empty);
+        // Assert
+        Assert.That(layouts, Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void The_images_of_background_layers_travel_with_the_profile_and_other_layers_are_kept()
+    public void ImportBundle_AProfileThatCallsNothing_HasNoSharedWorkflows()
+    {
+        // Arrange
+        var plain = new DeviceProfile("p", "Plain", Dev, [Binding("key.0", FolderBackAction.ActionId)]);
+        var file = Path.Combine(_root, "plain" + ProfileBundle.Extension);
+        ProfileBundle.Export([plain], file, [SharedFlow(SharedA)]);
+
+        // Act
+        var imported = ProfileBundle.ImportBundle(file, Dev, AssetsPath);
+
+        // Assert
+        Assert.That(imported.SharedWorkflows, Is.Empty);
+    }
+
+    [Test]
+    public void SharedWorkflowsUsed_AProfileThatCallsNothing_FindsNone()
+    {
+        // Arrange
+        var plain = new DeviceProfile("p", "Plain", Dev, [Binding("key.0", FolderBackAction.ActionId)]);
+
+        // Act
+        var used = ProfileBundle.SharedWorkflowsUsed([plain], [SharedFlow(SharedA)]);
+
+        // Assert
+        Assert.That(used, Is.Empty);
+    }
+
+    private (DeviceProfile Profile, string Picture, string File) LayeredProfile()
     {
         var picture = Path.Combine(_root, "layer.png");
         File.WriteAllBytes(picture, [9, 9, 9]);
-        var profile = new DeviceProfile("p", "Studio", "dev", [], Background: new ProfileBackground("#123456")
+        var profile = new DeviceProfile("p", "Studio", Dev, [], Background: new ProfileBackground("#123456")
         {
             Layers =
             [
-                new BackgroundLayer(BackgroundLayerKinds.Image, Opacity: 0.5) { ImagePath = picture },
-                new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = "#FF0000", ToColor = "#0000FF", Angle = 30 },
+                new BackgroundLayer(BackgroundLayerKinds.Image, Opacity: HalfOpacity) { ImagePath = picture },
+                new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = Red, ToColor = Blue, Angle = LayerAngle },
             ],
         });
-        var file = Path.Combine(_root, "layers" + ProfileBundle.Extension);
+        return (profile, picture, Path.Combine(_root, "layers" + ProfileBundle.Extension));
+    }
 
+    [Test]
+    public void Import_ALayeredBackground_BringsTheLayersPictureAlong()
+    {
+        // Arrange
+        var (profile, picture, file) = LayeredProfile();
         ProfileBundle.Export([profile], file);
         File.Delete(picture);
-        var imported = ProfileBundle.Import(file, "dev", Path.Combine(_root, "assets"));
 
+        // Act
+        var imported = ProfileBundle.Import(file, Dev, AssetsPath);
+
+        // Assert
         var layers = imported[0].Background!.Layers!;
         Assert.That(layers, Has.Count.EqualTo(2));
         Assert.That(File.ReadAllBytes(layers[0].ImagePath!), Is.EqualTo(new byte[] { 9, 9, 9 }), "the picture came along");
-        Assert.That(layers[0].Opacity, Is.EqualTo(0.5));
-        Assert.That(layers[1].Angle, Is.EqualTo(30));
+    }
+
+    [Test]
+    public void Import_ALayeredBackground_KeepsTheOtherLayersAndTheColor()
+    {
+        // Arrange
+        var (profile, picture, file) = LayeredProfile();
+        ProfileBundle.Export([profile], file);
+        File.Delete(picture);
+
+        // Act
+        var imported = ProfileBundle.Import(file, Dev, AssetsPath);
+
+        // Assert
+        var layers = imported[0].Background!.Layers!;
+        Assert.That(layers[0].Opacity, Is.EqualTo(HalfOpacity));
+        Assert.That(layers[1].Angle, Is.EqualTo(LayerAngle));
         Assert.That(imported[0].Background!.Color, Is.EqualTo("#123456"));
     }
 
-    [Test]
-    public void A_profile_travels_with_its_pages_folders_and_images()
+    private (DeviceProfile[] Layouts, string Image, string File) ProfileWithAPageAndAFolder()
     {
         var image = Path.Combine(_root, "photo.png");
         File.WriteAllBytes(image, [1, 2, 3]);
-        var profile = new DeviceProfile("p", "Studio", "dev", [Binding("key.0", FolderAction.ActionId, image, (FolderAction.FolderIdKey, "p.folder"))]);
-        var page = new DeviceProfile("p.page", "Page 2", "dev", []) { ParentId = "p", Kind = ProfileKinds.Page };
-        var folder = new DeviceProfile("p.folder", "Tools", "dev", [Binding("key.0", FolderBackAction.ActionId)]) { ParentId = "p", Kind = ProfileKinds.Folder };
-        var file = Path.Combine(_root, "studio" + ProfileBundle.Extension);
-
-        ProfileBundle.Export([profile, page, folder], file);
-        File.Delete(image); // the bundle carries its own copy
-        var imported = ProfileBundle.Import(file, "other-device", Path.Combine(_root, "assets"));
-
-        Assert.That(imported.Count, Is.EqualTo(3));
-        Expect.All(imported, layout => Assert.That(layout.DeviceId, Is.EqualTo("other-device")));
-        Assert.That(imported.Any(layout => layout.Id is "p" or "p.page" or "p.folder"), Is.False); // never replaces the original
-        var root = imported[0];
-        var importedFolder = imported.Single(layout => layout.Kind == ProfileKinds.Folder);
-        Assert.That(importedFolder.ParentId, Is.EqualTo(root.Id));
-        Assert.That(root.Bindings[0].Action.Settings.Get(FolderAction.FolderIdKey), Is.EqualTo(importedFolder.Id)); // the key opens the copy
-        Assert.That(File.ReadAllBytes(root.Bindings[0].Appearance.ImagePath!), Is.EqualTo(new[] { 1, 2, 3 }));
+        var profile = new DeviceProfile("p", "Studio", Dev, [Binding("key.0", FolderAction.ActionId, image, (FolderAction.FolderIdKey, "p.folder"))]);
+        var page = new DeviceProfile("p.page", "Page 2", Dev, []) { ParentId = "p", Kind = ProfileKinds.Page };
+        var folder = new DeviceProfile("p.folder", "Tools", Dev, [Binding("key.0", FolderBackAction.ActionId)]) { ParentId = "p", Kind = ProfileKinds.Folder };
+        return ([profile, page, folder], image, Path.Combine(_root, "studio" + ProfileBundle.Extension));
     }
 
     [Test]
-    public void Other_files_are_refused_plainly()
+    public void Import_AProfileWithAPageAndAFolder_BringsAllThreeLayoutsToTheOtherDeviceWithNewIds()
     {
+        // Arrange
+        var (layouts, image, file) = ProfileWithAPageAndAFolder();
+        ProfileBundle.Export(layouts, file);
+        File.Delete(image); // the bundle carries its own copy
+
+        // Act
+        var imported = ProfileBundle.Import(file, OtherDevice, AssetsPath);
+
+        // Assert
+        Assert.That(imported.Count, Is.EqualTo(3));
+        Expect.All(imported, layout => Assert.That(layout.DeviceId, Is.EqualTo(OtherDevice)));
+        Assert.That(imported.Any(layout => layout.Id is "p" or "p.page" or "p.folder"), Is.False, "never replaces the original");
+    }
+
+    [Test]
+    public void Import_AFolderKey_OpensTheCopiedFolder()
+    {
+        // Arrange
+        var (layouts, image, file) = ProfileWithAPageAndAFolder();
+        ProfileBundle.Export(layouts, file);
+        File.Delete(image);
+
+        // Act
+        var imported = ProfileBundle.Import(file, OtherDevice, AssetsPath);
+
+        // Assert
+        var root = imported[0];
+        var importedFolder = imported.Single(layout => layout.Kind == ProfileKinds.Folder);
+        Assert.That(importedFolder.ParentId, Is.EqualTo(root.Id));
+        Assert.That(root.Bindings[0].Action.Settings.Get(FolderAction.FolderIdKey), Is.EqualTo(importedFolder.Id));
+    }
+
+    [Test]
+    public void Import_AKeyImage_IsUnpackedFromTheBundle()
+    {
+        // Arrange
+        var (layouts, image, file) = ProfileWithAPageAndAFolder();
+        ProfileBundle.Export(layouts, file);
+        File.Delete(image);
+
+        // Act
+        var imported = ProfileBundle.Import(file, OtherDevice, AssetsPath);
+
+        // Assert
+        Assert.That(File.ReadAllBytes(imported[0].Bindings[0].Appearance.ImagePath!), Is.EqualTo(new byte[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public void Import_AFileThatIsNoProfile_IsRefusedPlainly()
+    {
+        // Arrange
         var file = Path.Combine(_root, "not-a-profile" + ProfileBundle.Extension);
         using (var zip = ZipFile.Open(file, ZipArchiveMode.Create))
         {
             zip.CreateEntry("readme.txt");
         }
 
-        Assert.That(Assert.Throws<ProfileBundleException>(() => ProfileBundle.Import(file, "dev", _root)).Message, Does.Contain("isn't a DeckHost profile"));
+        // Act
+        var error = Assert.Throws<ProfileBundleException>(() => ProfileBundle.Import(file, Dev, _root));
+
+        // Assert
+        Assert.That(error.Message, Does.Contain("isn't a DeckHost profile"));
+    }
+
+    private static ProfileDocument DocumentSelecting(string profileId) =>
+        new(ProfileDocument.CurrentVersion, profileId, [new DeviceProfile("p", "P", Dev, [])]);
+
+    [Test]
+    public void ListBackups_AfterTheFirstSave_HasNothingToBackUpYet()
+    {
+        // Arrange
+        var store = new ProfileStore(Path.Combine(_root, "profiles.json"));
+
+        // Act
+        store.Save(DocumentSelecting("p"));
+
+        // Assert
+        Assert.That(store.ListBackups(), Is.Empty);
     }
 
     [Test]
-    public void Profiles_are_backed_up_once_a_day()
+    public void ListBackups_SeveralSavesOnTheSameDay_KeepsOneBackupOfTheFirstVersion()
     {
+        // Arrange
         var store = new ProfileStore(Path.Combine(_root, "profiles.json"));
-        var document = new ProfileDocument(ProfileDocument.CurrentVersion, "p", [new DeviceProfile("p", "P", "dev", [])]);
-        store.Save(document); // nothing to back up yet
-        Assert.That(store.ListBackups(), Is.Empty);
+        store.Save(DocumentSelecting("p"));
 
-        store.Save(document with { SelectedProfileId = "p2" });
-        store.Save(document with { SelectedProfileId = "p3" }); // same day: one backup
+        // Act
+        store.Save(DocumentSelecting("p2"));
+        store.Save(DocumentSelecting("p3"));
+
+        // Assert
         var backup = Expect.Single(store.ListBackups());
         Assert.That(ProfileStore.LoadFrom(backup.FullName)!.SelectedProfileId, Is.EqualTo("p"));
     }
@@ -174,10 +333,8 @@ public sealed class ProfileFileTests : IDisposable
         return file;
     }
 
-    [Test]
-    public void A_paged_stream_deck_profile_becomes_a_profile_with_pages_and_folders()
-    {
-        var file = StreamDeckProfile(
+    private string PagedStreamDeckProfile() =>
+        StreamDeckProfile(
             ("ABC.sdProfile/manifest.json", """
                 { "Name": "Streaming", "Version": "2.0", "Device": { "Model": "20GAA9901", "UUID": "" },
                   "Pages": { "Current": "page-1", "Pages": ["page-1", "page-2"] } }
@@ -205,37 +362,85 @@ public sealed class ProfileFileTests : IDisposable
                     "1,0": { "UUID": "com.elgato.streamdeck.system.text", "Settings": { "pastedText": "hello" }, "States": [ {} ] } } } ] }
                 """));
 
-        var result = StreamDeckProfileImporter.Import(file, "dev", Controls, Actions, Path.Combine(_root, "assets"));
+    private const string KeyMuteAction = "media.mute";
 
+    private StreamDeckImportResult ImportPaged() =>
+        StreamDeckProfileImporter.Import(PagedStreamDeckProfile(), Dev, Controls, Actions, AssetsPath);
+
+    [Test]
+    public void Import_APagedStreamDeckProfile_BecomesAProfileWithItsNameAndAPage()
+    {
+        // Act
+        var result = ImportPaged();
+
+        // Assert
         var root = result.Layouts[0];
         Assert.That((root.Name, root.Kind), Is.EqualTo(("Streaming", (string?)null)));
         Assert.That(result.Layouts.Any(layout => layout.Kind == ProfileKinds.Page && layout.ParentId == root.Id && layout.Bindings[0].Action.Settings.Get("mode") == "previous"), Is.True);
+    }
 
-        var website = root.Bindings.Single(binding => binding.ControlId == "key.0");
+    [Test]
+    public void Import_AWebsiteKey_BecomesAnOpenActionWithItsTitleAndImage()
+    {
+        // Act
+        var result = ImportPaged();
+
+        // Assert
+        var website = result.Layouts[0].Bindings.Single(binding => binding.ControlId == "key.0");
         Assert.That((website.Action.ActionId, website.Action.Settings.Get("target"), website.Appearance.Text), Is.EqualTo(("system.open", "https://example.com", "Docs")));
         Assert.That(File.ReadAllText(website.Appearance.ImagePath!), Is.EqualTo("png-bytes"));
-        Assert.That(root.Bindings.Single(binding => binding.ControlId == "key.6").Action.ActionId, Is.EqualTo("media.mute")); // column 1, row 1
-        Assert.That(root.Bindings.Single(binding => binding.ControlId == "encoder.1").Action.ActionId, Is.EqualTo("builtin.page"));
+    }
 
+    [Test]
+    public void Import_KeysAndDialsByColumnAndRow_LandOnTheMatchingControls()
+    {
+        // Act
+        var root = ImportPaged().Layouts[0];
+
+        // Assert
+        Assert.That(root.Bindings.Single(binding => binding.ControlId == "key.6").Action.ActionId, Is.EqualTo(KeyMuteAction), "column 1, row 1");
+        Assert.That(root.Bindings.Single(binding => binding.ControlId == "encoder.1").Action.ActionId, Is.EqualTo("builtin.page"));
+    }
+
+    [Test]
+    public void Import_ARoutineWithAnAlternative_BecomesAMultiActionSwitch()
+    {
+        // Act
+        var root = ImportPaged().Layouts[0];
+
+        // Assert
         var toggle = root.Bindings.Single(binding => binding.ControlId == "key.2");
         Assert.That(toggle.ActionKind, Is.EqualTo(ProfileActionKind.MultiActionSwitch));
         Assert.That(toggle.Steps.Select(step => (step.Action.ActionId, step.Group)), Is.EqualTo(new[] { ("media.playpause", StepGroups.First), ("media.next", StepGroups.Second) }));
+    }
 
+    [Test]
+    public void Import_AnOpenChildKey_BecomesAFolderWithItsKeys()
+    {
+        // Act
+        var result = ImportPaged();
+
+        // Assert
+        var root = result.Layouts[0];
         var folderKey = root.Bindings.Single(binding => binding.ControlId == "key.4");
         var folder = result.Layouts.Single(layout => layout.Id == folderKey.Action.Settings.Get(FolderAction.FolderIdKey));
         Assert.That((folder.Kind, folder.ParentId, folder.Name), Is.EqualTo((ProfileKinds.Folder, root.Id, "Tools")));
         Assert.That(folder.Bindings.OrderBy(binding => binding.ControlId).Select(binding => binding.Action.ActionId), Is.EqualTo(new[] { FolderBackAction.ActionId, "system.type-text" }));
+    }
 
-        // Unknown: kept as the key looked; a key past this device's grid: not placed.
-        Assert.That(root.Bindings.Single(binding => binding.ControlId == "key.3").Appearance.Text, Is.EqualTo("Sunny"));
+    [Test]
+    public void Import_AnUnknownActionAndAKeyPastTheGrid_IsKeptAsTheKeyLookedOrNotPlaced()
+    {
+        // Act
+        var result = ImportPaged();
+
+        // Assert
+        Assert.That(result.Layouts[0].Bindings.Single(binding => binding.ControlId == "key.3").Appearance.Text, Is.EqualTo("Sunny"));
         Assert.That(result.Unavailable, Does.Contain("Weather"));
         Assert.That(result.NotPlaced, Is.EqualTo(1));
     }
 
-    [Test]
-    public void A_single_page_stream_deck_profile_imports_too()
-    {
-        var file = StreamDeckProfile(("X.sdProfile/manifest.json", """
+    private string SinglePageStreamDeckProfile() => StreamDeckProfile(("X.sdProfile/manifest.json", """
             { "Name": "Old", "Version": "1.0", "Actions": {
                 "0,0": { "UUID": "com.elgato.streamdeck.system.open", "Settings": { "path": "C:\\Tools\\app.exe" }, "States": [ { "Title": "App" } ] },
                 "1,0": { "UUID": "com.elgato.streamdeck.multiactions.routine", "Settings": { "Routine": [
@@ -243,11 +448,25 @@ public sealed class ProfileFileTests : IDisposable
                     { "UUID": "com.elgato.streamdeck.system.multimedia", "Settings": { "actionIdx": 4 } } ] }, "States": [ {} ] } } }
             """));
 
-        var result = StreamDeckProfileImporter.Import(file, "dev", Controls, Actions, _root);
+    [Test]
+    public void Import_ASinglePageStreamDeckProfile_MapsAnOpenKeyToALaunchAction()
+    {
+        // Act
+        var result = StreamDeckProfileImporter.Import(SinglePageStreamDeckProfile(), Dev, Controls, Actions, _root);
 
+        // Assert
         var root = Expect.Single(result.Layouts);
         Assert.That(root.Bindings.Single(binding => binding.ControlId == "key.0").Action.ActionId, Is.EqualTo("system.launch"));
-        var multi = root.Bindings.Single(binding => binding.ControlId == "key.1");
+    }
+
+    [Test]
+    public void Import_ASinglePageStreamDeckProfile_MapsARoutineToAMultiActionWithItsSteps()
+    {
+        // Act
+        var result = StreamDeckProfileImporter.Import(SinglePageStreamDeckProfile(), Dev, Controls, Actions, _root);
+
+        // Assert
+        var multi = Expect.Single(result.Layouts).Bindings.Single(binding => binding.ControlId == "key.1");
         Assert.That((multi.ActionKind, multi.Steps.Count), Is.EqualTo((ProfileActionKind.MultiAction, 2)));
         Assert.That(result.Imported, Is.EqualTo(2));
     }

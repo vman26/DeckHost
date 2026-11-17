@@ -8,39 +8,104 @@ namespace DeckHost.Tests;
 /// </summary>
 public class PlatformTests
 {
+    private const double LevelTolerance = 5e-4;
+    private const double FullLevel = 1.0;
+    private const string PactlVolume = "Volume: front-left: 26214 /  40% / -23.88 dB,   front-right: 26214 /  40% / -23.88 dB\n        balance 0.00\n";
+    private const string AmixerOutput = "Simple mixer control 'Master',0\n  Mono: Playback 63 [72%] [-5.00dB] [on]\n";
+    private const string ActiveWindow = "_NET_ACTIVE_WINDOW(WINDOW): window id # 0x3e00007\n";
+
     [TestCase("Volume: 0.40\n", 0.40, false)]
     [TestCase("Volume: 0.55 [MUTED]\n", 0.55, true)]
-    [TestCase("Volume: 1.30\n", 1.0, false)] // PipeWire allows boosting past 100 %
-    public void Reads_wpctl(string output, double level, bool muted)
+    [TestCase("Volume: 1.30\n", FullLevel, false)] // PipeWire allows boosting past 100 %
+    public void ParseWpctl_WpctlOutput_ReadsLevelAndMute(string output, double level, bool muted)
     {
+        // Act
         var reading = SystemVolume.ParseWpctl(output);
+
+        // Assert
         Assert.That(reading, Is.Not.Null);
-        Assert.That(reading!.Value.Level, Is.EqualTo(level).Within(5e-4));
+        Assert.That(reading!.Value.Level, Is.EqualTo(level).Within(LevelTolerance));
         Assert.That(reading.Value.Muted, Is.EqualTo(muted));
     }
 
     [Test]
-    public void Reads_pactl_and_amixer()
+    public void ParseWpctl_NoOutput_IsNull()
     {
-        var pactl = SystemVolume.ParsePercent(
-            "Volume: front-left: 26214 /  40% / -23.88 dB,   front-right: 26214 /  40% / -23.88 dB\n        balance 0.00\n",
-            "Mute: yes\n");
-        Assert.That((Math.Round(pactl!.Value.Level, 2), pactl.Value.Muted), Is.EqualTo((0.40, true)));
+        // Act
+        var reading = SystemVolume.ParseWpctl(null);
 
-        var amixer = SystemVolume.ParsePercent("Simple mixer control 'Master',0\n  Mono: Playback 63 [72%] [-5.00dB] [on]\n", null);
-        Assert.That((Math.Round(amixer!.Value.Level, 2), amixer.Value.Muted), Is.EqualTo((0.72, false)));
-
-        Assert.That(SystemVolume.ParsePercent("no device", null), Is.Null);
-        Assert.That(SystemVolume.ParseWpctl(null), Is.Null);
+        // Assert
+        Assert.That(reading, Is.Null);
     }
 
     [Test]
-    public void Reads_window_ids_from_xprop()
+    public void ParsePercent_PactlVolumeAndMute_ReadsLevelAndMute()
     {
-        Assert.That(ForegroundAppWatcher.WindowIds("_NET_ACTIVE_WINDOW(WINDOW): window id # 0x3e00007\n"), Is.EqualTo(new[] { "0x3e00007" }));
-        Assert.That(ForegroundAppWatcher.WindowIds("_NET_ACTIVE_WINDOW(WINDOW): window id # 0x0\n"), Is.Empty);
-        Assert.That(ForegroundAppWatcher.WindowIds("_NET_CLIENT_LIST(WINDOW): window id # 0x1a00003, 0x2200007\n"), Is.EqualTo(new[] { "0x1a00003", "0x2200007" }));
-        Assert.That(ForegroundAppWatcher.WindowIds(null), Is.Empty);
+        // Act
+        var pactl = SystemVolume.ParsePercent(PactlVolume, "Mute: yes\n");
+
+        // Assert
+        Assert.That((Math.Round(pactl!.Value.Level, 2), pactl.Value.Muted), Is.EqualTo((0.40, true)));
+    }
+
+    [Test]
+    public void ParsePercent_AmixerOutput_ReadsLevelAndMute()
+    {
+        // Act
+        var amixer = SystemVolume.ParsePercent(AmixerOutput, null);
+
+        // Assert
+        Assert.That((Math.Round(amixer!.Value.Level, 2), amixer.Value.Muted), Is.EqualTo((0.72, false)));
+    }
+
+    [Test]
+    public void ParsePercent_OutputWithoutAVolume_IsNull()
+    {
+        // Act
+        var reading = SystemVolume.ParsePercent("no device", null);
+
+        // Assert
+        Assert.That(reading, Is.Null);
+    }
+
+    [Test]
+    public void WindowIds_ActiveWindowFromXprop_IsThatWindow()
+    {
+        // Act
+        var ids = ForegroundAppWatcher.WindowIds(ActiveWindow);
+
+        // Assert
+        Assert.That(ids, Is.EqualTo(new[] { "0x3e00007" }));
+    }
+
+    [Test]
+    public void WindowIds_NoActiveWindow_IsEmpty()
+    {
+        // Act
+        var ids = ForegroundAppWatcher.WindowIds("_NET_ACTIVE_WINDOW(WINDOW): window id # 0x0\n");
+
+        // Assert
+        Assert.That(ids, Is.Empty);
+    }
+
+    [Test]
+    public void WindowIds_AClientList_ListsEveryWindow()
+    {
+        // Act
+        var ids = ForegroundAppWatcher.WindowIds("_NET_CLIENT_LIST(WINDOW): window id # 0x1a00003, 0x2200007\n");
+
+        // Assert
+        Assert.That(ids, Is.EqualTo(new[] { "0x1a00003", "0x2200007" }));
+    }
+
+    [Test]
+    public void WindowIds_NoOutput_IsEmpty()
+    {
+        // Act
+        var ids = ForegroundAppWatcher.WindowIds(null);
+
+        // Assert
+        Assert.That(ids, Is.Empty);
     }
 
     /// <summary>Every key a hotkey can name, as Hotkey.TryParse reads it.</summary>
@@ -56,84 +121,123 @@ public class PlatformTests
     public static IEnumerable<string> AllKeys() => AllKeyNames;
 
     [TestCaseSource(nameof(AllKeys))]
-    public void Every_hotkey_key_can_be_sent_on_Linux(string key)
+    public void LinuxKeyName_EveryHotkeyKey_HasAName(string key)
     {
-        Assert.That(Hotkey.TryParse(key, out var hotkey, out var error), Is.True, error);
-        Assert.That(string.IsNullOrEmpty(SystemControl.LinuxKeyName(hotkey.Key)), Is.False);
+        // Arrange
+        var parsed = Hotkey.TryParse(key, out var hotkey, out var error);
+
+        // Act
+        var name = SystemControl.LinuxKeyName(hotkey.Key);
+
+        // Assert
+        Assert.That(parsed, Is.True, error);
+        Assert.That(string.IsNullOrEmpty(name), Is.False);
     }
 
     [TestCaseSource(nameof(AllKeys))]
-    public void Every_hotkey_key_has_a_Mac_key_or_is_a_media_key(string key)
+    public void MacKeyCode_EveryHotkeyKey_HasACodeOrIsAMediaKeyOrIsOneTheMacLacks(string key)
     {
-        Assert.That(Hotkey.TryParse(key, out var hotkey, out var error), Is.True, error);
+        // Arrange
+        var parsed = Hotkey.TryParse(key, out var hotkey, out var error);
 
-        // Media keys go out as system-defined events; the Mac has no F21-F24, Print Screen or Pause.
+        // Act
+        var hasCode = SystemControl.MacKeyCode(hotkey.Key) is not null || SystemControl.ToMediaKey(hotkey.Key) is not null;
+
+        // Assert (media keys go out as system-defined events; the Mac has no F21-F24, Print Screen or Pause)
         var macHasNoSuchKey = key is "F21" or "F22" or "F23" or "F24" or "PrintScreen" or "Pause";
-        Assert.That(
-            SystemControl.MacKeyCode(hotkey.Key) is not null || SystemControl.ToMediaKey(hotkey.Key) is not null || macHasNoSuchKey,
-            Is.True,
-            $"{key} has no macOS key code");
+        Assert.That(parsed, Is.True, error);
+        Assert.That(hasCode || macHasNoSuchKey, Is.True, $"{key} has no macOS key code");
     }
 
     [Test]
-    public void Mac_key_codes_are_unique()
+    public void MacKeyCode_AllHotkeyKeys_AreUnique()
     {
+        // Act
         var codes = AllKeyNames
             .Select(key => Hotkey.TryParse(key, out var hotkey, out _) ? SystemControl.MacKeyCode(hotkey.Key) : null)
             .OfType<int>()
             .ToList();
+
+        // Assert
         Assert.That(codes.Distinct().Count(), Is.EqualTo(codes.Count));
     }
 
-    [Test]
-    public void Media_keys_round_trip_through_virtual_keys()
+    [TestCaseSource(nameof(MediaKeys))]
+    public void ToMediaKey_AVirtualKeyMadeFromAMediaKey_GivesTheMediaKeyBack(MediaKey key)
     {
-        foreach (var key in Enum.GetValues<MediaKey>())
-        {
-            Assert.That(SystemControl.ToMediaKey(SystemControl.ToVirtualKey(key)), Is.EqualTo(key));
-        }
+        // Act
+        var roundTripped = SystemControl.ToMediaKey(SystemControl.ToVirtualKey(key));
+
+        // Assert
+        Assert.That(roundTripped, Is.EqualTo(key));
     }
 
+    public static IEnumerable<MediaKey> MediaKeys() => Enum.GetValues<MediaKey>();
+
     [Test]
-    public void Writes_an_XDG_autostart_entry()
+    public void LinuxAutostartEntry_ForAProgram_IsADesktopEntryThatStartsItWithTheStartupFlag()
     {
+        // Act
         var entry = AppSettings.LinuxAutostartEntry("/home/me/.local/share/deckhost/DeckHost.App");
+
+        // Assert
         Assert.That(entry, Does.Contain("[Desktop Entry]"));
         Assert.That(entry, Does.Contain("Exec=\"/home/me/.local/share/deckhost/DeckHost.App\" --startup"));
         Assert.That(entry, Does.Contain("Type=Application"));
     }
 
-    [Test]
-    public void The_AppImage_variable_counts_only_when_it_names_a_file()
+    [TestCase(null)]
+    [TestCase(" ")]
+    [TestCase("/nowhere/DeckHost.AppImage")]
+    public void Resolve_AVariableThatNamesNoFile_IsNull(string? variable)
     {
-        Assert.That(AppImage.Resolve(null), Is.Null);
-        Assert.That(AppImage.Resolve(" "), Is.Null);
-        Assert.That(AppImage.Resolve("/nowhere/DeckHost.AppImage"), Is.Null);
-        if (OperatingSystem.IsLinux())
+        // Act
+        var resolved = AppImage.Resolve(variable);
+
+        // Assert
+        Assert.That(resolved, Is.Null);
+    }
+
+    [Test]
+    public void Resolve_AVariableThatNamesAnExistingFile_IsThatFile()
+    {
+        // Arrange
+        Assume.That(OperatingSystem.IsLinux(), "AppImages only exist on Linux");
+        var file = Path.GetTempFileName();
+        try
         {
-            var file = Path.GetTempFileName();
-            try
-            {
-                Assert.That(AppImage.Resolve(file), Is.EqualTo(file));
-            }
-            finally
-            {
-                File.Delete(file);
-            }
+            // Act
+            var resolved = AppImage.Resolve(file);
+
+            // Assert
+            Assert.That(resolved, Is.EqualTo(file));
+        }
+        finally
+        {
+            File.Delete(file);
         }
     }
 
     [Test]
-    public void A_Mac_launch_agent_opens_the_app_bundle()
+    public void MacLaunchAgent_AnAppBundle_OpensTheBundleAtLogin()
     {
+        // Act
         var bundled = AppSettings.MacLaunchAgent("/Applications/DeckHost.app/Contents/MacOS/DeckHost.App");
+
+        // Assert
         Assert.That(bundled, Does.Contain("<string>/usr/bin/open</string>"));
         Assert.That(bundled, Does.Contain("<string>/Applications/DeckHost.app</string>"));
         Assert.That(bundled, Does.Contain("<string>--startup</string>"));
         Assert.That(bundled, Does.Contain("<key>RunAtLoad</key>"));
+    }
 
-        // Outside a bundle (a development build): the program itself, with XML special characters escaped.
+    [Test]
+    public void MacLaunchAgent_OutsideABundle_RunsTheProgramItselfWithXmlCharactersEscaped()
+    {
+        // Act
         var bare = AppSettings.MacLaunchAgent("/Users/me/R&D/DeckHost.App");
+
+        // Assert
         Assert.That(bare, Does.Contain("<string>/Users/me/R&amp;D/DeckHost.App</string>"));
         Assert.That(bare, Does.Not.Contain("/usr/bin/open"));
     }
@@ -149,6 +253,12 @@ public class AppVersionTests
     [TestCase("1.4.0-alpha.21+Branch.release-1.4.0.Sha.d3d4b5e05b1e5182023baa6a9afb50d742a0ae49.d3d4b5e", "1.4.0-alpha.21+d3d4b5e")]
     [TestCase("1.4.0+Branch.main.Sha.d3d4b5e05b1e5182023baa6a9afb50d742a0ae49.d3d4b5e", "1.4.0")]
     [TestCase(null, "0.0.0")]
-    public void Pre_releases_show_their_commit(string? informational, string expected) =>
-        Assert.That(DeckHost.App.AppInfo.Describe(informational, null), Is.EqualTo(expected));
+    public void Describe_AnInformationalVersion_ShowsPreReleasesWithTheirCommit(string? informational, string expected)
+    {
+        // Act
+        var shown = DeckHost.App.AppInfo.Describe(informational, null);
+
+        // Assert
+        Assert.That(shown, Is.EqualTo(expected));
+    }
 }
