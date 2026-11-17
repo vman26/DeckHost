@@ -84,6 +84,10 @@ jobs:
       - name: Test
         run: dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release --no-build $VERSION_ARGS
 
+      # The views in Avalonia's headless platform: every view loads, and the custom-drawn ones draw what they should.
+      - name: UI tests
+        run: dotnet test DeckHost.UiTests/DeckHost.UiTests.csproj -c Release --no-build $VERSION_ARGS
+
       # Loads the native bridge from the app's plugin folder, as the app does, and lists devices.
       - name: Check the native bridge
         timeout-minutes: 2

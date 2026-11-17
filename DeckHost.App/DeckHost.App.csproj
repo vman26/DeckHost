@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="DeckHost.Tests" />
+    <InternalsVisibleTo Include="DeckHost.UiTests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -112,6 +112,7 @@ jobs:
             args+=("-p:MiraBoxCMakeArgs=-DOpenCV_DIR=$HOME/opencv-static/lib/cmake/opencv4")
           fi
           dotnet test DeckHost.Tests/DeckHost.Tests.csproj -c Release $VERSION_ARGS "${args[@]}"
+          dotnet test DeckHost.UiTests/DeckHost.UiTests.csproj -c Release $VERSION_ARGS "${args[@]}"
 
       - name: Publish
         run: |

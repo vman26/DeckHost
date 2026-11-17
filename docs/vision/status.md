@@ -154,7 +154,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 |---|---|---|
 | CI builds and tests on all three | ✅ | |
 | Package validation | ✅ | `--check-native` per package |
-| UI smoke tests, rendering regression tests | ⬜ | |
+| UI smoke tests, rendering regression tests | 🟡 | `DeckHost.UiTests`: every view loads and draws; pixel checks for the workflow canvas and the device body; no golden-image suite yet |
 | Windows installer and zip; macOS app; Linux tarball | ✅ | |
 | AppImage, Flatpak | ⬜ | |
 | Update integrity and rollback | ✅ | SHA256SUMS, provenance, swap with rollback |

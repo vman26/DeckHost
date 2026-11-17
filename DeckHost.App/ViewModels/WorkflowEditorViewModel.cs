@@ -104,6 +104,11 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         RefreshVariables();
     }
 
+    /// <summary>The time the live view goes by (tests set it to hold a wait half way).</summary>
+    internal Func<DateTime> Clock { get; set; } = static () => DateTime.UtcNow;
+
+    private DateTime Now() => Clock();
+
     public string DeviceId { get; }
 
     public string LayoutId { get; }
@@ -341,18 +346,18 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
 
     /// <summary>How far a waiting node is (0 to 1) while a run waits at it; null when nothing waits there.</summary>
     public double? WaitProgress(WorkflowNode node) =>
-        _waits.TryGetValue(node.Id, out var wait) && wait.Length > TimeSpan.Zero && (DateTime.UtcNow - wait.Start) < wait.Length
-            ? Math.Clamp((DateTime.UtcNow - wait.Start) / wait.Length, 0d, 1d)
+        _waits.TryGetValue(node.Id, out var wait) && wait.Length > TimeSpan.Zero && (Now() - wait.Start) < wait.Length
+            ? Math.Clamp((Now() - wait.Start) / wait.Length, 0d, 1d)
             : null;
 
-    public bool IsActive(WorkflowNode node) => _activeUntil.TryGetValue(node.Id, out var until) && until > DateTime.UtcNow;
+    public bool IsActive(WorkflowNode node) => _activeUntil.TryGetValue(node.Id, out var until) && until > Now();
 
-    public bool HasFailed(WorkflowNode node) => _failedUntil.TryGetValue(node.Id, out var until) && until > DateTime.UtcNow;
+    public bool HasFailed(WorkflowNode node) => _failedUntil.TryGetValue(node.Id, out var until) && until > Now();
 
     /// <summary>Whether a link was just taken by a run (both ends lit).</summary>
     public bool IsActive(WorkflowLink link) =>
-        _activeUntil.TryGetValue(link.From, out var from) && from > DateTime.UtcNow &&
-        _activeUntil.TryGetValue(link.To, out var to) && to > DateTime.UtcNow;
+        _activeUntil.TryGetValue(link.From, out var from) && from > Now() &&
+        _activeUntil.TryGetValue(link.To, out var to) && to > Now();
 
     // ---------------------------------------------------------------- selection and inspector
 
@@ -932,12 +937,12 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         if (trace.NodeId is { } nodeId)
         {
             var map = trace.Kind == WorkflowTraceKind.Failed ? _failedUntil : _activeUntil;
-            map[nodeId] = DateTime.UtcNow + (trace.Kind == WorkflowTraceKind.Failed ? ActiveFor * 2 : ActiveFor);
+            map[nodeId] = Now() + (trace.Kind == WorkflowTraceKind.Failed ? ActiveFor * 2 : ActiveFor);
             if (trace.Wait is { } wait && wait > TimeSpan.Zero)
             {
                 // A wait fills its node over the time it takes instead of just lighting it up.
-                _waits[nodeId] = (DateTime.UtcNow, wait);
-                map[nodeId] = DateTime.UtcNow + wait + ActiveFor;
+                _waits[nodeId] = (Now(), wait);
+                map[nodeId] = Now() + wait + ActiveFor;
             }
 
             if (_fadeTimer is not null)
@@ -969,7 +974,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
 
     private void FadeHighlights()
     {
-        var now = DateTime.UtcNow;
+        var now = Now();
         var waiting = _waits.Count > 0;
         var changed = Prune(_activeUntil, now) | Prune(_failedUntil, now);
         foreach (var done in _waits.Where(pair => now - pair.Value.Start >= pair.Value.Length).Select(static pair => pair.Key).ToList())
@@ -1016,7 +1021,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void Commit(Workflow next, string what, string? mergeKey = null)
     {
-        var now = DateTime.UtcNow;
+        var now = Now();
         var merge = mergeKey is not null && mergeKey == _lastSettingsEdit && now - _lastSettingsEditAt < SettingsMergeWindow && _undo.Count > 0;
         if (!merge)
         {
