@@ -81,6 +81,16 @@ version, which would be listed without a review, as in most app stores. The chec
 packages, new permissions are held back, and removing the entry stops new installs; DeckHost's
 plugin updates can be rolled back (**Back to v…**).
 
+## The Elgato mirror
+
+The same repository can keep a license-gated mirror of the Elgato community archive (`tools/mirror.py`, the **mirror** workflow, weekly). It writes `catalog.json` and `NOTICE.md` to the `mirror-data` branch, which **publish** puts at `/mirror/` on the Pages site, and attaches the packages to the rolling `elgato-mirror` release. A package is copied only when the plugin's GitHub repository has an allowlisted open-source license (MIT, Apache-2.0, BSD, ISC, MPL-2.0, the GPL family, Unlicense, CC0), the plugin isn't in `mirror/blocklist.json`, and the copy is a valid, small zip with a plugin manifest of the same id. The rest stay catalog-only.
+
+DeckHost's Elgato source (`PluginStore.LoadElgatoAsync`) reads `mirror/catalog.json` next to the archive: an entry with a mirrored copy downloads from the mirror and is checked against its SHA-256; everything else keeps the archive's download, and a missing or unreadable mirror changes nothing. A plugin only the mirror has isn't added, so the archive keeps deciding what is listed.
+
+**The workflow is off** until the repository variable `ELGATO_MIRROR_ENABLED` is `true`; set it only after Elgato's terms for the Marketplace are confirmed. **Actions → mirror → Run workflow** with *dry run* (the default for a manual run) works anyway and prints what it would do (it needs no write access; unauthenticated GitHub lookups hit the rate limit, the workflow's token doesn't). A first run can be spread over several with the *limit* input.
+
+Takedown: add the plugin id (or `owner/repository`) to `mirror/blocklist.json` in a pull request and run the workflow; the package is deleted and the entry loses its download.
+
 ## Reviewing a submission
 
 The **check** workflow does the mechanical part: the fields, the download, the checksum, the id and

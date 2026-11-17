@@ -46,7 +46,10 @@ public sealed record StoreEntry(
 /// plugins (https://openactionapi.github.io/plugins/catalogue.json). Packages come from the
 /// entry's download_url or the repository's latest GitHub release.</item>
 /// <item><see cref="ElgatoArchiveSource"/>: a community archive of Elgato Marketplace plugins
-/// (https://plugins.amankhanna.me/catalogue.json). Elgato itself offers no public catalog API.</item>
+/// (https://plugins.amankhanna.me/catalogue.json). Elgato itself offers no public catalog API.
+/// Plugins whose source repository has an open-source license may also be copied to the
+/// <c>deckhost-plugins</c> mirror (<see cref="ElgatoMirrorCatalogUrl"/>): those entries download
+/// from there, with a checksum, and the rest keep the archive's download.</item>
 /// </list>
 /// </summary>
 public sealed class PluginStore(HttpClient http)
@@ -63,6 +66,13 @@ public sealed class PluginStore(HttpClient http)
     private const string ElgatoIconUrl = "https://plugins.amankhanna.me/icons/{0}.png";
     private const string ElgatoCatalogUrl = "https://plugins.amankhanna.me/catalogue.json";
     private const string ElgatoDownloadUrl = "https://plugins.amankhanna.me/rezipped/{0}.zip";
+    /// <summary>
+    /// The mirror's catalog (deckhost-plugins' GitHub Pages, made by its mirror workflow): per plugin the
+    /// license, a copy of the package and its SHA-256 where the license allows one. Read next to the archive
+    /// while <see cref="IncludeOfficialCatalog"/> is on; missing (404) or unreadable it is simply empty.
+    /// </summary>
+    public const string ElgatoMirrorCatalogUrl = "https://vman26.github.io/deckhost-plugins/mirror/catalog.json";
+
     private const string ElgatoMarketplaceSearchUrl = "https://marketplace.elgato.com/stream-deck/plugins?search={0}";
     private const int MaxFolderScanDepth = 6;
     private static readonly string[] PackageExtensions = [".zip", ".dhplugin", ".streamdeckplugin"];
@@ -95,7 +105,7 @@ public sealed class PluginStore(HttpClient http)
         var sources = new List<Task<(IReadOnlyList<StoreEntry> Entries, string? Error)>>
         {
             LoadSourceAsync(OpenActionSource, async token => ParseOpenActionCatalog(await http.GetStringAsync(OpenActionCatalogUrl, token).ConfigureAwait(false)), cancellationToken),
-            LoadSourceAsync(ElgatoArchiveSource, async token => ParseElgatoArchiveCatalog(await http.GetStringAsync(ElgatoCatalogUrl, token).ConfigureAwait(false)), cancellationToken),
+            LoadSourceAsync(ElgatoArchiveSource, LoadElgatoAsync, cancellationToken),
         };
 
         if (IncludeOfficialCatalog && !DeckHostCatalogUrls.Contains(OfficialCatalogUrl, StringComparer.OrdinalIgnoreCase))
@@ -200,6 +210,99 @@ public sealed class PluginStore(HttpClient http)
 
     internal static IReadOnlyList<StoreEntry> ParseOpenActionCatalog(string json) =>
         ParseKeyedOrArray(json, OpenActionSource, OpenActionIconUrl);
+
+    /// <summary>The archive, with the mirror's checksummed copies in place of its downloads; the mirror alone when the archive is down.</summary>
+    private async Task<IReadOnlyList<StoreEntry>> LoadElgatoAsync(CancellationToken cancellationToken)
+    {
+        var mirrored = IncludeOfficialCatalog ? ReadElgatoMirrorAsync(cancellationToken) : Task.FromResult<IReadOnlyList<StoreEntry>>([]);
+        IReadOnlyList<StoreEntry> archive;
+        try
+        {
+            archive = ParseElgatoArchiveCatalog(await http.GetStringAsync(ElgatoCatalogUrl, cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            var copies = await mirrored.ConfigureAwait(false);
+            if (copies.Count == 0)
+            {
+                throw;
+            }
+
+            return copies;
+        }
+
+        return MergeElgatoMirror(archive, await mirrored.ConfigureAwait(false));
+    }
+
+    private async Task<IReadOnlyList<StoreEntry>> ReadElgatoMirrorAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await http.GetAsync(ElgatoMirrorCatalogUrl, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? ParseElgatoMirrorCatalog(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false))
+                : [];
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            return []; // the mirror only improves on the archive; without it nothing is lost
+        }
+    }
+
+    /// <summary>The archive's entries, each replaced by its mirrored copy (same id) when there is one. A plugin only the mirror has is not added: the archive decides what is listed.</summary>
+    internal static IReadOnlyList<StoreEntry> MergeElgatoMirror(IReadOnlyList<StoreEntry> archive, IReadOnlyList<StoreEntry> mirror)
+    {
+        if (mirror.Count == 0)
+        {
+            return archive;
+        }
+
+        var copies = mirror.GroupBy(static entry => entry.Id, StringComparer.OrdinalIgnoreCase).ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+        return [.. archive.Select(entry => copies.TryGetValue(entry.Id, out var copy) ? copy : entry)];
+    }
+
+    /// <summary>
+    /// The copies in the mirror's catalog: entries marked <c>mirrored</c> with an https download and a
+    /// SHA-256 (anything less is left to the archive). The license is shown in the description.
+    /// </summary>
+    internal static IReadOnlyList<StoreEntry> ParseElgatoMirrorCatalog(string json)
+    {
+        var entries = new List<StoreEntry>();
+        if (JsonNode.Parse(json) is not JsonArray catalog)
+        {
+            return entries;
+        }
+
+        foreach (var plugin in catalog.OfType<JsonObject>())
+        {
+            if (Text(plugin, "id") is not { } id ||
+                plugin["mirrored"]?.GetValueKind() is not System.Text.Json.JsonValueKind.True ||
+                Text(plugin, "download_url") is not { } download || !download.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                Text(plugin, "sha256") is not { Length: 64 } sha || !sha.All(char.IsAsciiHexDigit))
+            {
+                continue;
+            }
+
+            var name = Text(plugin, "name") ?? id;
+            entries.Add(new StoreEntry(
+                id,
+                name,
+                Text(plugin, "author"),
+                Text(plugin, "license") is { } license ? $"Copy kept by the DeckHost plugin repository, under the {license} license." : null,
+                ElgatoArchiveSource,
+                Text(plugin, "version"),
+                Text(plugin, "icon"),
+                Text(plugin, "source_repository"),
+                download,
+                PluginCategories.Resolve(Text(plugin, "category"), name, null, id),
+                Text(plugin, "marketplace_url"))
+            {
+                Sha256 = sha,
+            });
+        }
+
+        return entries;
+    }
 
     internal static IReadOnlyList<StoreEntry> ParseElgatoArchiveCatalog(string json)
     {

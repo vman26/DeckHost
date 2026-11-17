@@ -312,6 +312,112 @@ public sealed class RenderingAndStoreTests : IDisposable
         Assert.That(official.Any(entry => entry.Id == "deckhost.plugin.obs" && entry.Source == PluginStore.DeckHostSource), Is.True);
     }
 
+    private const string MirrorCatalog = """
+        [
+          { "id": "com.a.one", "name": "One", "author": "A", "version": "1.0", "icon": "https://plugins.amankhanna.me/icons/com.a.one.png", "marketplace_url": "https://marketplace.elgato.com/search?q=One",
+            "license": "MIT", "source_repository": "https://github.com/o/one", "sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "download_url": "https://github.com/vman26/deckhost-plugins/releases/download/elgato-mirror/com.a.one-1.0.zip", "mirrored": true },
+          { "id": "com.a.two", "name": "Two", "version": "1.0", "license": "CC-BY-NC-4.0", "sha256": null, "download_url": null, "mirrored": false },
+          { "id": "com.a.three", "name": "Three", "version": "1.0", "sha256": "short", "download_url": "https://example.test/three.zip", "mirrored": true },
+          { "id": "com.a.four", "name": "Four", "version": "1.0", "sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "download_url": "http://example.test/four.zip", "mirrored": true },
+          { "id": "com.a.five", "name": "Five", "version": "1.0", "sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "download_url": "https://example.test/five.zip", "mirrored": false },
+          { "id": "com.a.only-mirror", "name": "Only here", "version": "1.0", "sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "download_url": "https://example.test/only.zip", "mirrored": true }
+        ]
+        """;
+
+    private const string ArchiveCatalog = """
+        [ { "id": "com.a.one", "name": "One", "author": "A", "version": "1.1", "link": "https://github.com/o/one" },
+          { "id": "com.a.two", "name": "Two", "author": "B", "version": "1.0", "link": "https://example.test" } ]
+        """;
+
+    [Test]
+    public void The_mirror_catalog_gives_checksummed_copies_and_nothing_less()
+    {
+        var copies = PluginStore.ParseElgatoMirrorCatalog(MirrorCatalog);
+
+        // Only a mirrored entry with an https download and a full SHA-256 counts.
+        Assert.That(copies.Select(copy => copy.Id), Is.EqualTo(new[] { "com.a.one", "com.a.only-mirror" }));
+        var one = copies[0];
+        Assert.That(one.Sha256, Has.Length.EqualTo(64));
+        Assert.That(one.DownloadUrl, Does.StartWith("https://github.com/vman26/deckhost-plugins/releases/download/elgato-mirror/"));
+        Assert.That(one.Source, Is.EqualTo(PluginStore.ElgatoArchiveSource));
+        Assert.That(one.Description, Does.Contain("MIT"));
+        Assert.That(one.RepositoryUrl, Is.EqualTo("https://github.com/o/one"));
+        Assert.That(PluginStore.ParseElgatoMirrorCatalog("{ \"not\": \"an array\" }"), Is.Empty);
+    }
+
+    [Test]
+    public void A_mirrored_copy_replaces_the_archives_download_and_only_for_what_the_archive_lists()
+    {
+        var archive = PluginStore.ParseElgatoArchiveCatalog(ArchiveCatalog);
+        var merged = PluginStore.MergeElgatoMirror(archive, PluginStore.ParseElgatoMirrorCatalog(MirrorCatalog));
+
+        Assert.That(merged.Select(entry => entry.Id), Is.EqualTo(new[] { "com.a.one", "com.a.two" }));
+        Assert.That(merged[0].Sha256, Is.Not.Null);
+        Assert.That(merged[0].DownloadUrl, Does.Contain("elgato-mirror"));
+        // Not copied (license): the archive's own download, as before.
+        Assert.That(merged[1].DownloadUrl, Is.EqualTo("https://plugins.amankhanna.me/rezipped/com.a.two.zip"));
+        Assert.That(merged[1].Sha256, Is.Null);
+        Assert.That(PluginStore.MergeElgatoMirror(archive, []), Is.SameAs(archive));
+    }
+
+    [Test]
+    public async Task The_store_reads_the_mirror_with_the_archive_and_copes_without_either()
+    {
+        static HttpClient Client(Func<string, (System.Net.HttpStatusCode Status, string Body)> route) => new(new RoutedResponse(route));
+        static (System.Net.HttpStatusCode, string) NotFound() => (System.Net.HttpStatusCode.NotFound, string.Empty);
+        static IEnumerable<string> ElgatoErrors(IEnumerable<string> errors) => errors.Where(error => error.StartsWith(PluginStore.ElgatoArchiveSource, StringComparison.Ordinal));
+
+        // Both: the copy with its checksum wins for the plugin it covers.
+        using var both = Client(url => url switch
+        {
+            PluginStore.ElgatoMirrorCatalogUrl => (System.Net.HttpStatusCode.OK, MirrorCatalog),
+            var u when u.Contains("amankhanna.me/catalogue.json", StringComparison.Ordinal) => (System.Net.HttpStatusCode.OK, ArchiveCatalog),
+            _ => NotFound(),
+        });
+        var (entries, errors) = await new PluginStore(both).LoadAsync(CancellationToken.None);
+        var elgato = entries.Where(entry => entry.Source == PluginStore.ElgatoArchiveSource).ToList();
+        Assert.That(elgato.Select(entry => entry.Id), Is.EqualTo(new[] { "com.a.one", "com.a.two" }));
+        Assert.That(elgato[0].Sha256, Is.Not.Null);
+        Assert.That(ElgatoErrors(errors), Is.Empty);
+
+        // No mirror yet (404): exactly the archive, no error.
+        using var noMirror = Client(url => url.Contains("amankhanna.me/catalogue.json", StringComparison.Ordinal) ? (System.Net.HttpStatusCode.OK, ArchiveCatalog) : NotFound());
+        (entries, errors) = await new PluginStore(noMirror).LoadAsync(CancellationToken.None);
+        Assert.That(entries.Where(entry => entry.Source == PluginStore.ElgatoArchiveSource).Select(entry => entry.Sha256), Is.EqualTo(new string?[] { null, null }));
+        Assert.That(ElgatoErrors(errors), Is.Empty);
+
+        // A broken mirror file is ignored too.
+        using var broken = Client(url => url == PluginStore.ElgatoMirrorCatalogUrl ? (System.Net.HttpStatusCode.OK, "{ not json") : url.Contains("amankhanna.me/catalogue.json", StringComparison.Ordinal) ? (System.Net.HttpStatusCode.OK, ArchiveCatalog) : NotFound());
+        (entries, errors) = await new PluginStore(broken).LoadAsync(CancellationToken.None);
+        Assert.That(entries.Count(entry => entry.Source == PluginStore.ElgatoArchiveSource), Is.EqualTo(2));
+        Assert.That(ElgatoErrors(errors), Is.Empty);
+
+        // The archive is down: the mirrored copies still install; with neither, the error shows.
+        using var archiveDown = Client(url => url == PluginStore.ElgatoMirrorCatalogUrl ? (System.Net.HttpStatusCode.OK, MirrorCatalog) : NotFound());
+        (entries, errors) = await new PluginStore(archiveDown).LoadAsync(CancellationToken.None);
+        Assert.That(entries.Where(entry => entry.Source == PluginStore.ElgatoArchiveSource).Select(entry => entry.Id), Is.EqualTo(new[] { "com.a.one", "com.a.only-mirror" }));
+        Assert.That(ElgatoErrors(errors), Is.Empty);
+        using var neither = Client(_ => NotFound());
+        (_, errors) = await new PluginStore(neither).LoadAsync(CancellationToken.None);
+        Assert.That(ElgatoErrors(errors), Is.Not.Empty);
+
+        // Tests and tools turn the official sources off: then the mirror isn't asked for either.
+        var asked = new List<string>();
+        using var recording = Client(url => { asked.Add(url); return url.Contains("amankhanna.me/catalogue.json", StringComparison.Ordinal) ? (System.Net.HttpStatusCode.OK, ArchiveCatalog) : NotFound(); });
+        await new PluginStore(recording) { IncludeOfficialCatalog = false }.LoadAsync(CancellationToken.None);
+        Assert.That(asked, Does.Not.Contain(PluginStore.ElgatoMirrorCatalogUrl));
+    }
+
+    private sealed class RoutedResponse(Func<string, (System.Net.HttpStatusCode Status, string Body)> route) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var (status, body) = route(request.RequestUri!.AbsoluteUri);
+            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+        }
+    }
+
     private sealed class FixedResponse(byte[] body, System.Net.HttpStatusCode status = System.Net.HttpStatusCode.OK) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>

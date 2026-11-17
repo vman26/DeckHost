@@ -17,6 +17,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Background Studio | 🟡 | The layer list on the Profiles page (add, reorder, opacity, bindings); no live device preview or asset manager yet |
 | Marketplace: discovery, install/remove, updates, rollback, integrity | ✅ | Store, `PluginUpdater`, `.previous` rollback, sha256 |
 | Marketplace: dependency resolution, publisher verification, signatures | ⬜ | sha256 only; no signatures, no dependencies |
+| Marketplace: Elgato archive mirror | 🟡 | Built (`tools/mirror.py` in deckhost-plugins; the store prefers a checksummed copy of open-source plugins); the workflow stays off until Elgato's terms are confirmed |
 | Marketplace: purchase and entitlements | 🟡 | A Buy link; no entitlements |
 | Marketplace content beyond plugins (profiles, themes, icon packs, backgrounds, drivers, templates) | ⬜ | Icon packs install from files, not the store |
 

@@ -25,7 +25,7 @@ DeckHost runs Stream Deck plugins in their own processes and speaks their protoc
 
 ## Other stores
 
-The store lists the DeckHost catalog, OpenAction and an archive of the Elgato store. **Also
+The store lists the DeckHost catalog, OpenAction and an archive of the Elgato store (for open-source plugins DeckHost also keeps a checksummed copy in its plugin repository, which the store prefers when it has one). **Also
 browse** in the store opens the Elgato Marketplace, MiraBox Space and OpenAction in your browser:
 download a plugin there and install the file with **Install plugin…**.
 
