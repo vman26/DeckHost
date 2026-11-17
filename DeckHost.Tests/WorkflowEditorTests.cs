@@ -28,216 +28,435 @@ public class WorkflowEditorTests
         return (editor, stored);
     }
 
-    [Test]
-    public void An_action_added_with_a_node_selected_is_linked_after_it_and_stored_on_the_control()
+    private const string Wait = WorkflowNodeKinds.Wait;
+    private const string DeviceName = "device";
+    private const string KeyControl = "key.0";
+    private const double RoomGap = 60;
+
+    private static (WorkflowNode First, WorkflowNode Last, WorkflowLink Link, WorkflowNode Loose) TwoWaitsAndALooseOne(WorkflowEditorViewModel editor)
     {
+        var first = editor.AddNode(Wait, 300, 40);
+        var last = editor.AddNode(Wait, 600, 40);
+        editor.Connect(first.Id, WorkflowPorts.Next, last.Id);
+        var link = Expect.Single(editor.Workflow.Links);
+        var loose = editor.AddNode(Wait, 450, 200);
+        return (first, last, link, loose);
+    }
+
+    // ---------------------------------------------------------------- adding and linking nodes
+
+    [Test]
+    public void AddAction_WithANodeSelected_LinksItAfterThatNode()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        editor.SelectNode("n1");
+
+        // Act
+        var node = editor.AddAction(Item("Mute"))!;
+
+        // Assert
+        Assert.That(Expect.Single(editor.Workflow.Links), Is.EqualTo(new WorkflowLink("n1", WorkflowPorts.Next, node.Id)));
+        Assert.That(editor.SelectedNode?.Id, Is.EqualTo(node.Id));
+    }
+
+    [Test]
+    public void AddAction_WithANodeSelected_StoresTheWorkflowOnTheControl()
+    {
+        // Arrange
         var (editor, stored) = Editor();
         editor.SelectNode("n1");
 
-        var node = editor.AddAction(Item("Mute"))!;
+        // Act
+        editor.AddAction(Item("Mute"));
 
-        Assert.That(Expect.Single(editor.Workflow.Links), Is.EqualTo(new WorkflowLink("n1", WorkflowPorts.Next, node.Id)));
+        // Assert
         Assert.That(stored[^1], Is.EqualTo(editor.Workflow));
-        Assert.That(editor.SelectedNode?.Id, Is.EqualTo(node.Id));
         Assert.That(editor.SelectedIsAction, Is.True);
         Assert.That(editor.Overview, Does.Contain("1 action"));
     }
 
     [Test]
-    public void A_node_dropped_onto_a_link_splits_it_in_one_undo_step()
+    public void InsertIntoLink_ALooseNode_SplitsTheLinkAroundIt()
     {
+        // Arrange
         var (editor, _) = Editor();
-        var first = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
-        var last = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
-        editor.Connect(first.Id, WorkflowPorts.Next, last.Id);
-        var link = Expect.Single(editor.Workflow.Links);
-        var loose = editor.AddNode(WorkflowNodeKinds.Wait, 450, 200);
-        Assert.That(editor.CanInsertIntoLink(loose.Id), Is.True);
+        var (first, last, link, loose) = TwoWaitsAndALooseOne(editor);
 
-        Assert.That(editor.InsertIntoLink(loose.Id, link), Is.Null);
+        var couldInsert = editor.CanInsertIntoLink(loose.Id);
 
+        // Act
+        var problem = editor.InsertIntoLink(loose.Id, link);
+
+        // Assert
+        Assert.That(couldInsert, Is.True);
+        Assert.That(problem, Is.Null);
         Assert.That(editor.Workflow.Links, Is.EquivalentTo(new[]
         {
             new WorkflowLink(first.Id, WorkflowPorts.Next, loose.Id),
             new WorkflowLink(loose.Id, WorkflowPorts.Next, last.Id),
         }));
+    }
+
+    [Test]
+    public void Undo_AfterInsertingIntoALink_BringsTheOldLinkBackInOneStepAndKeepsTheNode()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var (_, _, link, loose) = TwoWaitsAndALooseOne(editor);
+        editor.InsertIntoLink(loose.Id, link);
+
+        // Act
         editor.UndoCommand.Execute(null);
+
+        // Assert
         Assert.That(Expect.Single(editor.Workflow.Links), Is.EqualTo(link), "one step brings the old link back");
         Assert.That(editor.Workflow.Nodes.Any(node => node.Id == loose.Id), Is.True, "the node itself stays");
     }
 
     [Test]
-    public void A_node_can_be_moved_and_put_into_a_link_as_one_undo_step()
+    public void InsertIntoLink_WithAPosition_MovesTheNodeThere()
     {
+        // Arrange
         var (editor, _) = Editor();
-        var first = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
-        var last = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
-        editor.Connect(first.Id, WorkflowPorts.Next, last.Id);
-        var link = Expect.Single(editor.Workflow.Links);
-        var loose = editor.AddNode(WorkflowNodeKinds.Wait, 450, 200);
+        var (_, _, link, loose) = TwoWaitsAndALooseOne(editor);
 
-        Assert.That(editor.InsertIntoLink(loose.Id, link, 440, 60), Is.Null);
+        // Act
+        var problem = editor.InsertIntoLink(loose.Id, link, 440, 60);
 
+        // Assert
         var placed = editor.Workflow.Find(loose.Id)!;
+        Assert.That(problem, Is.Null);
         Assert.That((placed.X, placed.Y), Is.EqualTo((440d, 60d)));
+    }
+
+    [Test]
+    public void Undo_AfterInsertingIntoALinkWithAPosition_PutsTheNodeBackWhereItWas()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var (_, _, link, loose) = TwoWaitsAndALooseOne(editor);
+        editor.InsertIntoLink(loose.Id, link, 440, 60);
+
+        // Act
         editor.UndoCommand.Execute(null);
+
+        // Assert
         var back = editor.Workflow.Find(loose.Id)!;
         Assert.That((back.X, back.Y), Is.EqualTo((450d, 200d)), "the same step puts it back where it was");
         Assert.That(Expect.Single(editor.Workflow.Links), Is.EqualTo(link));
     }
 
-    [Test]
-    public void Taking_the_links_off_a_node_keeps_the_node_and_its_neighbours()
+    private static (WorkflowEditorViewModel Editor, WorkflowNode First, WorkflowNode Middle, WorkflowNode Last) ChainOfThree()
     {
         var (editor, _) = Editor();
-        var first = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
-        var middle = editor.AddNode(WorkflowNodeKinds.Wait, 450, 40);
-        var last = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        var first = editor.AddNode(Wait, 300, 40);
+        var middle = editor.AddNode(Wait, 450, 40);
+        var last = editor.AddNode(Wait, 600, 40);
         editor.Connect(first.Id, WorkflowPorts.Next, middle.Id);
         editor.Connect(middle.Id, WorkflowPorts.Next, last.Id);
         editor.SelectNode(middle.Id);
-        Assert.That(editor.SelectedHasLinks, Is.True);
-
-        editor.DisconnectSelection();
-
-        Assert.That(editor.Workflow.Links, Is.Empty);
-        Assert.That(editor.Workflow.Nodes.Select(static node => node.Id), Does.Contain(middle.Id).And.Contain(first.Id).And.Contain(last.Id));
-        Assert.That(editor.SelectedHasLinks, Is.False);
-        editor.UndoCommand.Execute(null);
-        Assert.That(editor.Workflow.Links, Has.Count.EqualTo(2));
+        return (editor, first, middle, last);
     }
 
     [Test]
-    public void Actions_are_grouped_by_plugin_and_a_search_opens_the_matching_groups()
+    public void DisconnectSelection_TheMiddleNodeOfAChain_RemovesItsLinksButKeepsTheNodes()
     {
+        // Arrange
+        var (editor, first, middle, last) = ChainOfThree();
+
+        // Act
+        editor.DisconnectSelection();
+
+        // Assert
+        Assert.That(editor.Workflow.Links, Is.Empty);
+        Assert.That(editor.Workflow.Nodes.Select(static node => node.Id), Does.Contain(middle.Id).And.Contain(first.Id).And.Contain(last.Id));
+        Assert.That(editor.SelectedHasLinks, Is.False);
+    }
+
+    [Test]
+    public void Undo_AfterDisconnectingANode_BringsBothLinksBack()
+    {
+        // Arrange
+        var (editor, _, _, _) = ChainOfThree();
+        editor.DisconnectSelection();
+
+        // Act
+        editor.UndoCommand.Execute(null);
+
+        // Assert
+        Assert.That(editor.Workflow.Links, Has.Count.EqualTo(2));
+    }
+
+    // ---------------------------------------------------------------- the action list
+
+    [Test]
+    public void ActionGroups_Initially_AreGroupedByPluginAndCollapsed()
+    {
+        // Act
         var (editor, _) = Editor();
+
+        // Assert
         Assert.That(editor.ActionGroups, Is.Not.Empty);
         Assert.That(editor.ActionGroups.Select(static group => group.PluginId), Is.Unique);
         Assert.That(editor.ActionGroups.Sum(static group => group.Actions.Count), Is.EqualTo(editor.AvailableActions.Count));
         Assert.That(editor.ActionGroups.Any(static group => group.IsExpanded), Is.False, "collapsed like the main window until opened");
+    }
 
+    [Test]
+    public void ActionSearch_AnActionsName_OpensTheMatchingGroups()
+    {
+        // Arrange
+        var (editor, _) = Editor();
         var name = editor.AvailableActions[0].Name;
+
+        // Act
         editor.ActionSearch = name;
 
+        // Assert
         Assert.That(editor.ActionGroups, Is.Not.Empty);
         Assert.That(editor.ActionGroups.All(static group => group.IsExpanded), Is.True);
         Assert.That(editor.ActionGroups.SelectMany(static group => group.Actions).Any(action => action.Name == name), Is.True);
+    }
 
+    [Test]
+    public void ActionSearch_NoActionHasThatName_ListsNoGroups()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+
+        // Act
         editor.ActionSearch = "no action is called this";
+
+        // Assert
         Assert.That(editor.ActionGroups, Is.Empty);
     }
 
     [Test]
-    public void An_action_added_after_an_action_is_linked_from_then_never_from_the_error_output()
+    public void AddAction_AfterAnAction_LinksFromNextNeverFromTheErrorOutput()
     {
+        // Arrange
         var (editor, _) = Editor();
         var first = Expect.IsType<WorkflowNode>(editor.AddAction(Item("Play / Pause")));
         editor.SelectNode(first.Id);
         editor.AddAction(Item("Mute"));
         editor.SelectNode(first.Id);
+
+        // Act
         editor.AddAction(Item("Play / Pause"));
 
+        // Assert
         Assert.That(editor.Workflow.LinksFrom(first.Id, WorkflowPorts.Error), Is.Empty, "the error output is linked by hand only");
         Assert.That(editor.Workflow.LinksFrom(first.Id, WorkflowPorts.Next).Count(), Is.EqualTo(1));
     }
 
     [Test]
-    public void An_action_node_offers_tries_and_a_wait_for_when_it_did_not_run_and_keeps_them_on_the_node()
+    public void FailureOptions_AnActionNodeWithTries_KeepsThemOnTheNodeAndTheActionUntouched()
     {
+        // Arrange
         var (editor, stored) = Editor();
         var node = Expect.IsType<WorkflowNode>(editor.AddAction(Item("Play / Pause")));
         editor.SelectNode(node.Id);
-        Assert.That(editor.HasFailureOptions, Is.True);
-
         var retries = Expect.IsType<NumberSettingField>(editor.FailureOptions!.Fields.First());
+
+        // Act
         retries.Value = "3";
 
+        // Assert
+        Assert.That(editor.HasFailureOptions, Is.True);
         Assert.That(editor.Workflow.Find(node.Id)!.EffectiveSettings.GetInt(WorkflowKeys.Retries, 0), Is.EqualTo(3));
         Assert.That(stored.Last().Find(node.Id)!.EffectiveSettings.GetInt(WorkflowKeys.Retries, 0), Is.EqualTo(3));
         Assert.That(editor.Workflow.Find(node.Id)!.Action, Is.EqualTo(node.Action), "the action's own settings are untouched");
-
-        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 0, 0);
-        editor.SelectNode(wait.Id);
-        Assert.That(editor.HasFailureOptions, Is.False, "only for action nodes");
     }
 
     [Test]
-    public void Putting_a_node_into_a_link_makes_room_by_moving_what_follows_it_in_one_undo_step()
+    public void HasFailureOptions_AWaitNode_IsFalseBecauseItIsOnlyForActionNodes()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(Wait, 0, 0);
+
+        // Act
+        editor.SelectNode(wait.Id);
+
+        // Assert
+        Assert.That(editor.HasFailureOptions, Is.False);
+    }
+
+    // ---------------------------------------------------------------- making room
+
+    private static (WorkflowEditorViewModel Editor, WorkflowNode First, WorkflowNode Middle, WorkflowNode Last, WorkflowNode Elsewhere, WorkflowNode Loose) CrowdedChain()
     {
         var (editor, _) = Editor();
-        var first = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
-        var middle = editor.AddNode(WorkflowNodeKinds.Wait, 360, 40);
-        var last = editor.AddNode(WorkflowNodeKinds.Wait, 420, 40);
-        var elsewhere = editor.AddNode(WorkflowNodeKinds.Wait, 420, 300);
+        var first = editor.AddNode(Wait, 300, 40);
+        var middle = editor.AddNode(Wait, 360, 40);
+        var last = editor.AddNode(Wait, 420, 40);
+        var elsewhere = editor.AddNode(Wait, 420, 300);
         editor.Connect(first.Id, WorkflowPorts.Next, middle.Id);
         editor.Connect(middle.Id, WorkflowPorts.Next, last.Id);
+        var loose = editor.AddNode(Wait, 300, 200);
+        return (editor, first, middle, last, elsewhere, loose);
+    }
+
+    [Test]
+    public void InsertIntoLink_ACrowdedChain_MovesWhatFollowsClearOfTheInsertedNode()
+    {
+        // Arrange
+        var (editor, first, middle, last, elsewhere, loose) = CrowdedChain();
         var link = new WorkflowLink(first.Id, WorkflowPorts.Next, middle.Id);
-        var loose = editor.AddNode(WorkflowNodeKinds.Wait, 300, 200);
 
-        Assert.That(editor.InsertIntoLink(loose.Id, link, 300, 40), Is.Null);
+        // Act
+        var problem = editor.InsertIntoLink(loose.Id, link, 300, 40);
 
+        // Assert
         double X(string id) => editor.Workflow.Find(id)!.X;
+        Assert.That(problem, Is.Null);
         Assert.That(X(middle.Id), Is.GreaterThanOrEqualTo(X(loose.Id) + WorkflowEditorViewModel.NodeWidth + WorkflowSpacing.Gap), "the target moved clear of the inserted node");
-        Assert.That(X(last.Id) - X(middle.Id), Is.EqualTo(60), "what follows moved the same distance");
-        Assert.That(X(first.Id), Is.EqualTo(300), "what comes before stays");
-        Assert.That(X(elsewhere.Id), Is.EqualTo(420), "an unrelated branch stays");
+        Assert.That(X(last.Id) - X(middle.Id), Is.EqualTo(RoomGap), "what follows moved the same distance");
+    }
 
+    [Test]
+    public void InsertIntoLink_ACrowdedChain_LeavesWhatComesBeforeAndUnrelatedBranchesWhereTheyAre()
+    {
+        // Arrange
+        var (editor, first, middle, _, elsewhere, loose) = CrowdedChain();
+        var link = new WorkflowLink(first.Id, WorkflowPorts.Next, middle.Id);
+
+        // Act
+        editor.InsertIntoLink(loose.Id, link, 300, 40);
+
+        // Assert
+        Assert.That(editor.Workflow.Find(first.Id)!.X, Is.EqualTo(300), "what comes before stays");
+        Assert.That(editor.Workflow.Find(elsewhere.Id)!.X, Is.EqualTo(420), "an unrelated branch stays");
+    }
+
+    [Test]
+    public void Undo_AfterMakingRoom_PutsEverythingBackInOneStep()
+    {
+        // Arrange
+        var (editor, first, middle, last, _, loose) = CrowdedChain();
+        editor.InsertIntoLink(loose.Id, new WorkflowLink(first.Id, WorkflowPorts.Next, middle.Id), 300, 40);
+
+        // Act
         editor.UndoCommand.Execute(null);
+
+        // Assert
+        double X(string id) => editor.Workflow.Find(id)!.X;
         Assert.That((X(middle.Id), X(last.Id)), Is.EqualTo((360d, 420d)), "one Undo puts everything back");
         Assert.That(editor.Workflow.Links, Has.Count.EqualTo(2));
     }
 
     [Test]
-    public void A_dropped_node_or_action_pushes_the_rest_of_the_path_too_and_nothing_moves_when_there_is_room()
+    public void AddNode_DroppedOntoALinkWithTooLittleRoom_PushesTheNextNodeRightOfIt()
     {
+        // Arrange
         var (editor, _) = Editor();
-        var first = editor.AddNode(WorkflowNodeKinds.Wait, 100, 40);
-        var last = editor.AddNode(WorkflowNodeKinds.Wait, 160, 40);
+        var first = editor.AddNode(Wait, 100, 40);
+        var last = editor.AddNode(Wait, 160, 40);
         editor.Connect(first.Id, WorkflowPorts.Next, last.Id);
         var link = Expect.Single(editor.Workflow.Links);
 
-        var added = editor.AddNode(WorkflowNodeKinds.Wait, 100, 40, link);
-        Assert.That(editor.Workflow.Find(last.Id)!.X, Is.GreaterThanOrEqualTo(added.X + WorkflowEditorViewModel.NodeWidth + WorkflowSpacing.Gap));
+        // Act
+        var added = editor.AddNode(Wait, 100, 40, link);
 
+        // Assert
+        Assert.That(editor.Workflow.Find(last.Id)!.X, Is.GreaterThanOrEqualTo(added.X + WorkflowEditorViewModel.NodeWidth + WorkflowSpacing.Gap));
+    }
+
+    [Test]
+    public void AddAction_DroppedOntoASecondLink_NeverMovesTheRestOfThePathLeft()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var first = editor.AddNode(Wait, 100, 40);
+        var last = editor.AddNode(Wait, 160, 40);
+        editor.Connect(first.Id, WorkflowPorts.Next, last.Id);
+        editor.AddNode(Wait, 100, 40, Expect.Single(editor.Workflow.Links));
         var second = editor.Workflow.Links.First(candidate => candidate.To == last.Id);
         var before = editor.Workflow.Find(last.Id)!.X;
+
+        // Act
         var action = editor.AddAction(Item("Mute"), editor.Workflow.Find(second.From)!.X, 200, second);
+
+        // Assert
         Assert.That(action, Is.Not.Null);
         Assert.That(editor.Workflow.Find(last.Id)!.X, Is.GreaterThanOrEqualTo(before), "never moves left");
+    }
 
-        // With room already there nothing moves.
+    [Test]
+    public void MakeRoom_WhenThereIsRoomAlready_ChangesNothing()
+    {
+        // Arrange
         var roomy = new Workflow
         {
-            Nodes = [new WorkflowNode("a", WorkflowNodeKinds.Wait, 0, 0), new WorkflowNode("b", WorkflowNodeKinds.Wait, 1000, 0), new WorkflowNode("n", WorkflowNodeKinds.Wait, 300, 0)],
+            Nodes = [new WorkflowNode("a", Wait, 0, 0), new WorkflowNode("b", Wait, 1000, 0), new WorkflowNode("n", Wait, 300, 0)],
             Links = [new("a", WorkflowPorts.Next, "n"), new("n", WorkflowPorts.Next, "b")],
         };
-        Assert.That(WorkflowSpacing.MakeRoom(roomy, "n", "b", WorkflowEditorViewModel.NodeWidth), Is.SameAs(roomy));
+
+        // Act
+        var result = WorkflowSpacing.MakeRoom(roomy, "n", "b", WorkflowEditorViewModel.NodeWidth);
+
+        // Assert
+        Assert.That(result, Is.SameAs(roomy));
     }
+
+    // ---------------------------------------------------------------- shared workflows
 
     private static Workflow SharedOf(string id, string name) => new() { Id = id, Name = name, Nodes = [new WorkflowNode("t", WorkflowNodeKinds.Trigger)] };
 
-    [Test]
-    public void A_call_node_offers_the_shared_workflows_to_choose_from_and_can_open_the_one_it_names()
+    private static (WorkflowEditorViewModel Editor, WorkflowNode Call) EditorWithACallNode(Action<string>? onOpen = null)
     {
         var (editor, _) = Editor();
         editor.SharedSource = () => [SharedOf("wf.1", "Streaming on"), SharedOf("wf.2", "Streaming off")];
-        string? opened = null;
-        editor.OpenShared = id => opened = id;
+        editor.OpenShared = id => onOpen?.Invoke(id);
         var call = editor.AddNode(WorkflowNodeKinds.Call, 300, 40);
         editor.SelectNode(call.Id);
-
-        var choice = Expect.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.Single());
-        Assert.That(choice.Options.Select(static option => option.Label), Is.EqualTo(new[] { "Streaming on", "Streaming off" }));
-        choice.SelectedOption = choice.Options[1];
-        Assert.That(editor.Workflow.Find(call.Id)!.EffectiveSettings.Get(WorkflowKeys.Workflow), Is.EqualTo("wf.2"));
-        Assert.That(editor.SelectedIsCall, Is.True);
-
-        editor.OpenCallCommand.Execute(null);
-        Assert.That(opened, Is.EqualTo("wf.2"));
+        return (editor, call);
     }
 
     [Test]
-    public void Save_as_shared_needs_a_name_and_a_shared_editor_does_not_offer_it_again()
+    public void NodeSettings_ACallNode_OffersTheSharedWorkflowsByName()
+    {
+        // Act
+        var (editor, _) = EditorWithACallNode();
+
+        // Assert
+        var choice = Expect.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.Single());
+        Assert.That(choice.Options.Select(static option => option.Label), Is.EqualTo(new[] { "Streaming on", "Streaming off" }));
+    }
+
+    [Test]
+    public void SelectedOption_ChoosingASharedWorkflow_StoresItsIdOnTheCallNode()
+    {
+        // Arrange
+        var (editor, call) = EditorWithACallNode();
+        var choice = Expect.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.Single());
+
+        // Act
+        choice.SelectedOption = choice.Options[1];
+
+        // Assert
+        Assert.That(editor.Workflow.Find(call.Id)!.EffectiveSettings.Get(WorkflowKeys.Workflow), Is.EqualTo("wf.2"));
+        Assert.That(editor.SelectedIsCall, Is.True);
+    }
+
+    [Test]
+    public void OpenCall_ACallNodeThatNamesAWorkflow_OpensThatWorkflow()
+    {
+        // Arrange
+        string? opened = null;
+        var (editor, _) = EditorWithACallNode(id => opened = id);
+        var choice = Expect.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.Single());
+        choice.SelectedOption = choice.Options[1];
+
+        // Act
+        editor.OpenCallCommand.Execute(null);
+
+        // Assert
+        Assert.That(opened, Is.EqualTo("wf.2"));
+    }
+
+    private static (WorkflowEditorViewModel Editor, Func<Workflow?> Saved) EditorWithASharedStore()
     {
         var (editor, _) = Editor();
         Workflow? saved = null;
@@ -253,69 +472,169 @@ public class WorkflowEditorTests
             return ("wf.new", null);
         };
         editor.RefreshShared();
+        return (editor, () => saved);
+    }
+
+    [Test]
+    public void SaveAsShared_WithoutAName_SaysToNameItFirstAndSavesNothing()
+    {
+        // Arrange
+        var (editor, saved) = EditorWithASharedStore();
+
+        // Act
+        editor.SaveAsSharedCommand.Execute(null);
+
+        // Assert
         Assert.That(editor.CanSaveAsShared, Is.True);
-
-        editor.SaveAsSharedCommand.Execute(null);
         Assert.That(editor.Status, Is.EqualTo("name it first"));
-        Assert.That(saved, Is.Null);
+        Assert.That(saved(), Is.Null);
+    }
 
+    [Test]
+    public void SaveAsShared_WithAName_SavesItAndListsIt()
+    {
+        // Arrange
+        var (editor, saved) = EditorWithASharedStore();
         editor.WorkflowName = "Mute everything";
-        editor.SaveAsSharedCommand.Execute(null);
-        Assert.That(saved?.Name, Is.EqualTo("Mute everything"));
-        Assert.That(editor.SharedList.Select(static row => row.Id), Is.EqualTo(new[] { "wf.new" }));
 
+        // Act
+        editor.SaveAsSharedCommand.Execute(null);
+
+        // Assert
+        Assert.That(saved()?.Name, Is.EqualTo("Mute everything"));
+        Assert.That(editor.SharedList.Select(static row => row.Id), Is.EqualTo(new[] { "wf.new" }));
+    }
+
+    [Test]
+    public void CanSaveAsShared_ASharedEditor_IsFalse()
+    {
+        // Arrange
+        var (editor, _) = EditorWithASharedStore();
+
+        // Act
         using var sharedEditor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", SharedOf("wf.new", "Mute everything"), Actions, _ => true) { SaveShared = editor.SaveShared };
+
+        // Assert
         Assert.That(sharedEditor.IsShared, Is.True);
         Assert.That(sharedEditor.CanSaveAsShared, Is.False);
     }
 
     [Test]
-    public void Deleting_a_shared_workflow_asks_the_app_and_shows_why_not()
+    public void DeleteSharedRow_AWorkflowStillInUse_ShowsWhyNotAndKeepsIt()
     {
+        // Arrange
         var (editor, _) = Editor();
         editor.SharedSource = () => [SharedOf("wf.1", "In use")];
         editor.CallersOf = _ => ["Studio: key.3"];
         editor.DeleteShared = _ => "It is still called by Studio: key.3.";
         editor.RefreshShared();
-        Assert.That(editor.SharedList.Single().UsedBy, Is.EqualTo("used by Studio: key.3"));
+        var usedBy = editor.SharedList.Single().UsedBy;
 
+        // Act
         editor.DeleteSharedRowCommand.Execute(editor.SharedList.Single());
 
+        // Assert
+        Assert.That(usedBy, Is.EqualTo("used by Studio: key.3"));
         Assert.That(editor.Status, Does.Contain("Can't delete In use").And.Contain("still called"));
         Assert.That(editor.SharedList, Has.Count.EqualTo(1));
     }
 
-    [Test]
-    public void Breakpoints_are_toggled_per_node_and_a_held_run_is_followed_until_it_goes_on()
-    {
-        var (editor, _) = Editor();
-        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
-        Assert.That(editor.HasBreakpoint(wait), Is.False);
-        editor.ToggleBreakpoint(wait.Id);
-        Assert.That(editor.HasBreakpoint(wait), Is.True);
-        Assert.That(editor.Breakpoints.Of("device", "key.0"), Is.EqualTo(new[] { wait.Id }));
+    // ---------------------------------------------------------------- breakpoints and traces
 
-        DeckHost.Core.Models.WorkflowTrace Trace(DeckHost.Core.Models.WorkflowTraceKind kind, int run = 7, string? shared = null) =>
-            new("device", "layout", "key.0", run, wait.Id, kind, "Paused at a breakpoint", DateTimeOffset.Now) { WorkflowId = shared };
-        editor.ShowTrace(Trace(DeckHost.Core.Models.WorkflowTraceKind.Paused));
+    private static DeckHost.Core.Models.WorkflowTrace TraceOf(string nodeId, DeckHost.Core.Models.WorkflowTraceKind kind, int run = 7, string? shared = null, string detail = "Paused at a breakpoint") =>
+        new(DeviceName, "layout", KeyControl, run, nodeId, kind, detail, DateTimeOffset.Now) { WorkflowId = shared };
+
+    [Test]
+    public void ToggleBreakpoint_ANode_SetsAndRemovesItsBreakpoint()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(Wait, 300, 40);
+
+        // Act
+        editor.ToggleBreakpoint(wait.Id);
+        var setOn = editor.HasBreakpoint(wait);
+        editor.ToggleBreakpoint(wait.Id);
+
+        // Assert
+        Assert.That(setOn, Is.True);
+        Assert.That(editor.HasBreakpoint(wait), Is.False);
+    }
+
+    [Test]
+    public void Breakpoints_AToggledNode_IsListedForTheControl()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(Wait, 300, 40);
+
+        // Act
+        editor.ToggleBreakpoint(wait.Id);
+
+        // Assert
+        Assert.That(editor.Breakpoints.Of(DeviceName, KeyControl), Is.EqualTo(new[] { wait.Id }));
+    }
+
+    [Test]
+    public void ShowTrace_ARunPausedAtANode_IsFollowedUntilItGoesOn()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(Wait, 300, 40);
+
+        // Act
+        editor.ShowTrace(TraceOf(wait.Id, DeckHost.Core.Models.WorkflowTraceKind.Paused));
+
+        // Assert
         Assert.That(editor.IsPaused, Is.True);
         Assert.That(editor.IsPausedAt(wait), Is.True);
         Assert.That(editor.ContinueCommand.CanExecute(null), Is.True);
+    }
 
-        editor.ShowTrace(Trace(DeckHost.Core.Models.WorkflowTraceKind.Finished, run: 8));
+    [Test]
+    public void ShowTrace_AnotherRunEnding_DoesNotReleaseThePausedRun()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(Wait, 300, 40);
+        editor.ShowTrace(TraceOf(wait.Id, DeckHost.Core.Models.WorkflowTraceKind.Paused));
+
+        // Act
+        editor.ShowTrace(TraceOf(wait.Id, DeckHost.Core.Models.WorkflowTraceKind.Finished, run: 8));
+
+        // Assert
         Assert.That(editor.IsPaused, Is.True, "another run ending doesn't release it");
+    }
 
-        editor.ShowTrace(Trace(DeckHost.Core.Models.WorkflowTraceKind.Resumed));
+    [Test]
+    public void ShowTrace_ThePausedRunResuming_ReleasesIt()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(Wait, 300, 40);
+        editor.ShowTrace(TraceOf(wait.Id, DeckHost.Core.Models.WorkflowTraceKind.Paused));
+
+        // Act
+        editor.ShowTrace(TraceOf(wait.Id, DeckHost.Core.Models.WorkflowTraceKind.Resumed));
+
+        // Assert
         Assert.That(editor.IsPaused, Is.False);
         Assert.That(editor.ContinueCommand.CanExecute(null), Is.False);
+    }
 
-        var other = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
-        editor.ShowTrace(new("device", "layout", "key.0", 9, other.Id, DeckHost.Core.Models.WorkflowTraceKind.Node, "Waiting", DateTimeOffset.Now) { WorkflowId = "wf.1" });
-        Assert.That(editor.IsActive(other), Is.False, "a step in a shared workflow does not light this workflow's node with the same id");
+    [Test]
+    public void ShowTrace_AStepInASharedWorkflow_DoesNotLightThisWorkflowsNodeWithTheSameId()
+    {
+        // Arrange
+        var (editor, _) = Editor();
+        var other = editor.AddNode(Wait, 600, 40);
+
+        // Act
+        editor.ShowTrace(TraceOf(other.Id, DeckHost.Core.Models.WorkflowTraceKind.Node, run: 9, shared: "wf.1", detail: "Waiting"));
+
+        // Assert
+        Assert.That(editor.IsActive(other), Is.False);
         Assert.That(editor.RunLog[0], Does.Contain("↳"));
-
-        editor.ToggleBreakpoint(wait.Id);
-        Assert.That(editor.HasBreakpoint(wait), Is.False);
     }
 
     [TestCase("5", "number")]
