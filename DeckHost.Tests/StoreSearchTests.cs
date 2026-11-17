@@ -61,3 +61,17 @@ public class StoreSearchTests
         Assert.That(watch.ElapsedMilliseconds / 20.0, Is.LessThan(30), "ms per search over 20,000 plugins");
     }
 }
+
+/// <summary>What the Plugins page says a device plugin supports.</summary>
+public class DevicePluginDescriptionTests
+{
+    [Test]
+    public void The_MiraBox_and_Elgato_plugins_sum_up_their_models_even_with_nothing_plugged_in()
+    {
+        using var mirabox = new DeckHost.Device.MiraBox.MiraBoxDevicePlugin(Path.Combine(Path.GetTempPath(), "deckhost-desc-" + Guid.NewGuid().ToString("N")));
+        using var elgato = new DeckHost.Device.Elgato.ElgatoDevicePlugin(Path.Combine(Path.GetTempPath(), "deckhost-desc-" + Guid.NewGuid().ToString("N")));
+
+        Assert.That(PluginCatalog.DescribeSupport(mirabox), Does.StartWith("Supports 11 models, such as StreamDock N4 Pro"));
+        Assert.That(PluginCatalog.DescribeSupport(elgato), Does.StartWith("Supports ").And.Contain("models, such as").And.Not.EqualTo("Supports ."));
+    }
+}

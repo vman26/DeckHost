@@ -287,6 +287,33 @@ public sealed class PluginCatalog : IDisposable
     private IReadOnlyList<IApplicationPlugin> EnabledApplicationPluginsCore =>
         [.. _slots.Where(slot => slot.Instance is not null && !_disabled.Contains(slot.Id)).Select(slot => slot.Instance!)];
 
+    /// <summary>
+    /// What a device plugin supports: its models when it lists them (<see cref="IDeviceModelCatalog"/>),
+    /// else the devices it has now. Several models are summed up, not listed.
+    /// </summary>
+    internal static string DescribeSupport(IDevicePlugin plugin)
+    {
+        IEnumerable<string> names;
+        try
+        {
+            names = (plugin is IDeviceModelCatalog catalog ? catalog.DescribeModels() : plugin.Devices)
+                .Select(static device => device.Identity?.Model ?? device.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            names = plugin.Devices.Select(static device => device.Name).Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var list = names.ToList();
+        return list.Count switch
+        {
+            0 => "Devices you add yourself.",
+            <= 4 => $"Supports {string.Join(", ", list)}.",
+            _ => $"Supports {list.Count} models, such as {string.Join(", ", list.Take(3))}.",
+        };
+    }
+
     private IReadOnlyList<PluginEntry> EntriesCore =>
     [
         .. _devicePlugins.Select(plugin => new PluginEntry(
@@ -294,7 +321,7 @@ public sealed class PluginCatalog : IDisposable
             plugin.Name,
             plugin.GetType().Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
             null,
-            $"Supports {string.Join(", ", plugin.Devices.Select(device => device.Name).Distinct())}.",
+            DescribeSupport(plugin),
             PluginKind.Device,
             IsSystem: true,
             IsEnabled: true,
