@@ -28,118 +28,266 @@ public sealed class StreamDeckTests : IDisposable
         }
     }
 
-    [Test]
-    public void Parses_the_OpenAction_and_Elgato_archive_catalogs()
-    {
-        var openAction = PluginStore.ParseOpenActionCatalog("""
-            { "com.elgato.counter": { "name": "Counter", "author": "Elgato", "repository": "https://github.com/elgatosf/streamdeck-counter",
-              "download_url": "https://example.com/counter.streamDeckPlugin", "description": "Sample" } }
-            """);
-        var elgato = PluginStore.ParseElgatoArchiveCatalog("""
-            [ { "id": "com.elgato.counter", "name": "Counter", "author": "Elgato", "link": "https://developer.elgato.com", "version": "1.4" },
-              { "name": "no id" } ]
-            """);
+    private const string OpenActionCatalog = """
+        { "com.elgato.counter": { "name": "Counter", "author": "Elgato", "repository": "https://github.com/elgatosf/streamdeck-counter",
+          "download_url": "https://example.com/counter.streamDeckPlugin", "description": "Sample" } }
+        """;
 
-        var open = Expect.Single(openAction);
+    private const string ElgatoArchive = """
+        [ { "id": "com.elgato.counter", "name": "Counter", "author": "Elgato", "link": "https://developer.elgato.com", "version": "1.4" },
+          { "name": "no id" } ]
+        """;
+
+    private const string HelloTitle = "Hello";
+    private const string PluginScriptName = "plugin.js";
+    private const string HtmlPage = "index.html";
+    private const string KeyId = "key.0";
+
+    [Test]
+    public void ParseOpenActionCatalog_AnEntry_ReadsItsFieldsAndDownload()
+    {
+        // Act
+        var open = Expect.Single(PluginStore.ParseOpenActionCatalog(OpenActionCatalog));
+
+        // Assert
         Assert.That((open.Id, open.Name, open.Source, open.DownloadUrl), Is.EqualTo(("com.elgato.counter", "Counter", PluginStore.OpenActionSource, "https://example.com/counter.streamDeckPlugin")));
-        var archived = Expect.Single(elgato);
+    }
+
+    [Test]
+    public void ParseElgatoArchiveCatalog_AnEntryWithAnId_GetsTheArchivesDownloadAndVersion()
+    {
+        // Act
+        var archived = Expect.Single(PluginStore.ParseElgatoArchiveCatalog(ElgatoArchive));
+
+        // Assert
         Assert.That(archived.DownloadUrl, Is.EqualTo("https://plugins.amankhanna.me/rezipped/com.elgato.counter.zip"));
         Assert.That(archived.Version, Is.EqualTo("1.4"));
     }
 
+    private static System.Text.Json.Nodes.JsonObject Json(string json) => System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+
     [Test]
-    public void Merges_dial_feedback_updates()
+    public void Merge_PlainDialFeedbackValues_AreKept()
     {
-        static System.Text.Json.Nodes.JsonObject Json(string json) => System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
-
-        // Plain values, as most plugins send them.
+        // Act
         var feedback = DialFeedback.Merge(null, Json("""{ "title": "Volume", "value": "42%", "indicator": 42 }"""));
+
+        // Assert
         Assert.That(feedback, Is.EqualTo(new DialFeedback("Volume", "42%", 0.42)));
-
-        // A partial update keeps the rest; items may also be objects with a value and layout details.
-        feedback = DialFeedback.Merge(feedback, Json("""{ "value": { "value": 55, "color": "#fff" }, "indicator": { "value": "130" }, "icon": "ignored" }"""));
-        Assert.That(feedback, Is.EqualTo(new DialFeedback("Volume", "55", 1d)));
-
-        // An item set to nothing is cleared.
-        feedback = DialFeedback.Merge(feedback, Json("""{ "indicator": null }"""));
-        Assert.That(feedback, Is.EqualTo(new DialFeedback("Volume", "55", null)));
-        Assert.That(DialFeedback.Merge(feedback, null), Is.EqualTo(feedback));
     }
 
     [Test]
-    public void Reads_the_manifest_and_recognizes_html_plugins()
+    public void Merge_APartialUpdateWithObjectItems_KeepsTheRestAndClampsTheIndicator()
     {
-        var directory = WritePlugin("plugin.js");
+        // Arrange
+        var feedback = DialFeedback.Merge(null, Json("""{ "title": "Volume", "value": "42%", "indicator": 42 }"""));
+
+        // Act (items may also be objects with a value and layout details)
+        feedback = DialFeedback.Merge(feedback, Json("""{ "value": { "value": 55, "color": "#fff" }, "indicator": { "value": "130" }, "icon": "ignored" }"""));
+
+        // Assert
+        Assert.That(feedback, Is.EqualTo(new DialFeedback("Volume", "55", 1d)));
+    }
+
+    [Test]
+    public void Merge_AnItemSetToNothing_IsCleared()
+    {
+        // Arrange
+        var feedback = DialFeedback.Merge(null, Json("""{ "title": "Volume", "value": "55", "indicator": 1 }"""));
+
+        // Act
+        feedback = DialFeedback.Merge(feedback, Json("""{ "indicator": null }"""));
+
+        // Assert
+        Assert.That(feedback, Is.EqualTo(new DialFeedback("Volume", "55", null)));
+    }
+
+    [Test]
+    public void Merge_NoUpdate_KeepsTheFeedback()
+    {
+        // Arrange
+        var feedback = new DialFeedback("Volume", "55", null);
+
+        // Act
+        var merged = DialFeedback.Merge(feedback, null);
+
+        // Assert
+        Assert.That(merged, Is.EqualTo(feedback));
+    }
+
+    [Test]
+    public void Load_ACodePathPlugin_ReadsItsManifestAndIsNotHtml()
+    {
+        // Arrange
+        var directory = WritePlugin(PluginScriptName);
+
+        // Act
         var manifest = StreamDeckManifest.Load(directory);
+
+        // Assert
         Assert.That(manifest.Uuid, Is.EqualTo(PluginUuid));
-        Assert.That(manifest.CodePath, Is.EqualTo("plugin.js"));
+        Assert.That(manifest.CodePath, Is.EqualTo(PluginScriptName));
         Assert.That(manifest.UnsupportedReason, Is.Null);
         Assert.That(Expect.Single(manifest.Actions).SupportsKeypad, Is.True);
-
-        var html = StreamDeckManifest.Load(WritePlugin("index.html", uuid: "com.deckhost.html"));
-        Assert.That(html.UnsupportedReason, Is.Null);
-        Assert.That(html.IsHtml, Is.True);
         Assert.That(manifest.IsHtml, Is.False);
     }
 
     [Test]
-    public void Installs_a_stream_deck_plugin_even_when_wrapped_in_another_archive()
+    public void Load_AnHtmlPlugin_IsRecognizedAsHtmlAndSupported()
     {
-        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (_, _) => { });
-        using var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
-        catalog.Load();
+        // Arrange
+        var directory = WritePlugin(HtmlPage, uuid: "com.deckhost.html");
 
+        // Act
+        var html = StreamDeckManifest.Load(directory);
+
+        // Assert
+        Assert.That(html.UnsupportedReason, Is.Null);
+        Assert.That(html.IsHtml, Is.True);
+    }
+
+    private PluginEntry InstallWrapped(PluginCatalog catalog)
+    {
         // A .zip that contains the real .streamDeckPlugin, as some downloads do.
-        var inner = PackPlugin(WritePlugin("index.html"));
+        var inner = PackPlugin(WritePlugin(HtmlPage));
         var outer = Path.Combine(_root, "outer.zip");
         using (var archive = ZipFile.Open(outer, ZipArchiveMode.Create))
         {
             archive.CreateEntryFromFile(inner, "com.deckhost.test.streamDeckPlugin");
         }
 
-        var entry = catalog.Install(outer);
+        return catalog.Install(outer);
+    }
 
-        Assert.That(entry.Id, Is.EqualTo(PluginUuid));
-        Assert.That(entry.Source, Is.EqualTo(PluginCatalog.StreamDeckSource));
-        Assert.That(entry.Error, Is.Not.Null); // HTML plugin: installed, but can't run.
-        Assert.That(Directory.Exists(Path.Combine(catalog.StreamDeckDirectory, PluginUuid + ".sdPlugin")), Is.True);
+    private PluginCatalog NewCatalog(StreamDeckRuntime runtime)
+    {
+        var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
+        catalog.Load();
+        return catalog;
+    }
 
-        catalog.Uninstall(PluginUuid);
-        Assert.That(Directory.Exists(Path.Combine(catalog.StreamDeckDirectory, PluginUuid + ".sdPlugin")), Is.False);
+    private StreamDeckRuntime NewRuntime(Action<string, string>? log = null, params TimeSpan[] restartDelays)
+    {
+        var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), log ?? ((_, _) => { }));
+        if (restartDelays.Length > 0)
+        {
+            runtime.RestartDelays = restartDelays;
+        }
+
+        return runtime;
     }
 
     [Test]
-    public async Task Runs_a_Node_plugin_over_the_Stream_Deck_protocol()
+    public void Install_AStreamDeckPluginWrappedInAnotherArchive_InstallsTheInnerOne()
     {
-        if (!IsNodeAvailable())
-        {
-            return; // Node.js isn't installed on this machine; the protocol can't be exercised end to end.
-        }
+        // Arrange
+        using var runtime = NewRuntime();
+        using var catalog = NewCatalog(runtime);
 
-        var logs = new List<string>();
-        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (level, message) => { lock (logs) { logs.Add($"{level}: {message}"); } });
-        using var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
-        catalog.Load();
+        // Act
+        var entry = InstallWrapped(catalog);
+
+        // Assert
+        Assert.That(entry.Id, Is.EqualTo(PluginUuid));
+        Assert.That(entry.Source, Is.EqualTo(PluginCatalog.StreamDeckSource));
+        Assert.That(entry.Error, Is.Not.Null, "an HTML plugin: installed, but can't run");
+        Assert.That(Directory.Exists(Path.Combine(catalog.StreamDeckDirectory, PluginUuid + ".sdPlugin")), Is.True);
+    }
+
+    [Test]
+    public void Uninstall_AnInstalledStreamDeckPlugin_RemovesItsFolder()
+    {
+        // Arrange
+        using var runtime = NewRuntime();
+        using var catalog = NewCatalog(runtime);
+        InstallWrapped(catalog);
+
+        // Act
+        catalog.Uninstall(PluginUuid);
+
+        // Assert
+        Assert.That(Directory.Exists(Path.Combine(catalog.StreamDeckDirectory, PluginUuid + ".sdPlugin")), Is.False);
+    }
+
+    private sealed record RunningPlugin(StreamDeckRuntime Runtime, PluginCatalog Catalog, DeviceHostService Host, VariableStore Store, IDeckAction Action) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await Host.DisposeAsync();
+            Store.Dispose();
+            Catalog.Dispose();
+            Runtime.Dispose();
+        }
+    }
+
+    /// <summary>Installs a Node plugin made from <paramref name="script"/>, puts its action on key.0 and starts the host.</summary>
+    private async Task<RunningPlugin> StartNodePluginAsync(string script, StreamDeckRuntime runtime, PluginCatalog catalog)
+    {
         var plugin = new FakeDevicePlugin();
         runtime.DevicesProvider = () => plugin.Devices;
-        var entry = catalog.Install(PackPlugin(WritePlugin("plugin.js", script: TestPluginScript)));
-        Assert.That(entry.Error, Is.Null);
-
-        using var store = new VariableStore();
-        await using var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
+        Assert.That(catalog.Install(PackPlugin(WritePlugin(PluginScriptName, script: script))).Error, Is.Null);
+        var store = new VariableStore();
+        var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
         var reference = new ActionReference(PluginUuid, "Test", ActionUuid, "Test action", InputCapabilities.None, OutputCapabilities.None);
-        host.SetProfiles([new DeviceProfile("p1", "P", FakeDevicePlugin.DeviceId, [new ControlBinding("key.0", ProfileActionKind.Single, reference, new ControlAppearance(), [])])]);
+        host.SetProfiles([new DeviceProfile("p1", "P", FakeDevicePlugin.DeviceId, [new ControlBinding(KeyId, ProfileActionKind.Single, reference, new ControlAppearance(), [])])]);
         await host.StartAsync(CancellationToken.None);
-
         var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
-        Assert.That(await WaitForTitleAsync(action, "Hello"), Is.True, "willAppear → setTitle: " + string.Join(" | ", logs));
+        return new RunningPlugin(runtime, catalog, host, store, action);
+    }
 
-        host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1));
-        Assert.That(await WaitForTitleAsync(action, "Pressed 1"), Is.True, "keyDown → setTitle: " + string.Join(" | ", logs));
+    private static void PressKey(DeviceHostService host) =>
+        host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, KeyId, InputCapabilities.Press, 1));
 
-        // setSettings is stored and sent back with the next event.
-        host.SimulateInput(new DeviceInputEvent(FakeDevicePlugin.DeviceId, "key.0", InputCapabilities.Press, 1));
-        Assert.That(await WaitForTitleAsync(action, "Pressed 2"), Is.True, "settings round trip: " + string.Join(" | ", logs));
+    [Test]
+    public async Task WillAppear_ANodePlugin_SetsItsTitle()
+    {
+        // Arrange
+        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
+        var logs = new List<string>();
+        using var runtime = NewRuntime((level, message) => { lock (logs) { logs.Add($"{level}: {message}"); } });
+        using var catalog = NewCatalog(runtime);
+
+        // Act
+        await using var running = await StartNodePluginAsync(TestPluginScript, runtime, catalog);
+
+        // Assert
+        Assert.That(await WaitForTitleAsync(running.Action, HelloTitle), Is.True, "willAppear → setTitle: " + string.Join(" | ", logs));
+    }
+
+    [Test]
+    public async Task KeyDown_ANodePlugin_AnswersWithAnUpdatedTitle()
+    {
+        // Arrange
+        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
+        using var runtime = NewRuntime();
+        using var catalog = NewCatalog(runtime);
+        await using var running = await StartNodePluginAsync(TestPluginScript, runtime, catalog);
+        await WaitForTitleAsync(running.Action, HelloTitle);
+
+        // Act
+        PressKey(running.Host);
+
+        // Assert
+        Assert.That(await WaitForTitleAsync(running.Action, "Pressed 1"), Is.True, "keyDown → setTitle");
+    }
+
+    [Test]
+    public async Task SetSettings_ANodePlugin_GetsTheStoredSettingsBackWithTheNextEvent()
+    {
+        // Arrange
+        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
+        using var runtime = NewRuntime();
+        using var catalog = NewCatalog(runtime);
+        await using var running = await StartNodePluginAsync(TestPluginScript, runtime, catalog);
+        await WaitForTitleAsync(running.Action, HelloTitle);
+        PressKey(running.Host);
+        await WaitForTitleAsync(running.Action, "Pressed 1");
+
+        // Act
+        PressKey(running.Host);
+
+        // Assert
+        Assert.That(await WaitForTitleAsync(running.Action, "Pressed 2"), Is.True, "settings round trip");
     }
 
     private const string PidTitleScript = """
@@ -170,38 +318,27 @@ public sealed class StreamDeckTests : IDisposable
         return null;
     }
 
-    [Test]
-    public async Task A_plugin_whose_process_dies_is_restarted_and_its_keys_come_back()
-    {
-        if (!IsNodeAvailable())
-        {
-            return;
-        }
+    private static readonly TimeSpan ShortRestartDelay = TimeSpan.FromMilliseconds(100);
 
-        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (_, _) => { }) { RestartDelays = [TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100)] };
-        using var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
-        catalog.Load();
-        var plugin = new FakeDevicePlugin();
-        runtime.DevicesProvider = () => plugin.Devices;
-        Assert.That(catalog.Install(PackPlugin(WritePlugin("plugin.js", script: PidTitleScript))).Error, Is.Null);
+    [Test]
+    public async Task OnProcessExited_APluginWhoseProcessDies_IsRestartedAndItsKeysComeBack()
+    {
+        // Arrange
+        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine");
+        using var runtime = NewRuntime(null, ShortRestartDelay, ShortRestartDelay);
+        using var catalog = NewCatalog(runtime);
         var changes = 0;
         catalog.Changed += (_, _) => Interlocked.Increment(ref changes);
-
-        using var store = new VariableStore();
-        await using var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
-        var reference = new ActionReference(PluginUuid, "Test", ActionUuid, "Test action", InputCapabilities.None, OutputCapabilities.None);
-        host.SetProfiles([new DeviceProfile("p1", "P", FakeDevicePlugin.DeviceId, [new ControlBinding("key.0", ProfileActionKind.Single, reference, new ControlAppearance(), [])])]);
-        await host.StartAsync(CancellationToken.None);
-        var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
-
-        var first = await WaitForTitleStartingAsync(action, "Hello ");
-        Assert.That(first, Is.Not.Null);
+        await using var running = await StartNodePluginAsync(PidTitleScript, runtime, catalog);
+        var first = await WaitForTitleStartingAsync(running.Action, "Hello ");
         Assert.That(catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus, Does.StartWith("Runs in its own process (pid"));
 
-        // The plugin's process dies: it's started again and told what's on the device.
-        System.Diagnostics.Process.GetProcessById(int.Parse(first!["Hello ".Length..], System.Globalization.CultureInfo.InvariantCulture)).Kill();
+        // Act (the plugin's process dies: it's started again and told what's on the device)
+        Process.GetProcessById(int.Parse(first!["Hello ".Length..], System.Globalization.CultureInfo.InvariantCulture)).Kill();
+        var second = await WaitForTitleStartingAsync(running.Action, "Hello ", not: first);
 
-        var second = await WaitForTitleStartingAsync(action, "Hello ", not: first);
+        // Assert
+        Assert.That(first, Is.Not.Null);
         Assert.That(second, Is.Not.Null);
         Assert.That(catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus, Does.Contain("restarted 1×"));
         Assert.That(changes >= 2, Is.True);
@@ -220,70 +357,113 @@ public sealed class StreamDeckTests : IDisposable
         """;
 
     [Test]
-    public async Task A_plugin_that_reads_its_arguments_by_position_connects_on_the_second_try()
+    public async Task Start_APluginThatReadsItsArgumentsByPosition_ConnectsOnTheSecondTry()
     {
-        if (!IsNodeAvailable())
-        {
-            return;
-        }
-
+        // Arrange
+        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine");
         var logs = new List<string>();
-        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (_, message) => { lock (logs) { logs.Add(message); } });
-        using var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
-        catalog.Load();
-        var plugin = new FakeDevicePlugin();
-        runtime.DevicesProvider = () => plugin.Devices;
-        Assert.That(catalog.Install(PackPlugin(WritePlugin("plugin.js", script: PositionalScript))).Error, Is.Null);
+        using var runtime = NewRuntime((_, message) => { lock (logs) { logs.Add(message); } });
+        using var catalog = NewCatalog(runtime);
 
-        using var store = new VariableStore();
-        await using var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
-        var reference = new ActionReference(PluginUuid, "Test", ActionUuid, "Test action", InputCapabilities.None, OutputCapabilities.None);
-        host.SetProfiles([new DeviceProfile("p1", "P", FakeDevicePlugin.DeviceId, [new ControlBinding("key.0", ProfileActionKind.Single, reference, new ControlAppearance(), [])])]);
-        await host.StartAsync(CancellationToken.None);
+        // Act
+        await using var running = await StartNodePluginAsync(PositionalScript, runtime, catalog);
 
-        var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
-        Assert.That(await WaitForTitleAsync(action, "Positional"), Is.True, string.Join(" | ", logs));
+        // Assert
+        Assert.That(await WaitForTitleAsync(running.Action, "Positional"), Is.True, string.Join(" | ", logs));
         lock (logs)
         {
             Assert.That(logs.Any(message => message.Contains("older StreamDock", StringComparison.Ordinal)), Is.True);
         }
     }
 
-    [Test]
-    public void A_StreamDock_knob_action_is_a_dial()
-    {
-        var knob = new StreamDeckActionManifest("a", "A", null, null, ["Knob", "Information"], [], null, true, true);
-        var both = new StreamDeckActionManifest("b", "B", null, null, ["Keypad", "Encoder"], [], null, true, true);
+    private static StreamDeckActionManifest ActionFor(params string[] controllers) =>
+        new("a", "A", null, null, controllers, [], null, true, true);
 
-        Assert.That(knob.SupportsEncoder, Is.True);
-        Assert.That(knob.EncoderController, Is.EqualTo("Knob"));
-        Assert.That(both.EncoderController, Is.EqualTo("Encoder"));
+    [Test]
+    public void SupportsEncoder_AKnobAction_IsADial()
+    {
+        // Arrange
+        var knob = ActionFor("Knob", "Information");
+
+        // Act
+        var supportsEncoder = knob.SupportsEncoder;
+
+        // Assert
+        Assert.That(supportsEncoder, Is.True);
     }
 
     [Test]
-    public async Task A_plugin_that_keeps_crashing_is_stopped_with_a_message()
+    public void EncoderController_AKnobAction_IsKnob()
     {
-        if (!IsNodeAvailable())
-        {
-            return;
-        }
+        // Arrange
+        var knob = ActionFor("Knob", "Information");
 
-        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (_, _) => { }) { RestartDelays = [TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(50)] };
-        using var catalog = new PluginCatalog(Path.Combine(_root, "plugins"), [new FakeDevicePlugin()], [], [], runtime);
-        catalog.Load();
-        catalog.Install(PackPlugin(WritePlugin("plugin.js", script: "process.exit(1);")));
+        // Act
+        var controller = knob.EncoderController;
 
+        // Assert
+        Assert.That(controller, Is.EqualTo("Knob"));
+    }
+
+    [Test]
+    public void EncoderController_AnActionWithBothKeypadAndEncoder_IsEncoder()
+    {
+        // Arrange
+        var both = ActionFor("Keypad", "Encoder");
+
+        // Act
+        var controller = both.EncoderController;
+
+        // Assert
+        Assert.That(controller, Is.EqualTo("Encoder"));
+    }
+
+    private static readonly TimeSpan CrashRestartDelay = TimeSpan.FromMilliseconds(50);
+
+    private async Task<(StreamDeckRuntime Runtime, PluginCatalog Catalog)> StartAPluginThatExitsAtOnce()
+    {
+        var runtime = NewRuntime(null, CrashRestartDelay, CrashRestartDelay);
+        var catalog = NewCatalog(runtime);
+        catalog.Install(PackPlugin(WritePlugin(PluginScriptName, script: "process.exit(1);")));
         for (var attempt = 0; attempt < 200 && runtime.ProblemOf(PluginUuid) is null; attempt++)
         {
             await Task.Delay(50);
         }
 
-        Assert.That(runtime.ProblemOf(PluginUuid), Does.Contain("stopped 3 times"));
-        Assert.That(catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus, Is.EqualTo(runtime.ProblemOf(PluginUuid)));
+        return (runtime, catalog);
+    }
 
-        // Disabling and enabling starts it fresh.
+    [Test]
+    public async Task ProblemOf_APluginThatKeepsCrashing_SaysItStoppedThreeTimes()
+    {
+        // Arrange
+        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine");
+        var (runtime, catalog) = await StartAPluginThatExitsAtOnce();
+        using var _ = runtime;
+        using var __ = catalog;
+
+        // Act
+        var problem = runtime.ProblemOf(PluginUuid);
+
+        // Assert
+        Assert.That(problem, Does.Contain("stopped 3 times"));
+        Assert.That(catalog.Entries.Single(entry => entry.Id == PluginUuid).ProcessStatus, Is.EqualTo(problem));
+    }
+
+    [Test]
+    public async Task SetEnabled_DisablingAndEnablingACrashedPlugin_StartsItFresh()
+    {
+        // Arrange
+        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine");
+        var (runtime, catalog) = await StartAPluginThatExitsAtOnce();
+        using var _ = runtime;
+        using var __ = catalog;
+
+        // Act
         catalog.SetEnabled(PluginUuid, false);
         catalog.SetEnabled(PluginUuid, true);
+
+        // Assert
         Assert.That(runtime.ProblemOf(PluginUuid), Is.Null);
     }
 
