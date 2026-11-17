@@ -28,6 +28,10 @@ public sealed class ViewTests
                 using var frame = window.CaptureRenderedFrame();
                 window.Close();
             }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                // A native control (the plugin settings web view) that needs COM in a mode the headless thread can't give it (Windows only).
+            }
             catch (Exception ex)
             {
                 failures.Add($"{type.Name}: {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
