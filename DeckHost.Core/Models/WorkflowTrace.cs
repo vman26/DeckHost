@@ -30,4 +30,8 @@ public sealed record WorkflowTrace(
     string? NodeId,
     WorkflowTraceKind Kind,
     string Detail,
-    DateTimeOffset Time);
+    DateTimeOffset Time)
+{
+    /// <summary>For a step that waits (a Wait node, the pause between Repeat rounds): how long, so the editor can fill the node as time passes.</summary>
+    public TimeSpan? Wait { get; init; }
+}

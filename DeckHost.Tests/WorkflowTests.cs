@@ -186,6 +186,116 @@ public sealed class WorkflowTests : IAsyncDisposable
     }
 
     [Test]
+    public async Task Repeat_can_take_its_count_from_a_variable()
+    {
+        _store.Publish(VariableKeys.UserVariable("rounds"), "3");
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Node("repeat", WorkflowNodeKinds.Repeat, (WorkflowKeys.Mode, WorkflowKeys.ModeVariable), (WorkflowKeys.Times, "Rounds")), Run("each", "a"), Run("done", "b")],
+            Links = [Link("t", "repeat"), Link("repeat", "each", WorkflowPorts.Each), Link("repeat", "done", WorkflowPorts.Done)],
+        });
+
+        await Click();
+        await WaitUntil(() => Ran().Count >= 4);
+
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "a", "a", "b" }));
+    }
+
+    [Test]
+    public async Task Repeat_while_a_variable_holds_checks_it_before_every_round_and_waits_between_rounds()
+    {
+        // The body counts "n" up; the loop runs while n is less than 3 (so three rounds), 30 ms apart.
+        await Start(new Workflow
+        {
+            Nodes =
+            [
+                Trigger("t", WorkflowTriggers.Down),
+                Node("repeat", WorkflowNodeKinds.Repeat, (WorkflowKeys.Mode, WorkflowKeys.ModeWhile), (WorkflowKeys.Name, "n"), (WorkflowKeys.Operation, WorkflowKeys.IsLess), (WorkflowKeys.Value, "3"), (WorkflowKeys.Interval, "30")),
+                Node("count", WorkflowNodeKinds.SetVariable, (WorkflowKeys.Name, "n"), (WorkflowKeys.Operation, WorkflowKeys.Add), (WorkflowKeys.Value, "1")),
+                Run("each", "a"),
+                Run("done", "b"),
+            ],
+            Links = [Link("t", "repeat"), Link("repeat", "count", WorkflowPorts.Each), Link("count", "each"), Link("repeat", "done", WorkflowPorts.Done)],
+        });
+        _store.Publish(VariableKeys.UserVariable("n"), "0");
+
+        await Click();
+        await WaitUntil(() => Ran().Count >= 4);
+
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "a", "a", "b" }));
+        var pauses = Traces().Where(static trace => trace.Wait is not null).ToList();
+        Assert.That(pauses, Has.Count.EqualTo(3), "a wait after each round, the last one before the condition ends the loop");
+        Assert.That(pauses[0].Wait, Is.EqualTo(TimeSpan.FromMilliseconds(30)));
+        Assert.That(pauses[0].NodeId, Is.EqualTo("repeat"));
+    }
+
+    [Test]
+    public async Task Repeat_until_a_variable_holds_stops_when_it_does()
+    {
+        await Start(new Workflow
+        {
+            Nodes =
+            [
+                Trigger("t", WorkflowTriggers.Down),
+                Node("repeat", WorkflowNodeKinds.Repeat, (WorkflowKeys.Mode, WorkflowKeys.ModeUntil), (WorkflowKeys.Name, "n"), (WorkflowKeys.Operation, WorkflowKeys.IsEqual), (WorkflowKeys.Value, "2")),
+                Node("count", WorkflowNodeKinds.SetVariable, (WorkflowKeys.Name, "n"), (WorkflowKeys.Operation, WorkflowKeys.Add), (WorkflowKeys.Value, "1")),
+                Run("each", "a"),
+                Run("done", "b"),
+            ],
+            Links = [Link("t", "repeat"), Link("repeat", "count", WorkflowPorts.Each), Link("count", "each"), Link("repeat", "done", WorkflowPorts.Done)],
+        });
+        _store.Publish(VariableKeys.UserVariable("n"), "0");
+
+        await Click();
+        await WaitUntil(() => Ran().Count >= 3);
+
+        Assert.That(Ran(), Is.EqualTo(new[] { "a", "a", "b" }));
+    }
+
+    [Test]
+    public async Task A_condition_that_never_changes_cannot_repeat_forever()
+    {
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Node("repeat", WorkflowNodeKinds.Repeat, (WorkflowKeys.Mode, WorkflowKeys.ModeWhile), (WorkflowKeys.Name, "forever"), (WorkflowKeys.Operation, WorkflowKeys.IsEmpty)), Run("done", "b")],
+            Links = [Link("t", "repeat"), Link("repeat", "done", WorkflowPorts.Done)],
+        });
+
+        await Click();
+        await WaitUntil(() => Traces().Any(static trace => trace.Kind is WorkflowTraceKind.Failed));
+
+        // The empty body makes each round free; the step limit or the round limit ends it.
+        Assert.That(Traces().Any(static trace => trace.Kind == WorkflowTraceKind.Failed), Is.True);
+    }
+
+    [Test]
+    public void A_repeat_node_says_what_it_does_in_one_line()
+    {
+        static string Line(params (string Key, string Value)[] settings) => WorkflowNodeTypes.Summarize(Node("r", WorkflowNodeKinds.Repeat, settings));
+
+        Assert.That(Line((WorkflowKeys.Count, "3")), Is.EqualTo("Repeat 3×"));
+        Assert.That(Line(), Is.EqualTo("Repeat 2×"), "a node from before the modes");
+        Assert.That(Line((WorkflowKeys.Mode, WorkflowKeys.ModeVariable), (WorkflowKeys.Times, "rounds"), (WorkflowKeys.Interval, "500")), Is.EqualTo("Repeat rounds×, every 500 ms"));
+        Assert.That(Line((WorkflowKeys.Mode, WorkflowKeys.ModeWhile), (WorkflowKeys.Name, "mode"), (WorkflowKeys.Value, "on")), Is.EqualTo("Repeat while mode = on"));
+        Assert.That(Line((WorkflowKeys.Mode, WorkflowKeys.ModeUntil), (WorkflowKeys.Name, "n"), (WorkflowKeys.Operation, WorkflowKeys.IsGreater), (WorkflowKeys.Value, "5"), (WorkflowKeys.Interval, "2000")), Is.EqualTo("Repeat until n > 5, every 2 s"));
+    }
+
+    [Test]
+    public async Task A_wait_says_how_long_it_is_in_its_trace()
+    {
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Node("wait", WorkflowNodeKinds.Wait, (WorkflowKeys.Milliseconds, "40")), Run("after", "a")],
+            Links = [Link("t", "wait"), Link("wait", "after")],
+        });
+
+        await Click();
+        await WaitUntil(() => Ran().Count == 1);
+
+        Assert.That(Traces().Single(static trace => trace is { NodeId: "wait", Wait: not null }).Wait, Is.EqualTo(TimeSpan.FromMilliseconds(40)));
+    }
+
+    [Test]
     public async Task Waits_do_not_block_the_device_and_a_second_press_can_stop_the_run()
     {
         await Start(new Workflow

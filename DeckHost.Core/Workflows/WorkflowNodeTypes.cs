@@ -115,10 +115,45 @@ public static class WorkflowNodeTypes
     public static WorkflowNodeType Repeat { get; } = new(
         WorkflowNodeKinds.Repeat,
         "Repeat",
-        "Runs Each time a number of times, one round after the other, then Done.",
+        "Runs Each time round after round, then Done: a number of times, as many as a variable says, or while / until a variable condition holds, with an optional wait between rounds.",
         0xFFEC4899,
         Contracts.Icons.Repeat,
-        [new(WorkflowKeys.Count, "Times", ActionSettingKind.Number, "2") { Range = new NumberRange(1, 100) }]);
+        [
+            new(WorkflowKeys.Mode, "Repeat", ActionSettingKind.Choice, WorkflowKeys.ModeCount, Options:
+            [
+                new(WorkflowKeys.ModeCount, "a number of times"),
+                new(WorkflowKeys.ModeVariable, "as many times as a variable says"),
+                new(WorkflowKeys.ModeWhile, "while a variable condition is true"),
+                new(WorkflowKeys.ModeUntil, "until a variable condition is true"),
+            ]),
+            new(WorkflowKeys.Count, "Times", ActionSettingKind.Number, "2") { Range = new NumberRange(1, 100), ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeCount) },
+            new(WorkflowKeys.Times, "Variable", Placeholder: "e.g. rounds", Description: "Its value (a whole number, up to 1000) is how many times. Set it with a Set variable node.")
+            {
+                ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeVariable),
+            },
+            new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode", Description: "Checked before every round; names ignore case. Stops after 10 000 rounds at most.")
+            {
+                ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil),
+            },
+            new(WorkflowKeys.Operation, "Is", ActionSettingKind.Choice, WorkflowKeys.IsEqual, Options:
+            [
+                new(WorkflowKeys.IsEqual, "equal to"),
+                new(WorkflowKeys.IsNotEqual, "not equal to"),
+                new(WorkflowKeys.IsGreater, "greater than"),
+                new(WorkflowKeys.IsLess, "less than"),
+                new(WorkflowKeys.Contains, "containing"),
+                new(WorkflowKeys.IsSet, "set (not empty)"),
+                new(WorkflowKeys.IsEmpty, "empty"),
+            ])
+            {
+                ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil),
+            },
+            new(WorkflowKeys.Value, "Value", Placeholder: "text or number")
+            {
+                ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil),
+            },
+            new(WorkflowKeys.Interval, "Wait between rounds", ActionSettingKind.Number, "0", Description: "0 runs the rounds right after each other. For while / until, the wait comes before the condition is checked again.") { Range = WaitRange },
+        ]);
 
     public static WorkflowNodeType SetVariable { get; } = new(
         WorkflowNodeKinds.SetVariable,
@@ -176,7 +211,7 @@ public static class WorkflowNodeTypes
                 _ => $"If {Or(settings.Get(WorkflowKeys.Name), "…")} {DescribeComparison(settings)}",
             },
             WorkflowNodeKinds.Toggle => "Toggle",
-            WorkflowNodeKinds.Repeat => $"Repeat {Math.Clamp(settings.GetInt(WorkflowKeys.Count, 2), 1, WorkflowKeys.MaxRepeat)}×",
+            WorkflowNodeKinds.Repeat => SummarizeRepeat(settings),
             WorkflowNodeKinds.SetVariable => settings.Get(WorkflowKeys.Operation, WorkflowKeys.Set) switch
             {
                 WorkflowKeys.Add => $"{Or(settings.Get(WorkflowKeys.Name), "…")} + {Or(settings.Get(WorkflowKeys.Value), "1")}",
@@ -187,6 +222,18 @@ public static class WorkflowNodeTypes
             },
             WorkflowNodeKinds.Stop => "Stop",
             _ => node.Kind,
+        };
+    }
+
+    private static string SummarizeRepeat(ActionSettings settings)
+    {
+        var every = Math.Clamp(settings.GetInt(WorkflowKeys.Interval, 0), 0, WorkflowKeys.MaxWaitMs) is > 0 and var ms ? $", every {WorkflowEngine.FormatDuration(ms)}" : string.Empty;
+        return settings.Get(WorkflowKeys.Mode, WorkflowKeys.ModeCount) switch
+        {
+            WorkflowKeys.ModeVariable => $"Repeat {Or(settings.Get(WorkflowKeys.Times), "…")}×{every}",
+            WorkflowKeys.ModeWhile => $"Repeat while {Or(settings.Get(WorkflowKeys.Name), "…")} {DescribeComparison(settings)}{every}",
+            WorkflowKeys.ModeUntil => $"Repeat until {Or(settings.Get(WorkflowKeys.Name), "…")} {DescribeComparison(settings)}{every}",
+            _ => $"Repeat {Math.Clamp(settings.GetInt(WorkflowKeys.Count, 2), 1, WorkflowKeys.MaxRepeat)}×{every}",
         };
     }
 

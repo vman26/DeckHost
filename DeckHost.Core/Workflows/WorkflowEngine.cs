@@ -158,7 +158,7 @@ public sealed class WorkflowEngine
             case WorkflowNodeKinds.Wait:
             {
                 var ms = Math.Clamp(settings.GetInt(WorkflowKeys.Milliseconds, 500), 0, WorkflowKeys.MaxWaitMs);
-                Trace(run, node.Id, WorkflowTraceKind.Node, $"Waiting {FormatDuration(ms)}");
+                Trace(run, node.Id, WorkflowTraceKind.Node, $"Waiting {FormatDuration(ms)}", ms > 0 ? TimeSpan.FromMilliseconds(ms) : null);
                 if (ms > 0 && Scheduler is { } schedule)
                 {
                     schedule(run.Input.DeviceId, TimeSpan.FromMilliseconds(ms), () => Post(run, () => Follow(run, node, WorkflowPorts.Next, done)));
@@ -191,19 +191,53 @@ public sealed class WorkflowEngine
 
             case WorkflowNodeKinds.Repeat:
             {
-                var count = Math.Clamp(settings.GetInt(WorkflowKeys.Count, 2), 1, WorkflowKeys.MaxRepeat);
+                var mode = settings.Get(WorkflowKeys.Mode, WorkflowKeys.ModeCount);
+                var interval = Math.Clamp(settings.GetInt(WorkflowKeys.Interval, 0), 0, WorkflowKeys.MaxWaitMs);
+
+                // A fixed number of rounds is known now; while / until ask before every round.
+                int? times = mode switch
+                {
+                    WorkflowKeys.ModeVariable => Math.Clamp((int)Math.Round(Number(ReadVariable(settings.Get(WorkflowKeys.Times)), 0)), 0, WorkflowKeys.MaxRepeat),
+                    WorkflowKeys.ModeWhile or WorkflowKeys.ModeUntil => null,
+                    _ => Math.Clamp(settings.GetInt(WorkflowKeys.Count, 2), 1, WorkflowKeys.MaxRepeat),
+                };
                 var round = 0;
+
+                bool Another() => times is { } fixedTimes
+                    ? round < fixedTimes
+                    : round < WorkflowKeys.MaxConditionRounds && Evaluate(settings) == (mode == WorkflowKeys.ModeWhile);
+
                 void Loop()
                 {
-                    if (round < count)
+                    if (Another())
                     {
                         round++;
-                        Trace(run, node.Id, WorkflowTraceKind.Node, $"Round {round} of {count}");
-                        Follow(run, node, WorkflowPorts.Each, Loop);
+                        Trace(run, node.Id, WorkflowTraceKind.Node, times is { } total ? $"Round {round} of {total}" : $"Round {round}");
+                        Follow(run, node, WorkflowPorts.Each, Pause);
                     }
                     else
                     {
+                        if (times is null && round >= WorkflowKeys.MaxConditionRounds)
+                        {
+                            Trace(run, node.Id, WorkflowTraceKind.Failed, $"Stopped after {WorkflowKeys.MaxConditionRounds} rounds.");
+                        }
+
                         Follow(run, node, WorkflowPorts.Done, done);
+                    }
+                }
+
+                // Between rounds (not after the last of a fixed number): wait, then ask again.
+                void Pause()
+                {
+                    var last = times is { } fixedTimes && round >= fixedTimes;
+                    if (interval > 0 && !last && Scheduler is { } schedule)
+                    {
+                        Trace(run, node.Id, WorkflowTraceKind.Node, $"Next round in {FormatDuration(interval)}", TimeSpan.FromMilliseconds(interval));
+                        schedule(run.Input.DeviceId, TimeSpan.FromMilliseconds(interval), () => Post(run, Loop));
+                    }
+                    else
+                    {
+                        Loop();
                     }
                 }
 
@@ -422,7 +456,7 @@ public sealed class WorkflowEngine
         }
     }
 
-    private void Trace(Run run, string? nodeId, WorkflowTraceKind kind, string detail)
+    private void Trace(Run run, string? nodeId, WorkflowTraceKind kind, string detail, TimeSpan? wait = null)
     {
         var handler = Traced;
         if (handler is null)
@@ -432,7 +466,7 @@ public sealed class WorkflowEngine
 
         try
         {
-            handler(new WorkflowTrace(run.Input.DeviceId, run.ProfileId, run.Input.ControlId, run.Id, nodeId, kind, detail, DateTimeOffset.Now));
+            handler(new WorkflowTrace(run.Input.DeviceId, run.ProfileId, run.Input.ControlId, run.Id, nodeId, kind, detail, DateTimeOffset.Now) { Wait = wait });
         }
         catch
         {

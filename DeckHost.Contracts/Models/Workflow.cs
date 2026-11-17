@@ -236,8 +236,32 @@ public static class WorkflowKeys
     /// <summary>Wait: how long, in milliseconds.</summary>
     public const string Milliseconds = "ms";
 
-    /// <summary>Repeat: how many times.</summary>
+    /// <summary>Repeat: how many times (<see cref="ModeCount"/>).</summary>
     public const string Count = "count";
+
+    /// <summary>Repeat: how the rounds are decided (<see cref="ModeCount"/>, <see cref="ModeVariable"/>, <see cref="ModeWhile"/>, <see cref="ModeUntil"/>).</summary>
+    public const string Mode = "mode";
+
+    /// <summary>A fixed number of rounds (<see cref="Count"/>); also what a Repeat node without a mode does.</summary>
+    public const string ModeCount = "count";
+
+    /// <summary>As many rounds as a variable's value (<see cref="Times"/>).</summary>
+    public const string ModeVariable = "variable";
+
+    /// <summary>Rounds as long as a variable condition holds (<see cref="Name"/>, <see cref="Operation"/>, <see cref="Value"/>), checked before each round.</summary>
+    public const string ModeWhile = "while";
+
+    /// <summary>Rounds until a variable condition holds, checked before each round.</summary>
+    public const string ModeUntil = "until";
+
+    /// <summary>Repeat (<see cref="ModeVariable"/>): the variable that holds the number of rounds.</summary>
+    public const string Times = "times";
+
+    /// <summary>Repeat: how long to wait between rounds, in milliseconds (0: none).</summary>
+    public const string Interval = "interval";
+
+    /// <summary>The most rounds a while / until Repeat runs (a condition that never changes can't run forever).</summary>
+    public const int MaxConditionRounds = 10_000;
 
     /// <summary>If: what to check (<see cref="CheckVariable"/>, <see cref="CheckApp"/>, <see cref="CheckTime"/>).</summary>
     public const string Check = "check";

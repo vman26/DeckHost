@@ -969,23 +969,31 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string CheckVariable` |  |
 | `const string Clear` |  |
 | `const string Contains` |  |
-| `const string Count` | Repeat: how many times. |
+| `const string Count` | Repeat: how many times (`ModeCount`). |
 | `const string Flip` |  |
 | `const string From` | If (time): from and to, "HH:mm" (may wrap past midnight). |
+| `const string Interval` | Repeat: how long to wait between rounds, in milliseconds (0: none). |
 | `const string IsEmpty` |  |
 | `const string IsEqual` |  |
 | `const string IsGreater` |  |
 | `const string IsLess` |  |
 | `const string IsNotEqual` |  |
 | `const string IsSet` |  |
+| `const int MaxConditionRounds` | The most rounds a while / until Repeat runs (a condition that never changes can't run forever). |
 | `const int MaxRepeat` | The most times a Repeat node runs. |
 | `const int MaxWaitMs` | The longest wait a node can have (ten minutes). |
 | `const string Milliseconds` | Wait: how long, in milliseconds. |
+| `const string Mode` | Repeat: how the rounds are decided (`ModeCount`, `ModeVariable`, `ModeWhile`, `ModeUntil`). |
+| `const string ModeCount` | A fixed number of rounds (`Count`); also what a Repeat node without a mode does. |
+| `const string ModeUntil` | Rounds until a variable condition holds, checked before each round. |
+| `const string ModeVariable` | As many rounds as a variable's value (`Times`). |
+| `const string ModeWhile` | Rounds as long as a variable condition holds (`Name`, `Operation`, `Value`), checked before each round. |
 | `const string Name` | If / Set variable: the variable's name. |
 | `const string On` | Trigger: which input (`WorkflowTriggers`). |
 | `const string Operation` | If: the comparison; Set variable: the operation. |
 | `const string Set` |  |
 | `const string Subtract` |  |
+| `const string Times` | Repeat (`ModeVariable`): the variable that holds the number of rounds. |
 | `const string To` |  |
 | `const string Value` |  |
 

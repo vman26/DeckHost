@@ -666,20 +666,28 @@
   DeckHost.Contracts.Models.WorkflowKeys.Count : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Flip : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.From : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Interval : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsEmpty : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsEqual : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsGreater : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsLess : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsNotEqual : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.IsSet : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.MaxConditionRounds : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxRepeat : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxWaitMs : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.Milliseconds : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Mode : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ModeCount : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ModeUntil : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ModeVariable : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ModeWhile : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Name : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.On : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Operation : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Set : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Subtract : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Times : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.To : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Value : System.String const
   DeckHost.Contracts.Models.WorkflowLink(System.String From, System.String Port, System.String To)
