@@ -154,7 +154,43 @@ public partial class PluginStoreViewModel : ViewModelBase
     /// <summary>Reports install results to the Plugin Manager's status line.</summary>
     public event Action<string, bool>? StatusReported;
 
-    public ObservableCollection<StoreItemViewModel> Items { get; } = [];
+    /// <summary>The plugins shown: the first <see cref="Shown"/> matches.</summary>
+    public BulkObservableCollection<StoreItemViewModel> Items { get; } = [];
+
+    /// <summary>How many cards a page of results has; <see cref="ShowMore"/> adds another page.</summary>
+    internal const int PageSize = 40;
+
+    private int _limit = PageSize;
+    private int _matchCount;
+    private System.Threading.CancellationTokenSource? _filterDelay;
+
+    /// <summary>How long typing has to pause before the list is filtered (zero: at once, for tests).</summary>
+    internal TimeSpan SearchDelay { get; set; } = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>How many plugins match the search and filters.</summary>
+    public int MatchCount
+    {
+        get => _matchCount;
+        private set
+        {
+            if (SetProperty(ref _matchCount, value))
+            {
+                OnPropertyChanged(nameof(HasMore));
+                OnPropertyChanged(nameof(ShowMoreLabel));
+            }
+        }
+    }
+
+    public bool HasMore => MatchCount > Items.Count;
+
+    public string ShowMoreLabel => $"Show more ({MatchCount - Items.Count} more)";
+
+    [RelayCommand]
+    private void ShowMore()
+    {
+        _limit += PageSize;
+        ApplyFilter(keepLimit: true);
+    }
 
     public IReadOnlyList<string> Sources { get; } =
         [AllSources, PluginStore.DeckHostSource, PluginStore.OpenActionSource, PluginStore.ElgatoArchiveSource];
@@ -170,7 +206,7 @@ public partial class PluginStoreViewModel : ViewModelBase
         {
             if (SetProperty(ref _searchText, value))
             {
-                ApplyFilter();
+                ScheduleFilter();
             }
         }
     }
@@ -413,23 +449,63 @@ public partial class PluginStoreViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedCategory));
     }
 
-    private void ApplyFilter()
+    /// <summary>Filters after typing has paused, so each keystroke doesn't rebuild the list.</summary>
+    private void ScheduleFilter()
     {
-        var search = SearchText.Trim();
-        Items.Clear();
-        foreach (var item in _all
-                     .Where(item => SelectedSource == AllSources || item.Entry.Source.StartsWith(SelectedSource, StringComparison.Ordinal))
-                     .Where(item => SelectedCategory == AllCategories || string.Equals(item.Category, SelectedCategory, StringComparison.CurrentCultureIgnoreCase))
-                     .Where(item => SelectedStatus == AllStatuses || (SelectedStatus == InstalledStatus) == item.IsInstalled)
-                     .Where(item => search.Length == 0 ||
-                                    item.Entry.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
-                                    (item.Entry.Author?.Contains(search, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
-                                    (item.Entry.Description?.Contains(search, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
-                                    item.Entry.Id.Contains(search, StringComparison.OrdinalIgnoreCase))
-                     .Take(500))
+        _filterDelay?.Cancel();
+        if (SearchDelay <= TimeSpan.Zero)
         {
-            Items.Add(item);
+            ApplyFilter();
+            return;
         }
+
+        var delay = _filterDelay = new System.Threading.CancellationTokenSource();
+        _ = Task.Delay(SearchDelay, delay.Token).ContinueWith(
+            task =>
+            {
+                if (!task.IsCanceled)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyFilter());
+                }
+            },
+            TaskScheduler.Default);
+    }
+
+    private void ApplyFilter(bool keepLimit = false)
+    {
+        _filterDelay?.Cancel();
+        if (!keepLimit)
+        {
+            _limit = PageSize;
+        }
+
+        var matches = Filter(_all, SearchText, SelectedSource, SelectedCategory, SelectedStatus);
+        MatchCount = matches.Count;
+        Items.ReplaceAll(matches.Take(_limit));
+        OnPropertyChanged(nameof(HasMore));
+        OnPropertyChanged(nameof(ShowMoreLabel));
+    }
+
+    /// <summary>
+    /// The plugins matching the source, category, status and search: every word of the search must
+    /// be in the name, author, description or id (ordinal, ignoring case, on a key built once per plugin).
+    /// </summary>
+    internal static List<StoreItemViewModel> Filter(IEnumerable<StoreItemViewModel> items, string search, string source, string category, string status)
+    {
+        var terms = (search ?? string.Empty).Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(static term => term.ToLowerInvariant()).ToArray();
+        var matches = new List<StoreItemViewModel>();
+        foreach (var item in items)
+        {
+            if ((source == AllSources || item.Entry.Source.StartsWith(source, StringComparison.Ordinal)) &&
+                (category == AllCategories || string.Equals(item.Category, category, StringComparison.CurrentCultureIgnoreCase)) &&
+                (status == AllStatuses || (status == InstalledStatus) == item.IsInstalled) &&
+                terms.All(term => item.SearchKey.Contains(term, StringComparison.Ordinal)))
+            {
+                matches.Add(item);
+            }
+        }
+
+        return matches;
     }
 
     private static HttpClient CreateMediaClient()
@@ -466,6 +542,11 @@ public partial class StoreItemViewModel : ViewModelBase
     }
 
     public StoreEntry Entry { get; }
+
+    private string? _searchKey;
+
+    /// <summary>Name, author, description and id in lower case, built once, for the search.</summary>
+    internal string SearchKey => _searchKey ??= string.Join('\n', Entry.Name, Entry.Author, Entry.Description, Entry.Id).ToLowerInvariant();
 
     public string Name => Entry.Name;
 

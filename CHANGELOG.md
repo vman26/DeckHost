@@ -44,6 +44,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- The plugin store's search no longer freezes while you type: it waits for you to pause, shows a
+  page of results at a time (**Show more** adds the next) and matches every word you type.
 - Add a USB device: a key you pressed to look at what the device sends could not be added with
   **Add key** afterwards (it counted as noise, and nothing said so). It can now, and when you press
   a key right before clicking Add key the page tells you to wait a moment.
