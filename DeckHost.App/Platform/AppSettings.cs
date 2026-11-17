@@ -120,7 +120,8 @@ public static class AppSettings
     /// <summary>Adds or removes DeckHost's sign-in entry for the current user (no admin rights needed).</summary>
     public static void SetStartAtLogin(bool enabled)
     {
-        var exe = Environment.ProcessPath;
+        // From an AppImage the process lives in a temporary mount: start the file the user has.
+        var exe = AppImage.Path ?? Environment.ProcessPath;
         if (OperatingSystem.IsWindows())
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);

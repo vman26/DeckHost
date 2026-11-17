@@ -122,3 +122,5 @@ With the certificate, `scripts/package.sh` signs every file for the hardened run
 ### Linux
 
 Linux packages aren't signed; `SHA256SUMS.txt` lets users check a download.
+
+The AppImage is built on the same job from the published folder (`scripts/package-appimage.sh`), with `appimagetool` downloaded by `scripts/get-appimagetool.sh`: a pinned version whose SHA-256 is recorded in the script (change both together after reading the release page). The job runs `--check-native` from the finished file, so a bridge that doesn't load inside the image fails the release. The glibc floor is the Ubuntu 22.04 runner's. The tar.gz stays the package of the in-app updater (`UpdateChecker.SelectAsset` offers the AppImage only to an AppImage, detected through `APPIMAGE`). Flatpak isn't built (it needs offline NuGet sources, OpenCV as its own module and holes in the sandbox for the host tools).

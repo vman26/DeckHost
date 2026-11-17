@@ -24,10 +24,15 @@
         var files = {
           win: asset("-win-x64-setup.exe") !== release.html_url ? asset("-win-x64-setup.exe") : asset("-win-x64.zip"),
           linux: asset("-linux-x64.tar.gz"),
+          appimage: asset("-linux-x86_64.appimage"),
           mac: asset("-osx-arm64.zip"),
         };
         document.getElementById("deckhost-win").href = files.win;
         document.getElementById("deckhost-linux").href = files.linux;
+        var appimage = document.getElementById("deckhost-appimage");
+        if (appimage) {
+          appimage.href = files.appimage;
+        }
         document.getElementById("deckhost-mac").href = files.mac;
 
         var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";

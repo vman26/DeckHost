@@ -145,6 +145,19 @@ public sealed class UpdateCheckerTests : IDisposable
     }
 
     [Test]
+    public void An_AppImage_is_offered_the_AppImage_and_only_when_the_release_has_one()
+    {
+        var release = Release(
+            ("DeckHost-1.4.0-linux-x64.tar.gz", "https://example.com/linux.tar.gz"),
+            ("DeckHost-1.4.0-linux-x86_64.AppImage", "https://example.com/linux.AppImage"));
+        Assert.That(UpdateChecker.SelectAsset(release, "linux-x64", appImage: true)?.Name, Is.EqualTo("DeckHost-1.4.0-linux-x86_64.AppImage"));
+        // The tar.gz stays the package for an unpacked install, and for an AppImage of an older release.
+        Assert.That(UpdateChecker.SelectAsset(release, "linux-x64")?.Name, Is.EqualTo("DeckHost-1.4.0-linux-x64.tar.gz"));
+        var older = Release(("DeckHost-1.4.0-linux-x64.tar.gz", "https://example.com/linux.tar.gz"));
+        Assert.That(UpdateChecker.SelectAsset(older, "linux-x64", appImage: true)?.Name, Is.EqualTo("DeckHost-1.4.0-linux-x64.tar.gz"));
+    }
+
+    [Test]
     public async Task Reports_problems_plainly()
     {
         var offline = new UpdateChecker(new HttpClient(new FakeHandler(_ => throw new HttpRequestException("No such host"))));

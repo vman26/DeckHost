@@ -128,6 +128,17 @@ Switch on **Use HTTPS (encrypted)** in the Web Deck's settings to serve the page
 
 Linux only lets programs open USB devices they're allowed to. `install.sh` installs a udev rule (`70-deckhost-mirabox.rules`) for the N4 Pro and Elgato devices; unplug the device and plug it in again afterwards. Without it, DeckHost lists the device as not connected.
 
+### Linux: AppImage
+
+The `.AppImage` is the same DeckHost in one file: `chmod +x DeckHost-*.AppImage`, then run it. It needs FUSE 2 (`libfuse2`; on a system without it, run it as `APPIMAGE_EXTRACT_AND_RUN=1 ./DeckHost-*.AppImage`). It can't install the device rule itself, which needs root, so take the rule out of the file once:
+
+```bash
+./DeckHost-*.AppImage --appimage-extract usr/share/doc/deckhost/70-deckhost-mirabox.rules
+sudo install -m 0644 squashfs-root/usr/share/doc/deckhost/70-deckhost-mirabox.rules /etc/udev/rules.d/
+```
+
+then unplug the device and plug it in again. DeckHost doesn't update an AppImage by itself (the file is a read-only image): the update screen offers the new `.AppImage` to download, and you replace the old file. **Start with the system** writes an entry that starts the file you ran.
+
 ## Checking the device support
 
 Run DeckHost with `--check-native`. It loads the N4 Pro's native support, lists the devices it finds and exits, without opening a window.

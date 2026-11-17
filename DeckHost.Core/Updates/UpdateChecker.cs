@@ -180,11 +180,18 @@ public sealed class UpdateChecker
 
     /// <summary>
     /// The package for a platform (<c>win-x64</c>, <c>linux-x64</c>, <c>osx-arm64</c>, ...):
-    /// Windows' setup program, else its zip; the Linux tar.gz; the macOS zip.
+    /// Windows' setup program, else its zip; the Linux tar.gz (the AppImage, when
+    /// <paramref name="appImage"/> says DeckHost runs from one and the release has it); the macOS zip.
     /// </summary>
-    public static ReleaseAsset? SelectAsset(ReleaseInfo release, string runtimeIdentifier)
+    public static ReleaseAsset? SelectAsset(ReleaseInfo release, string runtimeIdentifier, bool appImage = false)
     {
         ArgumentNullException.ThrowIfNull(release);
+        if (appImage && runtimeIdentifier == "linux-x64" &&
+            release.Assets.FirstOrDefault(asset => asset.Name.EndsWith("-linux-x86_64.AppImage", StringComparison.OrdinalIgnoreCase)) is { } image)
+        {
+            return image;
+        }
+
         var suffixes = runtimeIdentifier.StartsWith("win", StringComparison.Ordinal)
             ? new[] { $"-{runtimeIdentifier}-setup.exe", $"-{runtimeIdentifier}.zip" }
             : runtimeIdentifier.StartsWith("osx", StringComparison.Ordinal)

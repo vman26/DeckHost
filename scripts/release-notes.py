@@ -98,6 +98,7 @@ def package_names(version, files=()):
         "setup": find("-win-x64-setup.exe"),
         "windows": find("-win-x64.zip"),
         "linux": find("-linux-x64.tar.gz"),
+        "appimage": find("-linux-x86_64.AppImage"),
         "macos": find("-osx-arm64.zip"),
     }
 
@@ -111,7 +112,7 @@ def compose(text, tag, pull_requests="", files=()):
         "| System | File |\n"
         "|---|---|\n"
         f"| Windows | `{names['setup']}` (installer) or `{names['windows']}` |\n"
-        f"| Linux | `{names['linux']}` (run `install.sh` inside) |\n"
+        f"| Linux | `{names['linux']}` (run `install.sh` inside) or `{names['appimage']}` (no install; `chmod +x` and run) |\n"
         f"| macOS (Apple silicon) | `{names['macos']}` |\n\n"
         "DeckHost already installed? It offers this update by itself.",
         END_MARKER,

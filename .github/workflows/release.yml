@@ -12,6 +12,8 @@ on:
       - ".github/workflows/release.yml"
       - "packaging/**"
       - "scripts/package.sh"
+      - "scripts/package-appimage.sh"
+      - "scripts/get-appimagetool.sh"
       - "scripts/build-opencv-static.sh"
       - "Directory.Build.props"
       - "GitVersion.yml"
@@ -161,6 +163,23 @@ jobs:
           MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
           MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: scripts/package.sh ${{ matrix.rid }} "${{ steps.version.outputs.file }}" publish/DeckHost artifacts/release "${{ steps.version.outputs.display }}"
+
+      # The AppImage: the same published app in one file that runs on most distributions without
+      # installing (built on the oldest runner for its glibc floor). appimagetool is a pinned,
+      # checksum-verified download; desktop-file-utils is what it validates the menu entry with.
+      - name: AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq desktop-file-utils
+          scripts/get-appimagetool.sh "$RUNNER_TEMP/appimagetool"
+          APPIMAGETOOL="$RUNNER_TEMP/appimagetool" scripts/package-appimage.sh "${{ steps.version.outputs.file }}" publish/DeckHost artifacts/release
+
+      # Run from the finished file, not from the publish folder: the bridge must load inside the image.
+      - name: Check the AppImage (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 2
+        run: APPIMAGE_EXTRACT_AND_RUN=1 artifacts/release/*.AppImage --check-native
 
       # Windows signing, either way (no-op without the secrets):
       #  - a certificate file: the WINDOWS_CERTIFICATE secret (.pfx), signed by scripts/sign-windows.ps1;

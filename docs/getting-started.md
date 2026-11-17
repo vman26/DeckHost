@@ -8,6 +8,7 @@ Download the package for your system from the [Download](download.md) page (the 
 |---|---|---|
 | Windows 10/11 (x64) | `DeckHost-<version>-win-x64-setup.exe` | Run it. It installs for your user, without administrator rights, with a Start menu entry and an uninstaller. |
 | Linux (x64) | `DeckHost-<version>-linux-x64.tar.gz` | Unpack and run `./install.sh`. It installs to `~/.local/share/deckhost` with a menu entry, and (with sudo, once) the device rule that lets DeckHost use the N4 Pro and Stream Decks without root. `./install.sh --uninstall` removes it. |
+| Linux (x64), no install | `DeckHost-<version>-linux-x86_64.AppImage` | `chmod +x` it and run it. The device rule has to be installed once by hand: see [the AppImage notes](devices.md#linux-appimage). |
 | macOS 12+ (Apple Silicon) | `DeckHost-<version>-osx-arm64.zip` | Unzip and move **DeckHost.app** to Applications. |
 
 !!! warning "First start of an unsigned build"

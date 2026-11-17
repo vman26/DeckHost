@@ -12,6 +12,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Added
 
+- Linux: an AppImage next to the tar.gz, one file that runs without installing. DeckHost doesn't replace it
+  by itself: the update screen offers the new file, and **Start with the system** starts the file you ran.
 - Plugin updates: DeckHost checks the store for newer versions of your installed plugins, and you
   can update one, all, or let them update by themselves (Plugins page).
 - DeckHost can install its own updates by itself when it closes (Settings → Updates).

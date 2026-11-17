@@ -104,6 +104,26 @@ public class PlatformTests
     }
 
     [Test]
+    public void The_AppImage_variable_counts_only_when_it_names_a_file()
+    {
+        Assert.That(AppImage.Resolve(null), Is.Null);
+        Assert.That(AppImage.Resolve(" "), Is.Null);
+        Assert.That(AppImage.Resolve("/nowhere/DeckHost.AppImage"), Is.Null);
+        if (OperatingSystem.IsLinux())
+        {
+            var file = Path.GetTempFileName();
+            try
+            {
+                Assert.That(AppImage.Resolve(file), Is.EqualTo(file));
+            }
+            finally
+            {
+                File.Delete(file);
+            }
+        }
+    }
+
+    [Test]
     public void A_Mac_launch_agent_opens_the_app_bundle()
     {
         var bundled = AppSettings.MacLaunchAgent("/Applications/DeckHost.app/Contents/MacOS/DeckHost.App");

@@ -44,10 +44,11 @@ internal static class UpdateInstaller
 
     /// <summary>Whether this installation can be updated in place (else the download is shown).</summary>
     /// <remarks>
-    /// Only a released (self-contained) DeckHost: a development build (bin/Debug) is never swapped.
+    /// Only a released (self-contained) DeckHost: a development build (bin/Debug) is never swapped,
+    /// and neither is an AppImage (a read-only mount; the user replaces the file).
     /// </remarks>
     public static bool CanInstallInPlace => OperatingSystem.IsWindows() ||
-        (Environment.ProcessPath is not null && IsSelfContained && CanReplace(InstallLocation));
+        (!AppImage.IsActive && Environment.ProcessPath is not null && IsSelfContained && CanReplace(InstallLocation));
 
     private static bool IsSelfContained =>
         new[] { "libcoreclr.so", "libcoreclr.dylib", "coreclr.dll" }.Any(name => File.Exists(Path.Combine(AppContext.BaseDirectory, name)));

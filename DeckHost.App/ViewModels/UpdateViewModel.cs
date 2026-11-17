@@ -132,7 +132,7 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
     private async Task PrepareInBackgroundAsync()
     {
         if (!InstallAutomatically || !CanInstallAutomatically || IsInstalling || _pendingInstall is not null || Latest is not { } release ||
-            UpdateChecker.SelectAsset(release, UpdateChecker.CurrentRuntimeIdentifier) is not { } asset)
+            UpdateChecker.SelectAsset(release, UpdateChecker.CurrentRuntimeIdentifier, Platform.AppImage.IsActive) is not { } asset)
         {
             return;
         }
@@ -337,7 +337,7 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (UpdateChecker.SelectAsset(release, UpdateChecker.CurrentRuntimeIdentifier) is not { } asset)
+        if (UpdateChecker.SelectAsset(release, UpdateChecker.CurrentRuntimeIdentifier, Platform.AppImage.IsActive) is not { } asset)
         {
             Status = $"This release has no package for {UpdateChecker.CurrentRuntimeIdentifier}; the release page opens instead.";
             OpenReleasePage();

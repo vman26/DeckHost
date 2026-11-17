@@ -14,6 +14,7 @@ DeckHost is free and open source (GPL-3.0). It runs on Windows, Linux and macOS.
 |---|---|---|
 | **Windows** 10 and 11 (x64) | Setup program, or a zip to run without installing | <a id="deckhost-win" href="https://github.com/vman26/DeckHost/releases">Download</a> |
 | **Linux** (x64) | `.tar.gz`; unpack and run `DeckHost` ([device rule](devices.md#linux-the-device-rule)) | <a id="deckhost-linux" href="https://github.com/vman26/DeckHost/releases">Download</a> |
+| **Linux** (x64), no install | `.AppImage`; make it executable and run it ([notes](devices.md#linux-appimage)) | <a id="deckhost-appimage" href="https://github.com/vman26/DeckHost/releases">Download</a> |
 | **macOS** (Apple Silicon) | App in a zip | <a id="deckhost-mac" href="https://github.com/vman26/DeckHost/releases">Download</a> |
 
 All releases, release notes and pre-releases are on the

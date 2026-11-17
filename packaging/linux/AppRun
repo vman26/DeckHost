@@ -1,0 +1,4 @@
+#!/bin/sh
+# AppImage entry point: starts DeckHost from the mounted image.
+here="$(dirname "$(readlink -f "$0")")"
+exec "$here/usr/bin/DeckHost/DeckHost.App" "$@"
