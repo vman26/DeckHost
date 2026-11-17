@@ -50,6 +50,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   again (up to 5 times, with a wait) before going on.
 - Dropping a node into a link in the workflow editor moves the nodes after it to the right to
   make room.
+- Workflow variables can belong to one profile or one control (**Shared by** on Set variable, If,
+  Repeat and the variable trigger), not only to every workflow.
 - The workflow editor lists the variables that are set right now and can set one, to see why a
   workflow went the way it did.
 

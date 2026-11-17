@@ -21,7 +21,7 @@ A run starts at a **When** node and follows the links from left to right. A node
 | **Set variable** | Sets, adds to, subtracts from, flips (true/false) or clears a variable. |
 | **Stop** | Ends the run, including branches that are still waiting. |
 
-Variables are shared by all workflows (names ignore case). The **Show Variable** action shows one on a key. They start empty when DeckHost starts.
+Variables are shared by all workflows (names ignore case) unless a node says otherwise: **Set variable**, **If**, **Repeat** and the "variable changes" trigger have a **Shared by** setting: every workflow (the default), only this profile's workflows, or only this control's workflow, so two keys can both use a variable called `count` without touching each other. The editor lists scoped variables as `count (profile …)` and `count (key.3 on …)`. The **Show Variable** action shows one on a key. They start empty when DeckHost starts.
 
 ## Workflows that start by themselves
 

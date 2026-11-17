@@ -277,6 +277,18 @@ public static class WorkflowKeys
     /// <summary>The most times an action node is tried again.</summary>
     public const int MaxRetries = 5;
 
+    /// <summary>Set variable, If, Repeat and the "variable changes" trigger: whose variable it is (<see cref="ScopeGlobal"/>, <see cref="ScopeProfile"/> or <see cref="ScopeControl"/>).</summary>
+    public const string Scope = "scope";
+
+    /// <summary>Shared by every workflow (the default).</summary>
+    public const string ScopeGlobal = "global";
+
+    /// <summary>Shared by the workflows of the same profile only.</summary>
+    public const string ScopeProfile = "profile";
+
+    /// <summary>Only this control's workflow.</summary>
+    public const string ScopeControl = "control";
+
     /// <summary>Trigger (timer): the seconds between runs.</summary>
     public const string Every = "every";
 

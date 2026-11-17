@@ -176,7 +176,7 @@ public sealed class WorkflowEngine
 
             case WorkflowNodeKinds.If:
             {
-                var yes = Evaluate(settings);
+                var yes = Evaluate(settings, run.Scope);
                 Trace(run, node.Id, WorkflowTraceKind.Node, yes ? "Yes" : "No");
                 Follow(run, node, yes ? WorkflowPorts.Yes : WorkflowPorts.No, done);
                 break;
@@ -200,7 +200,7 @@ public sealed class WorkflowEngine
                 // A fixed number of rounds is known now; while / until ask before every round.
                 int? times = mode switch
                 {
-                    WorkflowKeys.ModeVariable => Math.Clamp((int)Math.Round(Number(ReadVariable(settings.Get(WorkflowKeys.Times)), 0)), 0, WorkflowKeys.MaxRepeat),
+                    WorkflowKeys.ModeVariable => Math.Clamp((int)Math.Round(Number(ReadVariable(settings.Get(WorkflowKeys.Times), settings, run.Scope), 0)), 0, WorkflowKeys.MaxRepeat),
                     WorkflowKeys.ModeWhile or WorkflowKeys.ModeUntil => null,
                     _ => Math.Clamp(settings.GetInt(WorkflowKeys.Count, 2), 1, WorkflowKeys.MaxRepeat),
                 };
@@ -208,7 +208,7 @@ public sealed class WorkflowEngine
 
                 bool Another() => times is { } fixedTimes
                     ? round < fixedTimes
-                    : round < WorkflowKeys.MaxConditionRounds && Evaluate(settings) == (mode == WorkflowKeys.ModeWhile);
+                    : round < WorkflowKeys.MaxConditionRounds && Evaluate(settings, run.Scope) == (mode == WorkflowKeys.ModeWhile);
 
                 void Loop()
                 {
@@ -249,7 +249,7 @@ public sealed class WorkflowEngine
             }
 
             case WorkflowNodeKinds.SetVariable:
-                Trace(run, node.Id, WorkflowTraceKind.Node, Apply(settings));
+                Trace(run, node.Id, WorkflowTraceKind.Node, Apply(settings, run.Scope));
                 Follow(run, node, WorkflowPorts.Next, done);
                 break;
 
@@ -378,7 +378,7 @@ public sealed class WorkflowEngine
     }
 
     /// <summary>The answer of an If node.</summary>
-    internal bool Evaluate(ActionSettings settings)
+    internal bool Evaluate(ActionSettings settings, WorkflowScope? scope = null)
     {
         switch (settings.Get(WorkflowKeys.Check, WorkflowKeys.CheckVariable))
         {
@@ -409,7 +409,7 @@ public sealed class WorkflowEngine
                     return false;
                 }
 
-                var current = ReadVariable(name);
+                var current = ReadVariable(name, settings, scope);
                 var expected = settings.Get(WorkflowKeys.Value);
                 return settings.Get(WorkflowKeys.Operation, WorkflowKeys.IsEqual) switch
                 {
@@ -426,7 +426,7 @@ public sealed class WorkflowEngine
     }
 
     /// <summary>What a Set variable node does; returns a line for the trace.</summary>
-    internal string Apply(ActionSettings settings)
+    internal string Apply(ActionSettings settings, WorkflowScope? scope = null)
     {
         var name = settings.Get(WorkflowKeys.Name);
         if (name.Length == 0)
@@ -434,7 +434,7 @@ public sealed class WorkflowEngine
             return "No variable name.";
         }
 
-        var current = ReadVariable(name);
+        var current = ReadVariable(name, settings, scope);
         var value = settings.Get(WorkflowKeys.Value);
         var result = settings.Get(WorkflowKeys.Operation, WorkflowKeys.Set) switch
         {
@@ -445,12 +445,16 @@ public sealed class WorkflowEngine
             _ => value,
         };
 
-        _variables.Publish(VariableKeys.UserVariable(name), result);
+        _variables.Publish(WorkflowScopes.KeyOf(settings, name, scope), result);
         return $"{name.Trim()} = {(result.Length == 0 ? "(empty)" : result)}";
     }
 
     public string ReadVariable(string name) =>
         _variables.TryGetValue<string>(VariableKeys.UserVariable(name), out var value) ? value ?? string.Empty : string.Empty;
+
+    /// <summary>A variable's value for a node: global unless the node's scope setting says profile or control.</summary>
+    public string ReadVariable(string name, ActionSettings settings, WorkflowScope? scope) =>
+        _variables.TryGetValue<string>(WorkflowScopes.KeyOf(settings, name, scope), out var value) ? value ?? string.Empty : string.Empty;
 
     /// <summary>Where a Toggle node keeps which output is next.</summary>
     public static string ToggleKey(string deviceId, string controlId, string nodeId) =>
@@ -545,6 +549,8 @@ public sealed class WorkflowEngine
         public (string DeviceId, string ControlId, string TriggerId) Key { get; } = key;
 
         public string ProfileId { get; } = profileId;
+
+        public WorkflowScope Scope => new(ProfileId, Input.DeviceId, Input.ControlId);
 
         public Workflow Workflow { get; } = workflow;
 

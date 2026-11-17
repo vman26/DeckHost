@@ -25,6 +25,21 @@ public static class WorkflowEvents
         return wanted.Length == 0 || string.Equals(wanted.Trim(), (value ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>The same, for the workflow on one control: a trigger node's scope decides which variable it means.</summary>
+    public static bool MatchesVariable(WorkflowNode node, string variableKey, string value, WorkflowScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var settings = node.EffectiveSettings;
+        var name = settings.Get(WorkflowKeys.Name);
+        if (name.Trim().Length == 0 || !string.Equals(WorkflowScopes.KeyOf(settings, name, scope), variableKey, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var wanted = settings.Get(WorkflowKeys.Value);
+        return wanted.Length == 0 || string.Equals(wanted.Trim(), (value ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Whether an "app comes to the front" trigger node is about this app (part of its name; an empty setting matches no app).</summary>
     public static bool MatchesApp(WorkflowNode node, string app)
     {

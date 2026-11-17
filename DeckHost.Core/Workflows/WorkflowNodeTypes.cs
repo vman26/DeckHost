@@ -19,6 +19,18 @@ public static class WorkflowNodeTypes
 {
     private static readonly NumberRange WaitRange = new(0, 10_000, 50) { Unit = "ms" };
 
+    /// <summary>Whose variable a node means: shared by everything, this profile's, or this control's.</summary>
+    private static ActionSettingDefinition ScopeSetting(SettingCondition? showWhen) =>
+        new(WorkflowKeys.Scope, "Shared by", ActionSettingKind.Choice, WorkflowKeys.ScopeGlobal, "Every workflow (global), only the workflows of this profile, or only this control's workflow.", Options:
+        [
+            new(WorkflowKeys.ScopeGlobal, "every workflow"),
+            new(WorkflowKeys.ScopeProfile, "this profile's workflows"),
+            new(WorkflowKeys.ScopeControl, "this control only"),
+        ])
+        {
+            ShowWhen = showWhen,
+        };
+
     public static WorkflowNodeType Trigger { get; } = new(
         WorkflowNodeKinds.Trigger,
         "When",
@@ -50,6 +62,7 @@ public static class WorkflowNodeTypes
             {
                 ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.VariableChanged),
             },
+            ScopeSetting(new(WorkflowKeys.On, WorkflowTriggers.VariableChanged)),
             new(WorkflowKeys.Value, "Changes to", Placeholder: "any value", Description: "Leave empty to start on every change.")
             {
                 ShowWhen = new(WorkflowKeys.On, WorkflowTriggers.VariableChanged),
@@ -108,6 +121,7 @@ public static class WorkflowNodeTypes
             {
                 ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckVariable),
             },
+            ScopeSetting(new(WorkflowKeys.Check, WorkflowKeys.CheckVariable)),
             new(WorkflowKeys.Operation, "Is", ActionSettingKind.Choice, WorkflowKeys.IsEqual, Options:
             [
                 new(WorkflowKeys.IsEqual, "equal to"),
@@ -170,6 +184,7 @@ public static class WorkflowNodeTypes
             {
                 ShowWhen = new(WorkflowKeys.Mode, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil),
             },
+            ScopeSetting(new(WorkflowKeys.Mode, WorkflowKeys.ModeVariable, WorkflowKeys.ModeWhile, WorkflowKeys.ModeUntil)),
             new(WorkflowKeys.Operation, "Is", ActionSettingKind.Choice, WorkflowKeys.IsEqual, Options:
             [
                 new(WorkflowKeys.IsEqual, "equal to"),
@@ -198,6 +213,7 @@ public static class WorkflowNodeTypes
         Contracts.Icons.Variable,
         [
             new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode"),
+            ScopeSetting(null),
             new(WorkflowKeys.Operation, "Do", ActionSettingKind.Choice, WorkflowKeys.Set, Options:
             [
                 new(WorkflowKeys.Set, "Set to"),

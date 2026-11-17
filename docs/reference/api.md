@@ -83,8 +83,10 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string SwitchState` | A Multi Action Switch's set that the next press runs (`First` or `Second`). |
 | `const string WorkflowState` | Prefix of a workflow's own state under a control (e.g. which output a Toggle node takes next). |
 | `static string Control(string deviceId, string controlId)` | `devices.{deviceId}.{controlId}.` |
+| `static string ControlVariable(string deviceId, string controlId, string name)` | `vars.control\|{deviceId}\|{controlId}\|{name}`: a variable that belongs to one control's workflow. |
 | `static string Device(string deviceId)` | `devices.{deviceId}.` |
 | `static string For(string deviceId, string controlId, string suffix)` |  |
+| `static string ProfileVariable(string profileId, string name)` | `vars.profile\|{profileId}\|{name}`: a variable that only the workflows of one profile share. The `\|` keeps the parts apart (device and profile ids contain dots) and the key still starts with `vars.`, like every variable workflows set. |
 | `static string UserVariable(string name)` | `vars.{name}`: a variable that workflows set and check (names ignore case). |
 
 ## DeckHost.Contracts.Enums
@@ -999,6 +1001,10 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Operation` | If: the comparison; Set variable: the operation. |
 | `const string Retries` | Action: how many more times to try when it did not run (0 to `MaxRetries`). |
 | `const string RetryDelay` | Action: the wait between tries, in milliseconds. |
+| `const string Scope` | Set variable, If, Repeat and the "variable changes" trigger: whose variable it is (`ScopeGlobal`, `ScopeProfile` or `ScopeControl`). |
+| `const string ScopeControl` | Only this control's workflow. |
+| `const string ScopeGlobal` | Shared by every workflow (the default). |
+| `const string ScopeProfile` | Shared by the workflows of the same profile only. |
 | `const string Set` |  |
 | `const string Subtract` |  |
 | `const string Times` | Repeat (`ModeVariable`): the variable that holds the number of rounds. |

@@ -693,6 +693,10 @@
   DeckHost.Contracts.Models.WorkflowKeys.Operation : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Retries : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.RetryDelay : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Scope : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ScopeControl : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ScopeGlobal : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.ScopeProfile : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Set : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Subtract : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Times : System.String const
@@ -771,6 +775,7 @@
   DeckHost.Contracts.VariableKeys.AppearanceTile : System.String const
   DeckHost.Contracts.VariableKeys.AppearanceTileStyle : System.String const
   DeckHost.Contracts.VariableKeys.Control(System.String deviceId, System.String controlId) : System.String
+  DeckHost.Contracts.VariableKeys.ControlVariable(System.String deviceId, System.String controlId, System.String name) : System.String
   DeckHost.Contracts.VariableKeys.Counter : System.String const
   DeckHost.Contracts.VariableKeys.Device(System.String deviceId) : System.String
   DeckHost.Contracts.VariableKeys.ExecutionCount : System.String const
@@ -783,6 +788,7 @@
   DeckHost.Contracts.VariableKeys.LastError : System.String const
   DeckHost.Contracts.VariableKeys.LastEvent : System.String const
   DeckHost.Contracts.VariableKeys.LastValue : System.String const
+  DeckHost.Contracts.VariableKeys.ProfileVariable(System.String profileId, System.String name) : System.String
   DeckHost.Contracts.VariableKeys.Status : System.String const
   DeckHost.Contracts.VariableKeys.SwitchState : System.String const
   DeckHost.Contracts.VariableKeys.UserVariable(System.String name) : System.String

@@ -105,6 +105,21 @@ public sealed class WorkflowEventTests : IAsyncDisposable
     }
 
     [Test]
+    public async Task A_variable_trigger_can_listen_to_a_control_scoped_variable_of_its_own_control_only()
+    {
+        var own = Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "x"), (WorkflowKeys.Scope, WorkflowKeys.ScopeControl)));
+        await Start(new DeviceProfile("profile", "Profile", Device, [Binding(own, "key.0")]));
+
+        await Publish(VariableKeys.ControlVariable(Device, "key.1", "x"), "1");
+        Assert.That(Ran(), Is.Empty, "another control's variable");
+        await Publish(VariableKeys.UserVariable("x"), "1");
+        Assert.That(Ran(), Is.Empty, "the global one");
+
+        await Publish(VariableKeys.ControlVariable(Device, "key.0", "x"), "1");
+        Assert.That(Ran(), Is.EqualTo(new[] { "a" }));
+    }
+
+    [Test]
     public async Task A_variable_trigger_can_wait_for_one_value_and_ignores_a_value_that_did_not_change()
     {
         await Start(Flow(Trigger(WorkflowTriggers.VariableChanged, (WorkflowKeys.Name, "mode"), (WorkflowKeys.Value, "ON"))));

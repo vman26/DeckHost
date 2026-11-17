@@ -251,7 +251,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     public IReadOnlyList<KeyValuePair<string, string>> UserVariables() =>
         _variableStore is State.VariableStore store
             ? [.. store.Snapshot("vars.")
-                .Select(static pair => new KeyValuePair<string, string>(pair.Key["vars.".Length..], pair.Value?.ToString() ?? string.Empty))
+                .Select(static pair => new KeyValuePair<string, string>(WorkflowScopes.Describe(pair.Key), pair.Value?.ToString() ?? string.Empty))
                 .OrderBy(static pair => pair.Key, StringComparer.Ordinal)]
             : [];
 
@@ -808,7 +808,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     // ---------------------------------------------------------------- event triggers
 
     /// <summary>Starts the workflows of the shown profiles that listen to an event (and whose trigger node accepts it).</summary>
-    private void FireEvent(string trigger, Func<WorkflowNode, bool>? accept, string? onlyDeviceId = null)
+    private void FireEvent(string trigger, Func<WorkflowNode, WorkflowScope, bool>? accept, string? onlyDeviceId = null)
     {
         if (_actionRouter is not ActionRouter router)
         {
@@ -842,7 +842,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                     continue;
                 }
 
-                if (router.Workflows.Fire(profile, binding, trigger, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Press, 1), _actionHost, accept))
+                var scope = new WorkflowScope(profile.Id, deviceId, binding.ControlId);
+                if (router.Workflows.Fire(profile, binding, trigger, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Press, 1), _actionHost, accept is null ? null : node => accept(node, scope)))
                 {
                     _dirtyDevices.Add(deviceId);
                 }
@@ -861,11 +862,11 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         _eventValues[key] = value;
         if (key == VariableKeys.ForegroundApp)
         {
-            FireEvent(WorkflowTriggers.AppInFront, node => WorkflowEvents.MatchesApp(node, value));
+            FireEvent(WorkflowTriggers.AppInFront, (node, _) => WorkflowEvents.MatchesApp(node, value));
         }
         else
         {
-            FireEvent(WorkflowTriggers.VariableChanged, node => WorkflowEvents.MatchesVariable(node, key, value));
+            FireEvent(WorkflowTriggers.VariableChanged, (node, scope) => WorkflowEvents.MatchesVariable(node, key, value, scope));
         }
     }
 

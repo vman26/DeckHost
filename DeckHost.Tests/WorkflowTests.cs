@@ -591,6 +591,63 @@ public sealed class WorkflowTests : IAsyncDisposable
     }
 
     [Test]
+    public void Variables_can_belong_to_a_profile_or_to_one_control_instead_of_to_everyone()
+    {
+        using var store = new VariableStore();
+        var engine = new WorkflowEngine(store, (_, _, _, _) => true);
+        var one = new WorkflowScope("p1", Device, "key.0");
+        var two = new WorkflowScope("p2", Device, "key.1");
+
+        string Set(string scope, WorkflowScope where, string value) =>
+            engine.Apply(Settings((WorkflowKeys.Name, "Mode"), (WorkflowKeys.Scope, scope), (WorkflowKeys.Value, value)), where);
+        string Read(string scope, WorkflowScope where) =>
+            engine.ReadVariable("mode", Settings((WorkflowKeys.Scope, scope)), where);
+
+        Set(WorkflowKeys.ScopeGlobal, one, "everyone");
+        Set(WorkflowKeys.ScopeProfile, one, "profile one");
+        Set(WorkflowKeys.ScopeControl, one, "control one");
+        Set(WorkflowKeys.ScopeProfile, two, "profile two");
+
+        Assert.That(Read(WorkflowKeys.ScopeGlobal, two), Is.EqualTo("everyone"), "global is shared");
+        Assert.That(Read(WorkflowKeys.ScopeProfile, one), Is.EqualTo("profile one"));
+        Assert.That(Read(WorkflowKeys.ScopeProfile, two), Is.EqualTo("profile two"), "another profile has its own");
+        Assert.That(Read(WorkflowKeys.ScopeControl, one), Is.EqualTo("control one"));
+        Assert.That(Read(WorkflowKeys.ScopeControl, two), Is.Empty, "another control has none yet");
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Name, "mode"), (WorkflowKeys.Scope, WorkflowKeys.ScopeProfile), (WorkflowKeys.Value, "profile one")), one), Is.True);
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Name, "mode"), (WorkflowKeys.Scope, WorkflowKeys.ScopeProfile), (WorkflowKeys.Value, "profile one")), two), Is.False);
+        Assert.That(engine.Evaluate(Settings((WorkflowKeys.Name, "mode"), (WorkflowKeys.Value, "everyone")), two), Is.True, "no scope setting means global");
+    }
+
+    [Test]
+    public async Task A_control_scoped_variable_set_by_a_running_workflow_stays_with_its_control()
+    {
+        var set = (string value) => new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Node("s", WorkflowNodeKinds.SetVariable, (WorkflowKeys.Name, "who"), (WorkflowKeys.Scope, WorkflowKeys.ScopeControl), (WorkflowKeys.Value, value))],
+            Links = [Link("t", "s")],
+        };
+        _host.SetProfiles([new DeviceProfile("profile", "Profile", Device, [Binding(set("first")), Binding(set("second")) with { ControlId = "key.1" }])]);
+        await _host.StartAsync(CancellationToken.None);
+        await _host.WhenIdleAsync();
+
+        await Input(InputCapabilities.Press);
+        _host.SimulateInput(new DeviceInputEvent(Device, "key.1", InputCapabilities.Press, 1));
+        await _host.WhenIdleAsync();
+
+        Assert.That(_store.TryGetValue<string>(VariableKeys.ControlVariable(Device, "key.0", "who"), out var a) ? a : null, Is.EqualTo("first"));
+        Assert.That(_store.TryGetValue<string>(VariableKeys.ControlVariable(Device, "key.1", "who"), out var b) ? b : null, Is.EqualTo("second"));
+        Assert.That(_store.TryGetValue<string>(VariableKeys.UserVariable("who"), out _), Is.False, "nothing leaked into the global one");
+    }
+
+    [Test]
+    public void Scoped_variables_are_listed_with_where_they_belong()
+    {
+        Assert.That(WorkflowScopes.Describe(VariableKeys.UserVariable("Mode")), Is.EqualTo("mode"));
+        Assert.That(WorkflowScopes.Describe(VariableKeys.ProfileVariable("p1", "Mode")), Is.EqualTo("mode (profile p1)"));
+        Assert.That(WorkflowScopes.Describe(VariableKeys.ControlVariable("mirabox.n4pro", "key.3", "Mode")), Is.EqualTo("mode (key.3 on mirabox.n4pro)"));
+    }
+
+    [Test]
     public void A_workflow_binding_survives_the_profile_file()
     {
         var options = new JsonSerializerOptions
