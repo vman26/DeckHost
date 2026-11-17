@@ -31,6 +31,7 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
     private readonly Action<Action> _post;
     private readonly Func<DateTimeOffset> _clock;
     private readonly List<(DateTimeOffset Time, byte[] Report)> _recent = [];
+    private byte[]? _restingReport;
     private readonly List<byte[]> _learnIdle = [];
     private readonly List<byte[]> _learnActive = [];
     private IDisposable? _listener;
@@ -146,6 +147,7 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
         _listener?.Dispose();
         _listener = null;
         _recent.Clear();
+        _restingReport = null;
         _reportCount = 0;
         LastReport = string.Empty;
         OnPropertyChanged(nameof(ReportInfo));
@@ -170,6 +172,7 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
         var now = _clock();
         _recent.Add((now, report));
         _recent.RemoveAll(entry => now - entry.Time > IdleWindow);
+        _restingReport = report;
         _reportCount++;
         LastReport = string.Join(' ', report.Select(static value => value.ToString("X2", CultureInfo.InvariantCulture)));
         OnPropertyChanged(nameof(ReportInfo));
@@ -229,9 +232,19 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // What came in just before is the device at rest.
+        // What came in just before is the device at rest. Reports are only dropped when a new one
+        // arrives, so drop the old ones here too: a key pressed a few seconds ago to look at the
+        // reports would otherwise count as noise and could not be added. With nothing recent, the
+        // latest report (a device that only sends when something changes) is the resting state.
+        var now = _clock();
+        _recent.RemoveAll(entry => now - entry.Time > IdleWindow);
         _learnIdle.Clear();
         _learnIdle.AddRange(_recent.Select(static entry => entry.Report));
+        if (_learnIdle.Count == 0 && _restingReport is not null)
+        {
+            _learnIdle.Add(_restingReport);
+        }
+
         _learnActive.Clear();
         _learning = mode;
         Status = prompt;
@@ -242,8 +255,10 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
     {
         if (_learning != LearnMode.None)
         {
-            // What the user did for this control isn't "the device at rest" for the next one.
+            // What the user did for this control isn't "the device at rest" for the next one (the
+            // latest report is the pressed key: the release that follows becomes the resting one).
             _recent.Clear();
+            _restingReport = null;
         }
 
         _learning = LearnMode.None;
@@ -285,10 +300,42 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
                 StopLearning();
                 Rebuild();
                 break;
+            case LearnMode.Key or LearnMode.KnobPress when ChangedOnlyInNoise(report):
+                // Something changed, but in bits that moved just before: the key itself, pressed
+                // to look at the reports a moment ago. Learning goes on (a stream of changing
+                // values would show this for every report); Cancel and Add key starts over.
+                Status = "That looks like the key you pressed just before. Let go, wait a few seconds and try again: click Cancel, then Add key, then press the key.";
+                break;
             case LearnMode.Knob when _learnActive.Count >= KnobReports:
                 FinishKnob();
                 break;
         }
+    }
+
+    /// <summary>The report differs from the device at rest, but only in bits that moved during the rest window.</summary>
+    private bool ChangedOnlyInNoise(byte[] report)
+    {
+        // A few reports at rest are a key pressed and let go; more is a device that streams values.
+        if (_learnIdle.Count is < 2 or > 4)
+        {
+            return false;
+        }
+
+        var rest = _learnIdle.LastOrDefault(candidate => candidate.Length == report.Length && candidate[0] == report[0]);
+        if (rest is null)
+        {
+            return false;
+        }
+
+        for (var index = 1; index < report.Length; index++)
+        {
+            if (report[index] != rest[index])
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void FinishKnob()

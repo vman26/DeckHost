@@ -34,6 +34,82 @@ public sealed class DeviceCreatorTests : IDisposable
     }
 
     [Test]
+    public void A_key_pressed_to_look_at_the_reports_can_still_be_added_afterwards()
+    {
+        // The user presses the key to watch What it sends, then takes a while to click Add key.
+        var now = DateTimeOffset.UtcNow;
+        using var plugin = new HidDevicePlugin(_folder);
+        var source = new FakeSource();
+        using var creator = new DeviceCreatorViewModel(plugin, source, static action => action(), () => now);
+        creator.SelectedHardware = creator.Hardware.Single();
+        void Send(params byte[] report) => source.Report!(report);
+        Send(1, 0, 0, 0);
+        Send(1, 0x01, 0, 0);
+        Send(1, 0, 0, 0);
+
+        now += TimeSpan.FromSeconds(10);
+        creator.AddKeyCommand.Execute(null);
+        Send(1, 0x01, 0, 0);
+
+        Assert.That(creator.Controls.Select(static control => control.Name), Is.EqualTo(new[] { "Key 1" }));
+        Assert.That(creator.Status, Does.StartWith("Added Key 1"));
+    }
+
+    [Test]
+    public void A_key_that_is_pressed_right_before_Add_key_asks_to_wait_and_try_again()
+    {
+        var now = DateTimeOffset.UtcNow;
+        using var plugin = new HidDevicePlugin(_folder);
+        var source = new FakeSource();
+        using var creator = new DeviceCreatorViewModel(plugin, source, static action => action(), () => now);
+        creator.SelectedHardware = creator.Hardware.Single();
+        void Send(params byte[] report) => source.Report!(report);
+        Send(1, 0, 0, 0);
+        Send(1, 0x01, 0, 0);
+        Send(1, 0, 0, 0);
+
+        creator.AddKeyCommand.Execute(null);
+        Send(1, 0x01, 0, 0);
+
+        Assert.That(creator.Controls, Is.Empty);
+        Assert.That(creator.Status, Does.Contain("try again"));
+
+        // After letting go and a pause the same key is learned.
+        Send(1, 0, 0, 0);
+        now += TimeSpan.FromSeconds(5);
+        creator.CancelLearningCommand.Execute(null);
+        creator.AddKeyCommand.Execute(null);
+        Send(1, 0x01, 0, 0);
+        Assert.That(creator.Controls.Select(static control => control.Name), Is.EqualTo(new[] { "Key 1" }));
+    }
+
+    [Test]
+    public void A_device_that_streams_changing_values_can_still_have_its_keys_added()
+    {
+        var now = DateTimeOffset.UtcNow;
+        using var plugin = new HidDevicePlugin(_folder);
+        var source = new FakeSource();
+        using var creator = new DeviceCreatorViewModel(plugin, source, static action => action(), () => now);
+        creator.SelectedHardware = creator.Hardware.Single();
+        void Send(params byte[] report) => source.Report!(report);
+
+        // A counter byte changes with every report.
+        for (byte counter = 0; counter < 8; counter++)
+        {
+            Send(1, 0, counter, 0);
+        }
+
+        creator.AddKeyCommand.Execute(null);
+        Send(1, 0, 9, 0);
+        Send(1, 0, 10, 0);
+        Assert.That(creator.IsLearning, Is.True);
+        Assert.That(creator.Status, Does.Not.Contain("try again"));
+
+        Send(1, 0x04, 11, 0);
+        Assert.That(creator.Controls.Select(static control => control.Name), Is.EqualTo(new[] { "Key 1" }));
+    }
+
+    [Test]
     public void Keys_and_a_pushable_knob_are_learned_placed_numbered_and_saved_as_a_device()
     {
         using var plugin = new HidDevicePlugin(_folder);

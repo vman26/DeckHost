@@ -44,6 +44,11 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- Add a USB device: a key you pressed to look at what the device sends could not be added with
+  **Add key** afterwards (it counted as noise, and nothing said so). It can now, and when you press
+  a key right before clicking Add key the page tells you to wait a moment.
+- The N3's knobs are on the right of its keys, and the editor draws a device the way the simulator
+  does (a body, the screens in the profile's color, side wheels on the edge) instead of a blue box.
 - Selecting a key after another one could turn its tile off or change its Run when setting, and
   merely selecting a control added an undo step.
 - The text you set in Customize → Text now shows on every action, including plugins and readouts
