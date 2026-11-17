@@ -938,6 +938,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 |---|---|
 | `Workflow()` | Creates it with the positional properties. |
 | `IReadOnlyList<WorkflowLink> Links { get; init; }` |  |
+| `string Name { get; init; }` | A name the user gave the workflow (shown in the editor; also the file name when it's shared). |
 | `IReadOnlyList<WorkflowNode> Nodes { get; init; }` |  |
 | `string WhileRunning { get; init; }` | What a trigger does while its previous run is still going (`WorkflowConcurrency`). |
 | `WorkflowNode Find(string nodeId)` |  |
@@ -950,6 +951,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 
 | Member | |
 |---|---|
+| `IReadOnlyList<string> All` |  |
 | `const string Ignore` | Ignore the input until the run is finished. |
 | `const string Parallel` | Start another run next to it. |
 | `const string Restart` | Stop the run and start again. |

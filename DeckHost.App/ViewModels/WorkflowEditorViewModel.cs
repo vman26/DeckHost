@@ -28,6 +28,8 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     private const int MaxUndo = 200;
     private static readonly TimeSpan ActiveFor = TimeSpan.FromMilliseconds(700);
     private static readonly TimeSpan SettingsMergeWindow = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan FadeFrame = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan WaitFrame = TimeSpan.FromMilliseconds(33);
 
     private readonly Func<Workflow, bool> _apply;
     private readonly IDeviceHostService? _host;
@@ -36,6 +38,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     private readonly List<Workflow> _redo = [];
     private readonly Dictionary<string, DateTime> _activeUntil = [];
     private readonly Dictionary<string, DateTime> _failedUntil = [];
+    private readonly Dictionary<string, (DateTime Start, TimeSpan Length)> _waits = [];
     private readonly DispatcherTimer? _fadeTimer;
     private readonly Workflow _original;
     private Workflow _workflow;
@@ -91,7 +94,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         if (_host is not null)
         {
             _host.WorkflowTraced += OnTraced;
-            _fadeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+            _fadeTimer = new DispatcherTimer { Interval = FadeFrame };
             _fadeTimer.Tick += (_, _) => FadeHighlights();
         }
 
@@ -106,7 +109,52 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
 
     public string ControlName { get; }
 
-    public string Title => $"Workflow · {ControlName}";
+    public string Title => string.IsNullOrWhiteSpace(_workflow.Name) ? $"Workflow · {ControlName}" : $"{_workflow.Name} · {ControlName}";
+
+    /// <summary>The name the user gave the workflow (empty: it has none).</summary>
+    public string WorkflowName
+    {
+        get => _workflow.Name ?? string.Empty;
+        set
+        {
+            var name = (value ?? string.Empty).Trim();
+            if (name.Length > 80)
+            {
+                name = name[..80];
+            }
+
+            if (name == (_workflow.Name ?? string.Empty))
+            {
+                return;
+            }
+
+            Commit(_workflow with { Name = name.Length == 0 ? null : name }, name.Length == 0 ? "Removed the workflow's name" : $"Named the workflow {name}", "workflow-name");
+        }
+    }
+
+    /// <summary>The workflow as a file to share (<see cref="WorkflowFile"/>).</summary>
+    public string ExportText() => WorkflowFile.Serialize(_workflow);
+
+    public string ExportFileName => WorkflowFile.FileNameOf(_workflow, ControlName);
+
+    /// <summary>
+    /// Replaces the workflow with one read from a file (one undo step brings the old one back).
+    /// Returns why not when the file can't be used.
+    /// </summary>
+    public string? Import(string text)
+    {
+        var imported = WorkflowFile.TryRead(text, out var error);
+        if (imported is null)
+        {
+            return error;
+        }
+
+        Commit(imported with { WhileRunning = WorkflowConcurrency.All.Contains(imported.WhileRunning) ? imported.WhileRunning : WorkflowConcurrency.Parallel }, string.IsNullOrWhiteSpace(imported.Name) ? "Imported a workflow" : $"Imported {imported.Name}");
+        SelectNode(_workflow.Nodes.FirstOrDefault(static node => node.Kind == WorkflowNodeKinds.Trigger)?.Id ?? _workflow.Nodes.FirstOrDefault()?.Id);
+        OnPropertyChanged(nameof(WorkflowName));
+        OnPropertyChanged(nameof(Title));
+        return null;
+    }
 
     /// <summary>The workflow as it is now (what the canvas draws).</summary>
     public Workflow Workflow => _workflow;
@@ -193,6 +241,12 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     public bool IsSelected(WorkflowNode node) => node.Id == _selectedNodeId;
 
     public bool IsSelected(WorkflowLink link) => link == _selectedLink;
+
+    /// <summary>How far a waiting node is (0 to 1) while a run waits at it; null when nothing waits there.</summary>
+    public double? WaitProgress(WorkflowNode node) =>
+        _waits.TryGetValue(node.Id, out var wait) && wait.Length > TimeSpan.Zero && (DateTime.UtcNow - wait.Start) < wait.Length
+            ? Math.Clamp((DateTime.UtcNow - wait.Start) / wait.Length, 0d, 1d)
+            : null;
 
     public bool IsActive(WorkflowNode node) => _activeUntil.TryGetValue(node.Id, out var until) && until > DateTime.UtcNow;
 
@@ -360,7 +414,8 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     // ---------------------------------------------------------------- edits
 
     /// <summary>Adds a node of a kind at a canvas position (snapped to the grid) and selects it.</summary>
-    public WorkflowNode AddNode(string kind, double x, double y)
+    /// <param name="into">A link to put the node into (dropped onto it): one undo step adds the node and splits the link.</param>
+    public WorkflowNode AddNode(string kind, double x, double y, WorkflowLink? into = null)
     {
         var type = WorkflowNodeTypes.Of(kind);
         var node = new WorkflowNode(WorkflowConverter.NextId(_workflow), type.Kind, Snap(x), Snap(y))
@@ -370,13 +425,62 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
                 : new ActionSettings(type.Settings.Where(static setting => setting.DefaultValue.Length > 0)
                     .Select(static setting => new KeyValuePair<string, string>(setting.Key, setting.DefaultValue))),
         };
-        Commit(_workflow with { Nodes = [.. _workflow.Nodes, node] }, $"Added {type.Name}");
+        var split = into is not null && CanBeInserted(node.Kind) && _workflow.Links.Contains(into);
+        Commit(_workflow with { Nodes = [.. _workflow.Nodes, node], Links = split ? Splice(_workflow.Links, into!, node) : _workflow.Links }, split ? $"Added {type.Name} into a link" : $"Added {type.Name}");
         SelectNode(node.Id);
         return node;
     }
 
+    /// <summary>Whether a node of the kind can go into the middle of a link: it has an input and an output.</summary>
+    public static bool CanBeInserted(string kind) => WorkflowNodeKinds.HasInput(kind) && WorkflowNodeKinds.OutputsOf(kind).Count > 0;
+
+    /// <summary>The output that carries on to what the link led to: Done for a Repeat (Each is its body), else the first.</summary>
+    internal static string ContinuationPort(string kind) =>
+        kind == WorkflowNodeKinds.Repeat ? WorkflowPorts.Done : WorkflowNodeKinds.OutputsOf(kind)[0];
+
+    /// <summary>The links with <paramref name="into"/> cut in two: from its start into the node, and from the node on to its end.</summary>
+    private static IReadOnlyList<WorkflowLink> Splice(IReadOnlyList<WorkflowLink> links, WorkflowLink into, WorkflowNode node) =>
+    [
+        .. links.Where(link => link != into),
+        new WorkflowLink(into.From, into.Port, node.Id),
+        new WorkflowLink(node.Id, ContinuationPort(node.Kind), into.To),
+    ];
+
+    /// <summary>Whether a node that is already on the canvas can be dropped into a link: it isn't linked to anything yet.</summary>
+    public bool CanInsertIntoLink(string nodeId) =>
+        _workflow.Find(nodeId) is { } node && CanBeInserted(node.Kind) &&
+        !_workflow.Links.Any(link => link.From == nodeId || link.To == nodeId);
+
+    /// <summary>Puts a node that isn't linked yet into the middle of a link, as one undo step. Returns why not when it can't.</summary>
+    public string? InsertIntoLink(string nodeId, WorkflowLink link)
+    {
+        if (_workflow.Find(nodeId) is not { } node)
+        {
+            return "That node is gone.";
+        }
+
+        if (!_workflow.Links.Contains(link))
+        {
+            return "That link is gone.";
+        }
+
+        if (!CanBeInserted(node.Kind))
+        {
+            return node.Kind == WorkflowNodeKinds.Trigger ? "A When node starts a workflow; it can't go into a link." : "A Stop node ends the run; it can't pass the link on.";
+        }
+
+        if (!CanInsertIntoLink(nodeId))
+        {
+            return "Only a node that isn't linked yet can be dropped onto a link.";
+        }
+
+        Commit(_workflow with { Links = Splice(_workflow.Links, link, node) }, $"Put {SummaryOf(node)} into a link");
+        SelectNode(nodeId);
+        return null;
+    }
+
     /// <summary>Adds an action node; when a node is selected and its first output is free, links it from there.</summary>
-    public WorkflowNode? AddAction(ActionItemViewModel action, double? x = null, double? y = null)
+    public WorkflowNode? AddAction(ActionItemViewModel action, double? x = null, double? y = null, WorkflowLink? into = null)
     {
         ArgumentNullException.ThrowIfNull(action);
         if (!action.CanBeMultiActionStep)
@@ -398,10 +502,13 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         {
             Action = action.ToActionReference(action.DefaultSettings),
         };
-        var links = x is null && after is not null && freePort is not null
-            ? [.. _workflow.Links, new WorkflowLink(after.Id, freePort, node.Id)]
-            : _workflow.Links;
-        Commit(_workflow with { Nodes = [.. _workflow.Nodes, node], Links = links }, $"Added {action.Name}");
+        var split = into is not null && _workflow.Links.Contains(into);
+        var links = split
+            ? Splice(_workflow.Links, into!, node)
+            : x is null && after is not null && freePort is not null
+                ? [.. _workflow.Links, new WorkflowLink(after.Id, freePort, node.Id)]
+                : _workflow.Links;
+        Commit(_workflow with { Nodes = [.. _workflow.Nodes, node], Links = links }, split ? $"Added {action.Name} into a link" : $"Added {action.Name}");
         SelectNode(node.Id);
         return node;
     }
@@ -667,7 +774,18 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         {
             var map = trace.Kind == WorkflowTraceKind.Failed ? _failedUntil : _activeUntil;
             map[nodeId] = DateTime.UtcNow + (trace.Kind == WorkflowTraceKind.Failed ? ActiveFor * 2 : ActiveFor);
-            _fadeTimer?.Start();
+            if (trace.Wait is { } wait && wait > TimeSpan.Zero)
+            {
+                // A wait fills its node over the time it takes instead of just lighting it up.
+                _waits[nodeId] = (DateTime.UtcNow, wait);
+                map[nodeId] = DateTime.UtcNow + wait + ActiveFor;
+            }
+
+            if (_fadeTimer is not null)
+            {
+                _fadeTimer.Interval = _waits.Count > 0 ? WaitFrame : FadeFrame;
+                _fadeTimer.Start();
+            }
         }
 
         var node = trace.NodeId is { } id ? _workflow.Find(id) : null;
@@ -693,13 +811,25 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     private void FadeHighlights()
     {
         var now = DateTime.UtcNow;
+        var waiting = _waits.Count > 0;
         var changed = Prune(_activeUntil, now) | Prune(_failedUntil, now);
-        if (_activeUntil.Count == 0 && _failedUntil.Count == 0)
+        foreach (var done in _waits.Where(pair => now - pair.Value.Start >= pair.Value.Length).Select(static pair => pair.Key).ToList())
+        {
+            _waits.Remove(done);
+            changed = true;
+        }
+
+        if (_activeUntil.Count == 0 && _failedUntil.Count == 0 && _waits.Count == 0)
         {
             _fadeTimer?.Stop();
         }
+        else if (_fadeTimer is not null)
+        {
+            _fadeTimer.Interval = _waits.Count > 0 ? WaitFrame : FadeFrame;
+        }
 
-        if (changed)
+        // While something waits the node fills a little more each frame.
+        if (changed || waiting)
         {
             RaiseChanged();
         }

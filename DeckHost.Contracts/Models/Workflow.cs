@@ -9,6 +9,11 @@ namespace DeckHost.Contracts.Models;
 /// </summary>
 public sealed record Workflow
 {
+    /// <summary>A name the user gave the workflow (shown in the editor; also the file name when it's shared).</summary>
+    [JsonPropertyName("name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; init; }
+
     [JsonPropertyName("nodes")]
     public IReadOnlyList<WorkflowNode> Nodes { get; init; } = [];
 
@@ -61,6 +66,7 @@ public sealed record Workflow
     public bool Equals(Workflow? other) =>
         other is not null &&
         WhileRunning == other.WhileRunning &&
+        Name == other.Name &&
         Nodes.SequenceEqual(other.Nodes) &&
         Links.SequenceEqual(other.Links);
 
@@ -225,6 +231,8 @@ public static class WorkflowConcurrency
 
     /// <summary>Stop the run (the input works as a stop button).</summary>
     public const string Stop = "stop";
+
+    public static IReadOnlyList<string> All { get; } = [Parallel, Ignore, Restart, Stop];
 }
 
 /// <summary>Setting keys of workflow nodes (<see cref="WorkflowNode.Settings"/>) and their values.</summary>

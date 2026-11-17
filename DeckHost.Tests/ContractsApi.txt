@@ -647,10 +647,12 @@
   DeckHost.Contracts.Models.Workflow.GetHashCode() : System.Int32
   DeckHost.Contracts.Models.Workflow.Links : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.WorkflowLink> {set}
   DeckHost.Contracts.Models.Workflow.LinksFrom(System.String nodeId, System.String port) : System.Collections.Generic.IEnumerable<DeckHost.Contracts.Models.WorkflowLink>
+  DeckHost.Contracts.Models.Workflow.Name : System.String {set}
   DeckHost.Contracts.Models.Workflow.Nodes : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.WorkflowNode> {set}
   DeckHost.Contracts.Models.Workflow.ToString() : System.String
   DeckHost.Contracts.Models.Workflow.WhileRunning : System.String {set}
   DeckHost.Contracts.Models.Workflow.WouldCycle(System.String from, System.String to) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowConcurrency.All : System.Collections.Generic.IReadOnlyList<System.String>
   DeckHost.Contracts.Models.WorkflowConcurrency.Ignore : System.String const
   DeckHost.Contracts.Models.WorkflowConcurrency.Parallel : System.String const
   DeckHost.Contracts.Models.WorkflowConcurrency.Restart : System.String const

@@ -43,6 +43,164 @@ public class WorkflowEditorTests
     }
 
     [Test]
+    public void A_node_dropped_onto_a_link_splits_it_in_one_undo_step()
+    {
+        var (editor, _) = Editor();
+        var first = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        var last = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        editor.Connect(first.Id, WorkflowPorts.Next, last.Id);
+        var link = Expect.Single(editor.Workflow.Links);
+        var loose = editor.AddNode(WorkflowNodeKinds.Wait, 450, 200);
+        Assert.That(editor.CanInsertIntoLink(loose.Id), Is.True);
+
+        Assert.That(editor.InsertIntoLink(loose.Id, link), Is.Null);
+
+        Assert.That(editor.Workflow.Links, Is.EquivalentTo(new[]
+        {
+            new WorkflowLink(first.Id, WorkflowPorts.Next, loose.Id),
+            new WorkflowLink(loose.Id, WorkflowPorts.Next, last.Id),
+        }));
+        editor.UndoCommand.Execute(null);
+        Assert.That(Expect.Single(editor.Workflow.Links), Is.EqualTo(link), "one step brings the old link back");
+        Assert.That(editor.Workflow.Nodes.Any(node => node.Id == loose.Id), Is.True, "the node itself stays");
+    }
+
+    [Test]
+    public void A_node_with_links_or_a_node_without_a_way_through_cannot_be_put_into_a_link()
+    {
+        var (editor, _) = Editor();
+        var a = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        var b = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        editor.Connect(a.Id, WorkflowPorts.Next, b.Id);
+        var link = Expect.Single(editor.Workflow.Links);
+        var stop = editor.AddNode(WorkflowNodeKinds.Stop, 450, 200);
+        var linked = editor.AddNode(WorkflowNodeKinds.Wait, 450, 300);
+        var other = editor.AddNode(WorkflowNodeKinds.Wait, 750, 300);
+        editor.Connect(linked.Id, WorkflowPorts.Next, other.Id);
+
+        Assert.That(editor.InsertIntoLink(stop.Id, link), Does.Contain("Stop"));
+        Assert.That(editor.InsertIntoLink(linked.Id, link), Does.Contain("isn't linked"));
+        Assert.That(editor.InsertIntoLink("n1", link), Does.Contain("When"));
+        Assert.That(editor.InsertIntoLink(a.Id, link), Is.Not.Null, "a node already on the link");
+        Assert.That(editor.Workflow.Links.Contains(link), Is.True);
+    }
+
+    [Test]
+    public void A_new_node_or_action_dropped_onto_a_link_is_added_into_it_as_one_step()
+    {
+        var (editor, _) = Editor();
+        var a = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        var b = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        editor.Connect(a.Id, WorkflowPorts.Next, b.Id);
+        var link = Expect.Single(editor.Workflow.Links);
+
+        var repeat = editor.AddNode(WorkflowNodeKinds.Repeat, 450, 200, link);
+
+        Assert.That(editor.Workflow.Links, Is.EquivalentTo(new[]
+        {
+            new WorkflowLink(a.Id, WorkflowPorts.Next, repeat.Id),
+            new WorkflowLink(repeat.Id, WorkflowPorts.Done, b.Id), // a Repeat carries on from Done; Each is its body
+        }));
+        editor.UndoCommand.Execute(null);
+        Assert.That(Expect.Single(editor.Workflow.Links), Is.EqualTo(link));
+        Assert.That(editor.Workflow.Nodes.Any(node => node.Id == repeat.Id), Is.False, "added and linked in one step");
+
+        var mute = editor.AddAction(Item("Mute"), 450, 200, link)!;
+        Assert.That(editor.Workflow.Links.Select(static l => (l.From, l.To)), Is.EquivalentTo(new[] { (a.Id, mute.Id), (mute.Id, b.Id) }));
+    }
+
+    [Test]
+    public void The_workflow_can_be_named_and_the_name_goes_to_the_control_and_the_title()
+    {
+        var (editor, stored) = Editor();
+        Assert.That(editor.Title, Is.EqualTo("Workflow · Key 1"));
+
+        editor.WorkflowName = "  Mute the mic  ";
+
+        Assert.That(editor.WorkflowName, Is.EqualTo("Mute the mic"));
+        Assert.That(stored[^1].Name, Is.EqualTo("Mute the mic"));
+        Assert.That(editor.Title, Is.EqualTo("Mute the mic · Key 1"));
+        editor.WorkflowName = string.Empty;
+        Assert.That(stored[^1].Name, Is.Null);
+    }
+
+    [Test]
+    public void A_workflow_exports_to_a_file_and_comes_back_through_import_with_one_undo_step()
+    {
+        var (editor, _) = Editor();
+        editor.WorkflowName = "Scene switch";
+        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        editor.Connect("n1", WorkflowPorts.Next, wait.Id);
+        editor.AddAction(Item("Mute"), 600, 40);
+        var text = editor.ExportText();
+        Assert.That(editor.ExportFileName, Is.EqualTo("Scene switch.deckhostworkflow"));
+
+        var (other, stored) = Editor();
+        Assert.That(other.Import(text), Is.Null);
+
+        Assert.That(other.Workflow, Is.EqualTo(editor.Workflow));
+        Assert.That(stored[^1], Is.EqualTo(editor.Workflow));
+        Assert.That(other.WorkflowName, Is.EqualTo("Scene switch"));
+        other.UndoCommand.Execute(null);
+        Assert.That(other.Workflow.Name, Is.Null, "the old workflow is back");
+    }
+
+    [TestCase("")]
+    [TestCase("not json")]
+    [TestCase("[1,2]")]
+    [TestCase("""{ "format": "something-else", "workflow": { "nodes": [] } }""")]
+    [TestCase("""{ "format": "deckhost-workflow", "version": 99, "workflow": { "nodes": [] } }""")]
+    [TestCase("""{ "nodes": [ { "id": "a", "kind": "teleport" } ] }""")]
+    [TestCase("""{ "nodes": [ { "id": "a", "kind": "wait" }, { "id": "a", "kind": "wait" } ] }""")]
+    public void A_file_that_is_not_a_usable_workflow_is_refused_and_changes_nothing(string text)
+    {
+        var (editor, stored) = Editor();
+        var before = editor.Workflow;
+        var count = stored.Count;
+
+        Assert.That(editor.Import(text), Is.Not.Null.And.Not.Empty);
+
+        Assert.That(editor.Workflow, Is.EqualTo(before));
+        Assert.That(stored.Count, Is.EqualTo(count));
+    }
+
+    [Test]
+    public void Importing_drops_links_that_lead_nowhere_or_close_a_loop()
+    {
+        var (editor, _) = Editor();
+        const string text = """
+            { "nodes": [ { "id": "t", "kind": "trigger" }, { "id": "a", "kind": "wait" }, { "id": "b", "kind": "wait" } ],
+              "links": [ { "from": "t", "port": "next", "to": "a" }, { "from": "a", "port": "next", "to": "b" },
+                         { "from": "b", "port": "next", "to": "a" },
+                         { "from": "a", "port": "next", "to": "gone" },
+                         { "from": "a", "port": "yes", "to": "b" },
+                         { "from": "a", "port": "next", "to": "t" } ] }
+            """;
+
+        Assert.That(editor.Import(text), Is.Null);
+
+        Assert.That(editor.Workflow.Links.Select(static link => $"{link.From}>{link.To}"), Is.EqualTo(new[] { "t>a", "a>b" }));
+    }
+
+    [Test]
+    public void A_wait_fills_its_node_over_the_time_it_takes()
+    {
+        using var editor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", WorkflowConverter.Starter(), Actions, _ => true);
+        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        Assert.That(editor.WaitProgress(wait), Is.Null);
+
+        editor.ShowTrace(new DeckHost.Core.Models.WorkflowTrace("device", "layout", "key.0", 1, wait.Id, DeckHost.Core.Models.WorkflowTraceKind.Node, "Waiting 1 s", DateTimeOffset.Now) { Wait = TimeSpan.FromSeconds(60) });
+
+        var progress = editor.WaitProgress(wait);
+        Assert.That(progress, Is.Not.Null.And.InRange(0.0, 0.1));
+        Assert.That(editor.IsActive(wait), Is.True);
+        // Nothing waits at a node that only ran.
+        var other = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        editor.ShowTrace(new DeckHost.Core.Models.WorkflowTrace("device", "layout", "key.0", 1, other.Id, DeckHost.Core.Models.WorkflowTraceKind.Node, "Waiting", DateTimeOffset.Now));
+        Assert.That(editor.WaitProgress(other), Is.Null);
+    }
+
+    [Test]
     public void Links_into_a_trigger_loops_and_duplicates_are_refused()
     {
         var (editor, _) = Editor();
