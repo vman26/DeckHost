@@ -278,7 +278,7 @@
 										<ItemsControl.ItemTemplate>
 											<DataTemplate x:DataType="vm:VariableRow">
 												<TextBlock FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace" FontSize="11" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap">
-													<Run Text="{Binding Name}" FontWeight="SemiBold" /><Run Text=" = " /><Run Text="{Binding Value}" />
+													<Run Text="{Binding Name}" FontWeight="SemiBold" /><Run Text=" = " /><Run Text="{Binding Value}" /><Run Text="  " /><Run Text="{Binding Kind}" Foreground="{DynamicResource C.64748B}" FontSize="10" />
 												</TextBlock>
 											</DataTemplate>
 										</ItemsControl.ItemTemplate>

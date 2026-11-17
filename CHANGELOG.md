@@ -52,6 +52,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   make room.
 - Workflow variables can belong to one profile or one control (**Shared by** on Set variable, If,
   Repeat and the variable trigger), not only to every workflow.
+- Workflow expressions: **Calculate** in Set variable and an **An expression** check in If, with
+  variables in brackets, text, number and time functions, and a **Store as** type (number, true /
+  false or text) that refuses a value that doesn't fit.
 - Shared workflows: save a named workflow once and run it from others with a **Call workflow**
   node; profile exports take the shared workflows they call along.
 - Debugging workflows: breakpoints (F9), **Continue** and **Step** for a run that is held in front

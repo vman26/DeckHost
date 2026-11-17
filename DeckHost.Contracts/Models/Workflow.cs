@@ -357,9 +357,21 @@ public static class WorkflowKeys
     public const string From = "from";
     public const string To = "to";
 
+    /// <summary>If (expression) and Set variable (Calculate): the expression, e.g. <c>[count] &gt; 3 &amp;&amp; hour() &lt; 18</c>.</summary>
+    public const string Expression = "expression";
+
+    /// <summary>Set variable: what type the result is stored as (<see cref="AsAuto"/>, <see cref="AsText"/>, <see cref="AsNumber"/> or <see cref="AsBool"/>).</summary>
+    public const string As = "as";
+
+    public const string AsAuto = "auto";
+    public const string AsText = "text";
+    public const string AsNumber = "number";
+    public const string AsBool = "bool";
+
     public const string CheckVariable = "variable";
     public const string CheckApp = "app";
     public const string CheckTime = "time";
+    public const string CheckExpression = "expression";
 
     public const string IsEqual = "equals";
     public const string IsNotEqual = "not-equals";
@@ -374,6 +386,7 @@ public static class WorkflowKeys
     public const string Subtract = "subtract";
     public const string Flip = "flip";
     public const string Clear = "clear";
+    public const string Calculate = "calculate";
 
     /// <summary>The longest wait a node can have (ten minutes).</summary>
     public const int MaxWaitMs = 600_000;

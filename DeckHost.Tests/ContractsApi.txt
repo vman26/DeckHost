@@ -660,14 +660,22 @@
   DeckHost.Contracts.Models.WorkflowConcurrency.Stop : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Add : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.App : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.As : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.AsAuto : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.AsBool : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.AsNumber : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.AsText : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Calculate : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Check : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.CheckApp : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.CheckExpression : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.CheckTime : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.CheckVariable : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Clear : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Contains : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Count : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Every : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Expression : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Flip : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.From : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Interval : System.String const

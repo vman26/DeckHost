@@ -1131,4 +1131,8 @@ public sealed class WorkflowPaletteItem(WorkflowNodeType type)
 }
 
 /// <summary>A variable and its value, for the editor's variable view.</summary>
-public sealed record VariableRow(string Name, string Value);
+public sealed record VariableRow(string Name, string Value)
+{
+    /// <summary>How the value reads: number, true / false, text or empty.</summary>
+    public string Kind => DeckHost.Core.Workflows.WorkflowValue.Parse(Value).KindName;
+}

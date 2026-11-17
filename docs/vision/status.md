@@ -112,7 +112,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 9.3 History, cancellation | ✅ | Run log, Stop |
 | 9.3 Step execution, breakpoints, variable inspection, sub-workflows, templates | ✅ | Breakpoints, Continue and Step; live variable view and setter; shared workflows with a Call node (depth 8, no recursion); `.deckhostworkflow` files and profile bundles as templates |
 | 9.4 Global and plugin variables, device and app context | ✅ | `VariableStore`, `VariableKeys` |
-| 9.4 Local and profile scopes, typed variables, computed values | 🟡 | Profile and control scopes (`Shared by`); typed and computed values are planned (expression engine) |
+| 9.4 Local and profile scopes, typed variables, computed values | ✅ | Profile and control scopes (`Shared by`); Calculate and expression checks (`WorkflowExpression` over NCalc); values are stored as text and typed on read (`WorkflowValue`), with a checked **Store as** |
 | 9.6 Isolation, tracing, loop protection, ordering, never blocking | ✅ | `MaxNodesPerRun`, `WouldCycle`, scheduler |
 | 9.6 Timeouts, retries | 🟡 | Retries with a wait per action node; no timeouts (actions run on the worker and must be fast) |
 

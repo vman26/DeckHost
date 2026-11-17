@@ -116,7 +116,12 @@ public static class WorkflowNodeTypes
                 new(WorkflowKeys.CheckVariable, "A variable"),
                 new(WorkflowKeys.CheckApp, "The app in front"),
                 new(WorkflowKeys.CheckTime, "The time of day"),
+                new(WorkflowKeys.CheckExpression, "An expression"),
             ]),
+            new(WorkflowKeys.Expression, "Expression", Placeholder: "e.g. [count] > 3 && hour() < 18", Description: "Variables are written [name] ([profile:name], [control:name]); the answer counts as Yes when it is true, a number other than 0, or text that isn't empty, \"false\" or \"0\". A bad expression goes to No and says why in the run log.")
+            {
+                ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckExpression),
+            },
             new(WorkflowKeys.Name, "Variable", Placeholder: "e.g. mode", Description: "Set it with a Set variable node; names ignore case.")
             {
                 ShowWhen = new(WorkflowKeys.Check, WorkflowKeys.CheckVariable),
@@ -221,10 +226,25 @@ public static class WorkflowNodeTypes
                 new(WorkflowKeys.Subtract, "Subtract"),
                 new(WorkflowKeys.Flip, "Flip true / false"),
                 new(WorkflowKeys.Clear, "Clear"),
+                new(WorkflowKeys.Calculate, "Calculate"),
             ]),
             new(WorkflowKeys.Value, "Value", Placeholder: "text or number (add: 1)")
             {
                 ShowWhen = new(WorkflowKeys.Operation, WorkflowKeys.Set, WorkflowKeys.Add, WorkflowKeys.Subtract),
+            },
+            new(WorkflowKeys.Expression, "Expression", Placeholder: "e.g. [count] * 2 + 1", Description: "Variables are [name]; text, number and time functions are listed in the workflow guide. A result that can't be calculated leaves the variable as it was.")
+            {
+                ShowWhen = new(WorkflowKeys.Operation, WorkflowKeys.Calculate),
+            },
+            new(WorkflowKeys.As, "Store as", ActionSettingKind.Choice, WorkflowKeys.AsAuto, Description: "Number and true / false are checked: a value that doesn't fit leaves the variable as it was.", Options:
+            [
+                new(WorkflowKeys.AsAuto, "as it is"),
+                new(WorkflowKeys.AsText, "text"),
+                new(WorkflowKeys.AsNumber, "a number"),
+                new(WorkflowKeys.AsBool, "true / false"),
+            ])
+            {
+                ShowWhen = new(WorkflowKeys.Operation, WorkflowKeys.Set, WorkflowKeys.Calculate),
             },
         ]);
 
@@ -269,6 +289,7 @@ public static class WorkflowNodeTypes
             {
                 WorkflowKeys.CheckApp => $"If {Or(settings.Get(WorkflowKeys.App), "…")} is in front",
                 WorkflowKeys.CheckTime => $"If between {Or(settings.Get(WorkflowKeys.From), "…")} and {Or(settings.Get(WorkflowKeys.To), "…")}",
+                WorkflowKeys.CheckExpression => $"If {Or(settings.Get(WorkflowKeys.Expression), "…")}",
                 _ => $"If {Or(settings.Get(WorkflowKeys.Name), "…")} {DescribeComparison(settings)}",
             },
             WorkflowNodeKinds.Toggle => "Toggle",
@@ -279,6 +300,7 @@ public static class WorkflowNodeTypes
                 WorkflowKeys.Subtract => $"{Or(settings.Get(WorkflowKeys.Name), "…")} − {Or(settings.Get(WorkflowKeys.Value), "1")}",
                 WorkflowKeys.Flip => $"Flip {Or(settings.Get(WorkflowKeys.Name), "…")}",
                 WorkflowKeys.Clear => $"Clear {Or(settings.Get(WorkflowKeys.Name), "…")}",
+                WorkflowKeys.Calculate => $"{Or(settings.Get(WorkflowKeys.Name), "…")} = {Or(settings.Get(WorkflowKeys.Expression), "…")}",
                 _ => $"{Or(settings.Get(WorkflowKeys.Name), "…")} = {Or(settings.Get(WorkflowKeys.Value), "\"\"")}",
             },
             WorkflowNodeKinds.Call => $"Call {Or(settings.Get(WorkflowKeys.Workflow), "…")}",

@@ -803,6 +803,102 @@ public sealed class WorkflowTests : IAsyncDisposable
     }
 
     [Test]
+    public void Calculate_stores_the_result_of_an_expression_and_a_failed_one_leaves_the_variable_alone()
+    {
+        using var store = new VariableStore();
+        var engine = new WorkflowEngine(store, (_, _, _, _) => true);
+        var where = new WorkflowScope("p", Device, "key.0");
+        store.Publish(VariableKeys.UserVariable("count"), "4");
+        store.Publish(VariableKeys.ProfileVariable("p", "mode"), "night");
+
+        (string Line, bool Ok) Calc(string name, string expression, string? type = null, string? scope = null) =>
+            engine.TryApply(Settings(
+                (WorkflowKeys.Name, name), (WorkflowKeys.Operation, WorkflowKeys.Calculate), (WorkflowKeys.Expression, expression),
+                (WorkflowKeys.As, type ?? WorkflowKeys.AsAuto), (WorkflowKeys.Scope, scope ?? WorkflowKeys.ScopeGlobal)), where);
+
+        Assert.That(Calc("double", "[count] * 2 + 1"), Is.EqualTo(("double = 9", true)));
+        Assert.That(engine.ReadVariable("double"), Is.EqualTo("9"));
+        Assert.That(Calc("label", "[profile:mode] + ' ' + [count]").Ok, Is.True);
+        Assert.That(engine.ReadVariable("label"), Is.EqualTo("night 4"));
+        Assert.That(Calc("big", "[count] > 3", WorkflowKeys.AsBool).Ok, Is.True);
+        Assert.That(engine.ReadVariable("big"), Is.EqualTo("true"));
+        Assert.That(Calc("mine", "[count]", scope: WorkflowKeys.ScopeControl).Ok, Is.True);
+        Assert.That(store.TryGetValue<string>(VariableKeys.ControlVariable(Device, "key.0", "mine"), out var control) ? control : null, Is.EqualTo("4"), "the result goes to the chosen scope");
+
+        store.Publish(VariableKeys.UserVariable("keep"), "unchanged");
+        var broken = Calc("keep", "[count] +");
+        Assert.That(broken.Ok, Is.False);
+        Assert.That(broken.Line, Does.Contain("keep").And.Contain("valid expression"));
+        Assert.That(engine.ReadVariable("keep"), Is.EqualTo("unchanged"));
+        Assert.That(Calc("keep", "'abc'", WorkflowKeys.AsNumber).Ok, Is.False, "text can't be stored as a number");
+        Assert.That(engine.ReadVariable("keep"), Is.EqualTo("unchanged"));
+    }
+
+    [Test]
+    public void The_store_as_setting_checks_plain_values_too_and_normalises_numbers_and_booleans()
+    {
+        using var store = new VariableStore();
+        var engine = new WorkflowEngine(store, (_, _, _, _) => true);
+
+        (string Line, bool Ok) Set(string value, string type) =>
+            engine.TryApply(Settings((WorkflowKeys.Name, "x"), (WorkflowKeys.Value, value), (WorkflowKeys.As, type)));
+
+        Assert.That(Set("3.50", WorkflowKeys.AsNumber).Ok, Is.True);
+        Assert.That(engine.ReadVariable("x"), Is.EqualTo("3.5"));
+        Assert.That(Set("YES", WorkflowKeys.AsBool).Ok, Is.True);
+        Assert.That(engine.ReadVariable("x"), Is.EqualTo("true"));
+        Assert.That(Set("hello", WorkflowKeys.AsNumber).Ok, Is.False);
+        Assert.That(Set("hello", WorkflowKeys.AsBool).Ok, Is.False);
+        Assert.That(engine.ReadVariable("x"), Is.EqualTo("true"), "a value that doesn't fit changes nothing");
+        Assert.That(Set("12abc", WorkflowKeys.AsText).Ok, Is.True);
+        Assert.That(engine.ReadVariable("x"), Is.EqualTo("12abc"));
+    }
+
+    [Test]
+    public async Task An_if_node_can_check_an_expression_and_a_broken_one_goes_to_no_and_says_why()
+    {
+        _store.Publish(VariableKeys.UserVariable("count"), "7");
+        await Start(new Workflow
+        {
+            Nodes =
+            [
+                Trigger("t", WorkflowTriggers.Down),
+                Node("if", WorkflowNodeKinds.If, (WorkflowKeys.Check, WorkflowKeys.CheckExpression), (WorkflowKeys.Expression, "[count] > 5 && [count] < 10")),
+                Run("yes", "a"),
+                Run("no", "b"),
+                Node("bad", WorkflowNodeKinds.If, (WorkflowKeys.Check, WorkflowKeys.CheckExpression), (WorkflowKeys.Expression, "[count] >")),
+                Run("never", "c"),
+                Run("fallback", "a"),
+            ],
+            Links = [Link("t", "if"), Link("if", "yes", WorkflowPorts.Yes), Link("if", "no", WorkflowPorts.No), Link("t", "bad"), Link("bad", "never", WorkflowPorts.Yes), Link("bad", "fallback", WorkflowPorts.No)],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Ran().Count >= 2);
+
+        Assert.That(Ran(), Is.EquivalentTo(new[] { "a", "a" }), "the expression is true so Yes runs, the broken one falls back to No");
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Failed && trace.NodeId == "bad" && trace.Detail.Contains("Going on at No")), Is.True);
+    }
+
+    [Test]
+    public void Expressions_in_if_and_calculate_see_scoped_variables_through_their_prefix()
+    {
+        using var store = new VariableStore();
+        var engine = new WorkflowEngine(store, (_, _, _, _) => true) { Clock = () => new DateTime(2026, 1, 1, 10, 0, 0) };
+        var where = new WorkflowScope("p1", Device, "key.2");
+        store.Publish(VariableKeys.ProfileVariable("p1", "n"), "5");
+        store.Publish(VariableKeys.ControlVariable(Device, "key.2", "n"), "9");
+        store.Publish(VariableKeys.UserVariable("n"), "1");
+
+        bool Check(string expression) => engine.Evaluate(Settings((WorkflowKeys.Check, WorkflowKeys.CheckExpression), (WorkflowKeys.Expression, expression)), where);
+
+        Assert.That(Check("[n] == 1"), Is.True, "unprefixed is global");
+        Assert.That(Check("[profile:n] == 5"), Is.True);
+        Assert.That(Check("[control:n] == 9"), Is.True);
+        Assert.That(Check("hour() == 10"), Is.True, "the engine's clock is the expression's clock");
+    }
+
+    [Test]
     public void A_workflow_binding_survives_the_profile_file()
     {
         var options = new JsonSerializerOptions

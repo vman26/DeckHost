@@ -317,6 +317,40 @@ public class WorkflowEditorTests
         Assert.That(editor.HasBreakpoint(wait), Is.False);
     }
 
+    [TestCase("5", "number")]
+    [TestCase("true", "true / false")]
+    [TestCase("hello", "text")]
+    [TestCase("", "empty")]
+    public void The_variable_view_says_what_kind_of_value_each_variable_holds(string value, string kind) =>
+        Assert.That(new VariableRow("x", value).Kind, Is.EqualTo(kind));
+
+    [Test]
+    public void The_new_set_variable_and_if_settings_show_only_where_they_apply()
+    {
+        var (editor, _) = Editor();
+        var set = editor.AddNode(WorkflowNodeKinds.SetVariable, 300, 40);
+        editor.SelectNode(set.Id);
+        var fields = editor.NodeSettings!.Fields.ToDictionary(static field => field.Definition.Key);
+
+        Assert.That(fields[WorkflowKeys.Expression].IsVisible, Is.False, "Set to is the default operation");
+        Assert.That(fields[WorkflowKeys.Value].IsVisible, Is.True);
+        Assert.That(fields[WorkflowKeys.As].IsVisible, Is.True);
+
+        var operation = Expect.IsType<ChoiceSettingField>(fields[WorkflowKeys.Operation]);
+        operation.SelectedOption = operation.Options.Single(static option => option.Value == WorkflowKeys.Calculate);
+        Assert.That(fields[WorkflowKeys.Expression].IsVisible, Is.True);
+        Assert.That(fields[WorkflowKeys.Value].IsVisible, Is.False);
+
+        var check = editor.AddNode(WorkflowNodeKinds.If, 600, 40);
+        editor.SelectNode(check.Id);
+        var ifFields = editor.NodeSettings!.Fields.ToDictionary(static field => field.Definition.Key);
+        Assert.That(ifFields[WorkflowKeys.Expression].IsVisible, Is.False);
+        var kind = Expect.IsType<ChoiceSettingField>(ifFields[WorkflowKeys.Check]);
+        kind.SelectedOption = kind.Options.Single(static option => option.Value == WorkflowKeys.CheckExpression);
+        Assert.That(ifFields[WorkflowKeys.Expression].IsVisible, Is.True);
+        Assert.That(ifFields[WorkflowKeys.Name].IsVisible, Is.False);
+    }
+
     [Test]
     public void A_node_with_links_or_a_node_without_a_way_through_cannot_be_put_into_a_link()
     {

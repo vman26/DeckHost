@@ -238,8 +238,16 @@ public sealed class WorkflowEngine
 
             case WorkflowNodeKinds.If:
             {
-                var yes = Evaluate(settings, run.Scope);
-                Trace(run, frame, node.Id, WorkflowTraceKind.Node, yes ? "Yes" : "No");
+                var yes = EvaluateDetailed(settings, run.Scope, out var problem);
+                if (problem is not null)
+                {
+                    Trace(run, frame, node.Id, WorkflowTraceKind.Failed, $"{problem} Going on at No.");
+                }
+                else
+                {
+                    Trace(run, frame, node.Id, WorkflowTraceKind.Node, yes ? "Yes" : "No");
+                }
+
                 Follow(run, frame, node, yes ? WorkflowPorts.Yes : WorkflowPorts.No, done);
                 break;
             }
@@ -311,7 +319,11 @@ public sealed class WorkflowEngine
             }
 
             case WorkflowNodeKinds.SetVariable:
-                Trace(run, frame, node.Id, WorkflowTraceKind.Node, Apply(settings, run.Scope));
+                {
+                    var (line, ok) = TryApply(settings, run.Scope);
+                    Trace(run, frame, node.Id, ok ? WorkflowTraceKind.Node : WorkflowTraceKind.Failed, line);
+                }
+
                 Follow(run, frame, node, WorkflowPorts.Next, done);
                 break;
 
@@ -468,10 +480,21 @@ public sealed class WorkflowEngine
     }
 
     /// <summary>The answer of an If node.</summary>
-    internal bool Evaluate(ActionSettings settings, WorkflowScope? scope = null)
+    internal bool Evaluate(ActionSettings settings, WorkflowScope? scope = null) => EvaluateDetailed(settings, scope, out _);
+
+    /// <summary>The answer of an If node, and why when the check could not be made (an expression that failed: the answer is then No).</summary>
+    internal bool EvaluateDetailed(ActionSettings settings, WorkflowScope? scope, out string? problem)
     {
+        problem = null;
         switch (settings.Get(WorkflowKeys.Check, WorkflowKeys.CheckVariable))
         {
+            case WorkflowKeys.CheckExpression:
+            {
+                var result = Calculate(settings.Get(WorkflowKeys.Expression), scope);
+                problem = result.Error;
+                return result.Ok && result.Value.IsTrue;
+            }
+
             case WorkflowKeys.CheckApp:
             {
                 var part = settings.Get(WorkflowKeys.App);
@@ -516,27 +539,103 @@ public sealed class WorkflowEngine
     }
 
     /// <summary>What a Set variable node does; returns a line for the trace.</summary>
-    internal string Apply(ActionSettings settings, WorkflowScope? scope = null)
+    internal string Apply(ActionSettings settings, WorkflowScope? scope = null) => TryApply(settings, scope).Line;
+
+    /// <summary>
+    /// What a Set variable node does, with the line for the trace and whether it worked. A calculation that
+    /// fails, or a value that doesn't fit the chosen type, leaves the variable as it was.
+    /// </summary>
+    internal (string Line, bool Ok) TryApply(ActionSettings settings, WorkflowScope? scope = null)
     {
         var name = settings.Get(WorkflowKeys.Name);
         if (name.Length == 0)
         {
-            return "No variable name.";
+            return ("No variable name.", false);
         }
 
         var current = ReadVariable(name, settings, scope);
         var value = settings.Get(WorkflowKeys.Value);
-        var result = settings.Get(WorkflowKeys.Operation, WorkflowKeys.Set) switch
+        string result;
+        switch (settings.Get(WorkflowKeys.Operation, WorkflowKeys.Set))
         {
-            WorkflowKeys.Add => Format(Number(current, 0) + Number(value, 1)),
-            WorkflowKeys.Subtract => Format(Number(current, 0) - Number(value, 1)),
-            WorkflowKeys.Flip => string.Equals(current, "true", StringComparison.OrdinalIgnoreCase) ? "false" : "true",
-            WorkflowKeys.Clear => string.Empty,
-            _ => value,
-        };
+            case WorkflowKeys.Add:
+                result = Format(Number(current, 0) + Number(value, 1));
+                break;
+            case WorkflowKeys.Subtract:
+                result = Format(Number(current, 0) - Number(value, 1));
+                break;
+            case WorkflowKeys.Flip:
+                result = string.Equals(current, "true", StringComparison.OrdinalIgnoreCase) ? "false" : "true";
+                break;
+            case WorkflowKeys.Clear:
+                result = string.Empty;
+                break;
+            case WorkflowKeys.Calculate:
+            {
+                var calculated = Calculate(settings.Get(WorkflowKeys.Expression), scope);
+                if (!calculated.Ok)
+                {
+                    return ($"{name.Trim()}: {calculated.Error}", false);
+                }
 
+                result = calculated.Value.Text;
+                break;
+            }
+
+            default:
+                result = value;
+                break;
+        }
+
+        if (ConvertTo(settings.Get(WorkflowKeys.As, WorkflowKeys.AsAuto), result, out var converted) is { } why)
+        {
+            return ($"{name.Trim()}: {why}", false);
+        }
+
+        result = converted;
         _variables.Publish(WorkflowScopes.KeyOf(settings, name, scope), result);
-        return $"{name.Trim()} = {(result.Length == 0 ? "(empty)" : result)}";
+        return ($"{name.Trim()} = {(result.Length == 0 ? "(empty)" : result)}", true);
+    }
+
+    /// <summary>Stores a value as the chosen type: null when it fits (converted holds the text to store), else why not.</summary>
+    internal static string? ConvertTo(string type, string text, out string converted)
+    {
+        converted = text;
+        switch (type)
+        {
+            case WorkflowKeys.AsNumber:
+                if (!TryNumber(text, out var number))
+                {
+                    return $"'{text}' is not a number.";
+                }
+
+                converted = Format(number);
+                return null;
+            case WorkflowKeys.AsBool:
+                if (WorkflowExpression.ParseBool(text) is not { } flag)
+                {
+                    return $"'{text}' is not true or false.";
+                }
+
+                converted = flag ? "true" : "false";
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>Evaluates an expression for a node: <c>[name]</c> reads a variable ([profile:name] and [control:name] pick a scope).</summary>
+    internal WorkflowExpressionResult Calculate(string expression, WorkflowScope? scope) =>
+        WorkflowExpression.Evaluate(expression, name => ReadNamed(name, scope), Clock);
+
+    private string ReadNamed(string name, WorkflowScope? scope)
+    {
+        const string profile = "profile:";
+        const string control = "control:";
+        var key = name.StartsWith(profile, StringComparison.OrdinalIgnoreCase) && scope is { } p ? VariableKeys.ProfileVariable(p.ProfileId, name[profile.Length..])
+            : name.StartsWith(control, StringComparison.OrdinalIgnoreCase) && scope is { } c ? VariableKeys.ControlVariable(c.DeviceId, c.ControlId, name[control.Length..])
+            : VariableKeys.UserVariable(name);
+        return _variables.TryGetValue<string>(key, out var value) ? value ?? string.Empty : string.Empty;
     }
 
     public string ReadVariable(string name) =>

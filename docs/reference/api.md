@@ -968,14 +968,22 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 |---|---|
 | `const string Add` |  |
 | `const string App` | If (app): part of the focused app's name. |
+| `const string As` | Set variable: what type the result is stored as (`AsAuto`, `AsText`, `AsNumber` or `AsBool`). |
+| `const string AsAuto` |  |
+| `const string AsBool` |  |
+| `const string AsNumber` |  |
+| `const string AsText` |  |
+| `const string Calculate` |  |
 | `const string Check` | If: what to check (`CheckVariable`, `CheckApp`, `CheckTime`). |
 | `const string CheckApp` |  |
+| `const string CheckExpression` |  |
 | `const string CheckTime` |  |
 | `const string CheckVariable` |  |
 | `const string Clear` |  |
 | `const string Contains` |  |
 | `const string Count` | Repeat: how many times (`ModeCount`). |
 | `const string Every` | Trigger (timer): the seconds between runs. |
+| `const string Expression` | If (expression) and Set variable (Calculate): the expression, e.g. `[count] > 3 && hour() < 18`. |
 | `const string Flip` |  |
 | `const string From` | If (time): from and to, "HH:mm" (may wrap past midnight). |
 | `const string Interval` | Repeat: how long to wait between rounds, in milliseconds (0: none). |

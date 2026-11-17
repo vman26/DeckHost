@@ -15,10 +15,10 @@ A run starts at a **When** node and follows the links from left to right. A node
 | **When** | Starts the workflow: the control is pressed, released, tapped, double pressed, held down, turned left or right, or swiped left or right, or something happens that has nothing to do with the control (see [Workflows that start by themselves](#workflows-that-start-by-themselves)). A workflow can have several. |
 | **Action** | Runs an action, with its own settings. Drop an action from the list on the left onto the canvas. If the action did not run (its plugin isn't loaded, or it failed), the run goes on at **On error** when that has a link, else at **Then**; the node can also try again first (see [When an action fails](#when-an-action-fails)). |
 | **Wait** | Waits, then continues. The device keeps working. While a run waits the node fills up over the time it takes. |
-| **If** | Continues at **Yes** or **No**: a variable (equal to, greater than, containing, empty, …), the app in front (part of its name), or the time of day (also past midnight, 22:00–06:00). |
+| **If** | Continues at **Yes** or **No**: a variable (equal to, greater than, containing, empty, …), the app in front (part of its name), the time of day (also past midnight, 22:00–06:00), or an [expression](#expressions-and-types). |
 | **Toggle** | Takes **1st** and **2nd** in turn: on, then off. |
 | **Repeat** | Runs **Each time** one round after the other, then **Done**. How many rounds: a fixed number, as many as a variable says, **while** a variable has a value, or **until** it does. An optional pause between rounds turns it into a timer (a condition that never changes stops after 10,000 rounds). |
-| **Set variable** | Sets, adds to, subtracts from, flips (true/false) or clears a variable. |
+| **Set variable** | Sets, adds to, subtracts from, flips (true/false), clears or **calculates** a variable (see [Expressions](#expressions-and-types)). **Store as** keeps a result as text, a number or true/false and refuses a value that doesn't fit. |
 | **Call workflow** | Runs a [shared workflow](#shared-workflows) from its When node on, then goes on at **Then**. If it can't run (it was deleted, it has no When node, it would call itself, or calls are nested more than 8 deep) the run goes on at **On error** when that has a link, else at **Then**. |
 | **Stop** | Ends the run, including branches that are still waiting. |
 
@@ -40,6 +40,17 @@ Event triggers run on a workflow whose profile (page or folder) is shown on a de
 ## When an action fails
 
 An action node has two outputs: **Then** and **On error**. When its action did not run, the run follows **On error** if you linked it, so a failing step can show a warning, run something else or end the run; with nothing linked there, it goes on at **Then** as before. In the node's settings, **Try again when it did not run** (up to 5 times) and **Wait between tries** make the node try again first, and the node fills up while it waits for the next try. New actions you add after a node are linked from **Then**; link **On error** yourself by dragging from its dot.
+
+## Expressions and types
+
+Calculate (in Set variable) and the If check **An expression** take a small formula:
+
+- Variables are written in brackets: `[count]`; `[profile:count]` and `[control:count]` name a scope. An unset variable is empty.
+- Numbers use a dot (`2.5`). Operators: `+ - * / % **`, comparisons `== != < <= > >=`, logic `&& || !` (or `and`, `or`, `not`), and `condition ? a : b`. A number next to text joins as text (`[count] + ' taps'`).
+- Functions (lower case): `len upper lower trim contains startswith endswith replace substr number text bool clamp round` (`round(x)` or `round(x, digits)`), `hour() minute() weekday()` (1 = Monday), and from the formula library `min max abs floor ceiling sqrt pow if in`.
+- Anything else is refused with a message in the run log: a broken formula leaves the variable as it was, and an If node goes to **No**.
+
+Variables are stored as text and read back by what they look like: `true` / `false` are true/false values, `12.5` is a number, anything else is text. The variable view shows each variable's kind. Comparisons in an If node compare numbers as numbers (`10` is greater than `9`).
 
 ## Shared workflows
 
