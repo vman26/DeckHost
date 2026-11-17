@@ -336,11 +336,15 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
     public void Dispose()
     {
-        foreach (var uuid in _plugins.Keys.ToList())
+        // All at once: stopping one after another waits for each process in turn, which added up
+        // to more than Windows gives an application that is closing at shutdown.
+        var running = _plugins.Values.ToList();
+        foreach (var plugin in running.Where(static plugin => plugin.Html is not null))
         {
-            Stop(uuid);
+            Stop(plugin.Manifest.Uuid); // Browser pages belong to the thread that made them.
         }
 
+        Parallel.ForEach(running.Where(static plugin => plugin.Html is null), plugin => Stop(plugin.Manifest.Uuid));
         _server.Dispose();
     }
 

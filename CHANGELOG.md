@@ -48,6 +48,10 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- Windows no longer reports DeckHost (or one of its plugins) as preventing shutdown: with DeckHost
+  running in the tray its window refused every close, also the one Windows sends when shutting
+  down. It now only stays when you close the window yourself, and stops its plugin processes
+  together instead of one after another.
 - Right-clicking a control offers **Try it** (runs its action) instead of a Customize entry that
   did nothing, since clicking a control already opens its editor.
 - The Plugins page says what each device plugin supports (the Elgato one said "Supports .").

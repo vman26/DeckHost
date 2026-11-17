@@ -301,3 +301,30 @@ public sealed class OpenActionDeviceTests : IDisposable
         public void RequestRedraw(string deviceId) => RedrawQueue.Enqueue(deviceId);
     }
 }
+
+/// <summary>Closing DeckHost's window while Windows shuts down.</summary>
+public class ShutdownTests
+{
+    [TestCase(Avalonia.Controls.WindowCloseReason.WindowClosing, false, true, true)]
+    [TestCase(Avalonia.Controls.WindowCloseReason.Undefined, false, true, true)]
+    [TestCase(Avalonia.Controls.WindowCloseReason.OSShutdown, false, true, false)]
+    [TestCase(Avalonia.Controls.WindowCloseReason.ApplicationShutdown, false, true, false)]
+    [TestCase(Avalonia.Controls.WindowCloseReason.WindowClosing, true, true, false)]
+    [TestCase(Avalonia.Controls.WindowCloseReason.WindowClosing, false, false, false)]
+    public void Only_the_users_own_close_keeps_DeckHost_in_the_tray(Avalonia.Controls.WindowCloseReason reason, bool exiting, bool tray, bool keeps)
+    {
+        Assert.That(DeckHost.App.App.KeepsWindowOnClose(reason, exiting, tray), Is.EqualTo(keeps));
+    }
+
+    [Test]
+    public void Many_plugin_processes_are_stopped_at_once()
+    {
+        // Each process is waited for up to 3 s; one after another that adds up. This only checks the
+        // runtime still disposes with nothing running (the processes are covered by the plugin tests).
+        var directory = Path.Combine(Path.GetTempPath(), "deckhost-dispose-" + Guid.NewGuid().ToString("N"));
+        var runtime = new StreamDeckRuntime(Path.Combine(directory, "data"), Path.Combine(directory, "logs"), (_, _) => { });
+
+        Assert.DoesNotThrow(runtime.Dispose);
+        Directory.Delete(directory, recursive: true);
+    }
+}

@@ -68,16 +68,22 @@ public partial class App : Application
             var mainWindow = new MainWindow { DataContext = mainViewModel };
             var settings = Platform.AppSettings.Load();
             var exiting = false;
+            var osShutdown = false;
             AppSettingsViewModel.Changed += changed => settings = changed;
 
             // DeckHost keeps running in the tray: the device works without the window.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             mainWindow.Closing += (_, e) =>
             {
-                if (!exiting && settings.KeepsRunningInTray)
+                if (KeepsWindowOnClose(e.CloseReason, exiting, settings.KeepsRunningInTray))
                 {
                     e.Cancel = true;
                     mainWindow.Hide();
+                }
+                else if (e.CloseReason is WindowCloseReason.OSShutdown or WindowCloseReason.ApplicationShutdown)
+                {
+                    exiting = true;
+                    osShutdown = e.CloseReason == WindowCloseReason.OSShutdown;
                 }
             };
             mainWindow.Closed += (_, _) => desktop.Shutdown();
@@ -153,14 +159,15 @@ public partial class App : Application
 
                 // Blanks the device, stops the SDK threads and unloads the native bridge.
                 // The host's worker never needs the UI thread, so waiting here cannot deadlock.
-                deviceHostService.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+                // When Windows is shutting down it won't wait long for us: blank the device quickly.
+                deviceHostService.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(osShutdown ? 2 : 5));
                 pluginCatalog.Dispose();
 
                 // A downloaded update (Install updates automatically) installs now; its installer
                 // waits for this process to end and doesn't start DeckHost again.
                 updates.InstallPendingOnExit();
                 logger.LogInformation("DeckHost stopped.");
-                services.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+                services.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(osShutdown ? 2 : 5));
                 NLog.LogManager.Shutdown();
             };
         }
@@ -237,6 +244,14 @@ public partial class App : Application
     /// The composition root. Everything is a singleton except the view models of windows that can
     /// be opened more than once. Device plugins are the only place that knows about hardware.
     /// </summary>
+    /// <summary>
+    /// Whether closing the main window only hides it (DeckHost stays in the tray). Only the user's own
+    /// close does: when Windows shuts down or signs out, or the application itself shuts down,
+    /// refusing the close made Windows wait for DeckHost ("preventing shutdown").
+    /// </summary>
+    internal static bool KeepsWindowOnClose(WindowCloseReason reason, bool exiting, bool keepsRunningInTray) =>
+        !exiting && keepsRunningInTray && reason is not (WindowCloseReason.OSShutdown or WindowCloseReason.ApplicationShutdown);
+
     private static ServiceProvider ConfigureServices()
     {
         var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost");
