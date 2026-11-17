@@ -36,6 +36,9 @@ internal static class MiraBoxModels
     /// <summary>The vertical middle of the XL's four key rows, where its side wheels are centered.</summary>
     private const double XlGridMiddle = Margin + (((4 * (KeySize + KeyGap)) - KeyGap) / 2);
 
+    /// <summary>Where the N3's knob cluster starts: right of its three key columns.</summary>
+    private const double N3Knobs = Margin + (3 * KeySize) + (2 * KeyGap) + 30;
+
     private const InputCapabilities KeyInputs = InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.LongPress;
     private const InputCapabilities KnobInputs = InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release;
 
@@ -179,16 +182,17 @@ internal static class MiraBoxModels
 
     /// <summary>
     /// The N3 (V2, V2.5, V3): 6 keys (1–6 from the top-left), three buttons below them (7–9) and
-    /// three knobs on the left (top: press 12, left 15, right 18; bottom-left 10/13/16; bottom-right
-    /// 11/14/17; no release).
+    /// three knobs to the right of the keys (top: press 12, left 15, right 18; bottom-left 10/13/16;
+    /// bottom-right 11/14/17; no release). The SDK's comments put the knobs on the left; on the
+    /// hardware they are on the right.
     /// </summary>
     public static MiraBoxModel N3 { get; } = new(Origin.N3, "n3", "N3", "StreamDock N3",
         [
-            .. Keys(3, 2, TopLeftRows(3, 2, 1), Margin + 230, Margin),
-            .. ButtonRow(3, [7, 8, 9], Margin + 230, Margin + (2 * (KeySize + KeyGap)), (3 * KeySize) + (2 * KeyGap)),
-            Knob(0, Margin + 65, Margin + 10, left: 15, right: 18, press: 12, release: false),
-            Knob(1, Margin, Margin + 120, left: 13, right: 16, press: 10, release: false),
-            Knob(2, Margin + 130, Margin + 120, left: 14, right: 17, press: 11, release: false),
+            .. Keys(3, 2, TopLeftRows(3, 2, 1), Margin, Margin),
+            .. ButtonRow(3, [7, 8, 9], Margin, Margin + (2 * (KeySize + KeyGap)), (3 * KeySize) + (2 * KeyGap)),
+            Knob(0, N3Knobs + 65, Margin + 10, left: 15, right: 18, press: 12, release: false),
+            Knob(1, N3Knobs, Margin + 120, left: 13, right: 16, press: 10, release: false),
+            Knob(2, N3Knobs + 130, Margin + 120, left: 14, right: 17, press: 11, release: false),
         ])
     {
         ScreenWidth = 320,
