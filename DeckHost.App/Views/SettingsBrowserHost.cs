@@ -51,15 +51,52 @@ public sealed class SettingsBrowserHost : ContentControl
         base.OnPropertyChanged(change);
         if (change.Property == SourceProperty && _attached)
         {
+            _tries = 0;
             Refresh();
         }
     }
 
-    private void OnWebViewFailed() => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+    /// <summary>How many times a web view that did not come up is created again by itself before the message (with its button) is shown.</summary>
+    private const int AutomaticTries = 3;
+
+    /// <summary>How long a web view may take to come up before it is created again: WebView2's first start can be slow (a cold profile folder, a virus scanner), WebKitGTK and WKWebView are quick, and a view created while the window was still opening often only works the second time.</summary>
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(OperatingSystem.IsWindows() ? 12 : 4);
+
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(700);
+
+    private int _tries;
+
+    private void OnWebViewFailed(bool lasting) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+    {
+        if (lasting)
+        {
+            Release();
+            ShowMessage();
+        }
+        else if (_browser is not null && !_browserStarted)
+        {
+            // Torn down while it started: the same page again, once things have settled.
+            TryAgainOrGiveUp();
+        }
+    });
+
+    private void TryAgainOrGiveUp()
     {
         Release();
-        ShowMessage();
-    });
+        if (++_tries > AutomaticTries)
+        {
+            ShowMessage();
+            return;
+        }
+
+        Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+        {
+            if (_attached && Content is null)
+            {
+                Refresh();
+            }
+        }, RetryDelay);
+    }
 
     private void Refresh()
     {
@@ -126,6 +163,7 @@ public sealed class SettingsBrowserHost : ContentControl
             retry.Click += (_, _) =>
             {
                 WebViewSupport.Retry();
+                _tries = 0;
                 Release();
                 Refresh();
             };
@@ -163,16 +201,19 @@ public sealed class SettingsBrowserHost : ContentControl
                 Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
             }
         };
-        browser.AdapterCreated += (_, _) => _browserStarted = true;
+        browser.AdapterCreated += (_, _) =>
+        {
+            _browserStarted = true;
+            _tries = 0;
+        };
         Avalonia.Threading.DispatcherTimer.RunOnce(() =>
         {
-            // No web view on this system (Linux without WebKitGTK): the message instead.
+            // Not up in time (slow first start, or no web view on this system, Linux without WebKitGTK): again, then the message.
             if (!_browserStarted && _browser == browser && browser.IsEffectivelyVisible)
             {
-                Release();
-                ShowMessage();
+                TryAgainOrGiveUp();
             }
-        }, TimeSpan.FromSeconds(8));
+        }, StartTimeout);
         return browser;
     }
 }

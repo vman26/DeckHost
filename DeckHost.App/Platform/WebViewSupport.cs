@@ -24,8 +24,11 @@ internal static class WebViewSupport
     /// <summary>Folder of the failure marker; tests replace it.</summary>
     public static string MarkerPath { get; set; } = DisabledFile;
 
-    /// <summary>Raised (on any thread) when a web view failed while running: views switch to their fallback.</summary>
-    public static event Action? Failed;
+    /// <summary>
+    /// Raised (on any thread) when a web view failed. The argument is true when the runtime can't be used at all (views show their
+    /// message at once); false for a failure that may pass (a view torn down while it started): views that were still starting try again.
+    /// </summary>
+    public static event Action<bool>? Failed;
 
     public static bool IsAvailable => !SafeMode.IsOn && (_available ??= Probe());
 
@@ -65,20 +68,22 @@ internal static class WebViewSupport
     }
 
     /// <summary>
-    /// A web view failed after it was created: no more web views in this run. When the failure says the runtime itself
-    /// can't be used (not registered, not found) it is remembered for the next starts too, until the runtime changes;
-    /// a view that was only torn down while it started (<c>E_ABORT</c>, e.g. the editor was rebuilt) is not.
+    /// A web view failed after it was created. When the failure says the runtime itself can't be used (not registered, not
+    /// found) there are no more web views in this run, and it is remembered for the next starts too, until the runtime changes.
+    /// A view that was only torn down while it started (<c>E_ABORT</c>, e.g. the editor was rebuilt) changes nothing: the next
+    /// web view is created as usual.
     /// </summary>
     public static void ReportFailure(Exception exception)
     {
-        _available = false;
         Reason = $"The web view stopped working ({Describe(exception)}).";
-        if (IsRuntimeUnusable(exception))
+        var lasting = IsRuntimeUnusable(exception);
+        if (lasting)
         {
+            _available = false;
             Remember(exception);
         }
 
-        Failed?.Invoke();
+        Failed?.Invoke(lasting);
     }
 
     /// <summary>Whether the failure means this computer's web view runtime can't be used at all, so trying again at the next start would fail too.</summary>

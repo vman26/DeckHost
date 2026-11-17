@@ -194,7 +194,7 @@ public sealed class WebViewSupportTests : IDisposable
     }
 
     [Test]
-    public void ReportFailure_WebViewTornDownWhileStarting_StopsWebViewsForThisRunOnly()
+    public void ReportFailure_WebViewTornDownWhileStarting_KeepsWebViewsAvailable()
     {
         // Arrange (E_ABORT: the editor was rebuilt while the control started; the runtime itself is fine)
         var aborted = new COMException("Operation aborted", Aborted);
@@ -203,8 +203,24 @@ public sealed class WebViewSupportTests : IDisposable
         WebViewSupport.ReportFailure(aborted);
 
         // Assert
-        Assert.That(WebViewSupport.IsAvailable, Is.False);
-        Assert.That(File.Exists(WebViewSupport.MarkerPath), Is.False, "the next start tries the web view again");
+        Assert.That(WebViewSupport.IsAvailable, Is.True, "the next web view is created as usual");
+        Assert.That(File.Exists(WebViewSupport.MarkerPath), Is.False, "and the next start tries the web view again");
+    }
+
+    [Test]
+    public void ReportFailure_WebViewTornDownWhileStarting_RaisesFailedAsNotLasting()
+    {
+        // Arrange
+        bool? lasting = null;
+        void OnFailed(bool value) => lasting = value;
+        WebViewSupport.Failed += OnFailed;
+
+        // Act
+        WebViewSupport.ReportFailure(new COMException("Operation aborted", Aborted));
+        WebViewSupport.Failed -= OnFailed;
+
+        // Assert
+        Assert.That(lasting, Is.False);
     }
 
     [TestCase(ClassNotRegistered, true)]
@@ -223,7 +239,7 @@ public sealed class WebViewSupportTests : IDisposable
     {
         // Arrange
         var raised = 0;
-        void OnFailed() => raised++;
+        void OnFailed(bool lasting) => raised++;
         WebViewSupport.Failed += OnFailed;
 
         // Act

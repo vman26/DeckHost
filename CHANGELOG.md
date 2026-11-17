@@ -37,8 +37,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 - The Variables page publishes CPU and memory while it is open (they used to show nothing unless a background followed
   them), once a second and in percent, in step with the System Info action.
-- When the built-in browser can't start, the plugin settings page now says why and offers **Try the built-in browser
-  again**; a "failed" mark left by an older DeckHost that was only a view torn down while starting is forgotten.
+- When the built-in browser can't start, the plugin settings page tries again by itself (up to three times) before it says why and
+  offers **Try the built-in browser again**; a view that is only torn down while it starts no longer turns the browser off; a "failed" mark left by an older DeckHost that was only a view torn down while starting is forgotten.
 
 - Plugin store: open-source Elgato plugins can come from a checksummed copy kept in DeckHost's plugin
   repository instead of the community archive (the copying itself stays off for now).
