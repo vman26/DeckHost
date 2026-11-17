@@ -31,9 +31,9 @@
 				<StackPanel Spacing="8">
 					<TextBlock Text="New variable" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
 					<Grid ColumnDefinitions="2*,Auto,2*,Auto" ColumnSpacing="8">
-						<TextBox Text="{Binding NewName}" Watermark="Name" />
+						<TextBox Text="{Binding NewName}" PlaceholderText="Name" />
 						<ComboBox Grid.Column="1" ItemsSource="{x:Static vm:VariablesViewModel.Types}" SelectedItem="{Binding NewType}" MinWidth="120" />
-						<TextBox Grid.Column="2" Text="{Binding NewValue}" Watermark="Value" />
+						<TextBox Grid.Column="2" Text="{Binding NewValue}" PlaceholderText="Value" />
 						<Button Grid.Column="3" Content="Create" Classes="accent" Command="{Binding CreateCommand}" />
 					</Grid>
 					<TextBlock Classes="hint" Text="{Binding Status}" IsVisible="{Binding Status.Length}" />
