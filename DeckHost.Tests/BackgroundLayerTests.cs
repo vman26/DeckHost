@@ -12,6 +12,25 @@ namespace DeckHost.Tests;
 /// <summary>Profile backgrounds as layers: solid, gradient, image, and layers that follow a variable.</summary>
 public sealed class BackgroundLayerTests
 {
+    private const string BoundVariable = "vars.level";
+    private const string CpuVariable = "system.cpu";
+    private const string LayerColor = "#FFFFFF";
+    private const string Black = "#000000";
+    private const string Red = "#FF0000";
+    private const string Green = "#00FF00";
+    private const string Blue = "#0000FF";
+    private const string UnknownKind = "hologram";
+    private const string Pic = "C:\\pic.png";
+    private const double HalfOpacity = 0.5;
+    private const int ColorTolerance = 1;
+    private const double Tolerance = 0.001;
+    private const int GradientAngle = 45;
+    private const int RedPixelLow = 120;
+    private const int RedPixelHigh = 135;
+    private const int OpaqueAlpha = 255;
+    private const int WaitSeconds = 5;
+    private const int PollMilliseconds = 20;
+
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -33,98 +52,205 @@ public sealed class BackgroundLayerTests
 
     private static byte[] Corner(ControlFrame frame) => frame.Rgba[..4];
 
-    [Test]
-    public void The_older_color_and_image_fields_are_the_bottom_layers()
-    {
-        var background = new ProfileBackground("#112233", "C:\\pic.png") { Layers = [new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = "#FF0000", ToColor = "#0000FF" }] };
+    private static ProfileBackground WithLayer(BackgroundLayer layer) => new() { Layers = [layer] };
 
+    private static ProfileBackground OpaqueSolidFollowing(BackgroundBinding binding) =>
+        WithLayer(new BackgroundLayer(BackgroundLayerKinds.Solid, Opacity: 0.8) { Color = LayerColor, Binding = binding });
+
+    // ---------------------------------------------------------------- which layers there are
+
+    [Test]
+    public void Effective_OlderColorAndImageFields_AreTheBottomLayers()
+    {
+        // Arrange
+        var background = new ProfileBackground("#112233", Pic) { Layers = [new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = Red, ToColor = Blue }] };
+
+        // Act
         var layers = BackgroundLayers.Effective(background);
 
+        // Assert
         Assert.That(layers.Select(static layer => layer.Kind), Is.EqualTo(new[] { BackgroundLayerKinds.Solid, BackgroundLayerKinds.Image, BackgroundLayerKinds.Gradient }));
-        Assert.That(BackgroundLayers.Effective(null), Is.Empty);
-        Assert.That(new ProfileBackground().IsEmpty, Is.True);
-        Assert.That(new ProfileBackground { Layers = [] }.IsEmpty, Is.True);
-        Assert.That(new ProfileBackground { Layers = [new BackgroundLayer(BackgroundLayerKinds.Solid)] }.IsEmpty, Is.False);
     }
 
     [Test]
-    public async Task Layers_are_drawn_bottom_to_top_with_their_opacity_and_hidden_or_unknown_ones_are_skipped()
+    public void Effective_NoBackground_HasNoLayers()
     {
-        var (host, store, frames) = await Start(new ProfileBackground("#0000FF")
+        // Act
+        var layers = BackgroundLayers.Effective(null);
+
+        // Assert
+        Assert.That(layers, Is.Empty);
+    }
+
+    [Test]
+    public void IsEmpty_WithNothingSetOrOnlyEmptyLayers_IsTrue()
+    {
+        // Act
+        var plain = new ProfileBackground().IsEmpty;
+        var emptyLayers = new ProfileBackground { Layers = [] }.IsEmpty;
+
+        // Assert
+        Assert.That(plain, Is.True);
+        Assert.That(emptyLayers, Is.True);
+    }
+
+    [Test]
+    public void IsEmpty_WithALayer_IsFalse()
+    {
+        // Act
+        var isEmpty = new ProfileBackground { Layers = [new BackgroundLayer(BackgroundLayerKinds.Solid)] }.IsEmpty;
+
+        // Assert
+        Assert.That(isEmpty, Is.False);
+    }
+
+    // ---------------------------------------------------------------- what is drawn
+
+    [Test]
+    public async Task Render_LayersWithOpacityAndHiddenAndUnknownOnes_DrawsBottomToTopSkippingTheOthers()
+    {
+        // Arrange
+        var (host, store, frames) = await Start(new ProfileBackground(Blue)
         {
             Layers =
             [
-                new BackgroundLayer(BackgroundLayerKinds.Solid, Opacity: 0.5) { Color = "#FF0000" },
-                new BackgroundLayer(BackgroundLayerKinds.Solid, Visible: false) { Color = "#00FF00" },
-                new BackgroundLayer("hologram") { Color = "#FFFFFF" },
+                new BackgroundLayer(BackgroundLayerKinds.Solid, Opacity: HalfOpacity) { Color = Red },
+                new BackgroundLayer(BackgroundLayerKinds.Solid, Visible: false) { Color = Green },
+                new BackgroundLayer(UnknownKind) { Color = LayerColor },
             ],
         });
         await using var _ = host;
         using var __ = store;
 
+        // Act
         var pixel = Corner(frames["key.0"]);
-        Assert.That(pixel[0], Is.InRange(120, 135), "half red over blue");
+
+        // Assert
+        Assert.That(pixel[0], Is.InRange(RedPixelLow, RedPixelHigh), "half red over blue");
         Assert.That(pixel[1], Is.EqualTo(0), "the hidden green layer is not drawn");
-        Assert.That(pixel[2], Is.InRange(120, 135), "half of the blue is left");
-        Assert.That(pixel[3], Is.EqualTo(255));
+        Assert.That(pixel[2], Is.InRange(RedPixelLow, RedPixelHigh), "half of the blue is left");
+        Assert.That(pixel[3], Is.EqualTo(OpaqueAlpha));
     }
 
     [Test]
-    public async Task A_gradient_runs_across_the_whole_layout_so_neighbouring_keys_continue_each_other()
+    public async Task Render_AGradient_RunsAcrossTheWholeLayoutSoNeighbouringKeysContinueEachOther()
     {
-        var (host, store, frames) = await Start(new ProfileBackground { Layers = [new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = "#FF0000", ToColor = "#0000FF", Angle = 0 }] });
+        // Arrange
+        var (host, store, frames) = await Start(WithLayer(new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = Red, ToColor = Blue, Angle = 0 }));
         await using var _ = host;
         using var __ = store;
 
+        // Act
         var left = Corner(frames["key.0"]);
         var right = frames["key.1"].Rgba[^4..];
+
+        // Assert
         Assert.That(left[0], Is.GreaterThan(right[0]), "red fades from the left key to the right one");
         Assert.That(right[2], Is.GreaterThan(left[2]), "and blue grows");
         Assert.That(left[0] + left[2], Is.InRange(230, 275), "a mix of the two ends");
     }
 
+    // ---------------------------------------------------------------- bindings
+
     [TestCase(0.0, 255, 0)]
     [TestCase(100.0, 0, 255)]
     [TestCase(50.0, 128, 128)]
-    public void A_color_binding_blends_between_its_two_colors_by_the_variables_value(double value, int red, int blue)
+    public void Resolve_AColorBinding_BlendsBetweenItsTwoColorsByTheValue(double value, int red, int blue)
     {
+        // Arrange
         using var store = new VariableStore();
-        store.Publish("system.cpu", value);
-        var background = new ProfileBackground
-        {
-            Layers = [new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = "#000000", Binding = new BackgroundBinding("system.cpu") { FromColor = "#FF0000", ToColor = "#0000FF" } }],
-        };
+        store.Publish(CpuVariable, value);
+        var background = WithLayer(new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = Black, Binding = new BackgroundBinding(CpuVariable) { FromColor = Red, ToColor = Blue } });
 
+        // Act
         var layer = BackgroundLayers.Resolve(background, store).Single();
 
-        Assert.That((int)layer.Color.Red, Is.InRange(red - 1, red + 1));
-        Assert.That((int)layer.Color.Blue, Is.InRange(blue - 1, blue + 1));
+        // Assert
+        Assert.That((int)layer.Color.Red, Is.InRange(red - ColorTolerance, red + ColorTolerance));
+        Assert.That((int)layer.Color.Blue, Is.InRange(blue - ColorTolerance, blue + ColorTolerance));
     }
 
     [Test]
-    public void Opacity_and_visibility_bindings_follow_the_value_and_unreadable_values_use_the_fallback()
+    public void Resolve_AnOpacityBinding_ScalesTheLayersOwnOpacity()
     {
+        // Arrange
         using var store = new VariableStore();
-        ProfileBackground Of(BackgroundBinding binding) => new() { Layers = [new BackgroundLayer(BackgroundLayerKinds.Solid, Opacity: 0.8) { Color = "#FFFFFF", Binding = binding }] };
+        store.Publish(BoundVariable, "50");
 
-        store.Publish("vars.level", "50");
-        Assert.That(BackgroundLayers.Resolve(Of(new BackgroundBinding("vars.level", BackgroundBindingTargets.Opacity)), store).Single().Opacity, Is.EqualTo(0.4).Within(0.001), "half of the layer's own 0.8");
+        // Act
+        var layer = BackgroundLayers.Resolve(OpaqueSolidFollowing(new BackgroundBinding(BoundVariable, BackgroundBindingTargets.Opacity)), store).Single();
 
-        store.Publish("vars.on", "true");
-        Assert.That(BackgroundLayers.Resolve(Of(new BackgroundBinding("vars.on", BackgroundBindingTargets.Visible, Min: 1)), store), Has.Count.EqualTo(1));
-        store.Publish("vars.on", "false");
-        Assert.That(BackgroundLayers.Resolve(Of(new BackgroundBinding("vars.on", BackgroundBindingTargets.Visible, Min: 1)), store), Is.Empty);
-
-        store.Publish("vars.text", "not a number");
-        Assert.That(BackgroundLayers.Resolve(Of(new BackgroundBinding("vars.text", BackgroundBindingTargets.Opacity) { Fallback = 100 }), store).Single().Opacity, Is.EqualTo(0.8).Within(0.001), "unreadable: the fallback (the top of the range)");
-        Assert.That(BackgroundLayers.Resolve(Of(new BackgroundBinding("vars.missing", BackgroundBindingTargets.Opacity)), store), Is.Empty, "unset and no fallback: 0, so nothing shows");
-        Assert.That(BackgroundLayers.BoundVariables(Of(new BackgroundBinding(" vars.level "))), Is.EquivalentTo(new[] { "vars.level" }));
+        // Assert
+        Assert.That(layer.Opacity, Is.EqualTo(0.4).Within(Tolerance), "half of the layer's own 0.8");
     }
 
-    private const string BoundVariable = "vars.level";
-    private const string LayerColor = "#FFFFFF";
+    [Test]
+    public void Resolve_AVisibilityBindingWhileTheVariableIsTrue_KeepsTheLayer()
+    {
+        // Arrange
+        using var store = new VariableStore();
+        store.Publish("vars.on", "true");
 
-    private static ProfileBackground WithLayer(BackgroundLayer layer) => new() { Layers = [layer] };
+        // Act
+        var layers = BackgroundLayers.Resolve(OpaqueSolidFollowing(new BackgroundBinding("vars.on", BackgroundBindingTargets.Visible, Min: 1)), store);
+
+        // Assert
+        Assert.That(layers, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void Resolve_AVisibilityBindingWhileTheVariableIsFalse_DropsTheLayer()
+    {
+        // Arrange
+        using var store = new VariableStore();
+        store.Publish("vars.on", "false");
+
+        // Act
+        var layers = BackgroundLayers.Resolve(OpaqueSolidFollowing(new BackgroundBinding("vars.on", BackgroundBindingTargets.Visible, Min: 1)), store);
+
+        // Assert
+        Assert.That(layers, Is.Empty);
+    }
+
+    [Test]
+    public void Resolve_AnUnreadableValue_UsesTheBindingsFallback()
+    {
+        // Arrange
+        using var store = new VariableStore();
+        store.Publish("vars.text", "not a number");
+
+        // Act
+        var layer = BackgroundLayers.Resolve(OpaqueSolidFollowing(new BackgroundBinding("vars.text", BackgroundBindingTargets.Opacity) { Fallback = 100 }), store).Single();
+
+        // Assert
+        Assert.That(layer.Opacity, Is.EqualTo(0.8).Within(Tolerance), "the fallback is the top of the range");
+    }
+
+    [Test]
+    public void Resolve_AnUnsetVariableWithoutAFallback_ShowsNothing()
+    {
+        // Arrange
+        using var store = new VariableStore();
+
+        // Act
+        var layers = BackgroundLayers.Resolve(OpaqueSolidFollowing(new BackgroundBinding("vars.missing", BackgroundBindingTargets.Opacity)), store);
+
+        // Assert
+        Assert.That(layers, Is.Empty, "0, so nothing shows");
+    }
+
+    [Test]
+    public void BoundVariables_AVariableWithSpaces_IsListedTrimmed()
+    {
+        // Arrange
+        var background = OpaqueSolidFollowing(new BackgroundBinding(" vars.level "));
+
+        // Act
+        var variables = BackgroundLayers.BoundVariables(background);
+
+        // Assert
+        Assert.That(variables, Is.EquivalentTo(new[] { BoundVariable }));
+    }
 
     [Test]
     public void BoundVariables_HiddenBoundLayer_IsEmpty()
@@ -156,7 +282,7 @@ public sealed class BackgroundLayerTests
     public void BoundVariables_BoundLayerOfAnUnknownKind_IsEmpty()
     {
         // Arrange
-        var background = WithLayer(new BackgroundLayer("hologram") { Binding = new BackgroundBinding(BoundVariable) });
+        var background = WithLayer(new BackgroundLayer(UnknownKind) { Binding = new BackgroundBinding(BoundVariable) });
 
         // Act
         var variables = BackgroundLayers.BoundVariables(background);
@@ -166,65 +292,106 @@ public sealed class BackgroundLayerTests
     }
 
     [Test]
-    public async Task A_layer_that_follows_a_variable_redraws_the_device_when_the_variable_changes()
+    public async Task Render_ALayerThatFollowsAVariable_RedrawsTheDeviceWhenTheVariableChanges()
     {
-        var (host, store, frames) = await Start(new ProfileBackground
-        {
-            Layers = [new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = "#000000", Binding = new BackgroundBinding("system.cpu") { FromColor = "#000000", ToColor = "#FF0000" } }],
-        });
+        // Arrange
+        var (host, store, frames) = await Start(WithLayer(new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = Black, Binding = new BackgroundBinding(CpuVariable) { FromColor = Black, ToColor = Red } }));
         await using var _ = host;
         using var __ = store;
-        Assert.That(Corner(frames["key.0"])[0], Is.EqualTo(0), "unset: the low end");
+        var before = Corner(frames["key.0"])[0];
 
-        store.Publish("system.cpu", 100.0);
-        var end = DateTime.UtcNow.AddSeconds(5);
-        while (Corner(frames["key.0"])[0] != 255 && DateTime.UtcNow < end)
+        // Act
+        store.Publish(CpuVariable, 100.0);
+        var end = DateTime.UtcNow.AddSeconds(WaitSeconds);
+        while (Corner(frames["key.0"])[0] != OpaqueAlpha && DateTime.UtcNow < end)
         {
-            await Task.Delay(20);
+            await Task.Delay(PollMilliseconds);
             await host.WhenIdleAsync();
         }
 
-        Assert.That(Corner(frames["key.0"])[0], Is.EqualTo(255), "the key went red without any other change");
+        // Assert
+        Assert.That(before, Is.EqualTo(0), "unset: the low end");
+        Assert.That(Corner(frames["key.0"])[0], Is.EqualTo(OpaqueAlpha), "the key went red without any other change");
     }
 
+    // ---------------------------------------------------------------- the device backdrop
+
     [Test]
-    public void The_device_backdrop_uses_the_steady_layers_only()
+    public void GetColor_LayersThatFollowAVariableOrShowAnImage_GiveTheSameBackdropAsThePlainColor()
     {
+        // Arrange
         var plain = ProfileBackdrop.GetColor(new ProfileBackground("#336699"));
-        var layered = ProfileBackdrop.GetColor(new ProfileBackground
+        var layered = new ProfileBackground
         {
             Layers =
             [
                 new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = "#336699" },
-                new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = "#FF0000", Binding = new BackgroundBinding("system.cpu") },
-                new BackgroundLayer(BackgroundLayerKinds.Image) { ImagePath = "C:\\pic.png" },
+                new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = Red, Binding = new BackgroundBinding(CpuVariable) },
+                new BackgroundLayer(BackgroundLayerKinds.Image) { ImagePath = Pic },
             ],
-        });
-        var gradient = ProfileBackdrop.GetColor(new ProfileBackground { Layers = [new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = "#000000", ToColor = "#FFFFFF" }] });
+        };
 
-        Assert.That(layered, Is.EqualTo(plain), "a layer that follows a variable and an image don't change the backdrop");
-        Assert.That(gradient.Red, Is.InRange(120, 135), "a gradient counts as the color half way along it");
+        // Act
+        var backdrop = ProfileBackdrop.GetColor(layered);
+
+        // Assert
+        Assert.That(backdrop, Is.EqualTo(plain), "a layer that follows a variable and an image don't change the backdrop");
     }
 
     [Test]
-    public void Layers_survive_a_save_with_unknown_kinds_and_old_files_without_layers_still_load()
+    public void GetColor_AGradient_IsTheColorHalfWayAlongIt()
     {
+        // Arrange
+        var background = WithLayer(new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = Black, ToColor = LayerColor });
+
+        // Act
+        var gradient = ProfileBackdrop.GetColor(background);
+
+        // Assert
+        Assert.That(gradient.Red, Is.InRange(RedPixelLow, RedPixelHigh));
+    }
+
+    // ---------------------------------------------------------------- saving
+
+    [Test]
+    public void Serialize_LayersWithAnUnknownKind_SurviveASave()
+    {
+        // Arrange
         var background = new ProfileBackground("#101010")
         {
             Layers =
             [
-                new BackgroundLayer(BackgroundLayerKinds.Gradient, Opacity: 0.7) { Color = "#FF0000", ToColor = "#0000FF", Angle = 45 },
-                new BackgroundLayer("hologram") { Color = "#FFFFFF", Binding = new BackgroundBinding("vars.x", BackgroundBindingTargets.Visible, 1, 5) { Fallback = 2 } },
+                new BackgroundLayer(BackgroundLayerKinds.Gradient, Opacity: 0.7) { Color = Red, ToColor = Blue, Angle = GradientAngle },
+                new BackgroundLayer(UnknownKind) { Color = LayerColor, Binding = new BackgroundBinding("vars.x", BackgroundBindingTargets.Visible, 1, 5) { Fallback = 2 } },
             ],
         };
 
-        var json = JsonSerializer.Serialize(background, Options);
-        var back = JsonSerializer.Deserialize<ProfileBackground>(json, Options)!;
+        // Act
+        var back = JsonSerializer.Deserialize<ProfileBackground>(JsonSerializer.Serialize(background, Options), Options)!;
 
-        Assert.That(back.Layers!.Select(static layer => layer.Kind), Is.EqualTo(new[] { "gradient", "hologram" }));
+        // Assert
+        Assert.That(back.Layers!.Select(static layer => layer.Kind), Is.EqualTo(new[] { "gradient", UnknownKind }));
         Assert.That(back.Layers[1].Binding, Is.EqualTo(background.Layers![1].Binding));
-        Assert.That(back.Layers[0].Angle, Is.EqualTo(45));
-        Assert.That(JsonSerializer.Serialize(new ProfileBackground("#101010"), Options), Does.Not.Contain("layers"), "nothing is written for a background without layers");
-        Assert.That(JsonSerializer.Deserialize<ProfileBackground>("{\"color\":\"#ABCDEF\"}", Options)!.Layers, Is.Null);
+        Assert.That(back.Layers[0].Angle, Is.EqualTo(GradientAngle));
+    }
+
+    [Test]
+    public void Serialize_ABackgroundWithoutLayers_WritesNoLayers()
+    {
+        // Act
+        var json = JsonSerializer.Serialize(new ProfileBackground("#101010"), Options);
+
+        // Assert
+        Assert.That(json, Does.Not.Contain("layers"));
+    }
+
+    [Test]
+    public void Deserialize_AnOldFileWithoutLayers_StillLoads()
+    {
+        // Act
+        var background = JsonSerializer.Deserialize<ProfileBackground>("{\"color\":\"#ABCDEF\"}", Options)!;
+
+        // Assert
+        Assert.That(background.Layers, Is.Null);
     }
 }

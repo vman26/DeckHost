@@ -31,31 +31,80 @@ public class KnobActionTests
     [TestCase("deckhost.diagnostic.key-id")]
     [TestCase("builtin.clock")]
     [TestCase("system.info")]
-    public void Actions_that_show_text_fit_a_knob_with_a_touch_zone(string actionId)
+    public void FitsControl_ATextActionOnAKnobWithATouchZone_IsTrue(string actionId)
     {
+        // Arrange
         var action = BuiltIn(actionId);
 
-        Assert.That(action.FitsControl(Knob), Is.True);
-        Assert.That(action.FitsControl(Key), Is.True);
-        Assert.That(action.FitsControl(KnobWithoutDisplay), Is.False);
+        // Act
+        var fitsKnob = action.FitsControl(Knob);
+
+        // Assert
+        Assert.That(fitsKnob, Is.True);
+    }
+
+    [TestCase("builtin.counter")]
+    [TestCase("deckhost.diagnostic.key-id")]
+    [TestCase("builtin.clock")]
+    [TestCase("system.info")]
+    public void FitsControl_ATextActionOnAKey_IsTrue(string actionId)
+    {
+        // Arrange
+        var action = BuiltIn(actionId);
+
+        // Act
+        var fitsKey = action.FitsControl(Key);
+
+        // Assert
+        Assert.That(fitsKey, Is.True);
+    }
+
+    [TestCase("builtin.counter")]
+    [TestCase("deckhost.diagnostic.key-id")]
+    [TestCase("builtin.clock")]
+    [TestCase("system.info")]
+    public void FitsControl_ATextActionOnAKnobWithoutADisplay_IsFalse(string actionId)
+    {
+        // Arrange
+        var action = BuiltIn(actionId);
+
+        // Act
+        var fitsKnob = action.FitsControl(KnobWithoutDisplay);
+
+        // Assert
+        Assert.That(fitsKnob, Is.False);
     }
 
     [Test]
-    public void Key_image_actions_still_need_a_display_of_their_own()
+    public void FitsControl_AKeyImageActionOnAKey_IsTrue()
     {
+        // Arrange
         var keyImage = ActionItemViewModel.Create("p", "P", new ImageAction());
 
-        Assert.That(keyImage.FitsControl(Key), Is.True);
-        Assert.That(keyImage.FitsControl(Knob), Is.False);
+        // Act
+        var fits = keyImage.FitsControl(Key);
+
+        // Assert
+        Assert.That(fits, Is.True);
     }
 
     [Test]
-    public async Task A_counter_on_a_knob_counts_turns_and_shows_on_the_touch_zone()
+    public void FitsControl_AKeyImageActionOnAKnobWithATouchZone_IsFalseBecauseItNeedsADisplayOfItsOwn()
     {
-        var plugins = SystemPluginSet.Create();
-        var device = new StripDevicePlugin();
-        using var store = new VariableStore();
-        await using var host = new DeviceHostService([device], plugins, store);
+        // Arrange
+        var keyImage = ActionItemViewModel.Create("p", "P", new ImageAction());
+
+        // Act
+        var fits = keyImage.FitsControl(Knob);
+
+        // Assert
+        Assert.That(fits, Is.False);
+    }
+
+    private async Task<(DeviceHostService Host, VariableStore Store, System.Collections.Concurrent.ConcurrentDictionary<string, ControlFrame> Frames)> StartWithACounterOnTheKnob()
+    {
+        var store = new VariableStore();
+        var host = new DeviceHostService([new StripDevicePlugin()], SystemPluginSet.Create(), store);
         var frames = new System.Collections.Concurrent.ConcurrentDictionary<string, ControlFrame>();
         host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
         var counter = new ActionReference(SystemPluginSet.BuiltInPluginId, "Built-ins", "builtin.counter", "Counter", InputCapabilities.None, OutputCapabilities.Text);
@@ -63,15 +112,45 @@ public class KnobActionTests
             [new ControlBinding(StripDevicePlugin.KnobId, ProfileActionKind.Single, counter, new ControlAppearance(), [])])]);
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
-        var before = frames[StripDevicePlugin.ZoneId].Rgba;
+        return (host, store, frames);
+    }
 
-        host.SimulateInput(new DeviceInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.KnobId, InputCapabilities.Rotate, 1));
-        host.SimulateInput(new DeviceInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.KnobId, InputCapabilities.Rotate, 1));
-        host.SimulateInput(new DeviceInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.KnobId, InputCapabilities.Rotate, -1));
+    private static void TurnKnob(DeviceHostService host, int steps) =>
+        host.SimulateInput(new DeviceInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.KnobId, InputCapabilities.Rotate, steps));
+
+    [Test]
+    public async Task Rotate_ACounterOnAKnob_CountsTheTurns()
+    {
+        // Arrange
+        var (host, store, _) = await StartWithACounterOnTheKnob();
+        await using var _ = host;
+        using var __ = store;
+
+        // Act
+        TurnKnob(host, 1);
+        TurnKnob(host, 1);
+        TurnKnob(host, -1);
         await host.WhenIdleAsync();
 
+        // Assert
         Assert.That(store.TryGetValue<int>(VariableKeys.For(StripDevicePlugin.DeviceId, StripDevicePlugin.KnobId, VariableKeys.Counter), out var count), Is.True);
         Assert.That(count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Rotate_ACounterOnAKnob_RedrawsTheTouchZoneWithTheNewCount()
+    {
+        // Arrange
+        var (host, store, frames) = await StartWithACounterOnTheKnob();
+        await using var _ = host;
+        using var __ = store;
+        var before = frames[StripDevicePlugin.ZoneId].Rgba;
+
+        // Act
+        TurnKnob(host, 1);
+        await host.WhenIdleAsync();
+
+        // Assert
         Assert.That(before.AsSpan().SequenceEqual(frames[StripDevicePlugin.ZoneId].Rgba), Is.False, "the zone shows the new count");
     }
 
