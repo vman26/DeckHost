@@ -134,13 +134,16 @@ public static class WorkflowNodeKinds
     /// <summary>Runs a shared workflow (<see cref="WorkflowKeys.Workflow"/>), then goes on.</summary>
     public const string Call = "call";
 
+    /// <summary>Goes on at the output of the first case that equals an expression's value, else at Else (<see cref="WorkflowCases"/>).</summary>
+    public const string Switch = "switch";
+
     /// <summary>Sets, adds to or flips a workflow variable.</summary>
     public const string SetVariable = "set-variable";
 
     /// <summary>Ends the run (waits still to come don't continue).</summary>
     public const string Stop = "stop";
 
-    public static IReadOnlyList<string> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Call, Stop];
+    public static IReadOnlyList<string> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Call, Switch, Stop];
 
     /// <summary>The output ports of a kind, in the order the editor shows them.</summary>
     public static IReadOnlyList<string> OutputsOf(string kind) => kind switch
@@ -150,8 +153,18 @@ public static class WorkflowNodeKinds
         Repeat => [WorkflowPorts.Each, WorkflowPorts.Done],
         Stop => [],
         Action or Call => [WorkflowPorts.Next, WorkflowPorts.Error],
+        Switch => [WorkflowPorts.Default],
         _ => [WorkflowPorts.Next],
     };
+
+    /// <summary>The output ports of a node: like <see cref="OutputsOf(string)"/>, but a Switch has one per case, then Else.</summary>
+    public static IReadOnlyList<string> OutputsOf(WorkflowNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return node.Kind == Switch
+            ? [.. WorkflowCases.Parse(node.EffectiveSettings.Get(WorkflowKeys.Cases)).Select(static one => WorkflowCases.PortOf(one.Id)), WorkflowPorts.Default]
+            : OutputsOf(node.Kind);
+    }
 
     /// <summary>Whether links can lead into the kind (a trigger only starts runs).</summary>
     public static bool HasInput(string kind) => kind != Trigger;
@@ -170,6 +183,9 @@ public static class WorkflowPorts
     /// <summary>An action node's output for when the action did not run (the plugin isn't loaded, or it failed).</summary>
     public const string Error = "error";
 
+    /// <summary>A Switch node's output for when no case matches.</summary>
+    public const string Default = "default";
+
     public static string Describe(string port) => port switch
     {
         Next => "Then",
@@ -180,8 +196,21 @@ public static class WorkflowPorts
         Each => "Each time",
         Done => "Done",
         Error => "On error",
+        Default => "Else",
         _ => port,
     };
+
+    /// <summary>The label of a port on a node: a Switch case shows its text.</summary>
+    public static string Describe(string port, WorkflowNode? node)
+    {
+        if (node is not null && WorkflowCases.CaseIdOf(port) is { } id &&
+            WorkflowCases.Parse(node.EffectiveSettings.Get(WorkflowKeys.Cases)).FirstOrDefault(one => one.Id == id) is { } found)
+        {
+            return found.Text.Length == 0 ? "= (empty)" : "= " + found.Text;
+        }
+
+        return Describe(port);
+    }
 }
 
 /// <summary>The inputs a trigger node can start on.</summary>
@@ -275,6 +304,9 @@ public static class WorkflowKeys
 
     /// <summary>Wait: how long, in milliseconds.</summary>
     public const string Milliseconds = "ms";
+
+    /// <summary>Switch: the cases, one per line as <c>id=text</c> (the id keeps a case's links when its text or place changes).</summary>
+    public const string Cases = "cases";
 
     /// <summary>Call: the id of the shared workflow to run.</summary>
     public const string Workflow = "workflow";

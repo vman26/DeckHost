@@ -108,6 +108,34 @@ public sealed class RenderingTests
     }
 
     [AvaloniaTest]
+    public void A_switch_draws_one_port_per_case_and_else_with_their_own_colors()
+    {
+        using var editor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", new Workflow(), [], _ => true);
+        var sw = editor.AddNode(WorkflowNodeKinds.Switch, 100, 60);
+        editor.SelectNode(null);
+        var canvas = new WorkflowCanvas { DataContext = editor, Width = 500, Height = 300 };
+        var window = new Window { Width = 500, Height = 300, Content = canvas };
+        window.Show();
+        using var frame = window.CaptureRenderedFrame()!;
+
+        var node = editor.Workflow.Find(sw.Id)!;
+        Color RingOf(string port)
+        {
+            var (x, y) = WorkflowEditorViewModel.OutputPoint(node, port);
+            return Pixel(frame, (int)Math.Round(x) + 6, (int)Math.Round(y));
+        }
+
+        // The ring is anti-aliased, so colors are compared with a little room.
+        static bool Near(Color actual, string expected) =>
+            Math.Abs(actual.R - Color.Parse(expected).R) < 40 && Math.Abs(actual.G - Color.Parse(expected).G) < 40 && Math.Abs(actual.B - Color.Parse(expected).B) < 40;
+        Assert.That(Near(RingOf("case:c1"), "#06B6D4"), Is.True, "a case port is cyan");
+        Assert.That(Near(RingOf("case:c2"), "#06B6D4"), Is.True);
+        Assert.That(Near(RingOf(WorkflowPorts.Default), "#94A3B8"), Is.True, "Else is grey");
+        var (_, below) = WorkflowEditorViewModel.OutputPoint(node, WorkflowPorts.Default);
+        Assert.That(WorkflowEditorViewModel.HeightOf(node) + node.Y, Is.GreaterThan(below), "the node is tall enough for its third port");
+    }
+
+    [AvaloniaTest]
     public void A_link_between_two_nodes_is_drawn_in_the_gap_between_them()
     {
         using var editor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", new Workflow(), [], _ => true);

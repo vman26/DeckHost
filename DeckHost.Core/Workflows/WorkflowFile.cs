@@ -120,6 +120,11 @@ public static class WorkflowFile
             {
                 return Fail($"That workflow uses a node DeckHost doesn't know ('{node.Kind}'): it may need a newer DeckHost.", out error);
             }
+
+            if (node.Kind == WorkflowNodeKinds.Switch && WorkflowCases.Parse(node.EffectiveSettings.Get(WorkflowKeys.Cases)).Count > WorkflowCases.Max)
+            {
+                return Fail($"A Switch node in that workflow has more than {WorkflowCases.Max} cases.", out error);
+            }
         }
 
         // Links that lead nowhere are left out, and so is one that would close a loop.
@@ -128,7 +133,7 @@ public static class WorkflowFile
         foreach (var link in workflow.Links.Distinct())
         {
             if (checkedWorkflow.Find(link.From) is not { } from || checkedWorkflow.Find(link.To) is not { } to ||
-                !WorkflowNodeKinds.OutputsOf(from.Kind).Contains(link.Port) || !WorkflowNodeKinds.HasInput(to.Kind) ||
+                !WorkflowNodeKinds.OutputsOf(from).Contains(link.Port) || !WorkflowNodeKinds.HasInput(to.Kind) ||
                 (checkedWorkflow with { Links = links }).WouldCycle(link.From, link.To))
             {
                 continue;

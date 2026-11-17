@@ -55,6 +55,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Workflow expressions: **Calculate** in Set variable and an **An expression** check in If, with
   variables in brackets, text, number and time functions, and a **Store as** type (number, true /
   false or text) that refuses a value that doesn't fit.
+- A **Switch** workflow node: any number of cases, each with its own output, and Else; cases keep
+  their links when you move or rename them.
 - Shared workflows: save a named workflow once and run it from others with a **Call workflow**
   node; profile exports take the shared workflows they call along.
 - Debugging workflows: breakpoints (F9), **Continue** and **Step** for a run that is held in front

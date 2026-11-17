@@ -331,6 +331,14 @@ public sealed class WorkflowEngine
                 RunCall(run, frame, node, done);
                 break;
 
+            case WorkflowNodeKinds.Switch:
+            {
+                var (port, line, ok) = ChooseCase(settings, run.Scope);
+                Trace(run, frame, node.Id, ok ? WorkflowTraceKind.Node : WorkflowTraceKind.Failed, line);
+                Follow(run, frame, node, port, done);
+                break;
+            }
+
             case WorkflowNodeKinds.Stop:
                 Trace(run, frame, node.Id, WorkflowTraceKind.Node, "Stop");
                 Cancel(run, "Ended by a Stop node.");
@@ -622,6 +630,26 @@ public sealed class WorkflowEngine
             default:
                 return null;
         }
+    }
+
+    /// <summary>The output a Switch node goes on at: the first case equal to the value, else Else (also when the expression fails).</summary>
+    internal (string Port, string Line, bool Ok) ChooseCase(ActionSettings settings, WorkflowScope? scope)
+    {
+        var result = Calculate(settings.Get(WorkflowKeys.Expression), scope);
+        if (!result.Ok)
+        {
+            return (WorkflowPorts.Default, $"{result.Error} Going on at Else.", false);
+        }
+
+        foreach (var one in WorkflowCases.Parse(settings.Get(WorkflowKeys.Cases)))
+        {
+            if (AreEqual(result.Value.Text, one.Text))
+            {
+                return (WorkflowCases.PortOf(one.Id), $"{(result.Value.Text.Length == 0 ? "(empty)" : result.Value.Text)} = {(one.Text.Length == 0 ? "(empty)" : one.Text)}", true);
+            }
+        }
+
+        return (WorkflowPorts.Default, $"{(result.Value.Text.Length == 0 ? "(empty)" : result.Value.Text)}: no case matches, Else", true);
     }
 
     /// <summary>Evaluates an expression for a node: <c>[name]</c> reads a variable ([profile:name] and [control:name] pick a scope).</summary>

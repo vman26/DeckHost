@@ -77,6 +77,22 @@ public partial class WorkflowEditorView : UserControl, IWidePage
         }
     }
 
+    // ---------------------------------------------------------------- switch cases
+
+    private void CaseUp_OnClick(object? sender, RoutedEventArgs e) => WithCase(sender, static (vm, row) => vm.MoveCase(row, -1));
+
+    private void CaseDown_OnClick(object? sender, RoutedEventArgs e) => WithCase(sender, static (vm, row) => vm.MoveCase(row, 1));
+
+    private void CaseRemove_OnClick(object? sender, RoutedEventArgs e) => WithCase(sender, static (vm, row) => vm.RemoveCase(row));
+
+    private void WithCase(object? sender, Action<WorkflowEditorViewModel, CaseRow> action)
+    {
+        if (sender is Control { DataContext: CaseRow row } && DataContext is WorkflowEditorViewModel vm)
+        {
+            action(vm, row);
+        }
+    }
+
     // ---------------------------------------------------------------- shared workflows
 
     private void OpenShared_OnClick(object? sender, RoutedEventArgs e)

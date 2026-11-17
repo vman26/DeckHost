@@ -653,6 +653,22 @@
   DeckHost.Contracts.Models.Workflow.ToString() : System.String
   DeckHost.Contracts.Models.Workflow.WhileRunning : System.String {set}
   DeckHost.Contracts.Models.Workflow.WouldCycle(System.String from, System.String to) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowCase(System.String Id, System.String Text)
+  DeckHost.Contracts.Models.WorkflowCase.<Clone>$() : DeckHost.Contracts.Models.WorkflowCase
+  DeckHost.Contracts.Models.WorkflowCase.Deconstruct(System.String& Id, System.String& Text) : System.Void
+  DeckHost.Contracts.Models.WorkflowCase.Equals(DeckHost.Contracts.Models.WorkflowCase other) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowCase.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.WorkflowCase.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.WorkflowCase.Id : System.String {set}
+  DeckHost.Contracts.Models.WorkflowCase.Text : System.String {set}
+  DeckHost.Contracts.Models.WorkflowCase.ToString() : System.String
+  DeckHost.Contracts.Models.WorkflowCases.CaseIdOf(System.String port) : System.String
+  DeckHost.Contracts.Models.WorkflowCases.Max : System.Int32 const
+  DeckHost.Contracts.Models.WorkflowCases.NextId(System.Collections.Generic.IEnumerable<DeckHost.Contracts.Models.WorkflowCase> cases) : System.String
+  DeckHost.Contracts.Models.WorkflowCases.Parse(System.String text) : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.WorkflowCase>
+  DeckHost.Contracts.Models.WorkflowCases.PortOf(System.String caseId) : System.String
+  DeckHost.Contracts.Models.WorkflowCases.PortPrefix : System.String const
+  DeckHost.Contracts.Models.WorkflowCases.Serialize(System.Collections.Generic.IEnumerable<DeckHost.Contracts.Models.WorkflowCase> cases) : System.String
   DeckHost.Contracts.Models.WorkflowConcurrency.All : System.Collections.Generic.IReadOnlyList<System.String>
   DeckHost.Contracts.Models.WorkflowConcurrency.Ignore : System.String const
   DeckHost.Contracts.Models.WorkflowConcurrency.Parallel : System.String const
@@ -666,6 +682,7 @@
   DeckHost.Contracts.Models.WorkflowKeys.AsNumber : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.AsText : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Calculate : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Cases : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Check : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.CheckApp : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.CheckExpression : System.String const
@@ -743,14 +760,18 @@
   DeckHost.Contracts.Models.WorkflowNodeKinds.Call : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.HasInput(System.String kind) : System.Boolean
   DeckHost.Contracts.Models.WorkflowNodeKinds.If : System.String const
+  DeckHost.Contracts.Models.WorkflowNodeKinds.OutputsOf(DeckHost.Contracts.Models.WorkflowNode node) : System.Collections.Generic.IReadOnlyList<System.String>
   DeckHost.Contracts.Models.WorkflowNodeKinds.OutputsOf(System.String kind) : System.Collections.Generic.IReadOnlyList<System.String>
   DeckHost.Contracts.Models.WorkflowNodeKinds.Repeat : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.SetVariable : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.Stop : System.String const
+  DeckHost.Contracts.Models.WorkflowNodeKinds.Switch : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.Toggle : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.Trigger : System.String const
   DeckHost.Contracts.Models.WorkflowNodeKinds.Wait : System.String const
+  DeckHost.Contracts.Models.WorkflowPorts.Default : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Describe(System.String port) : System.String
+  DeckHost.Contracts.Models.WorkflowPorts.Describe(System.String port, DeckHost.Contracts.Models.WorkflowNode node) : System.String
   DeckHost.Contracts.Models.WorkflowPorts.Done : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Each : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Error : System.String const
@@ -837,6 +858,7 @@ class DeckHost.Contracts.Models.SettingCondition
 class DeckHost.Contracts.Models.TextStyle
 class DeckHost.Contracts.Models.TileStyle
 class DeckHost.Contracts.Models.Workflow
+class DeckHost.Contracts.Models.WorkflowCase
 class DeckHost.Contracts.Models.WorkflowLink
 class DeckHost.Contracts.Models.WorkflowNode
 enum DeckHost.Contracts.Enums.InputCapabilities
@@ -868,6 +890,7 @@ static class DeckHost.Contracts.Models.ControlInputs
 static class DeckHost.Contracts.Models.LightEffects
 static class DeckHost.Contracts.Models.ProfileKinds
 static class DeckHost.Contracts.Models.StepGroups
+static class DeckHost.Contracts.Models.WorkflowCases
 static class DeckHost.Contracts.Models.WorkflowConcurrency
 static class DeckHost.Contracts.Models.WorkflowKeys
 static class DeckHost.Contracts.Models.WorkflowNodeKinds

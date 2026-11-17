@@ -308,11 +308,11 @@ public sealed class WorkflowCanvas : Control
         }
 
         // Outputs on the right, each with its label.
-        foreach (var port in WorkflowNodeKinds.OutputsOf(node.Kind))
+        foreach (var port in WorkflowNodeKinds.OutputsOf(node))
         {
             var (ox, oy) = WorkflowEditorViewModel.OutputPoint(node, port);
             var color = PortColor(port);
-            var label = Text(WorkflowPorts.Describe(port), 11, HintBrush, Regular);
+            var label = Text(Fit(WorkflowPorts.Describe(port, node), 22), 11, HintBrush, Regular);
             context.DrawText(label, new Point(ox - label.Width - 14, oy - (label.Height / 2)));
             var linked = vm.Workflow.LinksFrom(node.Id, port).Any();
             context.DrawEllipse(linked ? new SolidColorBrush(color) : NodeFill, new Pen(new SolidColorBrush(color), 2), new Point(ox, oy), PortRadius, PortRadius);
@@ -348,6 +348,8 @@ public sealed class WorkflowCanvas : Control
         WorkflowPorts.Each => Color.Parse("#EC4899"),
         WorkflowPorts.Done => Color.Parse("#A78BFA"),
         WorkflowPorts.Error => Color.Parse("#F97316"),
+        WorkflowPorts.Default => Color.Parse("#94A3B8"),
+        _ when WorkflowCases.CaseIdOf(port) is not null => Color.Parse("#06B6D4"),
         _ => Color.Parse("#64748B"),
     };
 
@@ -391,7 +393,7 @@ public sealed class WorkflowCanvas : Control
         var reach = (PortRadius + 5) / Math.Min(1, _zoom);
         foreach (var node in _viewModel.Workflow.Nodes.Reverse())
         {
-            foreach (var port in WorkflowNodeKinds.OutputsOf(node.Kind))
+            foreach (var port in WorkflowNodeKinds.OutputsOf(node))
             {
                 var (x, y) = WorkflowEditorViewModel.OutputPoint(node, port);
                 if (Math.Abs(canvas.X - x) <= reach && Math.Abs(canvas.Y - y) <= reach)

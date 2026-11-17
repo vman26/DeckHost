@@ -329,12 +329,12 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         (node.Action is null || !_actionsByKey.ContainsKey(EditorActionIds.Key(node.Action.PluginId, node.Action.ActionId)));
 
     public static double HeightOf(WorkflowNode node) =>
-        HeaderHeight + SummaryHeight + (Math.Max(1, WorkflowNodeKinds.OutputsOf(node.Kind).Count) * PortRowHeight) + 8;
+        HeaderHeight + SummaryHeight + (Math.Max(1, WorkflowNodeKinds.OutputsOf(node).Count) * PortRowHeight) + 8;
 
     /// <summary>Where links leave a node's output port (canvas coordinates).</summary>
     public static (double X, double Y) OutputPoint(WorkflowNode node, string port)
     {
-        var index = Math.Max(0, WorkflowNodeKinds.OutputsOf(node.Kind).ToList().IndexOf(port));
+        var index = Math.Max(0, WorkflowNodeKinds.OutputsOf(node).ToList().IndexOf(port));
         return (node.X + NodeWidth, node.Y + HeaderHeight + SummaryHeight + (index * PortRowHeight) + (PortRowHeight / 2) + 2);
     }
 
@@ -487,6 +487,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
                 _nodeSettings.Changed += OnNodeSettingsChanged;
             }
 
+            RebuildCases();
             FailureOptions = node is { Kind: WorkflowNodeKinds.Action }
                 ? new SettingsEditorViewModel(WorkflowNodeTypes.ActionFailureSettings, node.EffectiveSettings, Control.Inputs)
                 : null;
@@ -566,6 +567,12 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
                 : new ActionSettings(type.Settings.Where(static setting => setting.DefaultValue.Length > 0)
                     .Select(static setting => new KeyValuePair<string, string>(setting.Key, setting.DefaultValue))),
         };
+        if (node.Kind == WorkflowNodeKinds.Switch)
+        {
+            // A new Switch starts with two cases to fill in, so its outputs are there to link.
+            node = WithCases(node, [new WorkflowCase("c1", "1"), new WorkflowCase("c2", "2")]);
+        }
+
         var split = into is not null && CanBeInserted(node.Kind) && _workflow.Links.Contains(into);
         var added = _workflow with { Nodes = [.. _workflow.Nodes, node], Links = split ? Splice(_workflow.Links, into!, node) : _workflow.Links };
         Commit(split ? WorkflowSpacing.MakeRoom(added, node.Id, into!.To, NodeWidth) : added, split ? $"Added {type.Name} into a link" : $"Added {type.Name}");
@@ -574,21 +581,23 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>The outputs a new node is linked from automatically: the error output is only ever linked by hand.</summary>
-    private static IEnumerable<string> FlowOutputsOf(string kind) => WorkflowNodeKinds.OutputsOf(kind).Where(static port => port != WorkflowPorts.Error);
+    private static IEnumerable<string> FlowOutputsOf(WorkflowNode node) => WorkflowNodeKinds.OutputsOf(node).Where(static port => port != WorkflowPorts.Error);
 
     /// <summary>Whether a node of the kind can go into the middle of a link: it has an input and an output.</summary>
     public static bool CanBeInserted(string kind) => WorkflowNodeKinds.HasInput(kind) && WorkflowNodeKinds.OutputsOf(kind).Count > 0;
 
     /// <summary>The output that carries on to what the link led to: Done for a Repeat (Each is its body), else the first.</summary>
-    internal static string ContinuationPort(string kind) =>
-        kind == WorkflowNodeKinds.Repeat ? WorkflowPorts.Done : WorkflowNodeKinds.OutputsOf(kind)[0];
+    internal static string ContinuationPort(WorkflowNode node) =>
+        node.Kind == WorkflowNodeKinds.Repeat ? WorkflowPorts.Done
+            : node.Kind == WorkflowNodeKinds.Switch ? WorkflowPorts.Default
+            : WorkflowNodeKinds.OutputsOf(node.Kind)[0];
 
     /// <summary>The links with <paramref name="into"/> cut in two: from its start into the node, and from the node on to its end.</summary>
     private static IReadOnlyList<WorkflowLink> Splice(IReadOnlyList<WorkflowLink> links, WorkflowLink into, WorkflowNode node) =>
     [
         .. links.Where(link => link != into),
         new WorkflowLink(into.From, into.Port, node.Id),
-        new WorkflowLink(node.Id, ContinuationPort(node.Kind), into.To),
+        new WorkflowLink(node.Id, ContinuationPort(node), into.To),
     ];
 
     /// <summary>Whether a node that is already on the canvas can be dropped into a link: it isn't linked to anything yet.</summary>
@@ -641,7 +650,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         }
 
         var after = SelectedNode;
-        var freePort = after is null ? null : FlowOutputsOf(after.Kind).FirstOrDefault(port => !_workflow.LinksFrom(after.Id, port).Any());
+        var freePort = after is null ? null : FlowOutputsOf(after).FirstOrDefault(port => !_workflow.LinksFrom(after.Id, port).Any());
         var (px, py) = (x, y) switch
         {
             ({ } ax, { } ay) => (ax, ay),
@@ -699,7 +708,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             return "A When node starts a workflow; nothing can lead into it.";
         }
 
-        if (!WorkflowNodeKinds.OutputsOf(from.Kind).Contains(port))
+        if (!WorkflowNodeKinds.OutputsOf(from).Contains(port))
         {
             return "That node has no such output.";
         }
@@ -781,7 +790,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         var previous = SelectedNode;
         var node = AddNode(item.Kind, x, y);
         if (previous is not null && WorkflowNodeKinds.HasInput(node.Kind) &&
-            FlowOutputsOf(previous.Kind).FirstOrDefault(port => !_workflow.LinksFrom(previous.Id, port).Any()) is { } port)
+            FlowOutputsOf(previous).FirstOrDefault(port => !_workflow.LinksFrom(previous.Id, port).Any()) is { } port)
         {
             Connect(previous.Id, port, node.Id);
             SelectNode(node.Id);

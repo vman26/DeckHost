@@ -948,6 +948,30 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `IEnumerable<WorkflowLink> LinksFrom(string nodeId, string port)` | The links leaving a node's output port, in the order they were made. |
 | `bool WouldCycle(string from, string to)` | Whether a link from `from` to `to` would close a loop. |
 
+### WorkflowCase
+
+*record* — One case of a Switch node: a stable id (its output is `case:{id}`) and the text it is compared with.
+
+| Member | |
+|---|---|
+| `WorkflowCase(string Id, string Text)` | One case of a Switch node: a stable id (its output is `case:{id}`) and the text it is compared with. |
+| `string Id { get; init; }` |  |
+| `string Text { get; init; }` |  |
+
+### WorkflowCases
+
+*static class* — Reads and writes a Switch node's cases, stored as one `id=text` line each.
+
+| Member | |
+|---|---|
+| `const int Max` | The most cases one Switch node has (a limit for files and the canvas, not for use). |
+| `const string PortPrefix` |  |
+| `static string CaseIdOf(string port)` | The case id of an output port, or null for any other port. |
+| `static string NextId(IEnumerable<WorkflowCase> cases)` | A case id that no case of the node uses yet (c1, c2, …). |
+| `static IReadOnlyList<WorkflowCase> Parse(string text)` | The cases in order; lines without an id, empty ids and repeated ids are left out. |
+| `static string PortOf(string caseId)` |  |
+| `static string Serialize(IEnumerable<WorkflowCase> cases)` |  |
+
 ### WorkflowConcurrency
 
 *static class* — What a trigger does while its previous run is still going (waits).
@@ -974,6 +998,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string AsNumber` |  |
 | `const string AsText` |  |
 | `const string Calculate` |  |
+| `const string Cases` | Switch: the cases, one per line as `id=text` (the id keeps a case's links when its text or place changes). |
 | `const string Check` | If: what to check (`CheckVariable`, `CheckApp`, `CheckTime`). |
 | `const string CheckApp` |  |
 | `const string CheckExpression` |  |
@@ -1062,11 +1087,13 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Repeat` | Runs its Each output a number of times, one after the other, then continues at Done. |
 | `const string SetVariable` | Sets, adds to or flips a workflow variable. |
 | `const string Stop` | Ends the run (waits still to come don't continue). |
+| `const string Switch` | Goes on at the output of the first case that equals an expression's value, else at Else (`WorkflowCases`). |
 | `const string Toggle` | Continues at First and Second in turn: the first run First, the next Second, and so on. |
 | `const string Trigger` | Where a run starts: an input of the control (`On`, `WorkflowTriggers`). |
 | `const string Wait` | Waits (`Milliseconds`), then continues. |
 | `static bool HasInput(string kind)` | Whether links can lead into the kind (a trigger only starts runs). |
 | `static IReadOnlyList<string> OutputsOf(string kind)` | The output ports of a kind, in the order the editor shows them. |
+| `static IReadOnlyList<string> OutputsOf(WorkflowNode node)` | The output ports of a node: like `OutputsOf`, but a Switch has one per case, then Else. |
 
 ### WorkflowPorts
 
@@ -1074,6 +1101,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 
 | Member | |
 |---|---|
+| `const string Default` | A Switch node's output for when no case matches. |
 | `const string Done` |  |
 | `const string Each` |  |
 | `const string Error` | An action node's output for when the action did not run (the plugin isn't loaded, or it failed). |
@@ -1083,6 +1111,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Second` |  |
 | `const string Yes` |  |
 | `static string Describe(string port)` |  |
+| `static string Describe(string port, WorkflowNode node)` | The label of a port on a node: a Switch case shows its text. |
 
 ### WorkflowTriggers
 

@@ -351,6 +351,107 @@ public class WorkflowEditorTests
         Assert.That(ifFields[WorkflowKeys.Name].IsVisible, Is.False);
     }
 
+    private static WorkflowEditorViewModel SwitchEditor(out WorkflowNode sw, out WorkflowNode first, out WorkflowNode second, out WorkflowNode other)
+    {
+        var (editor, _) = Editor();
+        sw = editor.AddNode(WorkflowNodeKinds.Switch, 300, 40);
+        first = editor.AddNode(WorkflowNodeKinds.Wait, 700, 0);
+        second = editor.AddNode(WorkflowNodeKinds.Wait, 700, 100);
+        other = editor.AddNode(WorkflowNodeKinds.Wait, 700, 200);
+        Assert.That(editor.Connect(sw.Id, "case:c1", first.Id), Is.Null);
+        Assert.That(editor.Connect(sw.Id, "case:c2", second.Id), Is.Null);
+        Assert.That(editor.Connect(sw.Id, WorkflowPorts.Default, other.Id), Is.Null);
+        editor.SelectNode(sw.Id);
+        return editor;
+    }
+
+    [Test]
+    public void A_new_switch_has_two_cases_and_else_and_grows_taller_with_its_ports()
+    {
+        var (editor, _) = Editor();
+        var sw = editor.AddNode(WorkflowNodeKinds.Switch, 300, 40);
+        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+
+        Assert.That(WorkflowNodeKinds.OutputsOf(editor.Workflow.Find(sw.Id)!), Is.EqualTo(new[] { "case:c1", "case:c2", WorkflowPorts.Default }));
+        Assert.That(WorkflowEditorViewModel.HeightOf(editor.Workflow.Find(sw.Id)!), Is.GreaterThan(WorkflowEditorViewModel.HeightOf(wait)));
+        var (_, y1) = WorkflowEditorViewModel.OutputPoint(editor.Workflow.Find(sw.Id)!, "case:c1");
+        var (_, y3) = WorkflowEditorViewModel.OutputPoint(editor.Workflow.Find(sw.Id)!, WorkflowPorts.Default);
+        Assert.That(y3 - y1, Is.EqualTo(2 * WorkflowEditorViewModel.PortRowHeight), "one row per output");
+        Assert.That(editor.Connect(sw.Id, "case:c9", wait.Id), Is.EqualTo("That node has no such output."));
+    }
+
+    [Test]
+    public void Cases_can_be_added_moved_renamed_and_removed_and_links_follow_their_case_not_its_place()
+    {
+        var editor = SwitchEditor(out var sw, out var first, out var second, out var other);
+        editor.AddCaseCommand.Execute(null);
+        Assert.That(editor.Cases.Select(static row => row.Id), Is.EqualTo(new[] { "c1", "c2", "c3" }));
+
+        editor.MoveCase(editor.Cases[0], 1);
+        Assert.That(editor.Cases.Select(static row => row.Id), Is.EqualTo(new[] { "c2", "c1", "c3" }));
+        Assert.That(editor.Workflow.Links.Single(link => link.To == first.Id).Port, Is.EqualTo("case:c1"), "its link stayed with the case");
+
+        editor.Cases.Single(static row => row.Id == "c2").Text = "night";
+        Assert.That(CasesText(editor, sw), Does.Contain("c2=night"));
+        Assert.That(editor.Workflow.Links.Single(link => link.To == second.Id).Port, Is.EqualTo("case:c2"), "renaming doesn't move links");
+
+        editor.RemoveCase(editor.Cases.Single(static row => row.Id == "c1"));
+        Assert.That(editor.Cases.Select(static row => row.Id), Is.EqualTo(new[] { "c2", "c3" }));
+        Assert.That(editor.Workflow.Links.Any(link => link.To == first.Id), Is.False, "only the removed case's link is gone");
+        Assert.That(editor.Workflow.Links.Any(link => link.To == second.Id), Is.True);
+        Assert.That(editor.Workflow.Links.Any(link => link.To == other.Id && link.Port == WorkflowPorts.Default), Is.True);
+
+        editor.UndoCommand.Execute(null);
+        Assert.That(editor.Cases.Select(static row => row.Id), Is.EqualTo(new[] { "c2", "c1", "c3" }), "one Undo brings the case and its link back");
+        Assert.That(editor.Workflow.Links.Any(link => link.To == first.Id && link.Port == "case:c1"), Is.True);
+    }
+
+    private static string CasesText(WorkflowEditorViewModel editor, WorkflowNode node) =>
+        editor.Workflow.Find(node.Id)!.EffectiveSettings.Get(WorkflowKeys.Cases);
+
+    [Test]
+    public void Editing_the_switch_expression_keeps_its_cases_and_a_switch_put_into_a_link_continues_at_else()
+    {
+        var editor = SwitchEditor(out var sw, out _, out _, out _);
+        var casesBefore = CasesText(editor, sw);
+        var field = Expect.IsType<TextSettingField>(editor.NodeSettings!.Fields.Single());
+
+        field.Value = "[mode]";
+
+        Assert.That(editor.Workflow.Find(sw.Id)!.EffectiveSettings.Get(WorkflowKeys.Expression), Is.EqualTo("[mode]"));
+        Assert.That(CasesText(editor, sw), Is.EqualTo(casesBefore), "the cases are not written over");
+
+        var (second, _) = Editor();
+        var a = second.AddNode(WorkflowNodeKinds.Wait, 100, 40);
+        var b = second.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        second.Connect(a.Id, WorkflowPorts.Next, b.Id);
+        var link = Expect.Single(second.Workflow.Links);
+        var inserted = second.AddNode(WorkflowNodeKinds.Switch, 300, 40, link);
+        Assert.That(second.Workflow.Links.Any(candidate => candidate.From == inserted.Id && candidate.Port == WorkflowPorts.Default && candidate.To == b.Id), Is.True);
+    }
+
+    [Test]
+    public void A_file_keeps_links_on_existing_case_ports_and_refuses_too_many_cases()
+    {
+        var editor = SwitchEditor(out var sw, out _, out _, out _);
+        var text = editor.ExportText();
+        var (other, _) = Editor();
+        Assert.That(other.Import(text), Is.Null);
+        Assert.That(other.Workflow.Links.Count(link => link.Port.StartsWith("case:", StringComparison.Ordinal)), Is.EqualTo(2));
+
+        var removed = text.Replace("c1=1\\nc2=2", "c2=2", StringComparison.Ordinal);
+        Assert.That(removed, Is.Not.EqualTo(text), "the test text was cut");
+        var (third, _) = Editor();
+        Assert.That(third.Import(removed), Is.Null);
+        Assert.That(third.Workflow.Links.Any(link => link.Port == "case:c1"), Is.False, "a link on a port the node no longer has is dropped");
+
+        var many = string.Join("\\n", Enumerable.Range(1, WorkflowCases.Max + 1).Select(static i => $"c{i}=x"));
+        var tooMany = text.Replace("c1=1\\nc2=2", many, StringComparison.Ordinal);
+        var (fourth, _) = Editor();
+        Assert.That(fourth.Import(tooMany), Does.Contain("more than"));
+        _ = sw;
+    }
+
     [Test]
     public void A_node_with_links_or_a_node_without_a_way_through_cannot_be_put_into_a_link()
     {

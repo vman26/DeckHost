@@ -315,6 +315,23 @@
 												   Text="This action isn't loaded (its plugin is disabled or uninstalled). It is skipped when the workflow runs." />
 									</StackPanel>
 									<ContentControl Content="{Binding NodeSettings}" IsVisible="{Binding HasNodeSettings}" />
+									<StackPanel Spacing="6" IsVisible="{Binding SelectedIsSwitch}">
+										<TextBlock Classes="section" Text="CASES" />
+										<TextBlock Classes="hint" Text="Each case has its own output on the node; the first one that equals the value wins, Else is for none. Moving or renaming a case keeps its links." />
+										<ItemsControl ItemsSource="{Binding Cases}">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate x:DataType="vm:CaseRow">
+													<Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4" Margin="0,2">
+														<TextBox Text="{Binding Text, Mode=TwoWay}" PlaceholderText="equals…" />
+														<Button Grid.Column="1" Content="↑" Padding="8,2" Click="CaseUp_OnClick" ToolTip.Tip="Move up" />
+														<Button Grid.Column="2" Content="↓" Padding="8,2" Click="CaseDown_OnClick" ToolTip.Tip="Move down" />
+														<Button Grid.Column="3" Content="✕" Padding="8,2" Click="CaseRemove_OnClick" ToolTip.Tip="Remove this case and its links" />
+													</Grid>
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
+										<Button Content="Add case" Command="{Binding AddCaseCommand}" IsEnabled="{Binding CanAddCase}" HorizontalAlignment="Left" />
+									</StackPanel>
 									<StackPanel Spacing="6" IsVisible="{Binding HasFailureOptions}">
 										<TextBlock Classes="section" Text="IF IT DID NOT RUN" />
 										<ContentControl Content="{Binding FailureOptions}" />

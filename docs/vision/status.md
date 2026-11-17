@@ -108,7 +108,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 9.3 Triggers: control input | ✅ | down, up, tap, double, hold, rotate, swipe |
 | 9.3 Triggers: events, timers, app changes | 🟡 | Profile shown, app in front, variable changed, timer (`WorkflowEvents`, host worker); no device-connected, hotkey or external (webhook) triggers |
 | 9.3 Logic, flow (if, sequence, parallel, repeat, wait) | ✅ | |
-| 9.3 Switch, expressions, transforms, events, error handling nodes | 🟡 | Error output and retries on action nodes; no switch, expressions or transforms |
+| 9.3 Switch, expressions, transforms, events, error handling nodes | ✅ | Switch with dynamic cases, expressions and Calculate (transforms), event triggers, error output and retries |
 | 9.3 History, cancellation | ✅ | Run log, Stop |
 | 9.3 Step execution, breakpoints, variable inspection, sub-workflows, templates | ✅ | Breakpoints, Continue and Step; live variable view and setter; shared workflows with a Call node (depth 8, no recursion); `.deckhostworkflow` files and profile bundles as templates |
 | 9.4 Global and plugin variables, device and app context | ✅ | `VariableStore`, `VariableKeys` |

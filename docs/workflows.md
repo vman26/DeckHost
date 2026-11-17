@@ -19,6 +19,7 @@ A run starts at a **When** node and follows the links from left to right. A node
 | **Toggle** | Takes **1st** and **2nd** in turn: on, then off. |
 | **Repeat** | Runs **Each time** one round after the other, then **Done**. How many rounds: a fixed number, as many as a variable says, **while** a variable has a value, or **until** it does. An optional pause between rounds turns it into a timer (a condition that never changes stops after 10,000 rounds). |
 | **Set variable** | Sets, adds to, subtracts from, flips (true/false), clears or **calculates** a variable (see [Expressions](#expressions-and-types)). **Store as** keeps a result as text, a number or true/false and refuses a value that doesn't fit. |
+| **Switch** | Takes the output of the first **case** that equals an expression's value (`[mode]`, `[count] % 3`, …), else **Else**. Numbers compare as numbers (`10` equals `10.0`), text ignores case. Add, move, rename and remove cases in the inspector; a case keeps its links when it moves or is renamed, and removing one only takes away its own links. A broken expression goes to Else and says why in the run log. |
 | **Call workflow** | Runs a [shared workflow](#shared-workflows) from its When node on, then goes on at **Then**. If it can't run (it was deleted, it has no When node, it would call itself, or calls are nested more than 8 deep) the run goes on at **On error** when that has a link, else at **Then**. |
 | **Stop** | Ends the run, including branches that are still waiting. |
 

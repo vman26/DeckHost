@@ -258,6 +258,16 @@ public static class WorkflowNodeTypes
             new(WorkflowKeys.Workflow, "Workflow", Placeholder: "the id of a shared workflow", Description: "Save a workflow as shared in the editor, then choose it here."),
         ]);
 
+    public static WorkflowNodeType Switch { get; } = new(
+        WorkflowNodeKinds.Switch,
+        "Switch",
+        "Goes on at the output of the first case that equals the value, else at Else.",
+        0xFF06B6D4,
+        Contracts.Icons.Branch,
+        [
+            new(WorkflowKeys.Expression, "Switch on", Placeholder: "e.g. [mode]  or  [count] % 3", Description: "Variables are [name]. Numbers compare as numbers, text ignores case; the first case that matches wins. A broken expression goes to Else and says why in the run log."),
+        ]);
+
     public static WorkflowNodeType Stop { get; } = new(
         WorkflowNodeKinds.Stop,
         "Stop",
@@ -267,7 +277,7 @@ public static class WorkflowNodeTypes
         []);
 
     /// <summary>All kinds, in the order the editor's palette lists them.</summary>
-    public static IReadOnlyList<WorkflowNodeType> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Call, Stop];
+    public static IReadOnlyList<WorkflowNodeType> All { get; } = [Trigger, Action, Wait, If, Toggle, Repeat, SetVariable, Call, Switch, Stop];
 
     public static WorkflowNodeType Of(string kind) => All.FirstOrDefault(type => type.Kind == kind) ?? Action;
 
@@ -304,6 +314,7 @@ public static class WorkflowNodeTypes
                 _ => $"{Or(settings.Get(WorkflowKeys.Name), "…")} = {Or(settings.Get(WorkflowKeys.Value), "\"\"")}",
             },
             WorkflowNodeKinds.Call => $"Call {Or(settings.Get(WorkflowKeys.Workflow), "…")}",
+            WorkflowNodeKinds.Switch => $"Switch on {Or(settings.Get(WorkflowKeys.Expression), "…")}",
             WorkflowNodeKinds.Stop => "Stop",
             _ => node.Kind,
         };

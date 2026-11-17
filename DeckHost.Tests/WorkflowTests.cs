@@ -898,6 +898,71 @@ public sealed class WorkflowTests : IAsyncDisposable
         Assert.That(Check("hour() == 10"), Is.True, "the engine's clock is the expression's clock");
     }
 
+    private static WorkflowNode SwitchOn(string id, string expression, params (string Id, string Text)[] cases) =>
+        Node(id, WorkflowNodeKinds.Switch, (WorkflowKeys.Expression, expression), (WorkflowKeys.Cases, WorkflowCases.Serialize(cases.Select(static one => new WorkflowCase(one.Id, one.Text)))));
+
+    [TestCase("night", "c2")]
+    [TestCase("DAY", "c1")]
+    [TestCase("evening", "default")]
+    public async Task A_switch_goes_on_at_the_first_case_that_equals_the_value_else_at_else(string mode, string expectedPort)
+    {
+        _store.Publish(VariableKeys.UserVariable("mode"), mode);
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), SwitchOn("sw", "[mode]", ("c1", "day"), ("c2", "night")), Run("day", "a"), Run("night", "b"), Run("other", "c")],
+            Links = [Link("t", "sw"), Link("sw", "day", "case:c1"), Link("sw", "night", "case:c2"), Link("sw", "other", WorkflowPorts.Default)],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Ran().Count > 0);
+
+        Assert.That(Ran(), Is.EqualTo(new[] { expectedPort switch { "c1" => "a", "c2" => "b", _ => "c" } }));
+    }
+
+    [Test]
+    public void A_switch_compares_numbers_as_numbers_the_first_match_wins_and_a_broken_expression_goes_to_else()
+    {
+        using var store = new VariableStore();
+        var engine = new WorkflowEngine(store, (_, _, _, _) => true);
+        store.Publish(VariableKeys.UserVariable("n"), "10");
+
+        ActionSettings Switch(string expression, params (string, string)[] cases) =>
+            Settings((WorkflowKeys.Expression, expression), (WorkflowKeys.Cases, WorkflowCases.Serialize(cases.Select(static one => new WorkflowCase(one.Item1, one.Item2)))));
+
+        Assert.That(engine.ChooseCase(Switch("[n]", ("a", "9"), ("b", "10.0"), ("c", "10")), null).Port, Is.EqualTo("case:b"), "10 equals 10.0, and the first match wins");
+        Assert.That(engine.ChooseCase(Switch("[n] % 3", ("a", "0"), ("b", "1")), null).Port, Is.EqualTo("case:b"));
+        Assert.That(engine.ChooseCase(Switch("[n] > 5", ("t", "true")), null).Port, Is.EqualTo("case:t"));
+        Assert.That(engine.ChooseCase(Switch("[unset]", ("e", "")), null).Port, Is.EqualTo("case:e"), "an empty case matches an unset variable");
+
+        var broken = engine.ChooseCase(Switch("[n] +", ("a", "1")), null);
+        Assert.That((broken.Port, broken.Ok), Is.EqualTo((WorkflowPorts.Default, false)));
+        Assert.That(broken.Line, Does.Contain("Else"));
+        Assert.That(engine.ChooseCase(Switch("[n]"), null).Port, Is.EqualTo(WorkflowPorts.Default), "no cases: always Else");
+    }
+
+    [Test]
+    public void The_cases_of_a_switch_are_ports_with_stable_ids_and_the_file_format_survives_odd_text()
+    {
+        var cases = new[] { new WorkflowCase("c1", "a=b"), new WorkflowCase("c7", "multi\nline"), new WorkflowCase("c3", string.Empty) };
+
+        var text = WorkflowCases.Serialize(cases);
+        var back = WorkflowCases.Parse(text);
+
+        Assert.That(back.Select(static one => one.Id), Is.EqualTo(new[] { "c1", "c7", "c3" }));
+        Assert.That(back[0].Text, Is.EqualTo("a=b"), "only the first = separates the id");
+        Assert.That(back[1].Text, Is.EqualTo("multi line"), "a new line in a case becomes a space");
+        Assert.That(back[2].Text, Is.Empty);
+        Assert.That(WorkflowCases.NextId(back), Is.EqualTo("c2"));
+        Assert.That(WorkflowCases.Parse("no id\n=empty id\nx=1\nx=2").Select(static one => one.Text), Is.EqualTo(new[] { "1" }), "bad lines and repeated ids are left out");
+
+        var node = Node("s", WorkflowNodeKinds.Switch, (WorkflowKeys.Cases, text));
+        Assert.That(WorkflowNodeKinds.OutputsOf(node), Is.EqualTo(new[] { "case:c1", "case:c7", "case:c3", "default" }));
+        Assert.That(WorkflowPorts.Describe("case:c1", node), Is.EqualTo("= a=b"));
+        Assert.That(WorkflowPorts.Describe("case:c3", node), Is.EqualTo("= (empty)"));
+        Assert.That(WorkflowPorts.Describe("default", node), Is.EqualTo("Else"));
+        Assert.That(WorkflowNodeKinds.OutputsOf(WorkflowNodeKinds.Wait), Is.EqualTo(new[] { WorkflowPorts.Next }), "other kinds are unchanged");
+    }
+
     [Test]
     public void A_workflow_binding_survives_the_profile_file()
     {
