@@ -32,7 +32,13 @@ public sealed class WebViewSupportTests : IDisposable
     private void RememberAFailureOn(string runtime)
     {
         Directory.CreateDirectory(_folder);
-        File.WriteAllText(WebViewSupport.MarkerPath, runtime + Environment.NewLine + "COMException: Class not registered");
+        File.WriteAllText(WebViewSupport.MarkerPath, string.Join(Environment.NewLine, runtime, "0x80040154", "COMException: Class not registered") + Environment.NewLine);
+    }
+
+    private void RememberAnOlderVersionsFailureOn(string runtime)
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(WebViewSupport.MarkerPath, runtime + Environment.NewLine + "COMException: Operation aborted" + Environment.NewLine);
     }
 
     private static Exception ExceptionFromTheWebViewAdapter()
@@ -88,6 +94,62 @@ public sealed class WebViewSupportTests : IDisposable
 
         // Assert
         Assert.That(available, Is.False);
+    }
+
+    [Test]
+    public void IsAvailable_MarkerFromAnOlderDeckHost_IsIgnoredAndRemoved()
+    {
+        // Arrange (an older DeckHost kept every failure, also a view torn down while it started)
+        RememberAnOlderVersionsFailureOn(Runtime);
+
+        // Act
+        var available = WebViewSupport.IsAvailable;
+
+        // Assert
+        Assert.That(available, Is.True);
+        Assert.That(File.Exists(WebViewSupport.MarkerPath), Is.False);
+    }
+
+    [Test]
+    public void Reason_FailureRememberedOnTheSameRuntime_SaysWhatFailed()
+    {
+        // Arrange
+        RememberAFailureOn(Runtime);
+
+        // Act
+        _ = WebViewSupport.IsAvailable;
+
+        // Assert
+        Assert.That(WebViewSupport.Reason, Does.Contain("Class not registered"));
+    }
+
+    [Test]
+    public void Reason_NoRuntime_SaysItIsNotInstalledOrNotFound()
+    {
+        // Arrange
+        WebViewSupport.RuntimeVersion = () => null;
+        WebViewSupport.Reset();
+
+        // Act
+        _ = WebViewSupport.IsAvailable;
+
+        // Assert
+        Assert.That(WebViewSupport.Reason, Is.Not.Null.And.Not.Empty);
+    }
+
+    [Test]
+    public void Retry_AfterARememberedFailure_TriesTheWebViewAgain()
+    {
+        // Arrange
+        RememberAFailureOn(Runtime);
+        _ = WebViewSupport.IsAvailable;
+
+        // Act
+        WebViewSupport.Retry();
+
+        // Assert
+        Assert.That(WebViewSupport.IsAvailable, Is.True);
+        Assert.That(File.Exists(WebViewSupport.MarkerPath), Is.False);
     }
 
     [Test]

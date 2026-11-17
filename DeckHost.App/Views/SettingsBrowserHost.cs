@@ -100,17 +100,40 @@ public sealed class SettingsBrowserHost : ContentControl
         browser.Source = null;
     }
 
-    private void ShowMessage() => Content = new TextBlock
+    private void ShowMessage()
     {
-        Margin = new Thickness(12),
-        TextWrapping = TextWrapping.Wrap,
-        Foreground = new SolidColorBrush(Color.Parse("#FCA5A5")),
-        Text = SafeMode.IsOn
-            ? "Safe mode: the built-in browser is off. Use Open in browser above; changes there are saved straight to the plugin."
+        var text = SafeMode.IsOn
+            ? "Safe mode: the built-in browser is off."
             : OperatingSystem.IsLinux()
-                ? "The built-in browser needs WebKitGTK (libwebkit2gtk-4.1). Use Open in browser above; changes there are saved straight to the plugin."
-                : "The built-in browser isn't available on this computer (the Microsoft Edge WebView2 runtime is missing or broken). Use Open in browser above; changes there are saved straight to the plugin.",
-    };
+                ? "The built-in browser needs WebKitGTK (libwebkit2gtk-4.1)."
+                : "The built-in browser isn't available on this computer.";
+        var details = SafeMode.IsOn ? null : WebViewSupport.Reason;
+        var panel = new StackPanel { Margin = new Thickness(12), Spacing = 8 };
+        panel.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(Color.Parse("#FCA5A5")),
+            Text = $"{text} Use Open in browser above; changes there are saved straight to the plugin.",
+        });
+        if (!string.IsNullOrEmpty(details))
+        {
+            panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = new SolidColorBrush(Color.Parse("#94A3B8")), Text = details });
+        }
+
+        if (!SafeMode.IsOn)
+        {
+            var retry = new Button { Content = "Try the built-in browser again", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left };
+            retry.Click += (_, _) =>
+            {
+                WebViewSupport.Retry();
+                Release();
+                Refresh();
+            };
+            panel.Children.Add(retry);
+        }
+
+        Content = panel;
+    }
 
     private NativeWebView CreateBrowser()
     {

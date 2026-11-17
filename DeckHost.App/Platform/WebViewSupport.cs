@@ -29,14 +29,39 @@ internal static class WebViewSupport
 
     public static bool IsAvailable => !SafeMode.IsOn && (_available ??= Probe());
 
-    public static void Reset() => _available = null;
+    /// <summary>Why the built-in browser can't be used right now (null while it can): shown instead of a bare "isn't available".</summary>
+    public static string? Reason { get; private set; }
+
+    public static void Reset()
+    {
+        _available = null;
+        Reason = null;
+    }
+
+    /// <summary>
+    /// Forgets a remembered failure and tries the web view again (the "Try again" button): the runtime may have been
+    /// installed or repaired since.
+    /// </summary>
+    public static void Retry()
+    {
+        try
+        {
+            File.Delete(MarkerPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Without the file being gone the next start still tries once the runtime version changes.
+        }
+
+        Reset();
+    }
 
     /// <summary>Puts the real runtime check and marker file back (tests).</summary>
     internal static void RestoreDefaults()
     {
         RuntimeVersion = DetectRuntimeVersion;
         MarkerPath = DisabledFile;
-        _available = null;
+        Reset();
     }
 
     /// <summary>
@@ -47,6 +72,7 @@ internal static class WebViewSupport
     public static void ReportFailure(Exception exception)
     {
         _available = false;
+        Reason = $"The web view stopped working ({Describe(exception)}).";
         if (IsRuntimeUnusable(exception))
         {
             Remember(exception);
@@ -60,6 +86,11 @@ internal static class WebViewSupport
         exception is System.Runtime.InteropServices.COMException { HResult: ClassNotRegistered or FileNotFound or ModuleNotFound } ||
         exception.GetType().Name.Contains("RuntimeNotFound", StringComparison.Ordinal);
 
+    internal static bool IsUnusableHResult(int hresult) => hresult is ClassNotRegistered or FileNotFound or ModuleNotFound;
+
+    private static string Describe(Exception exception) =>
+        $"0x{exception.HResult:X8}: {exception.GetType().Name}: {exception.Message}".ReplaceLineEndings(" ");
+
     private const int ClassNotRegistered = unchecked((int)0x80040154);
     private const int FileNotFound = unchecked((int)0x80070002);
     private const int ModuleNotFound = unchecked((int)0x8007007E);
@@ -69,7 +100,8 @@ internal static class WebViewSupport
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(MarkerPath)!);
-            File.WriteAllText(MarkerPath, $"{RuntimeVersion() ?? "none"}{Environment.NewLine}{exception.GetType().Name}: {exception.Message}{Environment.NewLine}");
+            // Line 1: the runtime version, line 2: the error code (so a transient failure from an older version isn't mistaken for a lasting one), line 3: the text.
+            File.WriteAllText(MarkerPath, string.Join(Environment.NewLine, RuntimeVersion() ?? "none", $"0x{exception.HResult:X8}", Describe(exception)) + Environment.NewLine);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -87,22 +119,46 @@ internal static class WebViewSupport
         var version = RuntimeVersion();
         if (string.IsNullOrEmpty(version))
         {
+            Reason = OperatingSystem.IsWindows()
+                ? "The Microsoft Edge WebView2 runtime isn't installed (or can't be found)."
+                : "No web view is available on this system.";
             return false;
         }
 
-        // A failure on this very runtime version: don't try again until it is updated.
+        return !FailureRememberedFor(version);
+    }
+
+    /// <summary>
+    /// A failure is remembered only when it was on this runtime version and said the runtime can't be used. A marker from an
+    /// older DeckHost (it kept every failure, also a view that was only torn down while starting) is removed.
+    /// </summary>
+    private static bool FailureRememberedFor(string version)
+    {
         try
         {
-            if (File.Exists(MarkerPath) && File.ReadLines(MarkerPath).FirstOrDefault() == version)
+            if (!File.Exists(MarkerPath))
             {
                 return false;
             }
+
+            var lines = File.ReadAllLines(MarkerPath);
+            var lasting = lines.Length >= 2 && lines[0] == version &&
+                lines[1].StartsWith("0x", StringComparison.Ordinal) &&
+                int.TryParse(lines[1][2..], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var hresult) &&
+                IsUnusableHResult(hresult);
+            if (lasting)
+            {
+                Reason = $"The WebView2 runtime failed to start on this computer ({(lines.Length > 2 ? lines[2] : lines[1])}).";
+                return true;
+            }
+
+            File.Delete(MarkerPath);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
         }
 
-        return true;
+        return false;
     }
 
     private static string? DetectRuntimeVersion()

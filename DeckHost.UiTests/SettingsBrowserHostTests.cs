@@ -53,8 +53,8 @@ public sealed class SettingsBrowserHostTests
         WebViewSupport.RestoreDefaults();
 
         // Assert
-        Assert.That(content, Is.TypeOf<TextBlock>());
-        Assert.That(((TextBlock)content!).Text, Does.Contain("Open in browser"));
+        Assert.That(content, Is.TypeOf<StackPanel>());
+        Assert.That(((TextBlock)((StackPanel)content!).Children[0]).Text, Does.Contain("Open in browser"));
     }
 
     [AvaloniaTest]
@@ -90,6 +90,24 @@ public sealed class SettingsBrowserHostTests
         WebViewSupport.RestoreDefaults();
 
         // Assert
-        Assert.That(content, Is.TypeOf<TextBlock>());
+        Assert.That(content, Is.TypeOf<StackPanel>());
+    }
+
+    [AvaloniaTest]
+    public void Message_WhenTheBrowserIsUnavailable_OffersToTryAgainAndSaysWhy()
+    {
+        // Arrange
+        NoWebViewRuntime();
+        var host = new SettingsBrowserHost { Source = Page };
+
+        // Act
+        var window = Show(host);
+        var content = (StackPanel)host.Content!;
+        window.Close();
+        WebViewSupport.RestoreDefaults();
+
+        // Assert
+        Assert.That(content.Children.OfType<Button>().Single().Content, Is.EqualTo("Try the built-in browser again"));
+        Assert.That(content.Children.OfType<TextBlock>().Count(), Is.EqualTo(2), "the message and the reason");
     }
 }
