@@ -69,6 +69,7 @@ public partial class ProfileManagerViewModel : ViewModelBase
                 OnPropertyChanged(nameof(EditingName));
                 OnPropertyChanged(nameof(EditingBackgroundColor));
                 OnPropertyChanged(nameof(EditingBackgroundImage));
+                OnPropertyChanged(nameof(EditingOverridesBackground));
                 ProfileLayers.Load(value?.BackgroundLayers);
                 ProfilePreview?.Invalidate();
                 OnPropertyChanged(nameof(BackgroundColorError));
@@ -81,6 +82,69 @@ public partial class ProfileManagerViewModel : ViewModelBase
     }
 
     public bool HasEditingProfile => EditingProfile is not null;
+
+    /// <summary>The parts of the Profile Manager: the profiles, the default background for all of them, and the backups.</summary>
+    public enum ManagerSection
+    {
+        Profiles,
+        DefaultBackground,
+        Backups,
+    }
+
+    private ManagerSection _section;
+
+    public ManagerSection Section
+    {
+        get => _section;
+        set
+        {
+            if (SetProperty(ref _section, value))
+            {
+                OnPropertyChanged(nameof(IsProfilesSection));
+                OnPropertyChanged(nameof(IsDefaultSection));
+                OnPropertyChanged(nameof(IsBackupsSection));
+                if (value == ManagerSection.Backups)
+                {
+                    RefreshBackups();
+                }
+
+                DefaultPreview.Invalidate();
+            }
+        }
+    }
+
+    public bool IsProfilesSection => _section == ManagerSection.Profiles;
+
+    public bool IsDefaultSection => _section == ManagerSection.DefaultBackground;
+
+    public bool IsBackupsSection => _section == ManagerSection.Backups;
+
+    [RelayCommand]
+    private void ShowProfiles() => Section = ManagerSection.Profiles;
+
+    [RelayCommand]
+    private void ShowDefaultBackground() => Section = ManagerSection.DefaultBackground;
+
+    [RelayCommand]
+    private void ShowBackups() => Section = ManagerSection.Backups;
+
+    /// <summary>Whether the edited profile uses a background of its own instead of the default. Off keeps what was set, unused.</summary>
+    public bool EditingOverridesBackground
+    {
+        get => EditingProfile?.OverridesBackground ?? false;
+        set
+        {
+            if (EditingProfile is null || value == EditingProfile.OverridesBackground)
+            {
+                return;
+            }
+
+            EditingProfile.OverridesBackground = value;
+            OnPropertyChanged();
+            _main.NotifyProfilesEdited();
+            ProfilePreview.Invalidate();
+        }
+    }
 
     public string EditingName
     {

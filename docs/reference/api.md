@@ -662,6 +662,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `bool IsRoot` |  |
 | `string Kind { get; init; }` | What this layout is: null for a profile, `Page` or `Folder`. |
 | `string Name { get; init; }` |  |
+| `bool? OverridesBackground { get; init; }` | Whether this layout uses `Background` instead of the default background for all profiles. Null (files from before the checkbox) means yes when it has a background. Off keeps the background stored but unused, so turning it on again brings it back. |
 | `string ParentId { get; init; }` | For a page or folder: the layout it belongs to. A page belongs to its profile; a folder to the page (or folder) whose key opens it. Null for a profile (its own first page). |
 
 ### DeviceSide

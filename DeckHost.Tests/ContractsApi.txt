@@ -416,6 +416,7 @@
   DeckHost.Contracts.Models.DeviceProfile.IsRoot : System.Boolean
   DeckHost.Contracts.Models.DeviceProfile.Kind : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile.Name : System.String {set}
+  DeckHost.Contracts.Models.DeviceProfile.OverridesBackground : System.Nullable<System.Boolean> {set}
   DeckHost.Contracts.Models.DeviceProfile.ParentId : System.String {set}
   DeckHost.Contracts.Models.DeviceProfile.ToString() : System.String
   DeckHost.Contracts.Models.DeviceSide.Back = 5

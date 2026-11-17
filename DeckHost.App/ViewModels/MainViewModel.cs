@@ -1322,7 +1322,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     {
         // A duplicate is a full working copy: bindings, appearance, background, app rules and plugin settings.
         var source = copyFrom?.ToModel();
-        var profile = new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], UniqueProfileName(name), SelectedDevice!.Id, source?.AutoSwitchApps, source?.Background);
+        var profile = new ProfileItemViewModel($"profile.{Guid.NewGuid():N}"[..20], UniqueProfileName(name), SelectedDevice!.Id, source?.AutoSwitchApps, source?.Background, source?.OverridesBackground);
         if (copyFrom is not null && source is not null)
         {
             // Pages and folders come along with new ids; Folder keys are pointed at the copies.
@@ -1335,7 +1335,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             CopyLayout(copyFrom, profile, ids);
             foreach (var layout in copyFrom.Layouts)
             {
-                var copy = new ProfileItemViewModel(ids[layout.Id], layout.Name, profile.DeviceId, null, layout.ToModel().Background)
+                var copy = new ProfileItemViewModel(ids[layout.Id], layout.Name, profile.DeviceId, null, layout.ToModel().Background, layout.OverridesBackground)
                 {
                     ParentId = layout.ParentId is { } parent && ids.TryGetValue(parent, out var newParent) ? newParent : profile.Id,
                     Kind = layout.Kind,
@@ -1505,7 +1505,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         ProfileItemViewModel? copy = null;
         foreach (var layout in mapped.Layouts)
         {
-            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? name : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background)
+            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? name : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background, layout.OverridesBackground)
             {
                 ParentId = layout.IsRoot ? null : layout.ParentId,
                 Kind = layout.IsRoot ? null : layout.Kind,
@@ -1566,7 +1566,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         ProfileItemViewModel? root = null;
         foreach (var layout in layouts)
         {
-            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? UniqueProfileName(layout.Name) : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background)
+            var item = new ProfileItemViewModel(layout.Id, layout.IsRoot ? UniqueProfileName(layout.Name) : layout.Name, layout.DeviceId, layout.AutoSwitchApps, layout.Background, layout.OverridesBackground)
             {
                 ParentId = layout.IsRoot ? null : layout.ParentId,
                 Kind = layout.IsRoot ? null : layout.Kind,
@@ -1734,7 +1734,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             var children = new List<ProfileItemViewModel>();
             foreach (var profile in document?.Profiles ?? [])
             {
-                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps, profile.Background)
+                var item = new ProfileItemViewModel(profile.Id, profile.Name, profile.DeviceId, profile.AutoSwitchApps, profile.Background, profile.OverridesBackground)
                 {
                     ParentId = profile.ParentId,
                     Kind = profile.Kind,
@@ -1914,9 +1914,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         // Pages and folders look like their profile unless they have a background of their own.
         var model = profile.ToModel();
         var inherited = profile.IsRoot ? null : profile.RootProfile.ToModel().Background;
-        return DeckHost.App.Profiles.ProfileBackgrounds.Effective(model.Background, inherited, DefaultBackground) is { } background && !ReferenceEquals(background, model.Background)
-            ? model with { Background = background }
-            : model;
+        var effective = DeckHost.App.Profiles.ProfileBackgrounds.Effective(model.Background, inherited, DefaultBackground, model.OverridesBackground ?? true);
+        return ReferenceEquals(effective, model.Background) ? model : model with { Background = effective };
     }
 
     /// <summary>The background the profile is drawn with (its own, its root's or the default), as the host gets it.</summary>

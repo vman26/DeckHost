@@ -79,6 +79,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Changed
 
+- Backgrounds: the default background has its own section in the Profile Manager, and a profile only shows its background
+  settings after you tick **Use a background of its own**; backups moved to their own section too.
+
 - Workflows: debugging only works while a workflow editor is open (a held run goes on when the last editor closes);
   deleting a node links what led into it to what it led to (and asks when it has several branches); Arrange keeps
   a Switch's branches in the order of its cases; a Call workflow node can create a new shared workflow; new workflows

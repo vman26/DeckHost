@@ -32,6 +32,11 @@
 				<StackPanel Spacing="4">
 					<TextBlock Text="Profile Manager" FontSize="24" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
 					<TextBlock Classes="hint" Text="Profiles are the pages of your device. Give a profile one or more apps and it turns on by itself while that app is in front." />
+					<StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+						<Button Content="Profiles" Command="{Binding ShowProfilesCommand}" Classes.accent="{Binding IsProfilesSection}" />
+						<Button Content="Default background" Command="{Binding ShowDefaultBackgroundCommand}" Classes.accent="{Binding IsDefaultSection}" />
+						<Button Content="Backups" Command="{Binding ShowBackupsCommand}" Classes.accent="{Binding IsBackupsSection}" />
+					</StackPanel>
 				</StackPanel>
 				<StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
 					<ToggleSwitch IsChecked="{Binding AutoSwitchEnabled}"
@@ -47,7 +52,7 @@
 			</Grid>
 		</Border>
 
-		<Grid Grid.Row="1" ColumnDefinitions="300,*" Margin="20" ColumnSpacing="16">
+		<Grid Grid.Row="1" ColumnDefinitions="300,*" Margin="20" ColumnSpacing="16" IsVisible="{Binding IsProfilesSection}">
 			<!-- Profile list -->
 			<Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
 				<TextBlock Classes="section" Text="PROFILES (NEXT/PREVIOUS USE THIS ORDER)" />
@@ -108,8 +113,11 @@
 					<Border Classes="card">
 						<StackPanel Spacing="10">
 							<TextBlock Classes="section" Text="BACKGROUND OF THIS PROFILE" />
+							<CheckBox IsChecked="{Binding EditingOverridesBackground, Mode=TwoWay}" Content="Use a background of its own (override the default)" />
+							<TextBlock Classes="hint" IsVisible="{Binding !EditingOverridesBackground}" TextWrapping="Wrap" Text="This profile shows the default background (Default background, above). Tick the box to give it its own; what you set stays when you untick it." />
+							<StackPanel Spacing="10" IsVisible="{Binding EditingOverridesBackground}">
 							<local:BackgroundPreviewView DataContext="{Binding ProfilePreview}" />
-							<TextBlock Classes="hint" Text="Shown behind every control of this profile. Leave it empty to use the default background for all profiles (below). An image spans the whole device, so each key shows its own part of it. Animated GIFs play (about 10 frames per second)." />
+							<TextBlock Classes="hint" Text="Shown behind every control of this profile. An image spans the whole device, so each key shows its own part of it. Animated GIFs play (about 10 frames per second)." />
 							<TextBlock Text="Color" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
 							<local:ColorField Hex="{Binding EditingBackgroundColor, Mode=TwoWay}" DefaultHex="#0B1220" Placeholder="DeckHost dark blue" Width="280" HorizontalAlignment="Left" />
 							<TextBlock Text="{Binding BackgroundColorError}" IsVisible="{Binding HasBackgroundColorError}" Foreground="{DynamicResource C.FCA5A5}" FontSize="12" />
@@ -120,46 +128,7 @@
 								<Button Grid.Column="2" Content="Clear" Command="{Binding ClearBackgroundCommand}" />
 							</Grid>
 							<local:BackgroundLayersEditor DataContext="{Binding ProfileLayers}" Margin="0,6,0,0" />
-						</StackPanel>
-					</Border>
-
-					<!-- Backups of all profiles: one a day (14 kept), or now; restore one. -->
-					<Border Classes="card">
-						<StackPanel Spacing="10">
-							<TextBlock Classes="section" Text="BACKUPS" />
-							<TextBlock Classes="hint" Text="DeckHost backs up all profiles once a day (the last 14 days are kept). Restoring replaces all profiles; the current ones are backed up first." />
-							<StackPanel Orientation="Horizontal" Spacing="8">
-								<Button Content="Back up now" Command="{Binding BackUpNowCommand}" />
-								<TextBlock Text="{Binding Message}" Foreground="{DynamicResource C.93C5FD}" VerticalAlignment="Center" TextWrapping="Wrap" />
 							</StackPanel>
-							<ItemsControl ItemsSource="{Binding Backups}">
-								<ItemsControl.ItemTemplate>
-									<DataTemplate x:DataType="vm:BackupItemViewModel">
-										<Grid ColumnDefinitions="*,Auto" Margin="0,2">
-											<TextBlock Text="{Binding Label}" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" />
-											<Button Grid.Column="1" Content="Restore" Command="{Binding RestoreCommand}" />
-										</Grid>
-									</DataTemplate>
-								</ItemsControl.ItemTemplate>
-							</ItemsControl>
-						</StackPanel>
-					</Border>
-
-					<Border Classes="card">
-						<StackPanel Spacing="10">
-							<TextBlock Classes="section" Text="DEFAULT BACKGROUND FOR ALL PROFILES" />
-							<local:BackgroundPreviewView DataContext="{Binding DefaultPreview}" />
-							<TextBlock Classes="hint" Text="Used by every profile that has no background of its own, so one background can serve all profiles while some override it." />
-							<TextBlock Text="Color" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
-							<local:ColorField Hex="{Binding DefaultBackgroundColor, Mode=TwoWay}" DefaultHex="#0B1220" Placeholder="DeckHost dark blue" Width="280" HorizontalAlignment="Left" />
-							<TextBlock Text="{Binding DefaultBackgroundColorError}" IsVisible="{Binding HasDefaultBackgroundColorError}" Foreground="{DynamicResource C.FCA5A5}" FontSize="12" />
-							<TextBlock Text="Image (PNG, JPG, SVG or animated GIF)" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
-							<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-								<TextBox Text="{Binding DefaultBackgroundImage, Mode=TwoWay}" PlaceholderText="Optional image file" />
-								<Button Grid.Column="1" Content="Browse…" Click="BrowseDefaultBackground_OnClick" />
-								<Button Grid.Column="2" Content="Clear" Command="{Binding ClearDefaultBackgroundCommand}" />
-							</Grid>
-							<local:BackgroundLayersEditor DataContext="{Binding DefaultLayers}" Margin="0,6,0,0" />
 						</StackPanel>
 					</Border>
 
@@ -208,5 +177,53 @@
 				</StackPanel>
 			</ScrollViewer>
 		</Grid>
+		<ScrollViewer Grid.Row="1" Margin="20" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsDefaultSection}">
+			<StackPanel MaxWidth="900" HorizontalAlignment="Left" Spacing="14">
+					<Border Classes="card">
+						<StackPanel Spacing="10">
+							<TextBlock Classes="section" Text="DEFAULT BACKGROUND FOR ALL PROFILES" />
+							<local:BackgroundPreviewView DataContext="{Binding DefaultPreview}" />
+							<TextBlock Classes="hint" Text="Used by every profile that does not use a background of its own. Set it once here; a profile can override it (Profiles, Background of this profile)." />
+							<TextBlock Text="Color" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+							<local:ColorField Hex="{Binding DefaultBackgroundColor, Mode=TwoWay}" DefaultHex="#0B1220" Placeholder="DeckHost dark blue" Width="280" HorizontalAlignment="Left" />
+							<TextBlock Text="{Binding DefaultBackgroundColorError}" IsVisible="{Binding HasDefaultBackgroundColorError}" Foreground="{DynamicResource C.FCA5A5}" FontSize="12" />
+							<TextBlock Text="Image (PNG, JPG, SVG or animated GIF)" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+							<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+								<TextBox Text="{Binding DefaultBackgroundImage, Mode=TwoWay}" PlaceholderText="Optional image file" />
+								<Button Grid.Column="1" Content="Browse…" Click="BrowseDefaultBackground_OnClick" />
+								<Button Grid.Column="2" Content="Clear" Command="{Binding ClearDefaultBackgroundCommand}" />
+							</Grid>
+							<local:BackgroundLayersEditor DataContext="{Binding DefaultLayers}" Margin="0,6,0,0" />
+						</StackPanel>
+					</Border>
+
+			</StackPanel>
+		</ScrollViewer>
+		<ScrollViewer Grid.Row="1" Margin="20" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsBackupsSection}">
+			<StackPanel MaxWidth="900" HorizontalAlignment="Left" Spacing="14">
+					<!-- Backups of all profiles: one a day (14 kept), or now; restore one. -->
+					<Border Classes="card">
+						<StackPanel Spacing="10">
+							<TextBlock Classes="section" Text="BACKUPS" />
+							<TextBlock Classes="hint" Text="DeckHost backs up all profiles once a day (the last 14 days are kept). Restoring replaces all profiles; the current ones are backed up first." />
+							<StackPanel Orientation="Horizontal" Spacing="8">
+								<Button Content="Back up now" Command="{Binding BackUpNowCommand}" />
+								<TextBlock Text="{Binding Message}" Foreground="{DynamicResource C.93C5FD}" VerticalAlignment="Center" TextWrapping="Wrap" />
+							</StackPanel>
+							<ItemsControl ItemsSource="{Binding Backups}">
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="vm:BackupItemViewModel">
+										<Grid ColumnDefinitions="*,Auto" Margin="0,2">
+											<TextBlock Text="{Binding Label}" Foreground="{DynamicResource C.CBD5E1}" VerticalAlignment="Center" />
+											<Button Grid.Column="1" Content="Restore" Command="{Binding RestoreCommand}" />
+										</Grid>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+						</StackPanel>
+					</Border>
+
+			</StackPanel>
+		</ScrollViewer>
 	</Grid>
 </UserControl>

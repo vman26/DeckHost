@@ -1,13 +1,14 @@
 # Backgrounds
 
-A profile's background is a color, an image, and any number of **layers** drawn over them, bottom to top. Set it on the **Profiles** page (the grid icon at the top right): **Background of this profile**, or **Default background for all profiles** for every profile that has none of its own. Pages and folders look like their profile.
+A profile's background is a color, an image, and any number of **layers** drawn over them, bottom to top. The **Default background** (Profile Manager, its own section) is set once and used by every profile. A profile can **use a background of its own**: tick the box under **Background of this profile** and the color, image and layers editor appears; untick it and the profile shows the default again (what you set stays, ready for the next time you tick it). Pages and folders look like their profile.
 
 The color and image are the bottom of the picture; **Layers** adds more on top:
 
 | Layer | What it draws |
 |---|---|
 | **Solid** | One color over the whole layout (with its opacity; `#AARRGGBB` colors work too). |
-| **Gradient** | A gradient across the whole layout, from one color to another at an angle (0° left to right, 90° top to bottom). Every key shows its own part, so neighbouring keys continue each other. |
+| **Gradient** | A gradient across the whole layout through two or more colors at an angle (0° left to right, 90° top to bottom). **+ Add a color** adds one, the arrows trade the places of two colors and each color has a % that says where along the gradient it starts. Every key shows its own part, so neighbouring keys continue each other. |
+| **Radial** | A gradient from a center point outwards through the same colors; set the center (across and down) and the size (100 % reaches the corners). |
 | **Image** | A picture (PNG, JPG, SVG or an animated GIF) spread over the whole layout; every key shows its slice. |
 
 Each layer has an **Opacity** and a **Show** switch (a hidden layer is kept, not drawn), and moves up or down with the arrows. A layer of a kind this version of DeckHost doesn't know (from a newer version) is kept as it is and not drawn.
@@ -25,7 +26,7 @@ Tick **Follows a variable** on a layer to make it react:
 - **Changes its opacity:** the layer gets more visible as the value grows, up to the layer's own opacity.
 - **Whether it shows:** the layer only shows while the value is at or above *From* (`true` counts as 1).
 
-**+ CPU glow** adds a red layer that gets stronger as the CPU gets busier. A device is drawn again when a variable a background follows changes, at most ten times a second, and only the keys whose picture changed are sent.
+**+ CPU glow** adds a red layer that gets stronger as the CPU gets busier (invisible when idle, full at 60 % load). A device is drawn again when a variable a background follows changes, at most ten times a second, and only the keys whose picture changed are sent.
 
 ## Limits
 
