@@ -7,69 +7,199 @@ namespace DeckHost.Tests;
 /// <summary>Remembered, unplugged devices can be forgotten from Device settings.</summary>
 public sealed class ForgetDeviceTests : IDisposable
 {
+    private const string XlId = "mirabox.xl";
+    private const string N4ProId = "mirabox.n4pro";
+    private const string UnknownMiraBox = "mirabox.nothing";
+    private const string UnknownElgato = "elgato.nothing";
+    private const string ForgetLabel = "Forget this device";
+    private const string ForgetQuestion = "Forget MiraBox N4 Pro?";
+
     private readonly string _directory = Directory.CreateTempSubdirectory("deckhost-forget").FullName;
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
-    [Test]
-    public void The_N4_Pro_listed_before_any_device_was_plugged_in_can_be_forgotten_for_good()
-    {
-        using (var plugin = new MiraBoxDevicePlugin(_directory))
-        {
-            var forget = Expect.Single(plugin.GetSettingActions(MiraBoxDevicePlugin.PrimaryDeviceId));
-            Assert.That((forget.Id, forget.Confirm), Is.EqualTo((MiraBoxDevicePlugin.ForgetActionId, "Forget MiraBox N4 Pro?")));
-            var changed = 0;
-            plugin.DevicesChanged += (_, _) => changed++;
+    private void RememberAnXl() =>
+        File.WriteAllText(Path.Combine(_directory, "mirabox-known.json"), JsonSerializer.Serialize(new[] { new { Id = XlId, OriginType = MiraBoxModels.Origin.XL, Serial = "X1" } }));
 
-            Assert.That(plugin.RunSettingAction(MiraBoxDevicePlugin.PrimaryDeviceId, MiraBoxDevicePlugin.ForgetActionId), Does.StartWith("Forgotten"));
-
-            Assert.That(plugin.Devices, Is.Empty);
-            Assert.That(changed, Is.EqualTo(1));
-        }
-
-        using var restarted = new MiraBoxDevicePlugin(_directory);
-        Assert.That(restarted.Devices, Is.Empty);
-    }
-
-    [Test]
-    public void A_remembered_MiraBox_model_can_be_forgotten()
-    {
-        File.WriteAllText(Path.Combine(_directory, "mirabox-known.json"), JsonSerializer.Serialize(new[] { new { Id = "mirabox.xl", OriginType = MiraBoxModels.Origin.XL, Serial = "X1" } }));
-        using var plugin = new MiraBoxDevicePlugin(_directory);
-        Assert.That(plugin.Devices.Select(static device => device.Id), Is.EquivalentTo(new[] { "mirabox.n4pro", "mirabox.xl" }));
-
-        plugin.RunSettingAction("mirabox.xl", MiraBoxDevicePlugin.ForgetActionId);
-
-        Assert.That(plugin.Devices.Select(static device => device.Id), Is.EqualTo(new[] { "mirabox.n4pro" }));
-        using var restarted = new MiraBoxDevicePlugin(_directory);
-        Assert.That(restarted.Devices.Select(static device => device.Id), Is.EqualTo(new[] { "mirabox.n4pro" }));
-    }
-
-    [Test]
-    public void A_remembered_Stream_Deck_can_be_forgotten()
+    private string RememberAStreamDeck()
     {
         var model = StreamDeckModel.All[0];
         var id = $"elgato.{model.ProductId:x4}.abc";
         File.WriteAllText(Path.Combine(_directory, "elgato-known.json"), JsonSerializer.Serialize(new[] { new { Id = id, model.ProductId, Serial = "ABC" } }));
-        using var plugin = new ElgatoDevicePlugin(_directory);
-        Assert.That(Expect.Single(plugin.Devices).Id, Is.EqualTo(id));
-        Assert.That(Expect.Single(plugin.GetSettingActions(id)).Label, Is.EqualTo("Forget this device"));
+        return id;
+    }
 
-        plugin.RunSettingAction(id, ElgatoDevicePlugin.ForgetActionId);
+    [Test]
+    public void GetSettingActions_AlwaysListedN4Pro_OffersToForgetItWithAConfirmation()
+    {
+        // Arrange
+        using var plugin = new MiraBoxDevicePlugin(_directory);
 
+        // Act
+        var forget = Expect.Single(plugin.GetSettingActions(MiraBoxDevicePlugin.PrimaryDeviceId));
+
+        // Assert
+        Assert.That((forget.Id, forget.Confirm), Is.EqualTo((MiraBoxDevicePlugin.ForgetActionId, ForgetQuestion)));
+    }
+
+    [Test]
+    public void RunSettingAction_ForgetTheN4Pro_RemovesItAndReportsOneChange()
+    {
+        // Arrange
+        using var plugin = new MiraBoxDevicePlugin(_directory);
+        var changed = 0;
+        plugin.DevicesChanged += (_, _) => changed++;
+
+        // Act
+        var message = plugin.RunSettingAction(MiraBoxDevicePlugin.PrimaryDeviceId, MiraBoxDevicePlugin.ForgetActionId);
+
+        // Assert
+        Assert.That(message, Does.StartWith("Forgotten"));
         Assert.That(plugin.Devices, Is.Empty);
-        using var restarted = new ElgatoDevicePlugin(_directory);
+        Assert.That(changed, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Devices_AfterForgettingTheN4ProAndRestarting_DoesNotListItAgain()
+    {
+        // Arrange
+        using (var plugin = new MiraBoxDevicePlugin(_directory))
+        {
+            plugin.RunSettingAction(MiraBoxDevicePlugin.PrimaryDeviceId, MiraBoxDevicePlugin.ForgetActionId);
+        }
+
+        // Act
+        using var restarted = new MiraBoxDevicePlugin(_directory);
+
+        // Assert
         Assert.That(restarted.Devices, Is.Empty);
     }
 
     [Test]
-    public void Unknown_devices_offer_nothing()
+    public void RunSettingAction_ForgetARememberedMiraBoxModel_ListsOnlyTheN4Pro()
     {
+        // Arrange
+        RememberAnXl();
+        using var plugin = new MiraBoxDevicePlugin(_directory);
+
+        // Act
+        plugin.RunSettingAction(XlId, MiraBoxDevicePlugin.ForgetActionId);
+
+        // Assert
+        Assert.That(plugin.Devices.Select(static device => device.Id), Is.EqualTo(new[] { N4ProId }));
+    }
+
+    [Test]
+    public void Devices_RememberedMiraBoxModel_IsListedNextToTheN4Pro()
+    {
+        // Arrange
+        RememberAnXl();
+
+        // Act
+        using var plugin = new MiraBoxDevicePlugin(_directory);
+
+        // Assert
+        Assert.That(plugin.Devices.Select(static device => device.Id), Is.EquivalentTo(new[] { N4ProId, XlId }));
+    }
+
+    [Test]
+    public void Devices_AfterForgettingAMiraBoxModelAndRestarting_ListsOnlyTheN4Pro()
+    {
+        // Arrange
+        RememberAnXl();
+        using (var plugin = new MiraBoxDevicePlugin(_directory))
+        {
+            plugin.RunSettingAction(XlId, MiraBoxDevicePlugin.ForgetActionId);
+        }
+
+        // Act
+        using var restarted = new MiraBoxDevicePlugin(_directory);
+
+        // Assert
+        Assert.That(restarted.Devices.Select(static device => device.Id), Is.EqualTo(new[] { N4ProId }));
+    }
+
+    [Test]
+    public void GetSettingActions_RememberedStreamDeck_OffersToForgetIt()
+    {
+        // Arrange
+        var id = RememberAStreamDeck();
+        using var plugin = new ElgatoDevicePlugin(_directory);
+
+        // Act
+        var forget = Expect.Single(plugin.GetSettingActions(id));
+
+        // Assert
+        Assert.That(forget.Label, Is.EqualTo(ForgetLabel));
+    }
+
+    [Test]
+    public void RunSettingAction_ForgetARememberedStreamDeck_RemovesIt()
+    {
+        // Arrange
+        var id = RememberAStreamDeck();
+        using var plugin = new ElgatoDevicePlugin(_directory);
+
+        // Act
+        plugin.RunSettingAction(id, ElgatoDevicePlugin.ForgetActionId);
+
+        // Assert
+        Assert.That(plugin.Devices, Is.Empty);
+    }
+
+    [Test]
+    public void Devices_AfterForgettingAStreamDeckAndRestarting_DoesNotListItAgain()
+    {
+        // Arrange
+        var id = RememberAStreamDeck();
+        using (var plugin = new ElgatoDevicePlugin(_directory))
+        {
+            plugin.RunSettingAction(id, ElgatoDevicePlugin.ForgetActionId);
+        }
+
+        // Act
+        using var restarted = new ElgatoDevicePlugin(_directory);
+
+        // Assert
+        Assert.That(restarted.Devices, Is.Empty);
+    }
+
+    [Test]
+    public void GetSettingActions_UnknownMiraBoxDevice_OffersNothing()
+    {
+        // Arrange
         using var mirabox = new MiraBoxDevicePlugin(_directory);
+
+        // Act
+        var actions = mirabox.GetSettingActions(UnknownMiraBox);
+
+        // Assert
+        Assert.That(actions, Is.Empty);
+    }
+
+    [Test]
+    public void GetSettingActions_UnknownStreamDeck_OffersNothing()
+    {
+        // Arrange
         using var elgato = new ElgatoDevicePlugin(_directory);
 
-        Assert.That(mirabox.GetSettingActions("mirabox.nothing"), Is.Empty);
-        Assert.That(elgato.GetSettingActions("elgato.nothing"), Is.Empty);
-        Assert.That(mirabox.RunSettingAction("mirabox.nothing", MiraBoxDevicePlugin.ForgetActionId), Does.StartWith("Only"));
+        // Act
+        var actions = elgato.GetSettingActions(UnknownElgato);
+
+        // Assert
+        Assert.That(actions, Is.Empty);
+    }
+
+    [Test]
+    public void RunSettingAction_ForgetAnUnknownMiraBoxDevice_SaysOnlyUnpluggedDevicesCanBeForgotten()
+    {
+        // Arrange
+        using var mirabox = new MiraBoxDevicePlugin(_directory);
+
+        // Act
+        var message = mirabox.RunSettingAction(UnknownMiraBox, MiraBoxDevicePlugin.ForgetActionId);
+
+        // Assert
+        Assert.That(message, Does.StartWith("Only"));
     }
 }
