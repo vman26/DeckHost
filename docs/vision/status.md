@@ -13,8 +13,8 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Simple and advanced automation | ✅ | Multi Action, Key Logic, Switch; node workflows |
 | Windows, Linux, macOS | ✅ | `build.yml`, `release.yml` |
 | No cloud dependency | ✅ | Everything local; store and updates optional |
-| Static, animated, reactive backgrounds | 🟡 | Static ✅ (color, image, default background, per control); animated 🟡 (GIF); reactive ⬜ |
-| Background Studio | ⬜ | |
+| Static, animated, reactive backgrounds | ✅ | Color, image, gradient and solid layers with opacity, default background, per control; GIF animation; layers that follow `system.cpu`, `system.memory` or a workflow variable |
+| Background Studio | 🟡 | The layer list on the Profiles page (add, reorder, opacity, bindings); no live device preview or asset manager yet |
 | Marketplace: discovery, install/remove, updates, rollback, integrity | ✅ | Store, `PluginUpdater`, `.previous` rollback, sha256 |
 | Marketplace: dependency resolution, publisher verification, signatures | ⬜ | sha256 only; no signatures, no dependencies |
 | Marketplace: purchase and entitlements | 🟡 | A Buy link; no entitlements |
@@ -38,7 +38,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 4.4 Workflows: events, external triggers, state machines, error handling, debugging | 🟡 | Control triggers only; run trace and log; no breakpoints |
 | 4.4 One engine for both | 🟡 | `WorkflowConverter` turns Multi Actions into workflows, but Multi Actions still run on `ActionRouter.RunSteps` |
 | 4.5 Vector, raster, text, gradients, transparency, fonts, icon packs, scaling, LED visualization | ✅ | `SkiaRenderContext` |
-| 4.5 Layers, animations, data-bound properties, transitions | 🟡 | GIF animation; variables drive actions' drawings; no layers or transitions |
+| 4.5 Layers, animations, data-bound properties, transitions | 🟡 | Background layers with data-bound color, opacity and visibility, GIF animation; no transitions, no layers on keys |
 | 4.6 Virtual surfaces, browser interface | ✅ | Web Deck; device simulator (any model, `DeckHost --simulator`) |
 | 4.6 Mobile clients, remote profile management, remote events | ⬜ | The Web Deck works on phones; no app, no remote editing |
 | 4.8 App detection, profile switching, system monitoring, dynamic states | ✅ | `ForegroundAppWatcher`, System Info |
@@ -57,7 +57,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 6.3 Rules 1–2, 4–7, 9 (core independent of vendors and Avalonia, contracts, versioned formats) | ✅ | Enforced by `ArchitectureTests` |
 | 6.3 Rule 8 (compatibility systems separate) | 🟡 | Stream Deck runtime in Core; OpenAction/MiraBox share it |
 | 6.3 Rule 10 (platform abstractions) | 🟡 | `Platform/` classes, not interfaces |
-| 6.3 Rules 11–14 (backgrounds, reactive bindings, fallbacks) | ⬜ | Wait for the background system |
+| 6.3 Rules 11–14 (backgrounds, reactive bindings, fallbacks) | ✅ | Backgrounds are device-independent layers, bindings resolve from the variable store (the renderer has no data source), unreadable values use the binding's fallback |
 | 6.4 Repository structure | 🟡 | Flat projects (Contracts, Core, App, Device.*, Tests); the plan allows fewer assemblies |
 
 ## 7. Device abstraction
@@ -127,7 +127,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 10.3 Alignment guides, layers, reusable styles, copy and paste, asset manager | ⬜ | |
 | 10.5 Incremental updates, caches | ✅ | Pixel-diff per frame, image/paint caches |
 | 10.5 Dirty regions, independent scheduling | 🟡 | Per device, not per region |
-| 10.6 Background system and Studio | ⬜ | Static profile backgrounds only (color, image slice over the layout, default background) |
+| 10.6 Background system and Studio | 🟡 | Layers and bindings, the Studio list; per-control dirty tracking, a live preview and the asset manager are not built |
 
 ## 11. Profiles
 

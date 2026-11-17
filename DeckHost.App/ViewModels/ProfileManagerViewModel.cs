@@ -26,8 +26,23 @@ public partial class ProfileManagerViewModel : ViewModelBase
         _main = main;
         _main.PropertyChanged += OnMainPropertyChanged;
         _editingProfile = main.SelectedRootProfile ?? main.Profiles.FirstOrDefault();
+        ProfileLayers = new BackgroundLayersViewModel(_editingProfile?.BackgroundLayers, layers =>
+        {
+            if (EditingProfile is { } profile)
+            {
+                profile.BackgroundLayers = layers;
+                _main.NotifyProfilesEdited();
+            }
+        });
+        DefaultLayers = new BackgroundLayersViewModel(main.DefaultBackgroundLayers, layers => _main.DefaultBackgroundLayers = layers);
         RefreshRunningApps();
     }
+
+    /// <summary>The layers over the edited profile's background color and image (Background Studio).</summary>
+    public BackgroundLayersViewModel ProfileLayers { get; }
+
+    /// <summary>The layers of the default background for all profiles.</summary>
+    public BackgroundLayersViewModel DefaultLayers { get; }
 
     public ObservableCollection<ProfileItemViewModel> Profiles => _main.Profiles;
 
@@ -44,6 +59,7 @@ public partial class ProfileManagerViewModel : ViewModelBase
                 OnPropertyChanged(nameof(EditingName));
                 OnPropertyChanged(nameof(EditingBackgroundColor));
                 OnPropertyChanged(nameof(EditingBackgroundImage));
+                ProfileLayers.Load(value?.BackgroundLayers);
                 OnPropertyChanged(nameof(BackgroundColorError));
                 OnPropertyChanged(nameof(HasBackgroundColorError));
                 OnPropertyChanged(nameof(HasEditingProfile));

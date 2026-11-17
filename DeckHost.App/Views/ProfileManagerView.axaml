@@ -118,6 +118,7 @@
 								<Button Grid.Column="1" Content="Browse…" Click="BrowseBackground_OnClick" />
 								<Button Grid.Column="2" Content="Clear" Command="{Binding ClearBackgroundCommand}" />
 							</Grid>
+							<local:BackgroundLayersEditor DataContext="{Binding ProfileLayers}" Margin="0,6,0,0" />
 						</StackPanel>
 					</Border>
 
@@ -156,6 +157,7 @@
 								<Button Grid.Column="1" Content="Browse…" Click="BrowseDefaultBackground_OnClick" />
 								<Button Grid.Column="2" Content="Clear" Command="{Binding ClearDefaultBackgroundCommand}" />
 							</Grid>
+							<local:BackgroundLayersEditor DataContext="{Binding DefaultLayers}" Margin="0,6,0,0" />
 						</StackPanel>
 					</Border>
 

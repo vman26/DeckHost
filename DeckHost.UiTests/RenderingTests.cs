@@ -136,6 +136,36 @@ public sealed class RenderingTests
     }
 
     [AvaloniaTest]
+    public void The_background_studio_shows_a_card_for_every_layer_including_a_bound_one_and_an_unknown_one()
+    {
+        var studio = new DeckHost.App.ViewModels.BackgroundLayersViewModel(
+        [
+            new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = "#1E293B" },
+            new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = "#FF0000", ToColor = "#0000FF", Angle = 45, Binding = new BackgroundBinding("system.cpu") { FromColor = "#000000", ToColor = "#FF0000" } },
+            new BackgroundLayer(BackgroundLayerKinds.Image),
+            new BackgroundLayer("hologram"),
+        ], _ => { });
+        var editor = new BackgroundLayersEditor { DataContext = studio };
+        var window = new Window { Width = 760, Height = 1600, Content = new ScrollViewer { Content = editor } };
+        window.Show();
+
+        using var frame = window.CaptureRenderedFrame()!;
+
+        var colors = new HashSet<Color>();
+        for (var y = 0; y < frame.PixelSize.Height; y += 8)
+        {
+            for (var x = 0; x < frame.PixelSize.Width; x += 8)
+            {
+                colors.Add(Pixel(frame, x, y));
+            }
+        }
+
+        Assert.That(colors.Count, Is.GreaterThan(5), "cards, text and color fields were drawn");
+        Assert.That(studio.Rows, Has.Count.EqualTo(4));
+        window.Close();
+    }
+
+    [AvaloniaTest]
     public void A_link_between_two_nodes_is_drawn_in_the_gap_between_them()
     {
         using var editor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", new Workflow(), [], _ => true);

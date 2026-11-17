@@ -41,6 +41,7 @@ nav:
   - Using DeckHost:
       - The editor: editor.md
       - Profiles, pages and folders: profiles.md
+      - Backgrounds: backgrounds.md
       - Multi Action and Key Logic: multi-actions.md
       - Workflows: workflows.md
       - Lights: lights.md

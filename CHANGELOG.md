@@ -55,6 +55,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Workflow expressions: **Calculate** in Set variable and an **An expression** check in If, with
   variables in brackets, text, number and time functions, and a **Store as** type (number, true /
   false or text) that refuses a value that doesn't fit.
+- Background layers (Profiles page): gradients across the whole layout, images and solid colors
+  with an opacity, drawn over the profile's color and image, and layers that follow the CPU load,
+  the memory load or a workflow's variable.
 - A **Switch** workflow node: any number of cases, each with its own output, and Else; cases keep
   their links when you move or rename them.
 - Shared workflows: save a named workflow once and run it from others with a **Call workflow**

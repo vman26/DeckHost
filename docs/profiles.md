@@ -12,7 +12,7 @@ Give a profile one or more apps (Profiles page): it turns on by itself while one
 
 ## Backgrounds
 
-A profile can have a background color and an image or animated GIF that spans all keys. **Default background for all profiles** applies to every profile without one of its own.
+A profile can have a background color and an image or animated GIF that spans all keys, with gradient, image and solid **layers** on top that can even follow the CPU load or a variable ([Backgrounds](backgrounds.md)). **Default background for all profiles** applies to every profile without one of its own.
 
 ## Another device
 
