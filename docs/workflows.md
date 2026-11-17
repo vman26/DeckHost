@@ -50,6 +50,7 @@ When the same input comes again before its run is done (a wait), the workflow ca
 - Drop a node onto a link, from the lists or by dragging one that isn't linked yet, and the link opens up and the node goes in between (one undo step). Stop and When nodes can't go into a link.
 - The actions on the left are grouped by plugin like in the main window; the search opens every group with a match.
 - **Arrange** lays the nodes out from left to right; **Fit** shows them all. Drag the background to pan, and use Ctrl + the mouse wheel to zoom.
+- With nothing selected, **Variables right now** lists the variables that are set (it follows the runs) and sets one to try the workflow with it.
 - **Run** starts the workflow as if the control was used; **Stop** stops every run. Each step lights up on the canvas and appears in the run log.
 - Links can't form a loop (use Repeat) and can't lead into a When node.
 - Every change reaches the device right away; **Revert** puts back the workflow as it was when you opened the editor.

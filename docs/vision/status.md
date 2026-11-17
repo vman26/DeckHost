@@ -110,7 +110,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 9.3 Logic, flow (if, sequence, parallel, repeat, wait) | ✅ | |
 | 9.3 Switch, expressions, transforms, events, error handling nodes | 🟡 | Error output and retries on action nodes; no switch, expressions or transforms |
 | 9.3 History, cancellation | ✅ | Run log, Stop |
-| 9.3 Step execution, breakpoints, variable inspection, sub-workflows, templates | ⬜ | |
+| 9.3 Step execution, breakpoints, variable inspection, sub-workflows, templates | 🟡 | Live variable view and setter in the editor, run log; share as `.deckhostworkflow` files; no breakpoints, stepping or sub-workflows |
 | 9.4 Global and plugin variables, device and app context | ✅ | `VariableStore`, `VariableKeys` |
 | 9.4 Local and profile scopes, typed variables, computed values | ⬜ | |
 | 9.6 Isolation, tracing, loop protection, ordering, never blocking | ✅ | `MaxNodesPerRun`, `WouldCycle`, scheduler |

@@ -248,6 +248,13 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     public void SetVariable(string key, string value) => Enqueue(() => _variableStore.Publish(key, value));
 
+    public IReadOnlyList<KeyValuePair<string, string>> UserVariables() =>
+        _variableStore is State.VariableStore store
+            ? [.. store.Snapshot("vars.")
+                .Select(static pair => new KeyValuePair<string, string>(pair.Key["vars.".Length..], pair.Value?.ToString() ?? string.Empty))
+                .OrderBy(static pair => pair.Key, StringComparer.Ordinal)]
+            : [];
+
     public void StopWorkflows(string deviceId, string controlId) => Enqueue(() =>
     {
         if (_actionRouter is ActionRouter router)

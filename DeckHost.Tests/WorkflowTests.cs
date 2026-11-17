@@ -578,6 +578,19 @@ public sealed class WorkflowTests : IAsyncDisposable
     }
 
     [Test]
+    public async Task The_host_lists_the_user_variables_for_the_editor_without_the_prefix_and_in_order()
+    {
+        await Start(new Workflow { Nodes = [Trigger("t", WorkflowTriggers.Down)] });
+        _store.Publish(VariableKeys.UserVariable("Zed"), "last");
+        _store.Publish(VariableKeys.UserVariable("alpha"), "1");
+        _store.Publish(VariableKeys.ForegroundApp, "obs");
+
+        var variables = _host.UserVariables();
+
+        Assert.That(variables.Select(static pair => (pair.Key, pair.Value)), Is.EqualTo(new[] { ("alpha", "1"), ("zed", "last") }));
+    }
+
+    [Test]
     public void A_workflow_binding_survives_the_profile_file()
     {
         var options = new JsonSerializerOptions

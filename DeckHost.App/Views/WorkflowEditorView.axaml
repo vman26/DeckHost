@@ -242,6 +242,30 @@
 								</StackPanel>
 							</Border>
 
+							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
+								<StackPanel Spacing="6">
+									<Grid ColumnDefinitions="*,Auto">
+										<TextBlock Classes="section" Text="VARIABLES RIGHT NOW" VerticalAlignment="Center" />
+										<Button Grid.Column="1" Content="Refresh" Padding="8,2" FontSize="11" Command="{Binding RefreshVariablesCommand}" />
+									</Grid>
+									<TextBlock Classes="hint" Text="None set yet. A Set variable node (or the fields below) creates one." IsVisible="{Binding !HasVariables}" />
+									<ItemsControl ItemsSource="{Binding Variables}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="vm:VariableRow">
+												<TextBlock FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace" FontSize="11" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap">
+													<Run Text="{Binding Name}" FontWeight="SemiBold" /><Run Text=" = " /><Run Text="{Binding Value}" />
+												</TextBlock>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+									<Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="6">
+										<TextBox Text="{Binding NewVariableName, Mode=TwoWay}" PlaceholderText="name" />
+										<TextBox Grid.Column="1" Text="{Binding NewVariableValue, Mode=TwoWay}" PlaceholderText="value" />
+										<Button Grid.Column="2" Content="Set" Command="{Binding SetVariableFromEditorCommand}" ToolTip.Tip="Set the variable to try the workflow with it; an empty value clears it" />
+									</Grid>
+								</StackPanel>
+							</Border>
+
 							<Border Classes="card" IsVisible="{Binding HasSelectedNode}">
 								<StackPanel Spacing="10">
 									<StackPanel Spacing="2">

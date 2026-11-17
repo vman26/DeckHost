@@ -48,6 +48,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   the front, when a variable changes (optionally to a given value) and every so many seconds.
 - Workflow action nodes have an **On error** output for when the action did not run, and can try
   again (up to 5 times, with a wait) before going on.
+- The workflow editor lists the variables that are set right now and can set one, to see why a
+  workflow went the way it did.
 
 ### Changed
 

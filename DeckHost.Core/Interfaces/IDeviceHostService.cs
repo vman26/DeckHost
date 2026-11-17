@@ -71,6 +71,9 @@ public interface IDeviceHostService : IAsyncDisposable
     {
     }
 
+    /// <summary>The variables workflows and actions have set (name and value; names are lower case), for the editor's variable view.</summary>
+    IReadOnlyList<KeyValuePair<string, string>> UserVariables() => [];
+
     /// <summary>Stops every run of the workflow on a control.</summary>
     void StopWorkflows(string deviceId, string controlId)
     {

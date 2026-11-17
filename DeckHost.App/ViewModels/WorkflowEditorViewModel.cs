@@ -101,6 +101,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         }
 
         SelectNode(_workflow.Nodes.FirstOrDefault()?.Id);
+        RefreshVariables();
     }
 
     public string DeviceId { get; }
@@ -219,6 +220,61 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
                 Commit(_workflow with { WhileRunning = value.Value }, "While running: " + value.Label.ToLowerInvariant());
             }
         }
+    }
+
+    /// <summary>The variables that are set right now (refreshed as runs go and by Refresh), for finding out why a workflow went the way it did.</summary>
+    public ObservableCollection<VariableRow> Variables { get; } = [];
+
+    public bool HasVariables => Variables.Count > 0;
+
+    private string _newVariableName = string.Empty;
+    private string _newVariableValue = string.Empty;
+
+    public string NewVariableName
+    {
+        get => _newVariableName;
+        set => SetProperty(ref _newVariableName, value ?? string.Empty);
+    }
+
+    public string NewVariableValue
+    {
+        get => _newVariableValue;
+        set => SetProperty(ref _newVariableValue, value ?? string.Empty);
+    }
+
+    /// <summary>Reads the variables from the host again.</summary>
+    [RelayCommand]
+    public void RefreshVariables()
+    {
+        var now = _host?.UserVariables() ?? [];
+        if (now.Count == Variables.Count && now.Select(static pair => (pair.Key, pair.Value)).SequenceEqual(Variables.Select(static row => (row.Name, row.Value))))
+        {
+            return;
+        }
+
+        Variables.Clear();
+        foreach (var (name, value) in now)
+        {
+            Variables.Add(new VariableRow(name, value));
+        }
+
+        OnPropertyChanged(nameof(HasVariables));
+    }
+
+    /// <summary>Sets a variable from the editor (to try a workflow with it); an empty value clears it.</summary>
+    [RelayCommand]
+    public void SetVariableFromEditor()
+    {
+        var name = _newVariableName.Trim();
+        if (name.Length == 0)
+        {
+            Status = "Type the variable's name first.";
+            return;
+        }
+
+        _host?.SetVariable(DeckHost.Contracts.VariableKeys.UserVariable(name), _newVariableValue);
+        Status = _newVariableValue.Length == 0 ? $"{name} cleared." : $"{name} = {_newVariableValue}";
+        RefreshVariables();
     }
 
     /// <summary>The run log: newest first.</summary>
@@ -872,6 +928,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     /// <summary>Lights up a traced node and adds the step to the run log.</summary>
     public void ShowTrace(WorkflowTrace trace)
     {
+        RefreshVariables();
         if (trace.NodeId is { } nodeId)
         {
             var map = trace.Kind == WorkflowTraceKind.Failed ? _failedUntil : _activeUntil;
@@ -1040,3 +1097,6 @@ public sealed class WorkflowPaletteItem(WorkflowNodeType type)
 
     public ListIcon Icon { get; } = ListIcon.From(type.Icon, type.Color, Contracts.Icons.Workflow);
 }
+
+/// <summary>A variable and its value, for the editor's variable view.</summary>
+public sealed record VariableRow(string Name, string Value);
