@@ -51,7 +51,7 @@ DeckHost writes a crash report on your computer. On the next start, **Help and s
 
 If DeckHost closes unexpectedly again and again right after it starts (two failed starts in a row, or one within a minute), the next start is in **safe mode**: the built-in browser (plugin settings pages, HTML plugins), Stream Deck, OpenAction and installed plugins are switched off, and no control is opened in the editor, so whatever crashed can't run again. Your devices, profiles and the built-in actions keep working. A banner says so; **Restart normally** forgets the failed starts and starts DeckHost again, and **Crash report** opens Help and support. You can also start in safe mode yourself with `DeckHost --safe-mode`.
 
-When something in the window goes wrong unexpectedly (a web page that can't start, a bug), DeckHost now carries on instead of closing: it writes a crash report, shows a notice with **Report…**, and a web view that failed is left off on that computer until the Microsoft Edge WebView2 runtime is updated (`%LocalAppData%/DeckHost/webview-disabled.txt`). Without the WebView2 runtime the plugin settings page shows **Open in browser** instead.
+When something in the window goes wrong unexpectedly (a web page that can't start, a bug), DeckHost now carries on instead of closing: it writes a crash report, shows a notice with **Report…**, and a web view that failed is left off for the rest of that run. If the WebView2 runtime itself can't be used (not registered or not found), it stays off on that computer until the Microsoft Edge WebView2 runtime is updated (`%LocalAppData%/DeckHost/webview-disabled.txt`; delete it to try again). Without the WebView2 runtime the plugin settings page shows **Open in browser** instead.
 
 ## Where DeckHost keeps its files
 
