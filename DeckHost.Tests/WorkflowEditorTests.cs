@@ -127,6 +127,40 @@ public class WorkflowEditorTests
     }
 
     [Test]
+    public void An_action_added_after_an_action_is_linked_from_then_never_from_the_error_output()
+    {
+        var (editor, _) = Editor();
+        var first = Expect.IsType<WorkflowNode>(editor.AddAction(Item("Play / Pause")));
+        editor.SelectNode(first.Id);
+        editor.AddAction(Item("Mute"));
+        editor.SelectNode(first.Id);
+        editor.AddAction(Item("Play / Pause"));
+
+        Assert.That(editor.Workflow.LinksFrom(first.Id, WorkflowPorts.Error), Is.Empty, "the error output is linked by hand only");
+        Assert.That(editor.Workflow.LinksFrom(first.Id, WorkflowPorts.Next).Count(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void An_action_node_offers_tries_and_a_wait_for_when_it_did_not_run_and_keeps_them_on_the_node()
+    {
+        var (editor, stored) = Editor();
+        var node = Expect.IsType<WorkflowNode>(editor.AddAction(Item("Play / Pause")));
+        editor.SelectNode(node.Id);
+        Assert.That(editor.HasFailureOptions, Is.True);
+
+        var retries = Expect.IsType<NumberSettingField>(editor.FailureOptions!.Fields.First());
+        retries.Value = "3";
+
+        Assert.That(editor.Workflow.Find(node.Id)!.EffectiveSettings.GetInt(WorkflowKeys.Retries, 0), Is.EqualTo(3));
+        Assert.That(stored.Last().Find(node.Id)!.EffectiveSettings.GetInt(WorkflowKeys.Retries, 0), Is.EqualTo(3));
+        Assert.That(editor.Workflow.Find(node.Id)!.Action, Is.EqualTo(node.Action), "the action's own settings are untouched");
+
+        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 0, 0);
+        editor.SelectNode(wait.Id);
+        Assert.That(editor.HasFailureOptions, Is.False, "only for action nodes");
+    }
+
+    [Test]
     public void A_node_with_links_or_a_node_without_a_way_through_cannot_be_put_into_a_link()
     {
         var (editor, _) = Editor();

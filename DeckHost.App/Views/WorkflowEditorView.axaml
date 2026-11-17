@@ -266,6 +266,10 @@
 												   Text="This action isn't loaded (its plugin is disabled or uninstalled). It is skipped when the workflow runs." />
 									</StackPanel>
 									<ContentControl Content="{Binding NodeSettings}" IsVisible="{Binding HasNodeSettings}" />
+									<StackPanel Spacing="6" IsVisible="{Binding HasFailureOptions}">
+										<TextBlock Classes="section" Text="IF IT DID NOT RUN" />
+										<ContentControl Content="{Binding FailureOptions}" />
+									</StackPanel>
 									<StackPanel Spacing="4">
 										<TextBlock Classes="label" Text="Name on the canvas" />
 										<TextBox Text="{Binding NodeTitle, Mode=TwoWay}" PlaceholderText="{Binding NodeTitlePlaceholder}" />

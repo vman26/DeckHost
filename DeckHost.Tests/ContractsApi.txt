@@ -679,6 +679,7 @@
   DeckHost.Contracts.Models.WorkflowKeys.MaxConditionRounds : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxEverySeconds : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxRepeat : System.Int32 const
+  DeckHost.Contracts.Models.WorkflowKeys.MaxRetries : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.MaxWaitMs : System.Int32 const
   DeckHost.Contracts.Models.WorkflowKeys.Milliseconds : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.MinEverySeconds : System.Int32 const
@@ -690,6 +691,8 @@
   DeckHost.Contracts.Models.WorkflowKeys.Name : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.On : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Operation : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.Retries : System.String const
+  DeckHost.Contracts.Models.WorkflowKeys.RetryDelay : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Set : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Subtract : System.String const
   DeckHost.Contracts.Models.WorkflowKeys.Times : System.String const
@@ -734,6 +737,7 @@
   DeckHost.Contracts.Models.WorkflowPorts.Describe(System.String port) : System.String
   DeckHost.Contracts.Models.WorkflowPorts.Done : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Each : System.String const
+  DeckHost.Contracts.Models.WorkflowPorts.Error : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.First : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.Next : System.String const
   DeckHost.Contracts.Models.WorkflowPorts.No : System.String const

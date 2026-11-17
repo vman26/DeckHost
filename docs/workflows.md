@@ -13,7 +13,7 @@ A run starts at a **When** node and follows the links from left to right. A node
 | Node | What it does |
 |---|---|
 | **When** | Starts the workflow: the control is pressed, released, tapped, double pressed, held down, turned left or right, or swiped left or right, or something happens that has nothing to do with the control (see [Workflows that start by themselves](#workflows-that-start-by-themselves)). A workflow can have several. |
-| **Action** | Runs an action, with its own settings. Drop an action from the list on the left onto the canvas. |
+| **Action** | Runs an action, with its own settings. Drop an action from the list on the left onto the canvas. If the action did not run (its plugin isn't loaded, or it failed), the run goes on at **On error** when that has a link, else at **Then**; the node can also try again first (see [When an action fails](#when-an-action-fails)). |
 | **Wait** | Waits, then continues. The device keeps working. While a run waits the node fills up over the time it takes. |
 | **If** | Continues at **Yes** or **No**: a variable (equal to, greater than, containing, empty, …), the app in front (part of its name), or the time of day (also past midnight, 22:00–06:00). |
 | **Toggle** | Takes **1st** and **2nd** in turn: on, then off. |
@@ -35,6 +35,10 @@ A When node can also start on an event, so a workflow can react without anyone p
 | **Every so many seconds** | From 1 second to a day, counted from when the profile was shown. |
 
 Event triggers run on a workflow whose profile (page or folder) is shown on a device; put the workflow on a control that isn't used for anything else. An event never piles runs up: it waits until the workflow's previous run is done. A workflow that keeps starting itself, such as one that changes the variable it starts on, is paused for half a minute after 20 starts within 5 seconds, and the log says so.
+
+## When an action fails
+
+An action node has two outputs: **Then** and **On error**. When its action did not run, the run follows **On error** if you linked it, so a failing step can show a warning, run something else or end the run; with nothing linked there, it goes on at **Then** as before. In the node's settings, **Try again when it did not run** (up to 5 times) and **Wait between tries** make the node try again first, and the node fills up while it waits for the next try. New actions you add after a node are linked from **Then**; link **On error** yourself by dragging from its dot.
 
 ## While a run is going
 

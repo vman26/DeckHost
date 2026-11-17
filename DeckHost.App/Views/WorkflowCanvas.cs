@@ -339,6 +339,7 @@ public sealed class WorkflowCanvas : Control
         WorkflowPorts.Second => Color.Parse("#F472B6"),
         WorkflowPorts.Each => Color.Parse("#EC4899"),
         WorkflowPorts.Done => Color.Parse("#A78BFA"),
+        WorkflowPorts.Error => Color.Parse("#F97316"),
         _ => Color.Parse("#64748B"),
     };
 

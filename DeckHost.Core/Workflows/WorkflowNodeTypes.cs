@@ -69,6 +69,20 @@ public static class WorkflowNodeTypes
         Contracts.Icons.Play,
         []);
 
+    /// <summary>What an action node does when its action did not run (shown next to the action's own settings).</summary>
+    public static IReadOnlyList<ActionSettingDefinition> ActionFailureSettings { get; } =
+    [
+        new(WorkflowKeys.Retries, "Try again when it did not run", ActionSettingKind.Number, "0",
+            Description: "How many more times to try. Then the run goes on at the node's \"On error\" output if it has a link, else at \"Then\".")
+        {
+            Range = new(0, WorkflowKeys.MaxRetries, 1) { Unit = "times" },
+        },
+        new(WorkflowKeys.RetryDelay, "Wait between tries", ActionSettingKind.Number, "1000")
+        {
+            Range = WaitRange,
+        },
+    ];
+
     public static WorkflowNodeType Wait { get; } = new(
         WorkflowNodeKinds.Wait,
         "Wait",

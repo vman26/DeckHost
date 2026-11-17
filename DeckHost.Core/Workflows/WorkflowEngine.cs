@@ -155,13 +155,8 @@ public sealed class WorkflowEngine
         switch (node.Kind)
         {
             case WorkflowNodeKinds.Action:
-            {
-                var ran = node.Action is { } action && Pulse(run, action);
-                Trace(run, node.Id, ran ? WorkflowTraceKind.Node : WorkflowTraceKind.Failed,
-                    node.Action is null ? "No action chosen." : ran ? node.Action.ActionName : $"{node.Action.ActionName} did not run (not loaded, or it failed).");
-                Follow(run, node, WorkflowPorts.Next, done);
+                RunAction(run, node, 1, done);
                 break;
-            }
 
             case WorkflowNodeKinds.Wait:
             {
@@ -276,6 +271,38 @@ public sealed class WorkflowEngine
     }
 
     /// <summary>Continues at every node linked from a port; <paramref name="done"/> runs once they all finished.</summary>
+    /// <summary>
+    /// Runs an action node. When the action did not run it is tried again as many times as the node says,
+    /// then the run goes on at the node's error output when that is linked, else at its next one.
+    /// </summary>
+    private void RunAction(Run run, WorkflowNode node, int attempt, Action done)
+    {
+        if (run.Ended)
+        {
+            return;
+        }
+
+        var settings = node.EffectiveSettings;
+        var ran = node.Action is { } action && Pulse(run, action);
+        var retries = Math.Clamp(settings.GetInt(WorkflowKeys.Retries, 0), 0, WorkflowKeys.MaxRetries);
+        if (!ran && node.Action is { } failed && attempt <= retries && Scheduler is { } schedule)
+        {
+            var delay = Math.Clamp(settings.GetInt(WorkflowKeys.RetryDelay, 1000), 0, WorkflowKeys.MaxWaitMs);
+            Trace(run, node.Id, WorkflowTraceKind.Node,
+                $"{failed.ActionName} did not run; trying again in {FormatDuration(delay)} (try {attempt + 1} of {retries + 1})",
+                delay > 0 ? TimeSpan.FromMilliseconds(delay) : null);
+            schedule(run.Input.DeviceId, TimeSpan.FromMilliseconds(delay), () => Post(run, () => RunAction(run, node, attempt + 1, done)));
+            return;
+        }
+
+        var line = node.Action is null
+            ? "No action chosen."
+            : ran ? node.Action.ActionName : $"{node.Action.ActionName} did not run (not loaded, or it failed).";
+        var onError = !ran && run.Workflow.LinksFrom(node.Id, WorkflowPorts.Error).Any();
+        Trace(run, node.Id, ran ? WorkflowTraceKind.Node : WorkflowTraceKind.Failed, onError ? line + " Going on at \"On error\"." : line);
+        Follow(run, node, onError ? WorkflowPorts.Error : WorkflowPorts.Next, done);
+    }
+
     private void Follow(Run run, WorkflowNode node, string port, Action done)
     {
         var targets = run.Workflow.LinksFrom(node.Id, port)

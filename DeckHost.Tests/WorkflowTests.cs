@@ -480,6 +480,103 @@ public sealed class WorkflowTests : IAsyncDisposable
         Assert.That(workflow.WouldCycle("t", "2"), Is.False);
     }
 
+    private static WorkflowNode Flaky(string id, string actionId, params (string Key, string Value)[] settings) =>
+        Run(id, actionId) with { Settings = Settings(settings) };
+
+    [Test]
+    public async Task An_action_that_did_not_run_goes_on_at_its_error_output_when_that_is_linked()
+    {
+        _a.OnExecute = _ => throw new InvalidOperationException("broken");
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Run("1", "a"), Run("ok", "b"), Run("bad", "c")],
+            Links = [Link("t", "1"), Link("1", "ok"), Link("1", "bad", WorkflowPorts.Error)],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Ran().Count > 0);
+
+        Assert.That(Ran(), Is.EqualTo(new[] { "c" }), "the error branch, not the next one");
+        Assert.That(Traces().Any(trace => trace.Kind == WorkflowTraceKind.Failed && trace.Detail.Contains("On error")), Is.True);
+    }
+
+    [Test]
+    public async Task An_action_that_did_not_run_still_goes_on_at_next_when_nothing_is_linked_to_its_error_output()
+    {
+        _a.OnExecute = _ => throw new InvalidOperationException("broken");
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Run("1", "a"), Run("2", "b")],
+            Links = [Link("t", "1"), Link("1", "2")],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Ran().Count > 0);
+
+        Assert.That(Ran(), Is.EqualTo(new[] { "b" }));
+    }
+
+    [Test]
+    public async Task A_flaky_action_is_tried_again_and_the_run_goes_on_once_it_works()
+    {
+        var presses = 0;
+        _a.OnExecute = context =>
+        {
+            // Fails both halves of the press and release while it is still "flaky".
+            if (context.EventType == InputCapabilities.Press && Interlocked.Increment(ref presses) <= 2 ||
+                context.EventType != InputCapabilities.Press && Volatile.Read(ref presses) <= 2)
+            {
+                throw new InvalidOperationException("not yet");
+            }
+        };
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Flaky("1", "a", (WorkflowKeys.Retries, "3"), (WorkflowKeys.RetryDelay, "0")), Run("ok", "b"), Run("bad", "c")],
+            Links = [Link("t", "1"), Link("1", "ok"), Link("1", "bad", WorkflowPorts.Error)],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Ran().Contains("b"));
+
+        Assert.That(Volatile.Read(ref presses), Is.EqualTo(3), "two failures, then it worked");
+        Assert.That(Ran(), Is.EqualTo(new[] { "b" }));
+        Assert.That(Traces().Count(trace => trace.Detail.Contains("trying again")), Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task An_action_that_keeps_failing_goes_to_its_error_output_after_its_tries()
+    {
+        var presses = 0;
+        _a.OnExecute = context =>
+        {
+            if (context.EventType == InputCapabilities.Press)
+            {
+                Interlocked.Increment(ref presses);
+            }
+
+            throw new InvalidOperationException("never");
+        };
+        await Start(new Workflow
+        {
+            Nodes = [Trigger("t", WorkflowTriggers.Down), Flaky("1", "a", (WorkflowKeys.Retries, "2"), (WorkflowKeys.RetryDelay, "0")), Run("ok", "b"), Run("bad", "c")],
+            Links = [Link("t", "1"), Link("1", "ok"), Link("1", "bad", WorkflowPorts.Error)],
+        });
+
+        await Input(InputCapabilities.Press);
+        await WaitUntil(() => Ran().Contains("c"));
+
+        Assert.That(Volatile.Read(ref presses), Is.EqualTo(3), "the first try and two more");
+        Assert.That(Ran(), Is.EqualTo(new[] { "c" }));
+    }
+
+    [Test]
+    public void An_action_node_has_an_error_output_next_to_its_next_one_and_the_others_are_unchanged()
+    {
+        Assert.That(WorkflowNodeKinds.OutputsOf(WorkflowNodeKinds.Action), Is.EqualTo(new[] { WorkflowPorts.Next, WorkflowPorts.Error }));
+        Assert.That(WorkflowNodeKinds.OutputsOf(WorkflowNodeKinds.Wait), Is.EqualTo(new[] { WorkflowPorts.Next }));
+        Assert.That(WorkflowPorts.Describe(WorkflowPorts.Error), Is.EqualTo("On error"));
+    }
+
     [Test]
     public void A_workflow_binding_survives_the_profile_file()
     {

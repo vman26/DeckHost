@@ -141,6 +141,7 @@ public static class WorkflowNodeKinds
         Toggle => [WorkflowPorts.First, WorkflowPorts.Second],
         Repeat => [WorkflowPorts.Each, WorkflowPorts.Done],
         Stop => [],
+        Action => [WorkflowPorts.Next, WorkflowPorts.Error],
         _ => [WorkflowPorts.Next],
     };
 
@@ -158,6 +159,9 @@ public static class WorkflowPorts
     public const string Each = "each";
     public const string Done = "done";
 
+    /// <summary>An action node's output for when the action did not run (the plugin isn't loaded, or it failed).</summary>
+    public const string Error = "error";
+
     public static string Describe(string port) => port switch
     {
         Next => "Then",
@@ -167,6 +171,7 @@ public static class WorkflowPorts
         Second => "2nd",
         Each => "Each time",
         Done => "Done",
+        Error => "On error",
         _ => port,
     };
 }
@@ -262,6 +267,15 @@ public static class WorkflowKeys
 
     /// <summary>Wait: how long, in milliseconds.</summary>
     public const string Milliseconds = "ms";
+
+    /// <summary>Action: how many more times to try when it did not run (0 to <see cref="MaxRetries"/>).</summary>
+    public const string Retries = "retries";
+
+    /// <summary>Action: the wait between tries, in milliseconds.</summary>
+    public const string RetryDelay = "retry-delay";
+
+    /// <summary>The most times an action node is tried again.</summary>
+    public const int MaxRetries = 5;
 
     /// <summary>Trigger (timer): the seconds between runs.</summary>
     public const string Every = "every";

@@ -985,6 +985,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const int MaxConditionRounds` | The most rounds a while / until Repeat runs (a condition that never changes can't run forever). |
 | `const int MaxEverySeconds` | The longest, in seconds (a day). |
 | `const int MaxRepeat` | The most times a Repeat node runs. |
+| `const int MaxRetries` | The most times an action node is tried again. |
 | `const int MaxWaitMs` | The longest wait a node can have (ten minutes). |
 | `const string Milliseconds` | Wait: how long, in milliseconds. |
 | `const int MinEverySeconds` | The shortest time between a timer trigger's runs, in seconds. |
@@ -996,6 +997,8 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Name` | If / Set variable: the variable's name. |
 | `const string On` | Trigger: which input (`WorkflowTriggers`). |
 | `const string Operation` | If: the comparison; Set variable: the operation. |
+| `const string Retries` | Action: how many more times to try when it did not run (0 to `MaxRetries`). |
+| `const string RetryDelay` | Action: the wait between tries, in milliseconds. |
 | `const string Set` |  |
 | `const string Subtract` |  |
 | `const string Times` | Repeat (`ModeVariable`): the variable that holds the number of rounds. |
@@ -1055,6 +1058,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 |---|---|
 | `const string Done` |  |
 | `const string Each` |  |
+| `const string Error` | An action node's output for when the action did not run (the plugin isn't loaded, or it failed). |
 | `const string First` |  |
 | `const string Next` |  |
 | `const string No` |  |

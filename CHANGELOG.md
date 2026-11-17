@@ -46,6 +46,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 - Workflows can start by themselves: when the profile comes onto the device, when an app comes to
   the front, when a variable changes (optionally to a given value) and every so many seconds.
+- Workflow action nodes have an **On error** output for when the action did not run, and can try
+  again (up to 5 times, with a wait) before going on.
 
 ### Changed
 

@@ -47,6 +47,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     private string? _lastSettingsEdit;
     private DateTime _lastSettingsEditAt;
     private SettingsEditorViewModel? _nodeSettings;
+    private SettingsEditorViewModel? _failureOptions;
     private string _nodeTitle = string.Empty;
     private string _status = string.Empty;
     private bool _syncingInspector;
@@ -405,6 +406,11 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
                 _nodeSettings.Changed -= OnNodeSettingsChanged;
             }
 
+            if (_failureOptions is not null)
+            {
+                _failureOptions.Changed -= OnFailureOptionsChanged;
+            }
+
             var node = SelectedNode;
             NodeSettings = node switch
             {
@@ -417,6 +423,14 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             if (_nodeSettings is not null)
             {
                 _nodeSettings.Changed += OnNodeSettingsChanged;
+            }
+
+            FailureOptions = node is { Kind: WorkflowNodeKinds.Action }
+                ? new SettingsEditorViewModel(WorkflowNodeTypes.ActionFailureSettings, node.EffectiveSettings, Control.Inputs)
+                : null;
+            if (_failureOptions is not null)
+            {
+                _failureOptions.Changed += OnFailureOptionsChanged;
             }
 
             NodeTitle = node?.Title ?? string.Empty;
@@ -434,6 +448,31 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         {
             _syncingInspector = false;
         }
+    }
+
+    /// <summary>For an action node: what happens when the action did not run (tries and the wait between them).</summary>
+    public SettingsEditorViewModel? FailureOptions
+    {
+        get => _failureOptions;
+        private set
+        {
+            if (SetProperty(ref _failureOptions, value))
+            {
+                OnPropertyChanged(nameof(HasFailureOptions));
+            }
+        }
+    }
+
+    public bool HasFailureOptions => _failureOptions is not null;
+
+    private void OnFailureOptionsChanged(object? sender, EventArgs e)
+    {
+        if (_syncingInspector || SelectedNode is not { Kind: WorkflowNodeKinds.Action } node || _failureOptions is null)
+        {
+            return;
+        }
+
+        ReplaceNode(node with { Settings = _failureOptions.ToSettings() }, "Changed what happens when " + SummaryOf(node) + " fails", mergeKey: node.Id + ":failure");
     }
 
     private void OnNodeSettingsChanged(object? sender, EventArgs e)
@@ -470,6 +509,9 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         SelectNode(node.Id);
         return node;
     }
+
+    /// <summary>The outputs a new node is linked from automatically: the error output is only ever linked by hand.</summary>
+    private static IEnumerable<string> FlowOutputsOf(string kind) => WorkflowNodeKinds.OutputsOf(kind).Where(static port => port != WorkflowPorts.Error);
 
     /// <summary>Whether a node of the kind can go into the middle of a link: it has an input and an output.</summary>
     public static bool CanBeInserted(string kind) => WorkflowNodeKinds.HasInput(kind) && WorkflowNodeKinds.OutputsOf(kind).Count > 0;
@@ -535,7 +577,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         }
 
         var after = SelectedNode;
-        var freePort = after is null ? null : WorkflowNodeKinds.OutputsOf(after.Kind).FirstOrDefault(port => !_workflow.LinksFrom(after.Id, port).Any());
+        var freePort = after is null ? null : FlowOutputsOf(after.Kind).FirstOrDefault(port => !_workflow.LinksFrom(after.Id, port).Any());
         var (px, py) = (x, y) switch
         {
             ({ } ax, { } ay) => (ax, ay),
@@ -674,7 +716,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         var previous = SelectedNode;
         var node = AddNode(item.Kind, x, y);
         if (previous is not null && WorkflowNodeKinds.HasInput(node.Kind) &&
-            WorkflowNodeKinds.OutputsOf(previous.Kind).FirstOrDefault(port => !_workflow.LinksFrom(previous.Id, port).Any()) is { } port)
+            FlowOutputsOf(previous.Kind).FirstOrDefault(port => !_workflow.LinksFrom(previous.Id, port).Any()) is { } port)
         {
             Connect(previous.Id, port, node.Id);
             SelectNode(node.Id);
