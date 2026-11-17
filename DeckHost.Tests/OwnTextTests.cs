@@ -14,46 +14,106 @@ public sealed class OwnTextTests
 {
     private const uint Blue = 0xFF0000FF;
     private const uint Green = 0xFF00FF00;
+    private const uint IconColor = 0xFF93C5FD;
+    private const string PluginId = "p";
+    private const string Hello = "HELLO";
+    private const string OwnText = "MY COUNT";
+    private const string Reading = "7";
+    private const string ActionTitle = "Counter";
+    private const int WhiteTolerance = 40;
+    private const int ColorTolerance = 60;
 
     [Test]
-    public async Task An_action_that_ignores_the_text_gets_it_as_a_label()
+    public async Task Render_ActionThatIgnoresTheTextAndNoText_DrawsNoWhite()
     {
-        var plain = await RenderAsync(new SolidAction("solid", Blue), text: null);
-        var titled = await RenderAsync(new SolidAction("solid", Blue), text: "HELLO");
+        // Arrange
+        var action = new SolidAction("solid", Blue);
 
+        // Act
+        var plain = await RenderAsync(action, text: null);
+
+        // Assert
         Assert.That(HasWhite(plain), Is.False);
+    }
+
+    [Test]
+    public async Task Render_ActionThatIgnoresTheText_GetsTheTextAsAWhiteLabel()
+    {
+        // Arrange
+        var action = new SolidAction("solid", Blue);
+
+        // Act
+        var titled = await RenderAsync(action, text: Hello);
+
+        // Assert
         Assert.That(HasWhite(titled), Is.True, "the host draws the text (white by default) over a picture without it");
     }
 
     [Test]
-    public async Task An_action_that_draws_the_text_itself_gets_no_second_copy()
+    public async Task Render_ActionThatDrawsTheTextItself_ShowsItsOwnGreenText()
     {
-        var frame = await RenderAsync(new SelfTitledAction(), text: "HELLO");
+        // Arrange
+        var action = new SelfTitledAction();
 
+        // Act
+        var frame = await RenderAsync(action, text: Hello);
+
+        // Assert
         Assert.That(Has(frame, 0, 255, 0), Is.True, "the action's own (green) text");
+    }
+
+    [Test]
+    public async Task Render_ActionThatDrawsTheTextItself_GetsNoSecondCopyFromTheHost()
+    {
+        // Arrange
+        var action = new SelfTitledAction();
+
+        // Act
+        var frame = await RenderAsync(action, text: Hello);
+
+        // Assert
         Assert.That(HasWhite(frame), Is.False, "no extra white label from the host");
     }
 
     [Test]
-    public void A_reading_on_a_key_shows_the_own_text_with_its_icon()
+    public void DrawReading_KeyWithOwnText_ShowsTheOwnTextAsALabel()
     {
+        // Arrange
         var context = new TextCapture();
-        context.Variables.Publish(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceText), "MY COUNT");
+        context.Variables.Publish(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceText), OwnText);
 
-        context.DrawReading("MY COUNT", "7", null, 0xFF93C5FD, Icons.Counter);
+        // Act
+        context.DrawReading(OwnText, Reading, null, IconColor, Icons.Counter);
 
-        Assert.That(context.Labels, Does.Contain("MY COUNT"));
-        Assert.That(context.Texts, Does.Contain("7"));
+        // Assert
+        Assert.That(context.Labels, Does.Contain(OwnText));
     }
 
     [Test]
-    public void A_reading_on_a_key_keeps_the_icon_alone_without_own_text()
+    public void DrawReading_KeyWithOwnText_ShowsTheValue()
     {
+        // Arrange
+        var context = new TextCapture();
+        context.Variables.Publish(VariableKeys.For(context.DeviceId, context.ControlId, VariableKeys.AppearanceText), OwnText);
+
+        // Act
+        context.DrawReading(OwnText, Reading, null, IconColor, Icons.Counter);
+
+        // Assert
+        Assert.That(context.Texts, Does.Contain(Reading));
+    }
+
+    [Test]
+    public void DrawReading_KeyWithoutOwnText_KeepsTheIconAlone()
+    {
+        // Arrange
         var context = new TextCapture();
 
-        context.DrawReading("Counter", "7", null, 0xFF93C5FD, Icons.Counter);
+        // Act
+        context.DrawReading(ActionTitle, Reading, null, IconColor, Icons.Counter);
 
-        Assert.That(context.Labels.Concat(context.Texts), Does.Not.Contain("Counter"));
+        // Assert
+        Assert.That(context.Labels.Concat(context.Texts), Does.Not.Contain(ActionTitle));
     }
 
     private static async Task<ControlFrame> RenderAsync(IDeckAction action, string? text)
@@ -61,18 +121,18 @@ public sealed class OwnTextTests
         var plugin = new StripDevicePlugin();
         using var store = new VariableStore();
         var frames = new ConcurrentDictionary<string, ControlFrame>();
-        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin("p", action)], store);
+        await using var host = new DeviceHostService([plugin], [new TestApplicationPlugin(PluginId, action)], store);
         host.ControlFrameRendered += frame => frames[frame.ControlId] = frame;
-        var binding = Bindings.Single(StripDevicePlugin.ZoneId, "p", action.Id) with { Appearance = new ControlAppearance(text) };
+        var binding = Bindings.Single(StripDevicePlugin.ZoneId, PluginId, action.Id) with { Appearance = new ControlAppearance(text) };
         host.SetProfiles([new DeviceProfile("one", "one", StripDevicePlugin.DeviceId, [binding])]);
         await host.StartAsync(CancellationToken.None);
         await host.WhenIdleAsync();
         return frames[StripDevicePlugin.ZoneId];
     }
 
-    private static bool HasWhite(ControlFrame frame) => Has(frame, 255, 255, 255, tolerance: 40);
+    private static bool HasWhite(ControlFrame frame) => Has(frame, 255, 255, 255, tolerance: WhiteTolerance);
 
-    private static bool Has(ControlFrame frame, int red, int green, int blue, int tolerance = 60)
+    private static bool Has(ControlFrame frame, int red, int green, int blue, int tolerance = ColorTolerance)
     {
         for (var index = 0; index < frame.Rgba.Length; index += 4)
         {

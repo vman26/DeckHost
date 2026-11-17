@@ -16,9 +16,27 @@ public class LinkedDisplayTests
 {
     private const uint Red = 0xFFFF0000;
     private const uint Blue = 0xFF0000FF;
+    private const string PluginId = "p";
+    private const string ProfileId = "one";
+    private const string GreenBackground = "#00FF00";
+    private const string DisplayOnlyAction = "display";
+    private const int PixelInsideTheTopLeft = 2;
+    private const int CornerInset = 3;
+    private const int ShortestStrip = 20;
+    private static readonly byte[] GreenPixel = [0, 255, 0, 255];
+    private static readonly string BaseBackdrop = "backdrop:11,18,32";
+    private static readonly string RedBackdrop = "backdrop:255,0,0";
+    private static readonly string ZoneImage = $"image:{StripDevicePlugin.ZoneId}";
     private static readonly byte[] RedPixel = [255, 0, 0, 255];
     private static readonly byte[] BluePixel = [0, 0, 255, 255];
     private static readonly byte[] BasePixel = [0x0B, 0x12, 0x20, 255];
+
+    private sealed class TempProfilesFile : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"deckhost-profiles-{Guid.NewGuid():N}.json");
+
+        public void Dispose() => File.Delete(Path);
+    }
 
     private sealed class Fixture : IAsyncDisposable
     {
@@ -38,7 +56,7 @@ public class LinkedDisplayTests
 
         public Fixture()
         {
-            Host = new DeviceHostService([Plugin], [new TestApplicationPlugin("p", KnobAction, ZoneAction, DisplayOnly)], Store);
+            Host = new DeviceHostService([Plugin], [new TestApplicationPlugin(PluginId, KnobAction, ZoneAction, DisplayOnly)], Store);
             Host.ControlFrameRendered += frame => Frames[frame.ControlId] = frame;
         }
 
@@ -66,190 +84,342 @@ public class LinkedDisplayTests
         new(id, id, StripDevicePlugin.DeviceId, bindings, Background: background);
 
     private static ControlBinding Knob(bool showOnDisplay = true) =>
-        Bindings.Single(StripDevicePlugin.KnobId, "p", "knob") with { Appearance = new ControlAppearance { ShowOnLinkedDisplay = showOnDisplay } };
+        Bindings.Single(StripDevicePlugin.KnobId, PluginId, "knob") with { Appearance = new ControlAppearance { ShowOnLinkedDisplay = showOnDisplay } };
 
-    private static ControlBinding Zone() => Bindings.Single(StripDevicePlugin.ZoneId, "p", "zone");
+    private static ControlBinding Zone() => Bindings.Single(StripDevicePlugin.ZoneId, PluginId, "zone");
+
+    private static ControlBinding GreenZone() =>
+        Bindings.Single(StripDevicePlugin.ZoneId, PluginId, DisplayOnlyAction) with { Appearance = new ControlAppearance(BackgroundColor: GreenBackground) };
+
+    private static async Task TapTheZoneAsync(Fixture fixture)
+    {
+        fixture.Plugin.Context!.ReportInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.ZoneId, InputCapabilities.Press, 1);
+        await fixture.Host.WhenIdleAsync();
+    }
 
     [Test]
-    public async Task A_knob_fills_its_touch_zone_when_the_zone_has_no_action()
+    public async Task ShowAsync_KnobWithoutAZoneAction_FillsTheZoneWithTheKnobsDrawing()
     {
+        // Arrange
         await using var fixture = new Fixture();
-        await fixture.ShowAsync(Profile("one", null, Knob()));
 
-        Assert.That(fixture.ZonePixel(2, 2), Is.EqualTo(RedPixel));
-        Assert.That(fixture.ZonePixel(StripDevicePlugin.ZoneWidth - 3, StripDevicePlugin.ZoneHeight - 3), Is.EqualTo(RedPixel));
+        // Act
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob()));
 
-        // Drawn as the knob (its own variables and settings), at the zone's full size.
+        // Assert
+        Assert.That(fixture.ZonePixel(PixelInsideTheTopLeft, PixelInsideTheTopLeft), Is.EqualTo(RedPixel));
+        Assert.That(fixture.ZonePixel(StripDevicePlugin.ZoneWidth - CornerInset, StripDevicePlugin.ZoneHeight - CornerInset), Is.EqualTo(RedPixel));
+    }
+
+    [Test]
+    public async Task ShowAsync_KnobWithoutAZoneAction_DrawsTheKnobAsItselfAtTheZonesFullSize()
+    {
+        // Arrange
+        await using var fixture = new Fixture();
+
+        // Act
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob()));
+
+        // Assert
         Assert.That(fixture.KnobAction.Renders, Does.Contain((StripDevicePlugin.KnobId, StripDevicePlugin.ZoneWidth, StripDevicePlugin.ZoneHeight, false)));
     }
 
     [Test]
-    public async Task A_knob_and_a_zone_action_share_the_zone()
+    public void LinkedStripHeight_TouchZone_IsBetweenTheMinimumAndHalfTheZone()
     {
+        // Arrange
+        var zoneHeight = StripDevicePlugin.ZoneHeight;
+
+        // Act
+        var strip = ControlRenderer.LinkedStripHeight(zoneHeight);
+
+        // Assert
+        Assert.That(strip, Is.InRange(ShortestStrip, zoneHeight / 2));
+    }
+
+    [Test]
+    public async Task ShowAsync_KnobAndZoneAction_GiveTheTopToTheZoneAndTheBottomStripToTheKnob()
+    {
+        // Arrange
         await using var fixture = new Fixture();
-        await fixture.ShowAsync(Profile("one", null, Knob(), Zone()));
+        var own = StripDevicePlugin.ZoneHeight - ControlRenderer.LinkedStripHeight(StripDevicePlugin.ZoneHeight);
 
-        var strip = ControlRenderer.LinkedStripHeight(StripDevicePlugin.ZoneHeight);
-        var own = StripDevicePlugin.ZoneHeight - strip;
-        Assert.That(strip, Is.InRange(20, StripDevicePlugin.ZoneHeight / 2));
+        // Act
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob(), Zone()));
 
-        // The zone's action keeps the top; the knob (which sits below the zone) gets the bottom strip.
+        // Assert
         Assert.That(fixture.ZonePixel(2, 2), Is.EqualTo(BluePixel));
         Assert.That(fixture.ZonePixel(2, own - 1), Is.EqualTo(BluePixel));
         Assert.That(fixture.ZonePixel(2, own), Is.EqualTo(RedPixel));
         Assert.That(fixture.ZonePixel(2, StripDevicePlugin.ZoneHeight - 1), Is.EqualTo(RedPixel));
+    }
 
+    [Test]
+    public async Task ShowAsync_KnobAndZoneAction_DrawTheZoneFullAndTheKnobCompact()
+    {
+        // Arrange
+        await using var fixture = new Fixture();
+        var strip = ControlRenderer.LinkedStripHeight(StripDevicePlugin.ZoneHeight);
+        var own = StripDevicePlugin.ZoneHeight - strip;
+
+        // Act
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob(), Zone()));
+
+        // Assert
         Assert.That(fixture.ZoneAction.Renders, Does.Contain((StripDevicePlugin.ZoneId, StripDevicePlugin.ZoneWidth, own, false)));
         Assert.That(fixture.KnobAction.Renders, Does.Contain((StripDevicePlugin.KnobId, StripDevicePlugin.ZoneWidth, strip, true)));
     }
 
     [Test]
-    public async Task A_zone_with_only_a_background_color_is_still_free_for_the_knob()
+    public async Task ShowAsync_ZoneWithOnlyABackgroundColor_LetsTheKnobFillTheWholeZone()
     {
+        // Arrange
         await using var fixture = new Fixture();
-        var greenZone = Bindings.Single(StripDevicePlugin.ZoneId, "p", "display") with { Appearance = new ControlAppearance(BackgroundColor: "#00FF00") };
-        await fixture.ShowAsync(Profile("one", null, Knob(), greenZone));
 
-        // The knob fills the whole zone: no strip, the zone's own action area is empty.
+        // Act
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob(), GreenZone()));
+
+        // Assert
         Assert.That(fixture.KnobAction.Renders, Does.Contain((StripDevicePlugin.KnobId, StripDevicePlugin.ZoneWidth, StripDevicePlugin.ZoneHeight, false)));
         Assert.That(fixture.KnobAction.Renders.Any(render => render.Compact), Is.False);
         Assert.That(fixture.ZonePixel(2, StripDevicePlugin.ZoneHeight - 1), Is.EqualTo(RedPixel));
+    }
 
-        // And a tap there is the knob's.
-        fixture.Plugin.Context!.ReportInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.ZoneId, InputCapabilities.Press, 1);
-        await fixture.Host.WhenIdleAsync();
+    [Test]
+    public async Task ReportInput_TapOnAZoneWithOnlyABackgroundColor_PressesTheKnob()
+    {
+        // Arrange
+        await using var fixture = new Fixture();
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob(), GreenZone()));
+
+        // Act
+        await TapTheZoneAsync(fixture);
+
+        // Assert
         Assert.That(fixture.KnobAction.Executions, Does.Contain((StripDevicePlugin.KnobId, InputCapabilities.Press)));
         Assert.That(fixture.DisplayOnly.Executions, Is.Empty);
     }
 
     [Test]
-    public async Task The_zone_color_shows_under_a_knob_that_draws_nothing_there()
+    public async Task ShowAsync_KnobDrawingNothingOnAZoneWithABackgroundColor_ShowsTheZoneColor()
     {
+        // Arrange
         await using var fixture = new Fixture();
-        var greenZone = Bindings.Single(StripDevicePlugin.ZoneId, "p", "display") with { Appearance = new ControlAppearance(BackgroundColor: "#00FF00") };
-        var knobShowingNothing = Bindings.Single(StripDevicePlugin.KnobId, "p", "display");
-        await fixture.ShowAsync(Profile("one", null, knobShowingNothing, greenZone));
+        var knobShowingNothing = Bindings.Single(StripDevicePlugin.KnobId, PluginId, DisplayOnlyAction);
 
-        Assert.That(fixture.ZonePixel(2, 2), Is.EqualTo(new byte[] { 0, 255, 0, 255 }));
+        // Act
+        await fixture.ShowAsync(Profile(ProfileId, null, knobShowingNothing, GreenZone()));
+
+        // Assert
+        Assert.That(fixture.ZonePixel(2, 2), Is.EqualTo(GreenPixel));
     }
 
     [Test]
-    public async Task A_zone_with_its_own_text_shares_with_the_knob()
+    public async Task ShowAsync_ZoneWithItsOwnText_SharesTheZoneWithTheKnob()
     {
+        // Arrange
         await using var fixture = new Fixture();
-        var labelledZone = Bindings.Single(StripDevicePlugin.ZoneId, "p", "display") with { Appearance = new ControlAppearance(Text: "Mute", BackgroundColor: "#00FF00") };
-        await fixture.ShowAsync(Profile("one", null, Knob(), labelledZone));
+        var labelledZone = Bindings.Single(StripDevicePlugin.ZoneId, PluginId, DisplayOnlyAction) with { Appearance = new ControlAppearance(Text: "Mute", BackgroundColor: GreenBackground) };
 
+        // Act
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob(), labelledZone));
+
+        // Assert
         Assert.That(fixture.KnobAction.Renders.Any(render => render.Compact), Is.True);
-        Assert.That(fixture.ZonePixel(2, 2), Is.EqualTo(new byte[] { 0, 255, 0, 255 }));
+        Assert.That(fixture.ZonePixel(2, 2), Is.EqualTo(GreenPixel));
     }
 
     [Test]
-    public async Task A_knob_can_stay_off_the_zone()
+    public async Task ShowAsync_KnobNotShownOnTheDisplay_LeavesTheZoneAtTheBaseColor()
     {
+        // Arrange
         await using var fixture = new Fixture();
-        await fixture.ShowAsync(Profile("one", null, Knob(showOnDisplay: false)));
 
+        // Act
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob(showOnDisplay: false)));
+
+        // Assert
         Assert.That(fixture.ZonePixel(2, 2), Is.EqualTo(BasePixel));
         Assert.That(fixture.KnobAction.Renders, Is.Empty);
     }
 
     [Test]
-    public async Task Tapping_a_zone_that_only_shows_the_knob_presses_the_knob()
+    public async Task ReportInput_TapOnAZoneThatOnlyShowsTheKnob_PressesAndReleasesTheKnob()
     {
+        // Arrange
         await using var fixture = new Fixture();
-        await fixture.ShowAsync(Profile("one", null, Knob()));
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob()));
 
-        fixture.Plugin.Context!.ReportInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.ZoneId, InputCapabilities.Press, 1);
-        await fixture.Host.WhenIdleAsync();
+        // Act
+        await TapTheZoneAsync(fixture);
 
+        // Assert
         Assert.That(
             fixture.KnobAction.Executions,
             Is.EqualTo(new[] { (StripDevicePlugin.KnobId, InputCapabilities.Press), (StripDevicePlugin.KnobId, InputCapabilities.Release) }));
     }
 
-    [TestCase(true, true)]   // the zone has its own action: the tap is the zone's
-    [TestCase(false, false)] // the knob isn't shown there: the tap does nothing
-    public async Task Other_taps_never_reach_the_knob(bool zoneHasAction, bool showKnobOnDisplay)
+    [Test]
+    public async Task ReportInput_TapOnAZoneWithItsOwnAction_RunsTheZonesActionAndNotTheKnobs()
     {
+        // Arrange
         await using var fixture = new Fixture();
-        await fixture.ShowAsync(zoneHasAction
-            ? Profile("one", null, Knob(showKnobOnDisplay), Zone())
-            : Profile("one", null, Knob(showKnobOnDisplay)));
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob(), Zone()));
 
-        fixture.Plugin.Context!.ReportInputEvent(StripDevicePlugin.DeviceId, StripDevicePlugin.ZoneId, InputCapabilities.Press, 1);
-        await fixture.Host.WhenIdleAsync();
+        // Act
+        await TapTheZoneAsync(fixture);
 
+        // Assert
         Assert.That(fixture.KnobAction.Executions, Is.Empty);
-        Assert.That(fixture.ZoneAction.Executions.Count, Is.EqualTo(zoneHasAction ? 1 : 0));
+        Assert.That(fixture.ZoneAction.Executions.Count, Is.EqualTo(1));
     }
 
     [Test]
-    public async Task The_backdrop_follows_the_profile_and_is_sent_before_the_images()
+    public async Task ReportInput_TapOnAZoneWhereTheKnobIsNotShown_DoesNothing()
     {
+        // Arrange
         await using var fixture = new Fixture();
-        await fixture.ShowAsync(
-            Profile("plain", null),
-            Profile("red", new ProfileBackground("#FF0000")),
-            Profile("also-red", new ProfileBackground("#FF0000")));
+        await fixture.ShowAsync(Profile(ProfileId, null, Knob(showOnDisplay: false)));
 
-        // No background color: the base color the controls start with, then the control images.
-        Assert.That(fixture.Plugin.Calls, Is.EqualTo(new[] { "backdrop:11,18,32", $"image:{StripDevicePlugin.ZoneId}" }));
+        // Act
+        await TapTheZoneAsync(fixture);
 
-        // Another color: the backdrop first, then every image again (the device may have drawn over them).
+        // Assert
+        Assert.That(fixture.KnobAction.Executions, Is.Empty);
+        Assert.That(fixture.ZoneAction.Executions, Is.Empty);
+    }
+
+    private static DeviceProfile[] ThreeProfilesWithBackdrops() =>
+    [
+        Profile("plain", null),
+        Profile("red", new ProfileBackground("#FF0000")),
+        Profile("also-red", new ProfileBackground("#FF0000")),
+    ];
+
+    [Test]
+    public async Task ShowAsync_ProfileWithoutABackgroundColor_SendsTheBaseBackdropBeforeTheImages()
+    {
+        // Arrange
+        await using var fixture = new Fixture();
+
+        // Act
+        await fixture.ShowAsync(ThreeProfilesWithBackdrops());
+
+        // Assert
+        Assert.That(fixture.Plugin.Calls, Is.EqualTo(new[] { BaseBackdrop, ZoneImage }));
+    }
+
+    [Test]
+    public async Task SetActiveProfile_ProfileWithAnotherColor_SendsTheBackdropThenEveryImageAgain()
+    {
+        // Arrange
+        await using var fixture = new Fixture();
+        await fixture.ShowAsync(ThreeProfilesWithBackdrops());
         fixture.Plugin.Calls.Clear();
+
+        // Act
         fixture.Host.SetActiveProfile("red");
         await fixture.Host.WhenIdleAsync();
-        Assert.That(fixture.Plugin.Calls, Is.EqualTo(new[] { "backdrop:255,0,0", $"image:{StripDevicePlugin.ZoneId}" }));
 
-        // The same color and the same pixels: nothing is sent.
+        // Assert
+        Assert.That(fixture.Plugin.Calls, Is.EqualTo(new[] { RedBackdrop, ZoneImage }));
+    }
+
+    [Test]
+    public async Task SetActiveProfile_ProfileWithTheSameColorAndPixels_SendsNothing()
+    {
+        // Arrange
+        await using var fixture = new Fixture();
+        await fixture.ShowAsync(ThreeProfilesWithBackdrops());
+        fixture.Host.SetActiveProfile("red");
+        await fixture.Host.WhenIdleAsync();
         fixture.Plugin.Calls.Clear();
+
+        // Act
         fixture.Host.SetActiveProfile("also-red");
         await fixture.Host.WhenIdleAsync();
+
+        // Assert
         Assert.That(fixture.Plugin.Calls, Is.Empty);
     }
 
     [Test]
-    public async Task A_redraw_request_sends_the_backdrop_and_the_images_again()
+    public async Task RequestRedraw_AfterTheDeviceOverwroteItsScreen_SendsTheBackdropAndTheImagesAgain()
     {
+        // Arrange
         await using var fixture = new Fixture();
         await fixture.ShowAsync(Profile("plain", null));
         fixture.Plugin.Calls.Clear();
 
-        // What a device plugin asks for after it overwrote the screen (the N4 Pro's idle screen).
+        // Act (what a device plugin asks for after it overwrote the screen: the N4 Pro's idle screen)
         fixture.Plugin.Context!.RequestRedraw(StripDevicePlugin.DeviceId);
         await fixture.Host.WhenIdleAsync();
 
-        Assert.That(fixture.Plugin.Calls, Is.EqualTo(new[] { "backdrop:11,18,32", $"image:{StripDevicePlugin.ZoneId}" }));
+        // Assert
+        Assert.That(fixture.Plugin.Calls, Is.EqualTo(new[] { BaseBackdrop, ZoneImage }));
+    }
+
+    private static DeckHost.Core.Profiles.ProfileStore SavedProfileWithAHiddenKnob(TempProfilesFile file)
+    {
+        var store = new DeckHost.Core.Profiles.ProfileStore(file.Path);
+        store.Save(new DeckHost.Core.Profiles.ProfileDocument(1, ProfileId, [Profile(ProfileId, null, Knob(showOnDisplay: false), Zone())]));
+        return store;
     }
 
     [Test]
-    public void The_knob_display_choice_is_saved_with_the_profile()
+    public void Load_KnobHiddenFromItsDisplay_KeepsTheChoice()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"deckhost-profiles-{Guid.NewGuid():N}.json");
-        try
-        {
-            var store = new DeckHost.Core.Profiles.ProfileStore(path);
-            store.Save(new DeckHost.Core.Profiles.ProfileDocument(1, "one", [Profile("one", null, Knob(showOnDisplay: false), Zone())]));
+        // Arrange
+        using var file = new TempProfilesFile();
+        var store = SavedProfileWithAHiddenKnob(file);
 
-            var bindings = store.Load()!.Profiles.Single().Bindings;
-            Assert.That(bindings.Single(binding => binding.ControlId == StripDevicePlugin.KnobId).Appearance.ShowOnLinkedDisplay, Is.False);
+        // Act
+        var bindings = store.Load()!.Profiles.Single().Bindings;
 
-            // Older files have no such field: knobs show on their zone.
-            Assert.That(bindings.Single(binding => binding.ControlId == StripDevicePlugin.ZoneId).Appearance.ShowOnLinkedDisplay, Is.True);
-            var old = System.Text.Json.JsonSerializer.Deserialize<ControlAppearance>("""{ "Text": "Hi" }""")!;
-            Assert.That(old.ShowOnLinkedDisplay, Is.True);
-        }
-        finally
-        {
-            File.Delete(path);
-        }
+        // Assert
+        Assert.That(bindings.Single(binding => binding.ControlId == StripDevicePlugin.KnobId).Appearance.ShowOnLinkedDisplay, Is.False);
+    }
+
+    [Test]
+    public void Load_ZoneBindingWithoutTheChoice_ShowsOnTheLinkedDisplay()
+    {
+        // Arrange
+        using var file = new TempProfilesFile();
+        var store = SavedProfileWithAHiddenKnob(file);
+
+        // Act
+        var bindings = store.Load()!.Profiles.Single().Bindings;
+
+        // Assert
+        Assert.That(bindings.Single(binding => binding.ControlId == StripDevicePlugin.ZoneId).Appearance.ShowOnLinkedDisplay, Is.True);
+    }
+
+    [Test]
+    public void Deserialize_AppearanceFromAnOlderFileWithoutTheField_ShowsOnTheLinkedDisplay()
+    {
+        // Arrange
+        const string oldFile = """{ "Text": "Hi" }""";
+
+        // Act
+        var appearance = System.Text.Json.JsonSerializer.Deserialize<ControlAppearance>(oldFile)!;
+
+        // Assert
+        Assert.That(appearance.ShowOnLinkedDisplay, Is.True);
     }
 
     [TestCase(null, 0x0B, 0x12, 0x20)]
     [TestCase("#FF8000", 0xFF, 0x80, 0x00)]
     [TestCase("not a color", 0x0B, 0x12, 0x20)]
     [TestCase("#80FFFFFF", 0x85, 0x89, 0x90)] // half-transparent white over the base color
-    public void The_backdrop_color_is_the_profile_color_over_the_base(string? color, byte red, byte green, byte blue) =>
-        Assert.That(ProfileBackdrop.GetColor(color is null ? null : new ProfileBackground(color)), Is.EqualTo((red, green, blue)));
+    public void GetColor_ProfileColor_IsTheColorOverTheBase(string? color, byte red, byte green, byte blue)
+    {
+        // Arrange
+        var background = color is null ? null : new ProfileBackground(color);
+
+        // Act
+        var result = ProfileBackdrop.GetColor(background);
+
+        // Assert
+        Assert.That(result, Is.EqualTo((red, green, blue)));
+    }
 }

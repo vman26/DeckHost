@@ -10,193 +10,349 @@ namespace DeckHost.Tests;
 
 public class VariableStoreTests
 {
-    [Test]
-    public void Publish_then_TryGetValue_returns_value()
-    {
-        using var store = new VariableStore();
-        store.Publish("a", 42);
+    private const string Key = "a";
+    private const int Answer = 42;
+    private const int RaceRounds = 200;
+    private const int LastValue = 99;
 
-        Assert.That(store.TryGetValue<int>("a", out var value), Is.True);
-        Assert.That(value, Is.EqualTo(42));
-        Assert.That(store.TryGetValue<string>("a", out _), Is.False);
+    [Test]
+    public void TryGetValue_AfterPublish_ReturnsTheValue()
+    {
+        // Arrange
+        using var store = new VariableStore();
+        store.Publish(Key, Answer);
+
+        // Act
+        var found = store.TryGetValue<int>(Key, out var value);
+
+        // Assert
+        Assert.That(found, Is.True);
+        Assert.That(value, Is.EqualTo(Answer));
     }
 
     [Test]
-    public void Observe_before_first_publish_receives_values()
+    public void TryGetValue_AskedForAnotherType_ReturnsFalse()
     {
+        // Arrange
+        using var store = new VariableStore();
+        store.Publish(Key, Answer);
+
+        // Act
+        var found = store.TryGetValue<string>(Key, out _);
+
+        // Assert
+        Assert.That(found, Is.False);
+    }
+
+    [Test]
+    public void Observe_SubscribedBeforeTheFirstPublish_ReceivesEveryValue()
+    {
+        // Arrange
         using var store = new VariableStore();
         var received = new List<int>();
-        using var subscription = store.Observe<int>("a").Subscribe(received.Add);
+        using var subscription = store.Observe<int>(Key).Subscribe(received.Add);
 
-        store.Publish("a", 1);
-        store.Publish("a", 2);
+        // Act
+        store.Publish(Key, 1);
+        store.Publish(Key, 2);
 
+        // Assert
         Assert.That(received, Is.EqualTo(new[] { 1, 2 }));
     }
 
     [Test]
-    public async Task Concurrent_observe_and_publish_never_loses_the_subscriber()
+    [Repeat(RaceRounds)]
+    public async Task Observe_RacingWithTheFirstPublish_NeverLosesTheSubscriber()
     {
-        for (var round = 0; round < 200; round++)
+        // Arrange
+        using var store = new VariableStore();
+        var key = $"k{Guid.NewGuid():N}";
+        var last = -1;
+        var start = new ManualResetEventSlim();
+        var observe = Task.Run(() =>
         {
-            using var store = new VariableStore();
-            var key = $"k{round}";
-            var last = -1;
-            var start = new ManualResetEventSlim();
+            start.Wait();
+            return store.Observe<int>(key).Subscribe(value => Volatile.Write(ref last, value));
+        });
+        var publish = Task.Run(() =>
+        {
+            start.Wait();
+            store.Publish(key, 1);
+        });
 
-            var observe = Task.Run(() =>
-            {
-                start.Wait();
-                return store.Observe<int>(key).Subscribe(value => Volatile.Write(ref last, value));
-            });
-            var publish = Task.Run(() =>
-            {
-                start.Wait();
-                store.Publish(key, 1);
-            });
+        // Act
+        start.Set();
+        using var subscription = await observe;
+        await publish;
+        store.Publish(key, LastValue);
 
-            start.Set();
-            using var subscription = await observe;
-            await publish;
-            store.Publish(key, 99);
-
-            Assert.That(Volatile.Read(ref last), Is.EqualTo(99));
-        }
+        // Assert
+        Assert.That(Volatile.Read(ref last), Is.EqualTo(LastValue));
     }
 }
 
 public class ActionRouterTests
 {
     private const string DeviceId = "dev";
+    private const string PluginId = "p";
+    private const string ActionId = "a";
+    private const string Key = "key.0";
+    private const string ProfileId = "profile";
+    private const string LastEventKey = "devices.dev.key.0.lastEvent";
+
+    private static DeviceProfile ProfileWith(params ControlBinding[] bindings) => new(ProfileId, "Profile", DeviceId, bindings);
+
+    private static DeviceInputEvent Press() => new(DeviceId, Key, InputCapabilities.Press, 1);
 
     [Test]
-    public void Dispatch_runs_bound_action_and_publishes_input_state()
+    public void Dispatch_BoundAction_ReturnsTrueAndRunsTheActionOnce()
     {
+        // Arrange
         using var store = new VariableStore();
-        var action = new RecordingAction("a");
-        var router = new ActionRouter(store, [new TestApplicationPlugin("p", action)]);
-        var profile = new DeviceProfile("profile", "Profile", DeviceId, [Bindings.Single("key.0", "p", "a")]);
+        var action = new RecordingAction(ActionId);
+        var router = new ActionRouter(store, [new TestApplicationPlugin(PluginId, action)]);
 
-        var dispatched = router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance);
+        // Act
+        var dispatched = router.Dispatch(ProfileWith(Bindings.Single(Key, PluginId, ActionId)), Press(), NullActionHost.Instance);
 
+        // Assert
         Assert.That(dispatched, Is.True);
-        var context = Expect.Single(action.Executions);
-        Assert.That(context.EventType, Is.EqualTo(InputCapabilities.Press));
-        Assert.That(store.TryGetValue<InputCapabilities>("devices.dev.key.0.lastEvent", out var lastEvent), Is.True);
+        Assert.That(Expect.Single(action.Executions).EventType, Is.EqualTo(InputCapabilities.Press));
+    }
+
+    [Test]
+    public void Dispatch_BoundAction_PublishesTheInputState()
+    {
+        // Arrange
+        using var store = new VariableStore();
+        var router = new ActionRouter(store, [new TestApplicationPlugin(PluginId, new RecordingAction(ActionId))]);
+
+        // Act
+        router.Dispatch(ProfileWith(Bindings.Single(Key, PluginId, ActionId)), Press(), NullActionHost.Instance);
+
+        // Assert
+        Assert.That(store.TryGetValue<InputCapabilities>(LastEventKey, out var lastEvent), Is.True);
         Assert.That(lastEvent, Is.EqualTo(InputCapabilities.Press));
     }
 
     [Test]
-    public void Dispatch_skips_actions_that_do_not_accept_the_event()
+    public void Dispatch_ActionThatDoesNotAcceptTheEvent_ReturnsFalse()
     {
+        // Arrange
         using var store = new VariableStore();
-        var action = new RecordingAction("a", InputCapabilities.Rotate);
-        var router = new ActionRouter(store, [new TestApplicationPlugin("p", action)]);
-        var profile = new DeviceProfile("profile", "Profile", DeviceId, [Bindings.Single("key.0", "p", "a")]);
+        var action = new RecordingAction(ActionId, InputCapabilities.Rotate);
+        var router = new ActionRouter(store, [new TestApplicationPlugin(PluginId, action)]);
 
-        Assert.That(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance), Is.False);
+        // Act
+        var dispatched = router.Dispatch(ProfileWith(Bindings.Single(Key, PluginId, ActionId)), Press(), NullActionHost.Instance);
+
+        // Assert
+        Assert.That(dispatched, Is.False);
+    }
+
+    [Test]
+    public void Dispatch_ActionThatDoesNotAcceptTheEvent_DoesNotRunIt()
+    {
+        // Arrange
+        using var store = new VariableStore();
+        var action = new RecordingAction(ActionId, InputCapabilities.Rotate);
+        var router = new ActionRouter(store, [new TestApplicationPlugin(PluginId, action)]);
+
+        // Act
+        router.Dispatch(ProfileWith(Bindings.Single(Key, PluginId, ActionId)), Press(), NullActionHost.Instance);
+
+        // Assert
         Assert.That(action.Executions, Is.Empty);
     }
 
-    [Test]
-    public void MultiAction_runs_steps_in_order_and_survives_a_failing_step()
-    {
-        using var store = new VariableStore();
-        var order = new List<string>();
-        var first = new RecordingAction("first") { OnExecute = _ => order.Add("first") };
-        var failing = new RecordingAction("failing") { OnExecute = _ => throw new InvalidOperationException("boom") };
-        var last = new RecordingAction("last") { OnExecute = _ => order.Add("last") };
-        var failures = new List<string>();
-        var router = new ActionRouter(store, [new TestApplicationPlugin("p", new RecordingAction("multi"), first, failing, last)], (reference, _) => failures.Add(reference.ActionId));
+    private sealed record MultiActionRun(ActionRouter Router, DeviceProfile Profile, List<string> Order, List<string> Failures);
 
+    private static MultiActionRun MultiActionWithAFailingMiddleStep(VariableStore store)
+    {
+        const string multi = "multi";
+        const string first = "first";
+        const string failing = "failing";
+        const string last = "last";
+        var order = new List<string>();
+        var failures = new List<string>();
+        var plugin = new TestApplicationPlugin(PluginId,
+            new RecordingAction(multi),
+            new RecordingAction(first) { OnExecute = _ => order.Add(first) },
+            new RecordingAction(failing) { OnExecute = _ => throw new InvalidOperationException("boom") },
+            new RecordingAction(last) { OnExecute = _ => order.Add(last) });
+        var router = new ActionRouter(store, [plugin], (reference, _) => failures.Add(reference.ActionId));
         var binding = new ControlBinding(
-            "key.0",
+            Key,
             ProfileActionKind.MultiAction,
-            Bindings.Reference("p", "multi"),
+            Bindings.Reference(PluginId, multi),
             new ControlAppearance(),
             [
-                new MultiActionStep(2, Bindings.Reference("p", "last")),
-                new MultiActionStep(1, Bindings.Reference("p", "failing")),
-                new MultiActionStep(0, Bindings.Reference("p", "first")),
+                new MultiActionStep(2, Bindings.Reference(PluginId, last)),
+                new MultiActionStep(1, Bindings.Reference(PluginId, failing)),
+                new MultiActionStep(0, Bindings.Reference(PluginId, first)),
             ]);
-        var profile = new DeviceProfile("profile", "Profile", DeviceId, [binding]);
-
-        Assert.That(router.Dispatch(profile, new DeviceInputEvent(DeviceId, "key.0", InputCapabilities.Press, 1), NullActionHost.Instance), Is.True);
-        Assert.That(order, Is.EqualTo(new[] { "first", "last" }));
-        Assert.That(failures, Is.EqualTo(new[] { "failing" }));
+        return new MultiActionRun(router, ProfileWith(binding), order, failures);
     }
 
     [Test]
-    public void Duplicate_action_ids_are_reported_instead_of_throwing()
+    public void Dispatch_MultiActionWithAFailingStep_RunsTheOtherStepsInOrder()
     {
+        // Arrange
         using var store = new VariableStore();
-        var router = new ActionRouter(store, [new TestApplicationPlugin("p", new RecordingAction("a")), new TestApplicationPlugin("p", new RecordingAction("a"))]);
+        var run = MultiActionWithAFailingMiddleStep(store);
 
-        Assert.That(router.DuplicateActionKeys, Is.EqualTo(new[] { "p:a" }));
+        // Act
+        var dispatched = run.Router.Dispatch(run.Profile, Press(), NullActionHost.Instance);
+
+        // Assert
+        Assert.That(dispatched, Is.True);
+        Assert.That(run.Order, Is.EqualTo(new[] { "first", "last" }));
+    }
+
+    [Test]
+    public void Dispatch_MultiActionWithAFailingStep_ReportsTheFailure()
+    {
+        // Arrange
+        using var store = new VariableStore();
+        var run = MultiActionWithAFailingMiddleStep(store);
+
+        // Act
+        run.Router.Dispatch(run.Profile, Press(), NullActionHost.Instance);
+
+        // Assert
+        Assert.That(run.Failures, Is.EqualTo(new[] { "failing" }));
+    }
+
+    [Test]
+    public void DuplicateActionKeys_TwoPluginsWithTheSameActionId_AreReportedInsteadOfThrowing()
+    {
+        // Arrange
+        using var store = new VariableStore();
+
+        // Act
+        var router = new ActionRouter(store, [new TestApplicationPlugin(PluginId, new RecordingAction(ActionId)), new TestApplicationPlugin(PluginId, new RecordingAction(ActionId))]);
+
+        // Assert
+        Assert.That(router.DuplicateActionKeys, Is.EqualTo(new[] { $"{PluginId}:{ActionId}" }));
     }
 }
 
-public class ProfileStoreTests
+public class ProfileStoreTests : IDisposable
 {
-    [Test]
-    public void Save_then_Load_round_trips_profiles()
+    private const string ProfileId = "profile";
+    private const string DeviceId = "dev";
+    private const string DefaultColor = "#0F766E";
+    private const string DefaultImage = "/images/wall.png";
+
+    private readonly string _folder = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}");
+    private string ProfilesFile => Path.Combine(_folder, "profiles.json");
+
+    public void Dispose()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}", "profiles.json");
-        try
+        if (Directory.Exists(_folder))
         {
-            var store = new ProfileStore(path);
-            var binding = new ControlBinding(
-                "key.3",
-                ProfileActionKind.MultiAction,
-                Bindings.Reference("p", "multi"),
-                new ControlAppearance("Hello", "C:/image.png", new RgbFeedback("FF0000", "000000", 150, true)),
-                [new MultiActionStep(0, Bindings.Reference("p", "a"))]);
-            var document = new ProfileDocument(ProfileDocument.CurrentVersion, "profile", [new DeviceProfile("profile", "Profile", "dev", [binding])]);
-
-            store.Save(document);
-            var loaded = store.Load();
-
-            Assert.That(loaded, Is.Not.Null);
-            Assert.That(loaded.SelectedProfileId, Is.EqualTo("profile"));
-            var loadedBinding = Expect.Single(Expect.Single(loaded.Profiles).Bindings);
-            Assert.That(loadedBinding.ControlId, Is.EqualTo(binding.ControlId));
-            Assert.That(loadedBinding.ActionKind, Is.EqualTo(binding.ActionKind));
-            Assert.That(loadedBinding.Appearance, Is.EqualTo(binding.Appearance));
-            Assert.That(loadedBinding.Steps[0], Is.EqualTo(binding.Steps[0]));
-            Assert.That(File.Exists(path + ".tmp"), Is.False);
-        }
-        finally
-        {
-            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+            Directory.Delete(_folder, recursive: true);
         }
     }
 
+    private static ControlBinding MultiActionBinding() => new(
+        "key.3",
+        ProfileActionKind.MultiAction,
+        Bindings.Reference("p", "multi"),
+        new ControlAppearance("Hello", "C:/image.png", new RgbFeedback("FF0000", "000000", 150, true)),
+        [new MultiActionStep(0, Bindings.Reference("p", "a"))]);
+
+    private static ProfileDocument DocumentWith(ControlBinding binding, ProfileBackground? defaultBackground = null) =>
+        new(ProfileDocument.CurrentVersion, ProfileId, [new DeviceProfile(ProfileId, "Profile", DeviceId, [binding])], DefaultBackground: defaultBackground);
+
     [Test]
-    public void The_default_background_and_new_appearance_fields_round_trip()
+    public void Load_AfterSave_ReturnsTheSelectedProfile()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"deckhost-{Guid.NewGuid():N}", "profiles.json");
-        try
-        {
-            var store = new ProfileStore(path);
-            var appearance = new ControlAppearance(BackgroundColor: "#80112233") { IconPath = "/icons/mic.svg", ShowTile = true, Tile = new TileStyle("#FF0000", "#0000FF", 30) };
-            var binding = new ControlBinding("key.0", ProfileActionKind.Single, Bindings.Reference("p", "a"), appearance, []);
-            store.Save(new ProfileDocument(ProfileDocument.CurrentVersion, "profile", [new DeviceProfile("profile", "Profile", "dev", [binding])],
-                DefaultBackground: new ProfileBackground("#0F766E", "/images/wall.png")));
+        // Arrange
+        var store = new ProfileStore(ProfilesFile);
+        store.Save(DocumentWith(MultiActionBinding()));
 
-            var loaded = store.Load()!;
+        // Act
+        var loaded = store.Load();
 
-            Assert.That(loaded.DefaultBackground, Is.EqualTo(new ProfileBackground("#0F766E", "/images/wall.png")));
-            Assert.That(Expect.Single(Expect.Single(loaded.Profiles).Bindings).Appearance, Is.EqualTo(appearance));
-        }
-        finally
-        {
-            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
-        }
+        // Assert
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded.SelectedProfileId, Is.EqualTo(ProfileId));
     }
 
     [Test]
-    public void Load_returns_null_when_there_is_no_file()
+    public void Load_AfterSave_ReturnsTheBindingWithItsAppearanceAndSteps()
     {
-        Assert.That(new ProfileStore(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.json")).Load(), Is.Null);
+        // Arrange
+        var binding = MultiActionBinding();
+        var store = new ProfileStore(ProfilesFile);
+        store.Save(DocumentWith(binding));
+
+        // Act
+        var loaded = store.Load()!;
+
+        // Assert
+        var loadedBinding = Expect.Single(Expect.Single(loaded.Profiles).Bindings);
+        Assert.That(loadedBinding.ControlId, Is.EqualTo(binding.ControlId));
+        Assert.That(loadedBinding.ActionKind, Is.EqualTo(binding.ActionKind));
+        Assert.That(loadedBinding.Appearance, Is.EqualTo(binding.Appearance));
+        Assert.That(loadedBinding.Steps[0], Is.EqualTo(binding.Steps[0]));
+    }
+
+    [Test]
+    public void Save_Profiles_LeavesNoTemporaryFileBehind()
+    {
+        // Arrange
+        var store = new ProfileStore(ProfilesFile);
+
+        // Act
+        store.Save(DocumentWith(MultiActionBinding()));
+
+        // Assert
+        Assert.That(File.Exists(ProfilesFile + ".tmp"), Is.False);
+    }
+
+    [Test]
+    public void Load_AfterSavingADefaultBackground_ReturnsIt()
+    {
+        // Arrange
+        var store = new ProfileStore(ProfilesFile);
+        var binding = new ControlBinding("key.0", ProfileActionKind.Single, Bindings.Reference("p", "a"), new ControlAppearance(), []);
+        store.Save(DocumentWith(binding, new ProfileBackground(DefaultColor, DefaultImage)));
+
+        // Act
+        var loaded = store.Load()!;
+
+        // Assert
+        Assert.That(loaded.DefaultBackground, Is.EqualTo(new ProfileBackground(DefaultColor, DefaultImage)));
+    }
+
+    [Test]
+    public void Load_AfterSavingNewAppearanceFields_ReturnsThemUnchanged()
+    {
+        // Arrange
+        var store = new ProfileStore(ProfilesFile);
+        var appearance = new ControlAppearance(BackgroundColor: "#80112233") { IconPath = "/icons/mic.svg", ShowTile = true, Tile = new TileStyle("#FF0000", "#0000FF", 30) };
+        var binding = new ControlBinding("key.0", ProfileActionKind.Single, Bindings.Reference("p", "a"), appearance, []);
+        store.Save(DocumentWith(binding));
+
+        // Act
+        var loaded = store.Load()!;
+
+        // Assert
+        Assert.That(Expect.Single(Expect.Single(loaded.Profiles).Bindings).Appearance, Is.EqualTo(appearance));
+    }
+
+    [Test]
+    public void Load_NoFile_ReturnsNull()
+    {
+        // Arrange
+        var store = new ProfileStore(Path.Combine(_folder, "missing.json"));
+
+        // Act
+        var loaded = store.Load();
+
+        // Assert
+        Assert.That(loaded, Is.Null);
     }
 }
