@@ -49,6 +49,9 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // An exception nobody catches on the UI thread (a web view that can't start) is reported, not fatal.
+            Platform.CrashReporter.InstallDispatcherSafetyNet();
+
             var services = ConfigureServices();
             Ioc.Default.ConfigureServices(services);
 
@@ -105,6 +108,22 @@ public partial class App : Application
                 desktop.Shutdown();
             }
 
+            // The safety net's notice, and the way out of safe mode: forget the failures and start again.
+            Platform.CrashReporter.Recovered += _ => Avalonia.Threading.Dispatcher.UIThread.Post(mainViewModel.ShowRecoveredNotice);
+            mainViewModel.RestartNormallyRequested += () =>
+            {
+                Platform.CrashReporter.Guard?.ClearFailures();
+                if (Environment.ProcessPath is { } executable)
+                {
+                    var start = new System.Diagnostics.ProcessStartInfo(executable) { UseShellExecute = false };
+                    start.ArgumentList.Add("--after-exit");
+                    start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    System.Diagnostics.Process.Start(start)?.Dispose();
+                }
+
+                ExitApplication();
+            };
+
             var updates = services.GetRequiredService<UpdateViewModel>();
             updates.RestartRequested += () =>
             {
@@ -147,6 +166,9 @@ public partial class App : Application
                 {
                     startPagesShown = true;
                     mainWindow.ShowStartPages();
+
+                    // Staying up for a while is what makes a run "healthy" (safe mode counts runs that didn't).
+                    Avalonia.Threading.DispatcherTimer.RunOnce(() => Platform.CrashReporter.Guard?.MarkHealthy(), Platform.StartupGuard.HealthyAfter);
                 }
             };
 
@@ -155,6 +177,7 @@ public partial class App : Application
 
             desktop.Exit += (_, _) =>
             {
+                Platform.CrashReporter.Guard?.MarkCleanExit();
                 mainViewModel.FlushPendingSave();
 
                 // Blanks the device, stops the SDK threads and unloads the native bridge.
@@ -315,7 +338,7 @@ public partial class App : Application
                     }
                 });
             runtime.DevicesProvider = () => provider.GetRequiredService<IDeviceHostService>().Devices;
-            if (Platform.WebView2PluginHost.IsSupported)
+            if (Platform.WebView2PluginHost.IsSupported && Platform.WebViewSupport.IsAvailable)
             {
                 // HTML-based Stream Deck plugins run in hidden WebView2 pages.
                 runtime.HtmlPluginHost = new Platform.WebView2PluginHost();
@@ -331,7 +354,11 @@ public partial class App : Application
                 provider.GetServices<IDevicePlugin>(),
                 SystemPluginSet.Create(),
                 SystemPluginSet.RequiredPluginIds,
-                provider.GetRequiredService<StreamDeckRuntime>());
+                provider.GetRequiredService<StreamDeckRuntime>())
+            {
+                // Safe mode: only the built-in plugins, so whatever crashed DeckHost can't run again.
+                LoadsExtraPlugins = !Platform.SafeMode.IsOn,
+            };
 
             // DeckHost plugins run in their own process (this program with --plugin-host), unless
             // the user moved one inside DeckHost on the Plugins page.

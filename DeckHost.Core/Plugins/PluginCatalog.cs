@@ -195,6 +195,12 @@ public sealed class PluginCatalog : IDisposable
     }
 
     /// <summary>Finishes pending removals and loads (and starts) the enabled installed plugins.</summary>
+    /// <summary>
+    /// False in safe mode: the installed packages, Stream Deck and OpenAction plugins are neither loaded nor started
+    /// (whatever crashed DeckHost can't run again), and their saved state is left as it is.
+    /// </summary>
+    public bool LoadsExtraPlugins { get; init; } = true;
+
     public void Load() => Run(null, LoadCore);
 
     /// <summary>
@@ -346,7 +352,7 @@ public sealed class PluginCatalog : IDisposable
             }
         }
 
-        if (Directory.Exists(InstallDirectory))
+        if (LoadsExtraPlugins && Directory.Exists(InstallDirectory))
         {
             foreach (var directory in Directory.EnumerateDirectories(InstallDirectory).Order(StringComparer.OrdinalIgnoreCase))
             {
@@ -373,7 +379,7 @@ public sealed class PluginCatalog : IDisposable
             }
         }
 
-        if (_streamDeck is not null && Directory.Exists(StreamDeckDirectory))
+        if (LoadsExtraPlugins && _streamDeck is not null && Directory.Exists(StreamDeckDirectory))
         {
             foreach (var directory in Directory.EnumerateDirectories(StreamDeckDirectory, "*.sdPlugin").Order(StringComparer.OrdinalIgnoreCase))
             {
@@ -399,12 +405,22 @@ public sealed class PluginCatalog : IDisposable
             }
         }
 
+        if (!LoadsExtraPlugins)
+        {
+            return;
+        }
+
         TryDeleteDirectory(Path.Combine(_rootDirectory, StagingDirectoryName));
         SaveState();
     }
 
     private PluginEntry InstallCore(string packagePath, string? fallbackId)
     {
+        if (!LoadsExtraPlugins)
+        {
+            throw new PluginException("Safe mode is on: plugins can't be installed until DeckHost is restarted normally.");
+        }
+
         if (!File.Exists(packagePath))
         {
             throw new PluginException($"Package not found: {packagePath}");
@@ -948,6 +964,11 @@ public sealed class PluginCatalog : IDisposable
 
     private void SaveState()
     {
+        if (!LoadsExtraPlugins)
+        {
+            return;
+        }
+
         try
         {
             Directory.CreateDirectory(_rootDirectory);

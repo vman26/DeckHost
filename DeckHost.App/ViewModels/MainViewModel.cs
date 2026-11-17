@@ -78,7 +78,13 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         RebuildActions();
         LoadProfiles();
-        SelectControl(ControlItems[0].Control);
+
+        // Safe mode starts without an open editor: whatever the first control's editor builds (a plugin's web page) is what crashed.
+        if (!Platform.SafeMode.IsOn)
+        {
+            SelectControl(ControlItems[0].Control);
+        }
+
         SeedRuntimeState();
 
         _foregroundAppWatcher.ForegroundAppChanged += OnForegroundAppChanged;
@@ -200,6 +206,38 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         get => _statusMessage;
         set => SetProperty(ref _statusMessage, value);
     }
+
+    /// <summary>DeckHost started in safe mode (web views and extra plugins are off) after crashing at start.</summary>
+    public bool IsSafeMode => Platform.SafeMode.IsOn;
+
+    public string SafeModeText => $"Safe mode: the built-in browser and extra plugins (Stream Deck, OpenAction, installed ones) are off. {Platform.SafeMode.Reason}";
+
+    private string _recoveredNotice = string.Empty;
+
+    /// <summary>Set when an unexpected error was recovered from (a crash report was written) instead of closing DeckHost.</summary>
+    public string RecoveredNotice
+    {
+        get => _recoveredNotice;
+        private set
+        {
+            if (SetProperty(ref _recoveredNotice, value))
+            {
+                OnPropertyChanged(nameof(HasRecoveredNotice));
+            }
+        }
+    }
+
+    public bool HasRecoveredNotice => RecoveredNotice.Length > 0;
+
+    /// <summary>The user asked to leave safe mode: the host clears what it remembers and starts DeckHost again.</summary>
+    public event Action? RestartNormallyRequested;
+
+    public void RestartNormally() => RestartNormallyRequested?.Invoke();
+
+    public void ShowRecoveredNotice() =>
+        RecoveredNotice = "DeckHost hit an unexpected error and carried on. A report was saved; you can send it from Help and support.";
+
+    public void DismissRecoveredNotice() => RecoveredNotice = string.Empty;
 
     public string ConnectionStatus
     {

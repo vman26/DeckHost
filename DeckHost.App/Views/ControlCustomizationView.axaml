@@ -246,8 +246,7 @@
 					<Button DockPanel.Dock="Right" Content="Open in browser" Padding="10,2" FontSize="12" Command="{Binding OpenSettingsPageInBrowserCommand}" />
 					<TextBlock Text="Plugin settings" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" />
 				</DockPanel>
-				<NativeWebView Grid.Row="1" Name="SettingsBrowser" Source="{Binding SettingsPageUri}" />
-				<TextBlock Grid.Row="1" Name="SettingsBrowserError" IsVisible="False" Margin="12" Foreground="{DynamicResource C.FCA5A5}" TextWrapping="Wrap" />
+				<local:SettingsBrowserHost Grid.Row="1" Source="{Binding SettingsPageUri}" />
 			</Grid>
 		</Border>
 				<TextBlock Classes="hint" IsVisible="{Binding ShowNothingToCustomize}"

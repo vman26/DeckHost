@@ -1,0 +1,174 @@
+using System.Runtime.InteropServices;
+using DeckHost.App.Platform;
+
+namespace DeckHost.Tests;
+
+/// <summary>When the built-in web view may be used: the runtime, and a failure remembered for that runtime version.</summary>
+public sealed class WebViewSupportTests : IDisposable
+{
+    private const string Runtime = "130.0.1";
+    private const string NewerRuntime = "131.0.0";
+    private const int ClassNotRegistered = unchecked((int)0x80040154);
+
+    private readonly string _folder = Path.Combine(Path.GetTempPath(), "deckhost-webview-" + Guid.NewGuid().ToString("N"));
+
+    public WebViewSupportTests()
+    {
+        WebViewSupport.MarkerPath = Path.Combine(_folder, "webview-disabled.txt");
+        WebViewSupport.RuntimeVersion = () => Runtime;
+        WebViewSupport.Reset();
+    }
+
+    public void Dispose()
+    {
+        WebViewSupport.RestoreDefaults();
+        if (Directory.Exists(_folder))
+        {
+            Directory.Delete(_folder, recursive: true);
+        }
+    }
+
+    private void RememberAFailureOn(string runtime)
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(WebViewSupport.MarkerPath, runtime + Environment.NewLine + "COMException: Class not registered");
+    }
+
+    private static Exception ExceptionFromTheWebViewAdapter()
+    {
+        try
+        {
+            InitializeWebViewAdapter();
+            return new InvalidOperationException();
+        }
+        catch (COMException exception)
+        {
+            return exception;
+        }
+    }
+
+    private static void InitializeWebViewAdapter() => throw new COMException("Class not registered", ClassNotRegistered);
+
+    [Test]
+    public void IsAvailable_RuntimeFound_IsTrue()
+    {
+        // Arrange (a runtime and no remembered failure)
+
+        // Act
+        var available = WebViewSupport.IsAvailable;
+
+        // Assert
+        Assert.That(available, Is.True);
+    }
+
+    [Test]
+    public void IsAvailable_NoRuntime_IsFalse()
+    {
+        // Arrange
+        WebViewSupport.RuntimeVersion = () => null;
+        WebViewSupport.Reset();
+
+        // Act
+        var available = WebViewSupport.IsAvailable;
+
+        // Assert
+        Assert.That(available, Is.False);
+    }
+
+    [Test]
+    public void IsAvailable_FailureRememberedOnTheSameRuntime_IsFalse()
+    {
+        // Arrange
+        RememberAFailureOn(Runtime);
+        WebViewSupport.Reset();
+
+        // Act
+        var available = WebViewSupport.IsAvailable;
+
+        // Assert
+        Assert.That(available, Is.False);
+    }
+
+    [Test]
+    public void IsAvailable_FailureRememberedOnAnOlderRuntime_TriesAgain()
+    {
+        // Arrange
+        RememberAFailureOn(Runtime);
+        WebViewSupport.RuntimeVersion = () => NewerRuntime;
+        WebViewSupport.Reset();
+
+        // Act
+        var available = WebViewSupport.IsAvailable;
+
+        // Assert
+        Assert.That(available, Is.True);
+    }
+
+    [Test]
+    public void ReportFailure_WebViewThatFailedWhileRunning_MakesItUnavailable()
+    {
+        // Arrange
+        var exception = ExceptionFromTheWebViewAdapter();
+
+        // Act
+        WebViewSupport.ReportFailure(exception);
+
+        // Assert
+        Assert.That(WebViewSupport.IsAvailable, Is.False);
+    }
+
+    [Test]
+    public void ReportFailure_WebViewThatFailedWhileRunning_RemembersTheRuntimeItFailedOn()
+    {
+        // Arrange
+        var exception = ExceptionFromTheWebViewAdapter();
+
+        // Act
+        WebViewSupport.ReportFailure(exception);
+
+        // Assert
+        Assert.That(File.ReadLines(WebViewSupport.MarkerPath).First(), Is.EqualTo(Runtime));
+    }
+
+    [Test]
+    public void ReportFailure_WebViewThatFailedWhileRunning_RaisesFailed()
+    {
+        // Arrange
+        var raised = 0;
+        void OnFailed() => raised++;
+        WebViewSupport.Failed += OnFailed;
+
+        // Act
+        WebViewSupport.ReportFailure(ExceptionFromTheWebViewAdapter());
+        WebViewSupport.Failed -= OnFailed;
+
+        // Assert
+        Assert.That(raised, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void IsWebViewFailure_ComExceptionFromTheWebViewAdapter_IsTrue()
+    {
+        // Arrange
+        var exception = ExceptionFromTheWebViewAdapter();
+
+        // Act
+        var isFailure = WebViewSupport.IsWebViewFailure(exception);
+
+        // Assert
+        Assert.That(isFailure, Is.True);
+    }
+
+    [Test]
+    public void IsWebViewFailure_UnrelatedException_IsFalse()
+    {
+        // Arrange
+        var exception = new InvalidOperationException("nothing to do with a web view");
+
+        // Act
+        var isFailure = WebViewSupport.IsWebViewFailure(exception);
+
+        // Assert
+        Assert.That(isFailure, Is.False);
+    }
+}

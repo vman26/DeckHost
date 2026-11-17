@@ -270,6 +270,10 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     private void OpenSupport_OnClick(object? sender, RoutedEventArgs e) => OpenSupport();
 
+    private void RestartNormally_OnClick(object? sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.RestartNormally();
+
+    private void DismissRecovered_OnClick(object? sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.DismissRecoveredNotice();
+
     /// <summary>Help and support: documentation, reporting a problem, the support bundle, crash reports.</summary>
     public void OpenSupport() =>
         OpenSingle("Help and support", () => new SupportView
@@ -325,7 +329,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     /// <summary>On start: a crash since last time opens Help and support; the first start opens the welcome tour.</summary>
     public void ShowStartPages()
     {
-        if (SupportViewModel.HasUnseenCrashes())
+        if (Platform.SafeMode.IsOn || SupportViewModel.HasUnseenCrashes())
         {
             OpenSupport();
         }

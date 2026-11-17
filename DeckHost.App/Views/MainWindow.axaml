@@ -100,6 +100,27 @@
 	</Window.DataTemplates>
 
 	<Panel>
+		<!-- Notices over the workspace: safe mode (always) and "recovered from an error" (until dismissed). -->
+		<StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,66,0,0" Spacing="8" ZIndex="50">
+			<Border IsVisible="{Binding IsSafeMode}" Padding="14,8" CornerRadius="12" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.FBBF24}" BorderThickness="1" MaxWidth="760">
+				<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+					<TextBlock Text="{Binding SafeModeText}" TextWrapping="Wrap" Foreground="{DynamicResource C.FDE68A}" VerticalAlignment="Center" />
+					<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+						<Button Content="Restart normally" Classes="accent" Click="RestartNormally_OnClick" />
+						<Button Content="Crash report" Click="OpenSupport_OnClick" />
+					</StackPanel>
+				</Grid>
+			</Border>
+			<Border IsVisible="{Binding HasRecoveredNotice}" Padding="14,8" CornerRadius="12" Background="{DynamicResource C.1E293B}" BorderBrush="{DynamicResource C.475569}" BorderThickness="1" MaxWidth="760">
+				<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+					<TextBlock Text="{Binding RecoveredNotice}" TextWrapping="Wrap" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" />
+					<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+						<Button Content="Report…" Click="OpenSupport_OnClick" />
+						<Button Content="✕" Click="DismissRecovered_OnClick" />
+					</StackPanel>
+				</Grid>
+			</Border>
+		</StackPanel>
 		<Grid RowDefinitions="Auto,*">
 			<!-- Header: menu, device and profile, update notice, tools. -->
 			<Border Padding="16,10" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="0,0,0,1">

@@ -83,6 +83,12 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- DeckHost no longer closes when the built-in browser (the plugin settings page) can't start, for example without
+  the Microsoft Edge WebView2 runtime: unexpected errors in the window are recovered from with a crash report and a
+  notice, and the browser stays off on that computer until the runtime is updated.
+- After repeated crashes at start DeckHost comes up in **safe mode** (no browser, no extra plugins, no open editor)
+  with a button to restart normally, instead of crashing every time.
+
 - Windows no longer reports DeckHost (or one of its plugins) as preventing shutdown: with DeckHost
   running in the tray its window refused every close, also the one Windows sends when shutting
   down. It now only stays when you close the window yourself, and stops its plugin processes
