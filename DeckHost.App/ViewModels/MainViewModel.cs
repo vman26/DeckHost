@@ -152,6 +152,33 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
     }
 
+    private bool _onlyCompatibleActions;
+
+    /// <summary>The action list shows only the actions that fit the selected control (a checkbox in the action bar).</summary>
+    public bool OnlyCompatibleActions
+    {
+        get => _onlyCompatibleActions;
+        set
+        {
+            if (SetProperty(ref _onlyCompatibleActions, value))
+            {
+                RefreshActionGroups();
+                OnlyCompatibleActionsChanged?.Invoke(this, value);
+            }
+        }
+    }
+
+    /// <summary>Raised when the user changes <see cref="OnlyCompatibleActions"/>, so the window can remember it.</summary>
+    public event EventHandler<bool>? OnlyCompatibleActionsChanged;
+
+    /// <summary>Sets <see cref="OnlyCompatibleActions"/> from the saved settings, without telling the window to save it again.</summary>
+    public void LoadOnlyCompatibleActions(bool value)
+    {
+        _onlyCompatibleActions = value;
+        OnPropertyChanged(nameof(OnlyCompatibleActions));
+        RefreshActionGroups();
+    }
+
     public ControlItemViewModel? SelectedControl
     {
         get => _selectedControl;
@@ -159,6 +186,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         {
             if (SetProperty(ref _selectedControl, value))
             {
+                RefreshActionGroups();
                 foreach (var item in ControlItems)
                 {
                     item.IsSelected = item == value;
@@ -2149,8 +2177,16 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private void RefreshActionGroups()
     {
+        // Actions that don't fit the selected control are dimmed (and hidden when the filter is on).
+        var selected = SelectedControl?.Control;
+        foreach (var action in _actionsByKey.Values)
+        {
+            action.UpdateFit(selected);
+        }
+
         var filteredActions = _actionsByKey.Values
             .Where(action => action.ShowInPalette)
+            .Where(action => !_onlyCompatibleActions || action.IsCompatible)
             .Where(action => string.IsNullOrWhiteSpace(SearchText)
                 || action.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
                 || action.PluginName.Contains(SearchText, StringComparison.OrdinalIgnoreCase)

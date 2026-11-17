@@ -26,6 +26,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   place freely), Ctrl or Shift and a click select several to line up or spread evenly, and **Arrange** keeps every
   key and knob on its own number. Right-click the device in the editor for **Add a USB device**.
 
+- The action list dims the actions the selected control can't use (hover for why), and **Only actions that fit the
+  selected control** hides them.
+
 - Plugin store: open-source Elgato plugins can come from a checksummed copy kept in DeckHost's plugin
   repository instead of the community archive (the copying itself stays off for now).
 - Linux: an AppImage next to the tar.gz, one file that runs without installing. DeckHost doesn't replace it

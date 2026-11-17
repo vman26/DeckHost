@@ -466,14 +466,17 @@
 
 				<!-- Actions, grouped by plugin. Drag one onto a control (or into a Multi Action's steps). -->
 				<Border Grid.Column="2" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1,0,0,0">
-					<Grid RowDefinitions="Auto,*">
-						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="12,12,12,8">
+					<Grid RowDefinitions="Auto,Auto,*">
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="12,12,12,4">
 							<TextBox PlaceholderText="Search actions" Text="{Binding SearchText, Mode=TwoWay}" />
 							<Button Grid.Column="1" Classes="tool" ToolTip.Tip="Get more plugins" Click="OpenPluginManager_OnClick">
 								<Viewbox Width="18" Height="18"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7Z" /></Canvas></Viewbox>
 							</Button>
 						</Grid>
-						<ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+						<CheckBox Grid.Row="1" Margin="12,0,12,6" Content="Only actions that fit the selected control" FontSize="12"
+								  IsChecked="{Binding OnlyCompatibleActions, Mode=TwoWay}"
+								  ToolTip.Tip="Hide the actions the selected control can't use. Without this they are only dimmed." />
+						<ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
 							<ItemsControl ItemsSource="{Binding ActionGroups}" Margin="6,0,6,12">
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:PluginActionGroupViewModel">
@@ -504,7 +507,8 @@
 																Padding="10,7"
 																CornerRadius="8"
 																Cursor="Hand"
-																ToolTip.Tip="{Binding Summary}"
+																Opacity="{Binding ListOpacity}"
+																ToolTip.Tip="{Binding ListToolTip}"
 																PointerPressed="ActionCard_OnPointerPressed">
 															<Border.ContextMenu>
 																<ContextMenu>

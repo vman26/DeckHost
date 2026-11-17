@@ -57,11 +57,13 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
             if (_workflowSource is not null)
             {
                 _workflowSource.PropertyChanged -= OnMainViewModelPropertyChanged;
+                _workflowSource.OnlyCompatibleActionsChanged -= RememberOnlyCompatible;
             }
 
             _workflowSource = DataContext as MainViewModel;
             if (_workflowSource is not null)
             {
+                _workflowSource.OnlyCompatibleActionsChanged += RememberOnlyCompatible;
                 _workflowSource.WorkflowEditorRequested += OpenWorkflowEditor;
                 _workflowSource.PropertyChanged += OnMainViewModelPropertyChanged;
             }
@@ -100,11 +102,15 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         OpenPage(editor.Title, new WorkflowEditorView { DataContext = editor });
     }
 
+    private static void RememberOnlyCompatible(object? sender, bool value) =>
+        AppSettings.Save(AppSettings.Load() with { OnlyCompatibleActions = value });
+
     private void ApplyDebugSetting(AppSettingsData settings)
     {
         if (DataContext is MainViewModel vm)
         {
             vm.ShowDebugPanel = settings.ShowDebugPanel;
+            vm.LoadOnlyCompatibleActions(settings.OnlyCompatibleActions);
             vm.ShowDeviceSimulator = settings.DeviceSimulator;
         }
 
