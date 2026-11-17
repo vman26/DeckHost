@@ -4,6 +4,8 @@
 - A profile has **pages**: the page bar under the device adds and removes them. Swipe the touch strip, or use a **Page** action, to flip through them.
 - A **folder** is a key that opens a set of keys, with a Back key in the first place. Drop the **Folder** action on a key, then double-click it (or **Open folder**) to fill it.
 
+![The Profiles page: profiles, the background, backups and copy to another device](images/profiles.png)
+
 ## Switching by app
 
 Give a profile one or more apps (Profiles page): it turns on by itself while one of them is in front, and DeckHost goes back to the profile you chose by hand when you leave it. Turn this off in the **☰** menu. On Linux this works for X11 and XWayland apps and needs `xprop`.

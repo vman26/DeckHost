@@ -2,6 +2,8 @@
 
 **Plugins** (the puzzle icon at the top right) lists what's installed: DeckHost's own plugins, installed DeckHost plugins, and Stream Deck / OpenAction plugins. Enable, disable and uninstall them there.
 
+![The Plugins page: devices and device plugins, then action plugins](images/plugins.png)
+
 ## The store
 
 The **Store** tab lists plugins from the [DeckHost plugin catalog](https://github.com/vman26/deckhost-plugins), OpenAction, and the Elgato community archive, with their icons and README (**More ▾**). Install with one click; DeckHost checks a catalog download against its checksum, and shows what a plugin may do (use the network, start programs, …) before you install it.

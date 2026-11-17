@@ -14,6 +14,19 @@ DeckHost is a free, open-source host for physical control surfaces (macro pads, 
 - **Actions:** media, volume, apps, hotkeys, profiles, pages and folders; Multi Action, Key Logic and visual **workflows**; DeckHost plugins and thousands of **Stream Deck and OpenAction plugins**.
 - **Documentation:** [vman26.github.io/DeckHost](https://vman26.github.io/DeckHost/).
 
+<p align="center"><img src="docs/images/editor.png" width="860" alt="The DeckHost editor with an N4 Pro profile: keys, touch strip and knobs on top, the selected key's settings below, actions grouped by plugin on the right"></p>
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/images/workflow.png"><img src="docs/images/workflow.png" alt="The workflow editor: nodes linked on a canvas, a Wait filling up while it runs"></a><br><sub><b>Workflows:</b> build what a key does from linked nodes, with live highlighting of each step.</sub></td>
+    <td width="50%"><a href="docs/images/simulator.png"><img src="docs/images/simulator.png" alt="The device simulator acting as an N4 Pro"></a><br><sub><b>Device simulator:</b> try any supported device without the hardware.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="docs/images/lights.png"><img src="docs/images/lights.png" alt="Knob light settings with a breathing effect"></a><br><sub><b>Lights:</b> an effect per device or per knob.</sub></td>
+    <td width="50%"><a href="docs/images/plugins.png"><img src="docs/images/plugins.png" alt="The Plugins page with devices and plugins"></a><br><sub><b>Plugins:</b> DeckHost, Stream Deck and OpenAction plugins, with a store.</sub></td>
+  </tr>
+</table>
+
 ## How DeckHost is made
 
 DeckHost is built by me, Marco, with a lot of help from **Claude**, an AI coding assistant (that's why many commits and pull requests say "Co-Authored-By: Claude" or "Generated with Claude Code"). I decide what DeckHost does and how it's designed, review the changes, and test them, on real hardware where I have it. The safety nets are public: 600+ automated tests, CI on Windows, Linux and macOS for every change, and the [design decisions](docs/maintainers/adr/index.md) written down.

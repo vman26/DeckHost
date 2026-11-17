@@ -2,6 +2,8 @@
 
 A workflow is what a control does, drawn as nodes linked on a canvas. Drop the **Workflow** action on a control (or use **Turn into a workflow…** in its editor), then **Open workflow editor**.
 
+![A workflow in the editor: a tap checks a variable, then either clears it and plays, or sets it, waits five seconds (the node fills up while a run waits) and mutes](images/workflow.png)
+
 ## How a run goes
 
 A run starts at a **When** node and follows the links from left to right. A node's dots on the right are its outputs; drag from one onto another node to link them. An output with several links runs them side by side, and the run ends when every branch is done.
