@@ -5,6 +5,9 @@ namespace DeckHost.Tests;
 /// <summary>The rules behind number settings' sliders: snapping, clamping and how values are stored.</summary>
 public class NumberRangeTests
 {
+    private const double Tolerance = 1e-9;
+    private const string DutchCulture = "nl-NL";
+
     [TestCase(0, 100, 1, 37.4, 37)]
     [TestCase(0, 100, 1, 37.5, 38)]
     [TestCase(0, 100, 1, -5, 0)]
@@ -15,31 +18,49 @@ public class NumberRangeTests
     [TestCase(0, 100, 5, 12, 10)]
     [TestCase(0, 100, 5, 13, 15)]
     [TestCase(-50, 50, 10, -24, -20)]
-    public void Snaps_to_the_nearest_step_inside_the_range(double minimum, double maximum, double step, double value, double expected) =>
-        Assert.That(new NumberRange(minimum, maximum, step).Snap(value), Is.EqualTo(expected).Within(1e-9));
-
-    [Test]
-    public void A_step_that_does_not_divide_the_range_stays_on_a_step_inside_it()
+    public void Snap_AValue_GoesToTheNearestStepInsideTheRange(double minimum, double maximum, double step, double value, double expected)
     {
-        // 0, 3, 6, 9: the maximum itself isn't a step, so the last step is the highest value.
+        // Arrange
+        var range = new NumberRange(minimum, maximum, step);
+
+        // Act
+        var snapped = range.Snap(value);
+
+        // Assert
+        Assert.That(snapped, Is.EqualTo(expected).Within(Tolerance));
+    }
+
+    [TestCase(10, 9)]
+    [TestCase(50, 9)]
+    [TestCase(-1, 0)]
+    public void Snap_AStepThatDoesNotDivideTheRange_StaysOnAStepInsideIt(double value, double expected)
+    {
+        // Arrange (0, 3, 6, 9: the maximum itself isn't a step, so the last step is the highest value)
         var range = new NumberRange(0, 10, 3);
-        Assert.That(range.Snap(10), Is.EqualTo(9).Within(1e-9));
-        Assert.That(range.Snap(50), Is.EqualTo(9).Within(1e-9));
-        Assert.That(range.Snap(-1), Is.EqualTo(0).Within(1e-9));
+
+        // Act
+        var snapped = range.Snap(value);
+
+        // Assert
+        Assert.That(snapped, Is.EqualTo(expected).Within(Tolerance));
     }
 
     [TestCase(1, 42.0, "42")]
     [TestCase(1, 42.6, "43")]
     [TestCase(0.05, 0.35, "0.35")]
     [TestCase(0.5, 2.0, "2")]
-    public void Stores_values_in_the_invariant_culture(double step, double value, string expected)
+    public void Format_UnderACommaDecimalCulture_StillWritesTheInvariantCulture(double step, double value, string expected)
     {
+        // Arrange (as on a Dutch or German Windows, which must not change what is saved)
         var previous = Thread.CurrentThread.CurrentCulture;
+        Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo(DutchCulture);
         try
         {
-            // A comma-decimal culture (as on a Dutch or German Windows) must not change what is saved.
-            Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("nl-NL");
-            Assert.That(new NumberRange(0, 100, step).Format(value), Is.EqualTo(expected));
+            // Act
+            var text = new NumberRange(0, 100, step).Format(value);
+
+            // Assert
+            Assert.That(text, Is.EqualTo(expected));
         }
         finally
         {
@@ -48,41 +69,71 @@ public class NumberRangeTests
     }
 
     [Test]
-    public void Describes_values_with_their_unit()
+    public void Describe_ARangeWithAUnit_AppendsTheUnit()
     {
-        Assert.That(new NumberRange(0, 100) { Unit = "%" }.Describe(75), Is.EqualTo("75 %"));
-        Assert.That(new NumberRange(0, 100).Describe(75), Is.EqualTo("75"));
+        // Arrange
+        var range = new NumberRange(0, 100) { Unit = "%" };
+
+        // Act
+        var text = range.Describe(75);
+
+        // Assert
+        Assert.That(text, Is.EqualTo("75 %"));
     }
 
     [Test]
-    public void Knows_whole_and_fractional_steps()
+    public void Describe_ARangeWithoutAUnit_IsJustTheNumber()
     {
-        Assert.That(new NumberRange(0, 100).IsWholeNumber, Is.True);
-        Assert.That(new NumberRange(0, 100, 5).IsWholeNumber, Is.True);
-        Assert.That(new NumberRange(0, 1, 0.1).IsWholeNumber, Is.False);
+        // Act
+        var text = new NumberRange(0, 100).Describe(75);
+
+        // Assert
+        Assert.That(text, Is.EqualTo("75"));
     }
 
-    [Test]
-    public void Reads_stored_numbers_back()
+    [TestCase(1.0, true)]
+    [TestCase(5.0, true)]
+    [TestCase(0.1, false)]
+    public void IsWholeNumber_ByStep_IsTrueOnlyForWholeSteps(double step, bool expected)
     {
+        // Arrange
+        var range = new NumberRange(0, 100, step);
+
+        // Act
+        var isWhole = range.IsWholeNumber;
+
+        // Assert
+        Assert.That(isWhole, Is.EqualTo(expected));
+    }
+
+    [TestCase("speed", 1, 0.35)]
+    [TestCase("bad", 1, 1)]
+    [TestCase("missing", 2, 2)]
+    public void GetDouble_FromStoredText_ReadsTheNumberOrTheDefault(string key, double fallback, double expected)
+    {
+        // Arrange
         var settings = new ActionSettings([new("speed", "0.35"), new("bad", "fast")]);
-        Assert.That(settings.GetDouble("speed", 1), Is.EqualTo(0.35));
-        Assert.That(settings.GetDouble("bad", 1), Is.EqualTo(1));
-        Assert.That(settings.GetDouble("missing", 2), Is.EqualTo(2));
+
+        // Act
+        var value = settings.GetDouble(key, fallback);
+
+        // Assert
+        Assert.That(value, Is.EqualTo(expected));
     }
 
-    [Test]
-    public void Device_brightness_has_a_percentage_slider_that_defaults_to_the_device_default()
+    [TestCase("keyBrightness")]
+    [TestCase("ledBrightness")]
+    public void GetDeviceSettingDefinitions_ABrightnessSetting_IsAPercentageSliderThatIsEmptyByDefault(string key)
     {
-        var definitions = new DeckHost.Device.MiraBox.MiraBoxDevicePlugin().GetDeviceSettingDefinitions(DeckHost.Device.MiraBox.MiraBoxDevicePlugin.PrimaryDeviceId);
-        foreach (var key in new[] { "keyBrightness", "ledBrightness" })
-        {
-            var definition = definitions.Single(candidate => candidate.Key == key);
-            Assert.That(definition.Kind, Is.EqualTo(ActionSettingKind.Number));
+        // Arrange
+        var plugin = new DeckHost.Device.MiraBox.MiraBoxDevicePlugin();
 
-            // Empty by default, so nothing is sent until it is changed; the slider shows the device's 100 %.
-            Assert.That(definition.DefaultValue, Is.EqualTo(string.Empty));
-            Assert.That((definition.Range!.Minimum, definition.Range.Maximum, definition.Range.Unit, definition.Range.UnsetValue), Is.EqualTo((0d, 100d, "%", (double?)100)));
-        }
+        // Act
+        var definition = plugin.GetDeviceSettingDefinitions(DeckHost.Device.MiraBox.MiraBoxDevicePlugin.PrimaryDeviceId).Single(candidate => candidate.Key == key);
+
+        // Assert
+        Assert.That(definition.Kind, Is.EqualTo(ActionSettingKind.Number));
+        Assert.That(definition.DefaultValue, Is.EqualTo(string.Empty), "empty by default, so nothing is sent until it is changed");
+        Assert.That((definition.Range!.Minimum, definition.Range.Maximum, definition.Range.Unit, definition.Range.UnsetValue), Is.EqualTo((0d, 100d, "%", (double?)100)));
     }
 }

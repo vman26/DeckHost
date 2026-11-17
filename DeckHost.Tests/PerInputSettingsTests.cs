@@ -11,17 +11,26 @@ namespace DeckHost.Tests;
 public class PerInputSettingsTests
 {
     private const string DeviceId = "dev";
+    private const string KnobId = "encoder.0";
     private const InputCapabilities Knob = InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release;
+    private const string ModeKey = "mode";
+    private const string SharedKey = "shared";
 
-    private static readonly ActionSettingDefinition Mode = new("mode", "Mode", ActionSettingKind.Choice, "a", Options: [new("a", "A"), new("b", "B"), new("c", "C")])
+    private static readonly ActionSettingDefinition Mode = new(ModeKey, "Mode", ActionSettingKind.Choice, "a", Options: [new("a", "A"), new("b", "B"), new("c", "C")])
     {
         PerInput = true,
         InputDefaults = new Dictionary<string, string> { [ControlInputs.RotateLeft] = "b", [ControlInputs.RotateRight] = "c" },
     };
 
+    private static readonly ActionSettingDefinition SharedSetting = new(SharedKey, "Shared", DefaultValue: "x");
 
-
-    private static readonly ActionSettingDefinition SharedSetting = new("shared", "Shared", DefaultValue: "x");
+    /// <summary>The plain value "c", the left turn's own "a" and a shared "y".</summary>
+    private static ActionSettings StoredSettings() => new(new Dictionary<string, string>
+    {
+        [ModeKey] = "c",
+        [$"{ModeKey}@{ControlInputs.RotateLeft}"] = "a",
+        [SharedKey] = "y",
+    });
 
     [TestCase(InputCapabilities.Press, 1, ControlInputs.Press)]
     [TestCase(InputCapabilities.Release, 0, ControlInputs.Release)]
@@ -31,52 +40,152 @@ public class PerInputSettingsTests
     [TestCase(InputCapabilities.Swipe, -1, ControlInputs.SwipeLeft)]
     [TestCase(InputCapabilities.Swipe, 1, ControlInputs.SwipeRight)]
     [TestCase(InputCapabilities.Rotate, 0, null)]
-    public void Events_map_to_inputs_by_direction(InputCapabilities eventType, int value, string? expected) =>
-        Assert.That(ControlInputs.FromEvent(eventType, value), Is.EqualTo(expected));
-
-    [Test]
-    public void A_knob_is_set_up_per_press_and_direction_and_a_release_is_not_an_input()
+    public void FromEvent_AnEventAndItsValue_MapsToAnInputByDirection(InputCapabilities eventType, int value, string? expected)
     {
-        Assert.That(ControlInputs.Of(Knob), Is.EqualTo(new[] { ControlInputs.Press, ControlInputs.RotateLeft, ControlInputs.RotateRight }));
-        Assert.That(ControlInputs.Of(InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.LongPress), Is.EqualTo(new[] { ControlInputs.Press, ControlInputs.LongPress }));
-        Assert.That(ControlInputs.Of(InputCapabilities.Swipe), Is.EqualTo(new[] { ControlInputs.SwipeLeft, ControlInputs.SwipeRight }));
+        // Act
+        var input = ControlInputs.FromEvent(eventType, value);
+
+        // Assert
+        Assert.That(input, Is.EqualTo(expected));
     }
 
     [Test]
-    public void An_input_gets_its_own_value_then_its_default_then_the_plain_value()
+    public void Of_AKnob_IsSetUpPerPressAndDirectionAndAReleaseIsNotAnInput()
     {
-        var settings = new ActionSettings(new Dictionary<string, string>
-        {
-            ["mode"] = "c",
-            ["mode@rotate-left"] = "a",
-            ["shared"] = "y",
-        });
+        // Act
+        var inputs = ControlInputs.Of(Knob);
 
-        Assert.That(settings.ForInput([Mode, SharedSetting], ControlInputs.RotateLeft).Get("mode"), Is.EqualTo("a")); // its own value
-        Assert.That(settings.ForInput([Mode, SharedSetting], ControlInputs.RotateRight).Get("mode"), Is.EqualTo("c")); // its default
-        Assert.That(settings.ForInput([Mode, SharedSetting], ControlInputs.Press).Get("mode"), Is.EqualTo("c")); // the plain value (bindings from before)
-        Assert.That(ActionSettings.Empty.ForInput([Mode], ControlInputs.Press).Get("mode", Mode.DefaultValue), Is.EqualTo("a"));
-        Assert.That(settings.ForInput([Mode, SharedSetting], ControlInputs.RotateLeft).Get("shared"), Is.EqualTo("y"));
-        Assert.That(settings.ForInput([SharedSetting], ControlInputs.Press), Is.SameAs(settings));
-        Assert.That(settings.ForInput([Mode], null), Is.SameAs(settings));
+        // Assert
+        Assert.That(inputs, Is.EqualTo(new[] { ControlInputs.Press, ControlInputs.RotateLeft, ControlInputs.RotateRight }));
     }
 
     [Test]
-    public void The_router_hands_the_action_the_value_for_the_input_that_happened()
+    public void Of_AKeyWithLongPress_HasPressAndLongPress()
     {
+        // Act
+        var inputs = ControlInputs.Of(InputCapabilities.Press | InputCapabilities.Release | InputCapabilities.LongPress);
+
+        // Assert
+        Assert.That(inputs, Is.EqualTo(new[] { ControlInputs.Press, ControlInputs.LongPress }));
+    }
+
+    [Test]
+    public void Of_ASwipeZone_HasBothDirections()
+    {
+        // Act
+        var inputs = ControlInputs.Of(InputCapabilities.Swipe);
+
+        // Assert
+        Assert.That(inputs, Is.EqualTo(new[] { ControlInputs.SwipeLeft, ControlInputs.SwipeRight }));
+    }
+
+    [Test]
+    public void ForInput_AValueStoredForTheInput_WinsOverTheRest()
+    {
+        // Arrange
+        var settings = StoredSettings();
+
+        // Act
+        var resolved = settings.ForInput([Mode, SharedSetting], ControlInputs.RotateLeft);
+
+        // Assert
+        Assert.That(resolved.Get(ModeKey), Is.EqualTo("a"));
+    }
+
+    [Test]
+    public void ForInput_NothingStoredForTheInput_UsesItsPerInputDefaultOverThePlainValue()
+    {
+        // Arrange (the defaults: right turn "c"; the plain value is also "c", so check with another plain value)
+        var settings = new ActionSettings(new Dictionary<string, string> { [ModeKey] = "a" });
+
+        // Act
+        var resolved = settings.ForInput([Mode], ControlInputs.RotateRight);
+
+        // Assert
+        Assert.That(resolved.Get(ModeKey), Is.EqualTo("c"));
+    }
+
+    [Test]
+    public void ForInput_AnInputWithoutADefault_FallsBackToThePlainValueOfBindingsFromBefore()
+    {
+        // Arrange
+        var settings = StoredSettings();
+
+        // Act
+        var resolved = settings.ForInput([Mode, SharedSetting], ControlInputs.Press);
+
+        // Assert
+        Assert.That(resolved.Get(ModeKey), Is.EqualTo("c"));
+    }
+
+    [Test]
+    public void ForInput_NothingStoredAtAll_UsesTheSettingsDefault()
+    {
+        // Act
+        var resolved = ActionSettings.Empty.ForInput([Mode], ControlInputs.Press);
+
+        // Assert
+        Assert.That(resolved.Get(ModeKey, Mode.DefaultValue), Is.EqualTo("a"));
+    }
+
+    [Test]
+    public void ForInput_ASettingThatIsNotPerInput_KeepsItsPlainValue()
+    {
+        // Arrange
+        var settings = StoredSettings();
+
+        // Act
+        var resolved = settings.ForInput([Mode, SharedSetting], ControlInputs.RotateLeft);
+
+        // Assert
+        Assert.That(resolved.Get(SharedKey), Is.EqualTo("y"));
+    }
+
+    [Test]
+    public void ForInput_NoPerInputSettings_ReturnsTheSameSettings()
+    {
+        // Arrange
+        var settings = StoredSettings();
+
+        // Act
+        var resolved = settings.ForInput([SharedSetting], ControlInputs.Press);
+
+        // Assert
+        Assert.That(resolved, Is.SameAs(settings));
+    }
+
+    [Test]
+    public void ForInput_NoInput_ReturnsTheSameSettings()
+    {
+        // Arrange
+        var settings = StoredSettings();
+
+        // Act
+        var resolved = settings.ForInput([Mode], null);
+
+        // Assert
+        Assert.That(resolved, Is.SameAs(settings));
+    }
+
+    [Test]
+    public void Dispatch_PressAndBothTurns_HandsTheActionTheValueForTheInputThatHappened()
+    {
+        // Arrange
         using var store = new VariableStore();
         var action = new RecordingAction("a") { Settings = [Mode] };
         var router = new ActionRouter(store, [new TestApplicationPlugin("p", action)]);
         var reference = Bindings.Reference("p", "a") with
         {
-            Settings = new ActionSettings(new Dictionary<string, string> { ["mode@press"] = "b", ["mode@rotate-right"] = "a" }),
+            Settings = new ActionSettings(new Dictionary<string, string> { [$"{ModeKey}@press"] = "b", [$"{ModeKey}@rotate-right"] = "a" }),
         };
-        var profile = new DeviceProfile("profile", "Profile", DeviceId, [new ControlBinding("encoder.0", ProfileActionKind.Single, reference, new ControlAppearance(), [])]);
+        var profile = new DeviceProfile("profile", "Profile", DeviceId, [new ControlBinding(KnobId, ProfileActionKind.Single, reference, new ControlAppearance(), [])]);
 
-        router.Dispatch(profile, new DeviceInputEvent(DeviceId, "encoder.0", InputCapabilities.Press, 1), NullActionHost.Instance);
-        router.Dispatch(profile, new DeviceInputEvent(DeviceId, "encoder.0", InputCapabilities.Rotate, -1), NullActionHost.Instance);
-        router.Dispatch(profile, new DeviceInputEvent(DeviceId, "encoder.0", InputCapabilities.Rotate, 1), NullActionHost.Instance);
+        // Act
+        router.Dispatch(profile, new DeviceInputEvent(DeviceId, KnobId, InputCapabilities.Press, 1), NullActionHost.Instance);
+        router.Dispatch(profile, new DeviceInputEvent(DeviceId, KnobId, InputCapabilities.Rotate, -1), NullActionHost.Instance);
+        router.Dispatch(profile, new DeviceInputEvent(DeviceId, KnobId, InputCapabilities.Rotate, 1), NullActionHost.Instance);
 
-        Assert.That(action.Executions.Select(context => context.Settings.Get("mode")), Is.EqualTo(new[] { "b", "b", "a" }));
+        // Assert
+        Assert.That(action.Executions.Select(context => context.Settings.Get(ModeKey)), Is.EqualTo(new[] { "b", "b", "a" }));
     }
 }
