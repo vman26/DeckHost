@@ -566,7 +566,8 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
                     .Select(static setting => new KeyValuePair<string, string>(setting.Key, setting.DefaultValue))),
         };
         var split = into is not null && CanBeInserted(node.Kind) && _workflow.Links.Contains(into);
-        Commit(_workflow with { Nodes = [.. _workflow.Nodes, node], Links = split ? Splice(_workflow.Links, into!, node) : _workflow.Links }, split ? $"Added {type.Name} into a link" : $"Added {type.Name}");
+        var added = _workflow with { Nodes = [.. _workflow.Nodes, node], Links = split ? Splice(_workflow.Links, into!, node) : _workflow.Links };
+        Commit(split ? WorkflowSpacing.MakeRoom(added, node.Id, into!.To, NodeWidth) : added, split ? $"Added {type.Name} into a link" : $"Added {type.Name}");
         SelectNode(node.Id);
         return node;
     }
@@ -618,11 +619,12 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         }
 
         var placed = x is { } px && y is { } py ? node with { X = Math.Max(0, Snap(px)), Y = Math.Max(0, Snap(py)) } : node;
-        Commit(_workflow with
+        var spliced = _workflow with
         {
             Nodes = [.. _workflow.Nodes.Select(candidate => candidate.Id == nodeId ? placed : candidate)],
             Links = Splice(_workflow.Links, link, node),
-        }, $"Put {SummaryOf(node)} into a link");
+        };
+        Commit(WorkflowSpacing.MakeRoom(spliced, nodeId, link.To, NodeWidth), $"Put {SummaryOf(node)} into a link");
         SelectNode(nodeId);
         return null;
     }
@@ -656,7 +658,8 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             : x is null && after is not null && freePort is not null
                 ? [.. _workflow.Links, new WorkflowLink(after.Id, freePort, node.Id)]
                 : _workflow.Links;
-        Commit(_workflow with { Nodes = [.. _workflow.Nodes, node], Links = links }, split ? $"Added {action.Name} into a link" : $"Added {action.Name}");
+        var withAction = _workflow with { Nodes = [.. _workflow.Nodes, node], Links = links };
+        Commit(split ? WorkflowSpacing.MakeRoom(withAction, node.Id, into!.To, NodeWidth) : withAction, split ? $"Added {action.Name} into a link" : $"Added {action.Name}");
         SelectNode(node.Id);
         return node;
     }

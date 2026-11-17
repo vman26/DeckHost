@@ -47,7 +47,7 @@ When the same input comes again before its run is done (a wait), the workflow ca
 ## The editor
 
 - Click a node to set it up on the right; click a link to select it. **Delete** removes, **Ctrl+D** duplicates, **Ctrl+Z / Ctrl+Y** undo and redo. Right-click a node for Duplicate, Take off its links and Remove, a link for Remove link, or the background for Fit, Arrange and Undo.
-- Drop a node onto a link, from the lists or by dragging one that isn't linked yet, and the link opens up and the node goes in between (one undo step). Stop and When nodes can't go into a link.
+- Drop a node onto a link, from the lists or by dragging one that isn't linked yet, and the link opens up and the node goes in between (one undo step). The node after it and everything that follows move to the right to make room, so nothing ends up on top of anything else. Stop and When nodes can't go into a link.
 - The actions on the left are grouped by plugin like in the main window; the search opens every group with a match.
 - **Arrange** lays the nodes out from left to right; **Fit** shows them all. Drag the background to pan, and use Ctrl + the mouse wheel to zoom.
 - With nothing selected, **Variables right now** lists the variables that are set (it follows the runs) and sets one to try the workflow with it.

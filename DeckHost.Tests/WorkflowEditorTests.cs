@@ -161,6 +161,59 @@ public class WorkflowEditorTests
     }
 
     [Test]
+    public void Putting_a_node_into_a_link_makes_room_by_moving_what_follows_it_in_one_undo_step()
+    {
+        var (editor, _) = Editor();
+        var first = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        var middle = editor.AddNode(WorkflowNodeKinds.Wait, 360, 40);
+        var last = editor.AddNode(WorkflowNodeKinds.Wait, 420, 40);
+        var elsewhere = editor.AddNode(WorkflowNodeKinds.Wait, 420, 300);
+        editor.Connect(first.Id, WorkflowPorts.Next, middle.Id);
+        editor.Connect(middle.Id, WorkflowPorts.Next, last.Id);
+        var link = new WorkflowLink(first.Id, WorkflowPorts.Next, middle.Id);
+        var loose = editor.AddNode(WorkflowNodeKinds.Wait, 300, 200);
+
+        Assert.That(editor.InsertIntoLink(loose.Id, link, 300, 40), Is.Null);
+
+        double X(string id) => editor.Workflow.Find(id)!.X;
+        Assert.That(X(middle.Id), Is.GreaterThanOrEqualTo(X(loose.Id) + WorkflowEditorViewModel.NodeWidth + WorkflowSpacing.Gap), "the target moved clear of the inserted node");
+        Assert.That(X(last.Id) - X(middle.Id), Is.EqualTo(60), "what follows moved the same distance");
+        Assert.That(X(first.Id), Is.EqualTo(300), "what comes before stays");
+        Assert.That(X(elsewhere.Id), Is.EqualTo(420), "an unrelated branch stays");
+
+        editor.UndoCommand.Execute(null);
+        Assert.That((X(middle.Id), X(last.Id)), Is.EqualTo((360d, 420d)), "one Undo puts everything back");
+        Assert.That(editor.Workflow.Links, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public void A_dropped_node_or_action_pushes_the_rest_of_the_path_too_and_nothing_moves_when_there_is_room()
+    {
+        var (editor, _) = Editor();
+        var first = editor.AddNode(WorkflowNodeKinds.Wait, 100, 40);
+        var last = editor.AddNode(WorkflowNodeKinds.Wait, 160, 40);
+        editor.Connect(first.Id, WorkflowPorts.Next, last.Id);
+        var link = Expect.Single(editor.Workflow.Links);
+
+        var added = editor.AddNode(WorkflowNodeKinds.Wait, 100, 40, link);
+        Assert.That(editor.Workflow.Find(last.Id)!.X, Is.GreaterThanOrEqualTo(added.X + WorkflowEditorViewModel.NodeWidth + WorkflowSpacing.Gap));
+
+        var second = editor.Workflow.Links.First(candidate => candidate.To == last.Id);
+        var before = editor.Workflow.Find(last.Id)!.X;
+        var action = editor.AddAction(Item("Mute"), editor.Workflow.Find(second.From)!.X, 200, second);
+        Assert.That(action, Is.Not.Null);
+        Assert.That(editor.Workflow.Find(last.Id)!.X, Is.GreaterThanOrEqualTo(before), "never moves left");
+
+        // With room already there nothing moves.
+        var roomy = new Workflow
+        {
+            Nodes = [new WorkflowNode("a", WorkflowNodeKinds.Wait, 0, 0), new WorkflowNode("b", WorkflowNodeKinds.Wait, 1000, 0), new WorkflowNode("n", WorkflowNodeKinds.Wait, 300, 0)],
+            Links = [new("a", WorkflowPorts.Next, "n"), new("n", WorkflowPorts.Next, "b")],
+        };
+        Assert.That(WorkflowSpacing.MakeRoom(roomy, "n", "b", WorkflowEditorViewModel.NodeWidth), Is.SameAs(roomy));
+    }
+
+    [Test]
     public void A_node_with_links_or_a_node_without_a_way_through_cannot_be_put_into_a_link()
     {
         var (editor, _) = Editor();
