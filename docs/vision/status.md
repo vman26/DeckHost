@@ -146,7 +146,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Search, categories, updates, integrity, licenses, local install, rollback | ✅ | |
 | Compatibility filtering | 🟡 | Unsupported plugins say why; no filter |
 | Remote: pairing, authentication, events, images, reconnection, multiple clients | ✅ | Web Deck |
-| Remote: encrypted transport, permissions | ⬜ | HTTP on the local network |
+| Remote: encrypted transport, permissions | 🟡 | Optional HTTPS with a certificate made per computer (`WebDeckCertificate`) and an installable web app manifest; no trusted-CA flow for phones, no per-client permissions |
 
 ## 13. Cross-platform
 

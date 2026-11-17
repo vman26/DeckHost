@@ -55,6 +55,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Workflow expressions: **Calculate** in Set variable and an **An expression** check in If, with
   variables in brackets, text, number and time functions, and a **Store as** type (number, true /
   false or text) that refuses a value that doesn't fit.
+- The Web Deck can be served over HTTPS (a certificate DeckHost makes for the computer, with its
+  fingerprint shown in Device settings) and can be installed as an app where the browser allows
+  it.
 - Background layers (Profiles page): gradients across the whole layout, images and solid colors
   with an opacity, drawn over the profile's color and image, and layers that follow the CPU load,
   the memory load or a workflow's variable.

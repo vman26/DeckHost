@@ -5,7 +5,10 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Reflection;
+using System.Net.Security;
+using System.Security.Authentication;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using DeckHost.Contracts.Enums;
@@ -34,6 +37,9 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
     public const string Port = "port";
     public const string Code = "code";
     public const string Pin = "pin";
+
+    /// <summary>"true" to serve the page and the deck over HTTPS with a certificate made for this computer.</summary>
+    public const string Https = "https";
     public const string NewCodeAction = "new-code";
 
     /// <summary>Wrong codes or PINs from one address within <see cref="FailureWindow"/> before it has to wait.</summary>
@@ -61,6 +67,7 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
     private readonly Dictionary<IPAddress, (int Failures, DateTime Since)> _failures = [];
     private IReadOnlyCollection<DeviceDefinition> _devices;
     private IDevicePluginContext? _context;
+    private X509Certificate2? _certificate;
     private TcpListener? _listener;
     private CancellationTokenSource? _stopping;
     private ActionSettings _settings;
@@ -94,8 +101,16 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
 
     /// <summary>The address to open on a phone (or here); null while sharing is off.</summary>
     public string? Address => ListeningPort is { } port
-        ? $"http://{(SharingMode == SharingNetwork ? LocalAddress() ?? "localhost" : "localhost")}:{port}/"
+        ? $"{(Secure ? "https" : "http")}://{(SharingMode == SharingNetwork ? LocalAddress() ?? "localhost" : "localhost")}:{port}/"
         : null;
+
+    /// <summary>Whether the server is running over HTTPS right now.</summary>
+    public bool Secure => _certificate is not null && ListeningPort is not null;
+
+    /// <summary>The SHA-256 fingerprint of the certificate in use (<c>AB:CD:…</c>), to compare on a phone before trusting it; null without HTTPS.</summary>
+    public string? CertificateFingerprint => _certificate is { } certificate ? WebDeckCertificate.Fingerprint(certificate) : null;
+
+    private bool UseHttps => string.Equals(_settings.Get(Https, "false"), "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The address with the pairing code in it (opens without typing the code); null while sharing is off.</summary>
     public string? Link => Address is { } address ? $"{address}?code={Uri.EscapeDataString(PairingCode)}" : null;
@@ -130,6 +145,10 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
         new(Columns, "Columns", ActionSettingKind.Number, "5") { Range = new NumberRange(WebDeckLayout.MinSize, WebDeckLayout.MaxColumns) },
         new(Rows, "Rows", ActionSettingKind.Number, "3") { Range = new NumberRange(WebDeckLayout.MinSize, WebDeckLayout.MaxRows) },
         new(Port, "Port", ActionSettingKind.Number, DefaultPort.ToString(CultureInfo.InvariantCulture)),
+        new(Https, "Use HTTPS (encrypted)", ActionSettingKind.Toggle, "false",
+            Description: CertificateFingerprint is { } fingerprint
+                ? $"Encrypted, with a certificate DeckHost made for this computer. A phone shows a warning the first time: check that its fingerprint is {fingerprint}, then continue. Browsers only offer to install the deck as an app over HTTPS (or on this computer)."
+                : "Encrypts the page and the deck with a certificate DeckHost makes for this computer (it isn't signed by anyone, so a phone asks you to trust it once). Browsers only offer to install the deck as an app over HTTPS (or on this computer)."),
         new(Code, "Pairing code", ActionSettingKind.Text, PairingCode,
             Description: "What a phone enters to connect (dashes and upper or lower case don't matter). New pairing code below makes another one and disconnects every phone."),
         new(Pin, "PIN (optional)", ActionSettingKind.Secret,
@@ -234,6 +253,15 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
             var port = Math.Clamp(_settings.GetInt(Port, DefaultPort), 1, 65535);
             try
             {
+                if (UseHttps)
+                {
+                    _certificate = WebDeckCertificate.LoadOrCreate(Path.GetDirectoryName(_settingsPath)!, WebDeckCertificate.CurrentNames(), DateTimeOffset.UtcNow, out var made);
+                    if (made)
+                    {
+                        _context?.Log("Info", $"Web deck: made a certificate for this computer (fingerprint {WebDeckCertificate.Fingerprint(_certificate)}).");
+                    }
+                }
+
                 var listener = new TcpListener(mode == SharingNetwork ? IPAddress.Any : IPAddress.Loopback, port);
                 listener.Start();
                 var stopping = new CancellationTokenSource();
@@ -251,6 +279,14 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
             {
                 error = $"Port {port} can't be used ({ex.Message}). Choose another port.";
                 _context?.Log("Warning", $"Web deck: {error}");
+                _certificate?.Dispose();
+                _certificate = null;
+            }
+            catch (CryptographicException ex)
+            {
+                error = $"Couldn't make the HTTPS certificate: {ex.Message}";
+                _context?.Log("Warning", $"Web deck: {error}");
+                _certificate = null;
             }
         }
 
@@ -275,6 +311,9 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
             _stopping = null;
             ListeningPort = null;
         }
+
+        _certificate?.Dispose();
+        _certificate = null;
 
         foreach (var client in _clients.Keys)
         {
@@ -329,8 +368,22 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
         {
             try
             {
-                var stream = tcp.GetStream();
-                var (method, target, headers) = await ReadRequestHeadAsync(stream, stopping).ConfigureAwait(false);
+                Stream stream = tcp.GetStream();
+                var certificate = _certificate;
+
+                // A page that doesn't finish its handshake or its request in time is dropped (no connection is held open for free).
+                using var patience = CancellationTokenSource.CreateLinkedTokenSource(stopping);
+                patience.CancelAfter(RequestTimeout);
+                if (certificate is not null)
+                {
+                    var secure = new SslStream(stream, leaveInnerStreamOpen: false);
+                    await secure.AuthenticateAsServerAsync(
+                        new SslServerAuthenticationOptions { ServerCertificate = certificate, ClientCertificateRequired = false, EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13 },
+                        patience.Token).ConfigureAwait(false);
+                    stream = secure;
+                }
+
+                var (method, target, headers) = await ReadRequestHeadAsync(stream, patience.Token).ConfigureAwait(false);
                 if (method != "GET")
                 {
                     await WriteResponseAsync(stream, 405, "text/plain", "Method Not Allowed"u8.ToArray()).ConfigureAwait(false);
@@ -344,6 +397,24 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
                 if (path is "/" or "/index.html")
                 {
                     await WriteResponseAsync(stream, 200, "text/html; charset=utf-8", _page).ConfigureAwait(false);
+                    return;
+                }
+
+                if (path == "/manifest.webmanifest")
+                {
+                    await WriteResponseAsync(stream, 200, "application/manifest+json", Encoding.UTF8.GetBytes(Manifest())).ConfigureAwait(false);
+                    return;
+                }
+
+                if (path is "/icon-192.png" or "/icon-512.png")
+                {
+                    await WriteResponseAsync(stream, 200, "image/png", Icon(path == "/icon-192.png" ? 192 : 512)).ConfigureAwait(false);
+                    return;
+                }
+
+                if (path == "/sw.js")
+                {
+                    await WriteResponseAsync(stream, 200, "text/javascript; charset=utf-8", ServiceWorker).ConfigureAwait(false);
                     return;
                 }
 
@@ -379,11 +450,82 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
 
                 await WriteResponseAsync(stream, 404, "text/plain", "Not Found"u8.ToArray()).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is IOException or SocketException or WebSocketException or InvalidDataException or OperationCanceledException or ObjectDisposedException)
+            catch (Exception ex) when (ex is IOException or SocketException or WebSocketException or InvalidDataException or OperationCanceledException or ObjectDisposedException or AuthenticationException)
             {
             }
         }
     }
+
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+
+    // ---------------------------------------------------------------- installable app
+
+    /// <summary>The web app manifest: what a browser needs to offer "install" (over HTTPS or on this computer).</summary>
+    private static string Manifest() => JsonSerializer.Serialize(new
+    {
+        name = "DeckHost",
+        short_name = "DeckHost",
+        description = "A deck for DeckHost on this phone, tablet or browser.",
+        start_url = "/",
+        scope = "/",
+        display = "fullscreen",
+        display_override = new[] { "fullscreen", "standalone" },
+        orientation = "any",
+        background_color = "#0b0f17",
+        theme_color = "#0b0f17",
+        icons = new[]
+        {
+            new { src = "/icon-192.png", sizes = "192x192", type = "image/png", purpose = "any" },
+            new { src = "/icon-512.png", sizes = "512x512", type = "image/png", purpose = "any" },
+        },
+    });
+
+    /// <summary>
+    /// Keeps the page itself for when the computer can't be reached for a moment. It never touches /check, /info or /ws (the
+    /// pairing and the deck), and keeps no pairing code: the page is cached under "/" whatever address it was opened with.
+    /// </summary>
+    private static readonly byte[] ServiceWorker = Encoding.UTF8.GetBytes("""
+        const SHELL = 'deckhost-shell-v1';
+        self.addEventListener('install', event => { self.skipWaiting(); });
+        self.addEventListener('activate', event => { event.waitUntil(self.clients.claim()); });
+        self.addEventListener('fetch', event => {
+          const url = new URL(event.request.url);
+          if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname !== '/') return;
+          event.respondWith(fetch(event.request).then(response => {
+            const copy = response.clone();
+            caches.open(SHELL).then(cache => cache.put('/', copy));
+            return response;
+          }).catch(() => caches.match('/')));
+        });
+        """);
+
+    /// <summary>The app icon: DeckHost's dark tile with a grid of colored keys, drawn here so the plugin needs no image files.</summary>
+    internal static byte[] Icon(int size)
+    {
+        using var surface = SKSurface.Create(new SKImageInfo(size, size, SKColorType.Rgba8888, SKAlphaType.Premul));
+        var canvas = surface.Canvas;
+        canvas.Clear(new SKColor(0x0B, 0x0F, 0x17));
+        using var paint = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
+        SKColor[] colors = [new(0xEC, 0x48, 0x99), new(0xA8, 0x55, 0xF7), new(0x3B, 0x82, 0xF6), new(0x06, 0xB6, 0xD4), new(0x22, 0xC5, 0x5E), new(0xF5, 0x9E, 0x0B)];
+        var margin = size * 0.17f;
+        var gap = size * 0.05f;
+        var cell = (size - (2 * margin) - (2 * gap)) / 3f;
+        for (var row = 0; row < 3; row++)
+        {
+            for (var column = 0; column < 3; column++)
+            {
+                paint.Color = colors[((row * 3) + column) % colors.Length];
+                var left = margin + (column * (cell + gap));
+                var top = margin + (row * (cell + gap));
+                canvas.DrawRoundRect(new SKRect(left, top, left + cell, top + cell), cell * 0.22f, cell * 0.22f, paint);
+            }
+        }
+
+        using var image = surface.Snapshot();
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
 
     /// <summary>
     /// Null when the request carries the pairing code (and the PIN, when one is set); otherwise why not:
@@ -569,7 +711,7 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
         return data.ToArray();
     }
 
-    private static async Task<(string Method, string Target, Dictionary<string, string> Headers)> ReadRequestHeadAsync(NetworkStream stream, CancellationToken stopping)
+    private static async Task<(string Method, string Target, Dictionary<string, string> Headers)> ReadRequestHeadAsync(Stream stream, CancellationToken stopping)
     {
         var buffer = new List<byte>();
         var single = new byte[1];
@@ -602,7 +744,7 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
         return (parts.Length > 0 ? parts[0] : string.Empty, parts.Length > 1 ? parts[1] : "/", headers);
     }
 
-    private static async Task WriteResponseAsync(NetworkStream stream, int status, string contentType, byte[] body)
+    private static async Task WriteResponseAsync(Stream stream, int status, string contentType, byte[] body)
     {
         var reason = status switch { 200 => "OK", 403 => "Forbidden", 404 => "Not Found", 405 => "Method Not Allowed", _ => "Error" };
         var head = $"HTTP/1.1 {status} {reason}\r\nContent-Type: {contentType}\r\nContent-Length: {body.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";

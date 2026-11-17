@@ -116,6 +116,14 @@ A deck in a web browser.
 
 Allow DeckHost through your firewall when the system asks, or phones can't reach it.
 
+### HTTPS and installing the deck as an app
+
+Switch on **Use HTTPS (encrypted)** in the Web Deck's settings to serve the page and the deck over TLS, so the pairing code and what you press can't be read on the network. DeckHost makes a certificate for this computer (its name and network addresses) the first time and keeps it next to the deck's settings; it makes a new one when your network address changes or the old one is about to expire.
+
+- The certificate isn't signed by anyone, so a phone or browser warns the first time. The fingerprint shown next to the setting is what to compare with the one the warning page shows before you continue.
+- Browsers only offer to **install the deck as an app** (a full-screen icon of its own that opens the deck directly) over HTTPS or on this computer. DeckHost serves the app manifest, its icon and a small service worker for it; the worker only keeps the page itself and never the deck or the pairing. Chrome and Edge accept an app from a certificate you have clicked through only on some systems; Safari on an iPhone only does it once the certificate is installed and trusted in the phone's settings. Where the install button doesn't show up, **Add to Home Screen** still works.
+- Plain HTTP stays the default, and a page at an `http://` address of the network can't be installed (that is the browsers' rule, not a DeckHost limit).
+
 ## Linux: the device rule
 
 Linux only lets programs open USB devices they're allowed to. `install.sh` installs a udev rule (`70-deckhost-mirabox.rules`) for the N4 Pro and Elgato devices; unplug the device and plug it in again afterwards. Without it, DeckHost lists the device as not connected.

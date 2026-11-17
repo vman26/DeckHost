@@ -209,6 +209,136 @@ public sealed class WebDeckTests : IDisposable
         Assert.That(plugin.CheckAccess($"/ws?code={code}&pin=4321", other), Is.Null);
     }
 
+    private async Task<(WebDeckPlugin Plugin, int Port, string Code)> StartSecure()
+    {
+        var port = FreePort();
+        var plugin = new WebDeckPlugin(_directory);
+        await plugin.InitializeAsync(new RecordingContext(), CancellationToken.None);
+        var settings = plugin.GetDeviceSettings(WebDeckPlugin.DeviceId)
+            .With(WebDeckPlugin.Sharing, WebDeckPlugin.SharingLocal)
+            .With(WebDeckPlugin.Port, port.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .With(WebDeckPlugin.Https, "true");
+        Assert.That(plugin.ApplyDeviceSettings(WebDeckPlugin.DeviceId, settings), Is.Null);
+        return (plugin, port, settings.Get(WebDeckPlugin.Code));
+    }
+
+    [Test]
+    public async Task OverHttpsThePageAndTheDeckAreEncryptedWithACertificateWhoseFingerprintIsShown()
+    {
+        var (plugin, port, code) = await StartSecure();
+        using var _ = plugin;
+        string? seen = null;
+        using var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (_, certificate, _, _) =>
+            {
+                seen = certificate is null ? null : WebDeckCertificate.Fingerprint(new System.Security.Cryptography.X509Certificates.X509Certificate2(certificate));
+                return true;
+            },
+        };
+        using var http = new HttpClient(handler);
+
+        var page = await http.GetStringAsync(new Uri($"https://127.0.0.1:{port}/"));
+
+        Assert.That(page, Does.Contain("Pairing code"));
+        Assert.That(plugin.Secure, Is.True);
+        Assert.That(plugin.Address, Does.StartWith("https://"));
+        Assert.That(plugin.CertificateFingerprint, Is.Not.Null.And.Match("^([0-9A-F]{2}:){31}[0-9A-F]{2}$"));
+        Assert.That(seen, Is.EqualTo(plugin.CertificateFingerprint), "the certificate on the wire is the one whose fingerprint Device Settings shows");
+        var https = plugin.GetDeviceSettingDefinitions(WebDeckPlugin.DeviceId).Single(static setting => setting.Key == WebDeckPlugin.Https);
+        Assert.That(https.Description, Does.Contain(plugin.CertificateFingerprint!));
+
+        Assert.That((await http.GetAsync(new Uri($"https://127.0.0.1:{port}/check?code=nope"))).StatusCode, Is.EqualTo(HttpStatusCode.Forbidden), "pairing works the same over TLS");
+        using var socket = new ClientWebSocket();
+        socket.Options.RemoteCertificateValidationCallback = static (_, _, _, _) => true;
+        await socket.ConnectAsync(new Uri($"wss://127.0.0.1:{port}/ws?code={code}"), CancellationToken.None);
+        Assert.That(JsonDocument.Parse(await ReceiveAsync(socket)).RootElement.GetProperty("type").GetString(), Is.EqualTo("layout"));
+    }
+
+    [Test]
+    public async Task PlainHttpToTheHttpsPortIsRefusedAndTheServerKeepsWorking()
+    {
+        var (plugin, port, _) = await StartSecure();
+        using var _ = plugin;
+        using var plain = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+
+        Assert.CatchAsync<Exception>(() => plain.GetStringAsync(new Uri($"http://127.0.0.1:{port}/")));
+
+        using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = static (_, _, _, _) => true };
+        using var secure = new HttpClient(handler);
+        Assert.That(await secure.GetStringAsync(new Uri($"https://127.0.0.1:{port}/")), Does.Contain("Pairing code"));
+    }
+
+    [Test]
+    public async Task WithoutHttpsThereIsNoCertificateAndTheAddressIsPlain()
+    {
+        var port = FreePort();
+        using var plugin = new WebDeckPlugin(_directory);
+        await plugin.InitializeAsync(new RecordingContext(), CancellationToken.None);
+        var settings = plugin.GetDeviceSettings(WebDeckPlugin.DeviceId).With(WebDeckPlugin.Sharing, WebDeckPlugin.SharingLocal).With(WebDeckPlugin.Port, port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.That(plugin.ApplyDeviceSettings(WebDeckPlugin.DeviceId, settings), Is.Null);
+
+        Assert.That(plugin.Secure, Is.False);
+        Assert.That(plugin.CertificateFingerprint, Is.Null);
+        Assert.That(plugin.Address, Does.StartWith("http://"));
+        Assert.That(File.Exists(Path.Combine(_directory, "web.deck.pfx")), Is.False, "no certificate is made unless HTTPS is on");
+    }
+
+    [Test]
+    public void TheCertificateIsKeptAcrossRestartsAndMadeAgainForNewNamesOrWhenItIsAboutToExpire()
+    {
+        var now = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+        string[] names = ["127.0.0.1", "localhost", "192.168.1.20", "deck-pc"];
+
+        using var first = WebDeckCertificate.LoadOrCreate(_directory, names, now, out var madeFirst);
+        using var again = WebDeckCertificate.LoadOrCreate(_directory, names.Reverse().ToArray(), now.AddDays(10), out var madeAgain);
+        using var moved = WebDeckCertificate.LoadOrCreate(_directory, [.. names, "192.168.1.99"], now.AddDays(10), out var madeMoved);
+        using var old = WebDeckCertificate.LoadOrCreate(_directory, [.. names, "192.168.1.99"], now.AddDays(10 + (int)WebDeckCertificate.Lifetime.TotalDays - 10), out var madeOld);
+
+        Assert.That(madeFirst, Is.True);
+        Assert.That(madeAgain, Is.False, "the same names, in any order, reuse the certificate");
+        Assert.That(WebDeckCertificate.Fingerprint(again), Is.EqualTo(WebDeckCertificate.Fingerprint(first)));
+        Assert.That(madeMoved, Is.True, "a new network address needs a new certificate");
+        Assert.That(WebDeckCertificate.Fingerprint(moved), Is.Not.EqualTo(WebDeckCertificate.Fingerprint(first)));
+        Assert.That(madeOld, Is.True, "one that is about to expire is replaced");
+
+        var alternative = first.Extensions.OfType<System.Security.Cryptography.X509Certificates.X509Extension>().Single(static extension => extension.Oid?.Value == "2.5.29.17").Format(false);
+        Assert.That(alternative, Does.Contain("192.168.1.20").And.Contain("deck-pc").And.Contain("127.0.0.1"));
+        Assert.That(System.Security.Cryptography.X509Certificates.ECDsaCertificateExtensions.GetECDsaPublicKey(first), Is.Not.Null, "an elliptic curve key");
+        Assert.That(first.HasPrivateKey, Is.True);
+    }
+
+    [Test]
+    public async Task TheDeckIsInstallableItServesAManifestIconsAndAWorkerThatNeverTouchesThePairing()
+    {
+        var port = FreePort();
+        using var plugin = new WebDeckPlugin(_directory);
+        await plugin.InitializeAsync(new RecordingContext(), CancellationToken.None);
+        Assert.That(plugin.ApplyDeviceSettings(WebDeckPlugin.DeviceId, plugin.GetDeviceSettings(WebDeckPlugin.DeviceId)
+            .With(WebDeckPlugin.Sharing, WebDeckPlugin.SharingLocal).With(WebDeckPlugin.Port, port.ToString(System.Globalization.CultureInfo.InvariantCulture))), Is.Null);
+        using var http = new HttpClient();
+        var origin = $"http://127.0.0.1:{port}";
+
+        var manifest = JsonDocument.Parse(await http.GetStringAsync(new Uri(origin + "/manifest.webmanifest"))).RootElement;
+        Assert.That(manifest.GetProperty("start_url").GetString(), Is.EqualTo("/"));
+        Assert.That(manifest.GetProperty("display").GetString(), Is.EqualTo("fullscreen"));
+        Assert.That(manifest.GetProperty("icons").EnumerateArray().Select(static icon => icon.GetProperty("sizes").GetString()), Is.EqualTo(new[] { "192x192", "512x512" }));
+
+        foreach (var (path, size) in new[] { ("/icon-192.png", 192), ("/icon-512.png", 512) })
+        {
+            var png = await http.GetByteArrayAsync(new Uri(origin + path));
+            Assert.That(png[..8], Is.EqualTo(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }), "a PNG");
+            Assert.That(System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16, 4)), Is.EqualTo(size), "of the size the manifest names");
+        }
+
+        var worker = await http.GetStringAsync(new Uri(origin + "/sw.js"));
+        Assert.That(worker, Does.Contain("pathname !== '/'").And.Not.Contain("/ws").And.Not.Contain("/check").And.Not.Contain("/info"), "it only ever handles the page");
+        var page = await http.GetStringAsync(new Uri(origin + "/"));
+        Assert.That(page, Does.Contain("rel=\"manifest\"").And.Contain("isSecureContext"), "the page links the manifest and registers the worker only in a secure context");
+        var response = await http.GetAsync(new Uri(origin + "/sw.js"));
+        Assert.That(response.Headers.CacheControl?.NoStore, Is.True, "the worker itself is never cached by the browser");
+    }
+
     [Test]
     public void NewPairingCodeReplacesTheOldOne()
     {
