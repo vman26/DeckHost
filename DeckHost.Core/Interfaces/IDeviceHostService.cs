@@ -82,6 +82,44 @@ public interface IDeviceHostService : IAsyncDisposable
     {
     }
 
+    /// <summary>Every device the plugins report with where it stands: listed, discovered (waiting for a decision) or ignored.</summary>
+    IReadOnlyList<Devices.DeviceRosterEntry> DeviceRoster() => [];
+
+    /// <summary>Raised when <see cref="DeviceRoster"/> changed (a device was discovered, added, removed or ignored).</summary>
+    event Action? RosterChanged
+    {
+        add
+        {
+        }
+
+        remove
+        {
+        }
+    }
+
+    /// <summary>Whether newly plugged-in devices are added by themselves.</summary>
+    bool AutoAddDevices => true;
+
+    /// <summary>Turns adding new devices by themselves on or off.</summary>
+    void SetAutoAddDevices(bool enabled)
+    {
+    }
+
+    /// <summary>Adds a discovered or ignored device to the list.</summary>
+    void AddDevice(string deviceId)
+    {
+    }
+
+    /// <summary>Takes a device out of the list; if it is plugged in it is offered again after it was unplugged and plugged in.</summary>
+    void RemoveDevice(string deviceId)
+    {
+    }
+
+    /// <summary>Keeps a discovered device out of the list.</summary>
+    void IgnoreDevice(string deviceId)
+    {
+    }
+
     /// <summary>The shared workflows Call nodes can run (replaces the previous list).</summary>
     void SetSharedWorkflows(IReadOnlyList<Workflow> workflows)
     {

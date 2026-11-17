@@ -29,6 +29,10 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - The action list dims the actions the selected control can't use (hover for why), and **Only actions that fit the
   selected control** hides them.
 
+- A **Devices** page (☰): every device DeckHost knows, plugged in or not, with **Remove**; new devices can wait
+  under **Found** (Add or Keep ignoring) instead of being added by themselves, and a removed device that is plugged
+  in again is offered again.
+
 - Plugin store: open-source Elgato plugins can come from a checksummed copy kept in DeckHost's plugin
   repository instead of the community archive (the copying itself stays off for now).
 - Linux: an AppImage next to the tar.gz, one file that runs without installing. DeckHost doesn't replace it

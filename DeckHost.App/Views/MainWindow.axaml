@@ -132,6 +132,7 @@
 									<Button Content="Profiles" HorizontalAlignment="Stretch" Click="OpenProfileManager_OnClick" />
 									<Button Content="Variables" HorizontalAlignment="Stretch" Click="OpenVariables_OnClick" ToolTip.Tip="CPU, memory, the app in front and the variables your workflows set" />
 									<Button Content="Plugins and store" HorizontalAlignment="Stretch" Click="OpenPluginManager_OnClick" />
+									<Button Content="{Binding DevicesMenuText}" HorizontalAlignment="Stretch" Click="OpenDevices_OnClick" ToolTip.Tip="Remove devices, and add the ones DeckHost found" />
 									<Button Content="Device settings" HorizontalAlignment="Stretch" Click="OpenDeviceSettings_OnClick" />
 									<Button Content="Add a USB device" HorizontalAlignment="Stretch" Click="OpenDeviceCreator_OnClick" ToolTip.Tip="Make a button box, pedal, jog wheel or other USB device into a deck" />
 									<Button Content="Device simulator" HorizontalAlignment="Stretch" Click="OpenSimulator_OnClick" IsVisible="{Binding ShowDeviceSimulator}" ToolTip.Tip="Open a window that acts like any device DeckHost supports, without the hardware" />
@@ -217,6 +218,7 @@
 					</Border>
 
 					<StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+						<Button Classes="accent" IsVisible="{Binding HasDiscoveredDevices}" Content="{Binding DiscoveredDevicesText}" Click="OpenDevices_OnClick" Margin="0,0,8,0" ToolTip.Tip="DeckHost found a device that isn't in the list yet" />
 						<Button Classes="tool" ToolTip.Tip="{Binding UndoTip}" IsEnabled="{Binding CanUndo}" Command="{Binding UndoCommand}">
 							<Viewbox Width="20" Height="20"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M9 4 3 10l6 6v-4.5h5a4.5 4.5 0 0 1 0 9h-3V23h3a7 7 0 0 0 0-14H9Z" /></Canvas></Viewbox>
 						</Button>

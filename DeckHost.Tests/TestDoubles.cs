@@ -51,16 +51,18 @@ internal sealed class FakeDevicePlugin : IDeviceWithContext, IDeviceOutput
 {
     public const string DeviceId = "fake.device";
 
+    private readonly string _deviceId;
     private DeviceDefinition[] _devices;
 
-    public FakeDevicePlugin(bool connected = true)
+    public FakeDevicePlugin(bool connected = true, string deviceId = DeviceId)
     {
+        _deviceId = deviceId;
         _devices = [CreateDevice(connected)];
     }
 
     public event EventHandler? DevicesChanged;
 
-    public string Id => "fake.plugin";
+    public string Id => _deviceId == DeviceId ? "fake.plugin" : "fake.plugin." + _deviceId;
 
     public string Name => "Fake";
 
@@ -108,8 +110,8 @@ internal sealed class FakeDevicePlugin : IDeviceWithContext, IDeviceOutput
 
     public void Dispose() => Disposed = true;
 
-    private static DeviceDefinition CreateDevice(bool connected) => new(
-        DeviceId,
+    private DeviceDefinition CreateDevice(bool connected) => new(
+        _deviceId,
         "Fake device",
         [
             new PhysicalControl("key.0", "Key 1", ControlType.Key, new Rect(0, 0, 10, 10), InputCapabilities.Press | InputCapabilities.Release, OutputCapabilities.ColorImage, 8, 8),

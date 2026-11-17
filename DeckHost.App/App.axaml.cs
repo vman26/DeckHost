@@ -316,7 +316,8 @@ public partial class App : Application
         services.AddSingleton(provider => new DeviceHostService(
             provider.GetServices<IDevicePlugin>(),
             [],
-            provider.GetRequiredService<IVariableStore>()));
+            provider.GetRequiredService<IVariableStore>(),
+            new DeviceRoster(Path.Combine(appData, "devices", "roster.json"))));
         services.AddSingleton<IDeviceHostService>(provider => provider.GetRequiredService<DeviceHostService>());
 
         // Plugins: Stream Deck SDK plugins run in their own processes via this runtime.

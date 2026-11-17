@@ -384,6 +384,14 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         }
     }
 
+    private void OpenDevices_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>() is { } host)
+        {
+            OpenSingle("Devices", () => new DeviceManagerView { DataContext = new DeviceManagerViewModel(host) });
+        }
+    }
+
     private void OpenProfileManager_OnClick(object? sender, RoutedEventArgs e)
     {
         if (TryResolve<ProfileManagerViewModel>() is { } profiles)

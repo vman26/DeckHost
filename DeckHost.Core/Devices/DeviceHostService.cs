@@ -95,6 +95,9 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private readonly Queue<RuntimeLogEntry> _runtimeLogs = new();
     private readonly ConcurrentDictionary<string, DeviceConnectionStatus> _connectionStatuses = new(StringComparer.OrdinalIgnoreCase);
     private volatile DeviceDefinition[] _devicesSnapshot = [];
+    private readonly DeviceRoster? _roster;
+    private volatile DeviceRosterEntry[] _rosterEntries = [];
+    private Action? _rosterChanged;
     private volatile DeviceProfile[] _profilesSnapshot = [];
     private int _startRequested;
     private int _disposed;
@@ -110,20 +113,24 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     public event Action<DeviceInputEvent>? InputReceived;
     public event Action<WorkflowTrace>? WorkflowTraced;
 
+    /// <param name="roster">Which reported devices are in the list; null lists every device the plugins report.</param>
     public DeviceHostService(
         IEnumerable<IDevicePlugin> devicePlugins,
         IEnumerable<IApplicationPlugin> applicationPlugins,
-        IVariableStore variableStore)
-        : this(devicePlugins, CreateRouter(variableStore, applicationPlugins, out var onActionFailed), variableStore)
+        IVariableStore variableStore,
+        DeviceRoster? roster = null)
+        : this(devicePlugins, CreateRouter(variableStore, applicationPlugins, out var onActionFailed), variableStore, roster)
     {
         onActionFailed.Target = this;
     }
 
-    public DeviceHostService(IEnumerable<IDevicePlugin> devicePlugins, IActionRouter actionRouter, IVariableStore variableStore)
+    public DeviceHostService(IEnumerable<IDevicePlugin> devicePlugins, IActionRouter actionRouter, IVariableStore variableStore, DeviceRoster? roster = null)
     {
         ArgumentNullException.ThrowIfNull(devicePlugins);
         ArgumentNullException.ThrowIfNull(actionRouter);
         ArgumentNullException.ThrowIfNull(variableStore);
+
+        _roster = roster;
 
         _variableStore = variableStore;
         _devicePlugins = devicePlugins.ToList();
@@ -1247,18 +1254,30 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     private void RefreshDevices(bool raiseEvent)
     {
+        var reported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var entries = new List<DeviceRosterEntry>();
         var changed = false;
 
         foreach (var plugin in _devicePlugins)
         {
             foreach (var device in plugin.Devices)
             {
-                if (!seen.Add(device.Id))
+                if (!reported.Add(device.Id))
                 {
                     Log("Warning", $"Device id '{device.Id}' is reported by more than one plugin; ignoring the one from '{plugin.Name}'.");
                     continue;
                 }
+
+                // Only the devices the user has in the list are used; the others wait on the Devices page.
+                var listing = _roster?.Decide(device.Id, device.IsConnected) ?? DeviceListing.Listed;
+                entries.Add(new DeviceRosterEntry(device.Id, device.Name, plugin.Name, device.IsConnected, listing));
+                if (listing != DeviceListing.Listed)
+                {
+                    continue;
+                }
+
+                seen.Add(device.Id);
 
                 if (_devicesById.TryGetValue(device.Id, out var existing) && existing.Device == device)
                 {
@@ -1278,11 +1297,28 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             }
         }
 
+        // The editor needs a device: when everything the plugins report waits or is ignored, the first one (a plugged-in one first) is listed.
+        if (_roster is not null && entries.Count > 0 && entries.All(static entry => entry.Listing != DeviceListing.Listed))
+        {
+            var pick = entries.FirstOrDefault(static entry => entry.IsConnected) ?? entries[0];
+            Log("Information", $"DeckHost keeps at least one device in the list: '{pick.Name}' was added.");
+            _roster.Add(pick.Id);
+            RefreshDevices(raiseEvent);
+            return;
+        }
+
         foreach (var removed in _devicesById.Keys.Where(id => !seen.Contains(id)).ToList())
         {
             changed = true;
             _devicesById.Remove(removed);
             ForgetFrames(removed);
+        }
+
+        var rosterChanged = !_rosterEntries.SequenceEqual(entries);
+        _rosterEntries = [.. entries];
+        if (rosterChanged && raiseEvent)
+        {
+            SafeInvoke(() => _rosterChanged?.Invoke());
         }
 
         if (!changed && _devicesSnapshot.Length == _devicesById.Count)
@@ -1296,6 +1332,52 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             SafeInvoke(() => DevicesChanged?.Invoke());
         }
     }
+
+    public event Action? RosterChanged
+    {
+        add => _rosterChanged += value;
+        remove => _rosterChanged -= value;
+    }
+
+    public IReadOnlyList<DeviceRosterEntry> DeviceRoster() => _rosterEntries;
+
+    public bool AutoAddDevices => _roster?.AutoAdd ?? true;
+
+    public void SetAutoAddDevices(bool enabled)
+    {
+        if (_roster is { } roster)
+        {
+            roster.AutoAdd = enabled;
+        }
+    }
+
+    public void AddDevice(string deviceId) => Enqueue(() =>
+    {
+        _roster?.Add(deviceId);
+        RefreshDevices(raiseEvent: true);
+    });
+
+    public void RemoveDevice(string deviceId) => Enqueue(() =>
+    {
+        if (_rosterEntries.Count(static entry => entry.Listing == DeviceListing.Listed) <= 1 &&
+            _rosterEntries.Any(entry => entry.Listing == DeviceListing.Listed && string.Equals(entry.Id, deviceId, StringComparison.OrdinalIgnoreCase)))
+        {
+            Log("Information", "The last device in the list can't be removed: DeckHost always keeps one.");
+            return;
+        }
+
+        _roster?.Remove(deviceId, IsPluggedIn(deviceId));
+        RefreshDevices(raiseEvent: true);
+    });
+
+    public void IgnoreDevice(string deviceId) => Enqueue(() =>
+    {
+        _roster?.Ignore(deviceId, IsPluggedIn(deviceId));
+        RefreshDevices(raiseEvent: true);
+    });
+
+    private bool IsPluggedIn(string deviceId) =>
+        _rosterEntries.FirstOrDefault(entry => string.Equals(entry.Id, deviceId, StringComparison.OrdinalIgnoreCase))?.IsConnected == true;
 
     /// <summary>Forgets everything sent to the device's screen, so all of it is sent again.</summary>
     private void ForgetFrames(string deviceId)

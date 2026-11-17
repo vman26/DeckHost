@@ -49,10 +49,13 @@ This support was written from the protocol and isn't tested on every model yet. 
 
 ## Devices you no longer use
 
-DeckHost remembers every MiraBox and Stream Deck it has seen, so you can edit them unplugged (and
-lists an N4 Pro before anything is plugged in). To remove one from the device picker, unplug it,
-open **Device settings** for it and click **Forget this device**. Its profiles are kept: plug it in
-again and it comes back with them. Devices from the device creator are removed on that page.
+**☰ → Devices** lists every device DeckHost knows, plugged in or not, and is where you take one out of the list.
+
+- **Your devices** are the ones in the header's device picker. **Remove** takes one out, whether or not it is plugged in. Its profiles are kept, so adding it again brings them back. DeckHost always keeps one device in the list.
+- **Removed** devices stay out of the list. A removed device that is plugged in again after you unplugged it shows up under **Found**, with **Add** and **Keep ignoring**. **Add back** is there for the others.
+- **Found** devices are new devices waiting for your decision. By default DeckHost adds a new device by itself when it is plugged in; switch **Add new devices by themselves** off and a new device waits under **Found** instead (a **N new devices** button appears in the header).
+
+DeckHost remembers every MiraBox and Stream Deck it has seen, so you can edit them unplugged (and lists an N4 Pro before anything is plugged in). **Forget this device** on a device's settings page still works for an unplugged device; Devices from the device creator are also removed on its page.
 
 ## Device simulator
 
@@ -89,7 +92,7 @@ Button boxes, foot pedals, jog wheels, game controllers and other USB devices De
 
 1. **Pick the device.** The list shows every USB HID interface on the computer; a device can have several. Pick one and press a key: **What it sends** shows the device's reports. If nothing changes when you press, try the device's other interface.
 2. **Add its keys and knobs.** Click **Add key** and press the key; DeckHost works out where it shows up in the reports. **Add knob**, turn it to the right a few clicks and click **Done turning**. For a knob you can push, select it and click **Learn push**. Pressing a key you already added says so. Keys light up on the canvas as you press them, and knobs show their turns.
-3. **Place them** where they sit on the device: drag them, or **Arrange** them in rows. Keys are numbered by where they sit (left to right, top to bottom) and knobs left to right, so profiles copy cleanly between devices.
+3. **Place them** where they sit on the device: drag them (they snap to the others' edges, centers and even spacing, with a guide line; hold **Alt** to place freely), or **Arrange** them in rows (each key and knob keeps its number). Ctrl or Shift and a click select several, to **line up** (left, center, right, top, middle, bottom) or **spread evenly**. Right-click the device in the editor for **Add a USB device**. Keys are numbered by where they sit (left to right, top to bottom) and knobs left to right, so profiles copy cleanly between devices.
 4. **Save device.** It joins the device picker with its own profiles, like any deck. **Edit** and **Remove** are on the same page.
 
 What to know:

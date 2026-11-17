@@ -70,6 +70,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         _deviceHostService.RuntimeLogReceived += entry => Dispatcher.UIThread.Post(() => OnRuntimeLogReceived(entry));
         _deviceHostService.ConnectionStatusChanged += status => Dispatcher.UIThread.Post(() => OnConnectionStatusChanged(status));
         _deviceHostService.DevicesChanged += () => Dispatcher.UIThread.Post(OnDevicesChanged);
+        _deviceHostService.RosterChanged += () => Dispatcher.UIThread.Post(RefreshDiscovered);
+        RefreshDiscovered();
         _deviceHostService.ActiveProfileChanged += (deviceId, profileId) => Dispatcher.UIThread.Post(() => OnHostActiveProfileChanged(deviceId, profileId));
         _deviceHostService.ControlFrameRendered += frame => Dispatcher.UIThread.Post(() => OnControlFrameRendered(frame));
         _deviceHostService.InputReceived += input => Dispatcher.UIThread.Post(() => OnInputReceived(input));
@@ -2050,6 +2052,29 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
     }
 
+    private int _discoveredDevices;
+
+    /// <summary>Devices DeckHost found that wait for Add or Keep ignoring (the Devices page).</summary>
+    public bool HasDiscoveredDevices => _discoveredDevices > 0;
+
+    public string DiscoveredDevicesText => _discoveredDevices == 1 ? "1 new device" : $"{_discoveredDevices} new devices";
+
+    public string DevicesMenuText => _discoveredDevices > 0 ? $"Devices ({_discoveredDevices} new)" : "Devices";
+
+    private void RefreshDiscovered()
+    {
+        var count = _deviceHostService.DeviceRoster().Count(static entry => entry.Listing == Core.Devices.DeviceListing.Discovered);
+        if (count == _discoveredDevices)
+        {
+            return;
+        }
+
+        _discoveredDevices = count;
+        OnPropertyChanged(nameof(HasDiscoveredDevices));
+        OnPropertyChanged(nameof(DiscoveredDevicesText));
+        OnPropertyChanged(nameof(DevicesMenuText));
+    }
+
     private void OnDevicesChanged()
     {
         RefreshDeviceList();
@@ -2083,6 +2108,11 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             }
 
             OnPropertyChanged(nameof(DeviceName));
+        }
+        else if ((_deviceHostService.Devices.FirstOrDefault(static device => device.IsConnected) ?? _deviceHostService.Devices.FirstOrDefault()) is { } remaining)
+        {
+            // The shown device was taken out of the list (the Devices page): show another one.
+            SwitchDevice(remaining);
         }
 
         RefreshConnectionStatus();
