@@ -19,6 +19,7 @@ A run starts at a **When** node and follows the links from left to right. A node
 | **Toggle** | Takes **1st** and **2nd** in turn: on, then off. |
 | **Repeat** | Runs **Each time** one round after the other, then **Done**. How many rounds: a fixed number, as many as a variable says, **while** a variable has a value, or **until** it does. An optional pause between rounds turns it into a timer (a condition that never changes stops after 10,000 rounds). |
 | **Set variable** | Sets, adds to, subtracts from, flips (true/false) or clears a variable. |
+| **Call workflow** | Runs a [shared workflow](#shared-workflows) from its When node on, then goes on at **Then**. If it can't run (it was deleted, it has no When node, it would call itself, or calls are nested more than 8 deep) the run goes on at **On error** when that has a link, else at **Then**. |
 | **Stop** | Ends the run, including branches that are still waiting. |
 
 Variables are shared by all workflows (names ignore case) unless a node says otherwise: **Set variable**, **If**, **Repeat** and the "variable changes" trigger have a **Shared by** setting: every workflow (the default), only this profile's workflows, or only this control's workflow, so two keys can both use a variable called `count` without touching each other. The editor lists scoped variables as `count (profile …)` and `count (key.3 on …)`. The **Show Variable** action shows one on a key. They start empty when DeckHost starts.
@@ -39,6 +40,17 @@ Event triggers run on a workflow whose profile (page or folder) is shown on a de
 ## When an action fails
 
 An action node has two outputs: **Then** and **On error**. When its action did not run, the run follows **On error** if you linked it, so a failing step can show a warning, run something else or end the run; with nothing linked there, it goes on at **Then** as before. In the node's settings, **Try again when it did not run** (up to 5 times) and **Wait between tries** make the node try again first, and the node fills up while it waits for the next try. New actions you add after a node are linked from **Then**; link **On error** yourself by dragging from its dot.
+
+## Shared workflows
+
+A workflow you want to use from several controls can be kept once. Give it a name in the box above the canvas and click **Save as shared**; it then shows in the **Shared workflows** list (with what uses it) and in the **Call workflow** node's list. **Open** edits it in an editor of its own: every change is kept and applies wherever it is called. A shared workflow can't be deleted while a control or another shared workflow calls it. Exporting a profile takes the shared workflows it calls along (with new ids, so an import never replaces yours).
+
+## Debugging
+
+- Select a node and press **F9** (or right-click → **Add breakpoint**) to put a red dot on it. A run that gets there stops in front of the node and the node gets an amber border; the Run log says which run is held.
+- **Continue** lets it go on until the next breakpoint; **Step** runs the next node and holds the run again. A run that is held keeps its waits: a Wait that ends meanwhile only continues once you release it. **Stop** ends a held run.
+- Breakpoints belong to the control, so a breakpoint inside a shared workflow stops the runs of the control that called it. They aren't saved with the workflow and are gone when DeckHost closes.
+- With nothing selected, **Variables right now** shows the state at the point where the run is held.
 
 ## While a run is going
 

@@ -141,6 +141,7 @@
 				<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
 					<Button Content="Export…" Click="Export_OnClick" ToolTip.Tip="Save this workflow as a file to share or keep" />
 					<Button Content="Import…" Click="Import_OnClick" ToolTip.Tip="Replace this workflow with one from a file (Undo brings yours back)" />
+					<Button Content="Save as shared" Command="{Binding SaveAsSharedCommand}" IsVisible="{Binding CanSaveAsShared}" ToolTip.Tip="Keep this workflow (it needs a name) so other workflows can run it with a Call workflow node" />
 					<Border Width="1" Background="{DynamicResource C.334155}" Margin="4,2" />
 					<Button Content="↶ Undo" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" ToolTip.Tip="Undo (Ctrl+Z)" />
 					<Button Content="↷ Redo" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" ToolTip.Tip="Redo (Ctrl+Y)" />
@@ -148,6 +149,8 @@
 					<Button Content="Fit" Click="Fit_OnClick" ToolTip.Tip="Show every node (Ctrl + wheel zooms, drag the background to pan)" />
 					<Button Content="Revert" Command="{Binding RevertAllCommand}" ToolTip.Tip="Put back the workflow as it was when you opened the editor" />
 					<Border Width="1" Background="{DynamicResource C.334155}" Margin="4,2" />
+					<Button Content="⏵ Continue" Classes="accent" Command="{Binding ContinueCommand}" IsVisible="{Binding IsPaused}" ToolTip.Tip="Let the held run go on until the next breakpoint" />
+					<Button Content="⤵ Step" Command="{Binding StepCommand}" IsVisible="{Binding IsPaused}" ToolTip.Tip="Run the next node, then hold again" />
 					<Button Content="▶ Run" Classes="accent" Command="{Binding RunCommand}" ToolTip.Tip="Start the workflow as if the control was used: the selected When node, else the first" />
 					<Button Content="■ Stop" Command="{Binding StopCommand}" ToolTip.Tip="Stop every run of this workflow" />
 				</StackPanel>
@@ -244,6 +247,28 @@
 
 							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
 								<StackPanel Spacing="6">
+									<TextBlock Classes="section" Text="SHARED WORKFLOWS" />
+									<TextBlock Classes="hint" IsVisible="{Binding IsShared}" Text="You are editing a shared workflow: every change is kept and applies wherever a Call workflow node runs it." />
+									<TextBlock Classes="hint" IsVisible="{Binding !HasSharedWorkflows}" Text="None yet. Name a workflow, then Save as shared in the toolbar to run it from other workflows with a Call workflow node." />
+									<ItemsControl ItemsSource="{Binding SharedList}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="vm:SharedWorkflowRow">
+												<Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,2">
+													<StackPanel>
+														<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" TextTrimming="CharacterEllipsis" />
+														<TextBlock Text="{Binding UsedBy}" FontSize="11" Foreground="{DynamicResource C.64748B}" TextTrimming="CharacterEllipsis" />
+													</StackPanel>
+													<Button Grid.Column="1" Content="Open" Padding="8,2" FontSize="11" Click="OpenShared_OnClick" />
+													<Button Grid.Column="2" Content="Delete" Padding="8,2" FontSize="11" Click="DeleteShared_OnClick" />
+												</Grid>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+								</StackPanel>
+							</Border>
+
+							<Border Classes="card" IsVisible="{Binding ShowNoSelection}">
+								<StackPanel Spacing="6">
 									<Grid ColumnDefinitions="*,Auto">
 										<TextBlock Classes="section" Text="VARIABLES RIGHT NOW" VerticalAlignment="Center" />
 										<Button Grid.Column="1" Content="Refresh" Padding="8,2" FontSize="11" Command="{Binding RefreshVariablesCommand}" />
@@ -300,6 +325,7 @@
 									</StackPanel>
 									<StackPanel Orientation="Horizontal" Spacing="8">
 										<Button Content="▶ Run from here" Command="{Binding RunCommand}" IsVisible="{Binding SelectedIsTrigger}" />
+										<Button Content="Open workflow" Command="{Binding OpenCallCommand}" IsVisible="{Binding SelectedIsCall}" />
 										<Button Content="Duplicate" Command="{Binding DuplicateSelectionCommand}" />
 										<Button Content="Remove" Command="{Binding DeleteSelectionCommand}" />
 									</StackPanel>

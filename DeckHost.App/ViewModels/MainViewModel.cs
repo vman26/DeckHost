@@ -54,6 +54,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         ArgumentNullException.ThrowIfNull(pluginCatalog);
 
         _deviceHostService = deviceHostService;
+        _workflowBreakpoints = new WorkflowBreakpoints(deviceHostService);
         _pluginCatalog = pluginCatalog;
         _profileStore = profileStore;
         _pluginState = pluginState;
@@ -924,7 +925,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         var layoutId = layout.Id;
-        return new WorkflowEditorViewModel(
+        return Configure(new WorkflowEditorViewModel(
             device.Id,
             layoutId,
             controlItem.Control,
@@ -932,7 +933,119 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
             binding.Model.Workflow ?? WorkflowConverter.Starter(),
             _actionsByKey.Values,
             workflow => ApplyWorkflow(layoutId, controlId, workflow),
-            _deviceHostService);
+            _deviceHostService), controlId);
+    }
+
+    private readonly WorkflowBreakpoints _workflowBreakpoints;
+
+    /// <summary>Gives an editor what it needs from the app: the shared workflows, opening one, and the shared breakpoints.</summary>
+    private WorkflowEditorViewModel Configure(WorkflowEditorViewModel editor, string fromControlId)
+    {
+        editor.Breakpoints = _workflowBreakpoints;
+        editor.SharedSource = () => _sharedWorkflows;
+        editor.SaveShared = SaveSharedWorkflow;
+        editor.DeleteShared = DeleteSharedWorkflow;
+        editor.CallersOf = CallersOf;
+        editor.OpenShared = id =>
+        {
+            if (CreateSharedWorkflowEditor(id, fromControlId) is { } shared)
+            {
+                WorkflowEditorRequested?.Invoke(shared);
+            }
+        };
+        editor.RefreshShared();
+        return editor;
+    }
+
+    // ---------------------------------------------------------------- shared workflows
+
+    private readonly List<Workflow> _sharedWorkflows = [];
+
+    /// <summary>The workflows Call nodes can run, by name.</summary>
+    public IReadOnlyList<Workflow> SharedWorkflows => _sharedWorkflows;
+
+    /// <summary>
+    /// Keeps a workflow as a shared one (the file kind: it needs a name). A workflow that already has an
+    /// id replaces that shared workflow; otherwise it gets a new id. Returns the id, or why not.
+    /// </summary>
+    public (string? Id, string? Problem) SaveSharedWorkflow(Workflow workflow)
+    {
+        if (string.IsNullOrWhiteSpace(workflow.Name))
+        {
+            return (null, "Give the workflow a name first: Call nodes list shared workflows by name.");
+        }
+
+        var name = workflow.Name.Trim();
+        var id = workflow.Id ?? $"wf.{Guid.NewGuid():N}"[..11];
+        if (_sharedWorkflows.Any(other => other.Id != id && string.Equals(other.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return (null, $"There is already a shared workflow called {name}.");
+        }
+
+        var shared = workflow with { Id = id, Name = name };
+        var index = _sharedWorkflows.FindIndex(other => other.Id == id);
+        if (index >= 0)
+        {
+            _sharedWorkflows[index] = shared;
+        }
+        else
+        {
+            _sharedWorkflows.Add(shared);
+        }
+
+        SyncProfilesToHost();
+        StatusMessage = $"Saved {name} as a shared workflow.";
+        return (id, null);
+    }
+
+    /// <summary>Who still calls a shared workflow: the layouts' controls and other shared workflows (names).</summary>
+    public IReadOnlyList<string> CallersOf(string id) =>
+    [
+        .. AllLayouts.SelectMany(layout => layout.ToModels().SelectMany(model => model.Bindings)
+            .Where(binding => binding.Workflow is { } workflow && Calls(workflow, id))
+            .Select(binding => $"{layout.Name}: {binding.ControlId}")),
+        .. _sharedWorkflows.Where(other => other.Id != id && Calls(other, id)).Select(static other => other.Name ?? other.Id ?? "a shared workflow"),
+    ];
+
+    private static bool Calls(Workflow workflow, string id) =>
+        workflow.Nodes.Any(node => node.Kind == WorkflowNodeKinds.Call && string.Equals(node.EffectiveSettings.Get(WorkflowKeys.Workflow).Trim(), id, StringComparison.Ordinal));
+
+    /// <summary>Deletes a shared workflow unless something still calls it. Returns why not.</summary>
+    public string? DeleteSharedWorkflow(string id)
+    {
+        var callers = CallersOf(id);
+        if (callers.Count > 0)
+        {
+            return $"It is still called by {string.Join(", ", callers.Take(3))}{(callers.Count > 3 ? ", …" : string.Empty)}.";
+        }
+
+        if (_sharedWorkflows.RemoveAll(workflow => workflow.Id == id) == 0)
+        {
+            return null;
+        }
+
+        SyncProfilesToHost();
+        return null;
+    }
+
+    /// <summary>Opens a shared workflow in the editor (on the control the editor was opened from, whose inputs it offers).</summary>
+    public WorkflowEditorViewModel? CreateSharedWorkflowEditor(string id, string fromControlId)
+    {
+        if (_sharedWorkflows.FirstOrDefault(workflow => workflow.Id == id) is not { } shared ||
+            SelectedDevice is not { } device || !_controlsById.TryGetValue(fromControlId, out var controlItem))
+        {
+            return null;
+        }
+
+        return Configure(new WorkflowEditorViewModel(
+            device.Id,
+            SelectedProfile?.Id ?? string.Empty,
+            controlItem.Control,
+            controlItem.DisplayName,
+            shared,
+            _actionsByKey.Values,
+            edited => SaveSharedWorkflow(edited with { Id = id }).Problem is null,
+            _deviceHostService), fromControlId);
     }
 
     /// <summary>Stores an edited workflow on its control (also when another layout is shown meanwhile).</summary>
@@ -1010,7 +1123,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
                 Profiles.Concat(_otherDeviceProfiles).SelectMany(static profile => profile.ToModels()).ToList(),
                 AutoSwitchEnabled,
                 DefaultBackground,
-                _deviceLights.Count == 0 ? null : new Dictionary<string, LightStyle>(_deviceLights, StringComparer.OrdinalIgnoreCase)));
+                _deviceLights.Count == 0 ? null : new Dictionary<string, LightStyle>(_deviceLights, StringComparer.OrdinalIgnoreCase),
+                _sharedWorkflows.Count == 0 ? null : [.. _sharedWorkflows]));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -1263,7 +1377,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     /// <summary>Writes a profile with its pages, folders and images to a <c>.deckhostprofile</c> file.</summary>
     public void ExportProfile(ProfileItemViewModel profile, string path)
     {
-        Core.Profiles.ProfileBundle.Export([.. profile.RootProfile.ToModels()], path);
+        Core.Profiles.ProfileBundle.Export([.. profile.RootProfile.ToModels()], path, _sharedWorkflows);
         StatusMessage = $"Exported {profile.RootProfile.Name} to {Path.GetFileName(path)}.";
     }
 
@@ -1286,7 +1400,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
         else
         {
-            layouts = Core.Profiles.ProfileBundle.Import(path, SelectedDevice!.Id, ImportedAssetsDirectory);
+            var bundle = Core.Profiles.ProfileBundle.ImportBundle(path, SelectedDevice!.Id, ImportedAssetsDirectory);
+            layouts = bundle.Layouts;
+            _sharedWorkflows.AddRange(bundle.SharedWorkflows);
             summary = $"{layouts.Sum(static layout => layout.Bindings.Count)} control(s) imported.";
             var controls = SelectedDevice.Controls;
             if (layouts.SelectMany(static layout => layout.Bindings).Any(binding => !controls.Any(control => SameId(control.Id, binding.ControlId))))
@@ -1639,6 +1755,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
                 _deviceLights[deviceId] = style;
             }
 
+            _sharedWorkflows.Clear();
+            _sharedWorkflows.AddRange((document?.SharedWorkflows ?? []).Where(static workflow => !string.IsNullOrWhiteSpace(workflow.Id)));
+
             if (unresolved > 0)
             {
                 StatusMessage = $"{unresolved} saved mapping(s) use plugins that aren't enabled; they are kept but inactive.";
@@ -1650,6 +1769,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
+        _deviceHostService.SetSharedWorkflows([.. _sharedWorkflows]);
         _deviceHostService.SetProfiles(EveryLayout.Select(ToHostModel).ToList());
         if (SelectedProfile is not null)
         {

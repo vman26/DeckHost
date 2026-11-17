@@ -77,6 +77,24 @@ public partial class WorkflowEditorView : UserControl, IWidePage
         }
     }
 
+    // ---------------------------------------------------------------- shared workflows
+
+    private void OpenShared_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: SharedWorkflowRow row } && DataContext is WorkflowEditorViewModel vm)
+        {
+            vm.OpenSharedRowCommand.Execute(row);
+        }
+    }
+
+    private void DeleteShared_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: SharedWorkflowRow row } && DataContext is WorkflowEditorViewModel vm)
+        {
+            vm.DeleteSharedRowCommand.Execute(row);
+        }
+    }
+
     // ---------------------------------------------------------------- sharing
 
     private static readonly FilePickerFileType WorkflowFiles = new("DeckHost workflow") { Patterns = ["*.deckhostworkflow"] };

@@ -34,6 +34,8 @@ public sealed class WorkflowCanvas : Control
     private static readonly IBrush MissingBrush = new SolidColorBrush(Color.Parse("#FCA5A5"));
     private static readonly IPen NodeBorder = new Pen(new SolidColorBrush(Color.Parse("#334155")), 1);
     private static readonly IPen SelectedBorder = new Pen(Brushes.White, 2);
+    private static readonly IPen PausedBorder = new Pen(new SolidColorBrush(Color.Parse("#F59E0B")), 3.5);
+    private static readonly IBrush BreakpointFill = new SolidColorBrush(Color.Parse("#EF4444"));
     private static readonly IPen FailedBorder = new Pen(new SolidColorBrush(Color.Parse("#EF4444")), 3);
     private static readonly Dictionary<string, Geometry?> Icons = [];
 
@@ -256,7 +258,7 @@ public sealed class WorkflowCanvas : Control
             context.DrawRectangle(new SolidColorBrush(accent, 0.35), null, rect.Inflate(6), 14, 14);
         }
 
-        context.DrawRectangle(NodeFill, vm.HasFailed(node) ? FailedBorder : vm.IsSelected(node) ? SelectedBorder : _hoverNodeId == node.Id && _drag == Drag.Link ? new Pen(new SolidColorBrush(accent), 2) : NodeBorder, rect, 10, 10);
+        context.DrawRectangle(NodeFill, vm.IsPausedAt(node) ? PausedBorder : vm.HasFailed(node) ? FailedBorder : vm.IsSelected(node) ? SelectedBorder : _hoverNodeId == node.Id && _drag == Drag.Link ? new Pen(new SolidColorBrush(accent), 2) : NodeBorder, rect, 10, 10);
 
         // Header: the kind's color, icon and name (an action's plugin).
         var header = new Rect(node.X, node.Y, width, WorkflowEditorViewModel.HeaderHeight);
@@ -290,6 +292,12 @@ public sealed class WorkflowCanvas : Control
         {
             var note = Text("not loaded", 10, MissingBrush, Regular);
             context.DrawText(note, new Point(node.X + width - note.Width - 10, node.Y + WorkflowEditorViewModel.HeaderHeight + 6));
+        }
+
+        // A breakpoint: a red dot on the node's top left corner; runs stop in front of it.
+        if (vm.HasBreakpoint(node))
+        {
+            context.DrawEllipse(BreakpointFill, new Pen(Brushes.White, 1.5), new Point(node.X + 2, node.Y + 2), 6, 6);
         }
 
         // Input on the left (not on a trigger).
@@ -718,6 +726,10 @@ public sealed class WorkflowCanvas : Control
                 vm.UndoCommand.Execute(null);
                 e.Handled = true;
                 break;
+            case Key.F9 when vm.SelectedNode is { } selected:
+                vm.ToggleBreakpoint(selected.Id);
+                e.Handled = true;
+                break;
             case Key.D when command:
                 vm.DuplicateSelectionCommand.Execute(null);
                 e.Handled = true;
@@ -803,6 +815,7 @@ public sealed class WorkflowCanvas : Control
                 items.Add(new Separator());
             }
 
+            items.Add(Item(vm.HasBreakpoint(node) ? "Remove breakpoint" : "Add breakpoint", () => vm.ToggleBreakpoint(node.Id), "F9"));
             items.Add(Item("Duplicate", () => vm.DuplicateSelection(), "Ctrl+D"));
             items.Add(Item("Take off its links", () => vm.DisconnectSelection(), enabled: vm.SelectedHasLinks));
             items.Add(new Separator());

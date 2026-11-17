@@ -213,6 +213,110 @@ public class WorkflowEditorTests
         Assert.That(WorkflowSpacing.MakeRoom(roomy, "n", "b", WorkflowEditorViewModel.NodeWidth), Is.SameAs(roomy));
     }
 
+    private static Workflow SharedOf(string id, string name) => new() { Id = id, Name = name, Nodes = [new WorkflowNode("t", WorkflowNodeKinds.Trigger)] };
+
+    [Test]
+    public void A_call_node_offers_the_shared_workflows_to_choose_from_and_can_open_the_one_it_names()
+    {
+        var (editor, _) = Editor();
+        editor.SharedSource = () => [SharedOf("wf.1", "Streaming on"), SharedOf("wf.2", "Streaming off")];
+        string? opened = null;
+        editor.OpenShared = id => opened = id;
+        var call = editor.AddNode(WorkflowNodeKinds.Call, 300, 40);
+        editor.SelectNode(call.Id);
+
+        var choice = Expect.IsType<ChoiceSettingField>(editor.NodeSettings!.Fields.Single());
+        Assert.That(choice.Options.Select(static option => option.Label), Is.EqualTo(new[] { "Streaming on", "Streaming off" }));
+        choice.SelectedOption = choice.Options[1];
+        Assert.That(editor.Workflow.Find(call.Id)!.EffectiveSettings.Get(WorkflowKeys.Workflow), Is.EqualTo("wf.2"));
+        Assert.That(editor.SelectedIsCall, Is.True);
+
+        editor.OpenCallCommand.Execute(null);
+        Assert.That(opened, Is.EqualTo("wf.2"));
+    }
+
+    [Test]
+    public void Save_as_shared_needs_a_name_and_a_shared_editor_does_not_offer_it_again()
+    {
+        var (editor, _) = Editor();
+        Workflow? saved = null;
+        editor.SharedSource = () => saved is null ? [] : [saved];
+        editor.SaveShared = workflow =>
+        {
+            if (string.IsNullOrWhiteSpace(workflow.Name))
+            {
+                return (null, "name it first");
+            }
+
+            saved = workflow with { Id = "wf.new" };
+            return ("wf.new", null);
+        };
+        editor.RefreshShared();
+        Assert.That(editor.CanSaveAsShared, Is.True);
+
+        editor.SaveAsSharedCommand.Execute(null);
+        Assert.That(editor.Status, Is.EqualTo("name it first"));
+        Assert.That(saved, Is.Null);
+
+        editor.WorkflowName = "Mute everything";
+        editor.SaveAsSharedCommand.Execute(null);
+        Assert.That(saved?.Name, Is.EqualTo("Mute everything"));
+        Assert.That(editor.SharedList.Select(static row => row.Id), Is.EqualTo(new[] { "wf.new" }));
+
+        using var sharedEditor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", SharedOf("wf.new", "Mute everything"), Actions, _ => true) { SaveShared = editor.SaveShared };
+        Assert.That(sharedEditor.IsShared, Is.True);
+        Assert.That(sharedEditor.CanSaveAsShared, Is.False);
+    }
+
+    [Test]
+    public void Deleting_a_shared_workflow_asks_the_app_and_shows_why_not()
+    {
+        var (editor, _) = Editor();
+        editor.SharedSource = () => [SharedOf("wf.1", "In use")];
+        editor.CallersOf = _ => ["Studio: key.3"];
+        editor.DeleteShared = _ => "It is still called by Studio: key.3.";
+        editor.RefreshShared();
+        Assert.That(editor.SharedList.Single().UsedBy, Is.EqualTo("used by Studio: key.3"));
+
+        editor.DeleteSharedRowCommand.Execute(editor.SharedList.Single());
+
+        Assert.That(editor.Status, Does.Contain("Can't delete In use").And.Contain("still called"));
+        Assert.That(editor.SharedList, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void Breakpoints_are_toggled_per_node_and_a_held_run_is_followed_until_it_goes_on()
+    {
+        var (editor, _) = Editor();
+        var wait = editor.AddNode(WorkflowNodeKinds.Wait, 300, 40);
+        Assert.That(editor.HasBreakpoint(wait), Is.False);
+        editor.ToggleBreakpoint(wait.Id);
+        Assert.That(editor.HasBreakpoint(wait), Is.True);
+        Assert.That(editor.Breakpoints.Of("device", "key.0"), Is.EqualTo(new[] { wait.Id }));
+
+        DeckHost.Core.Models.WorkflowTrace Trace(DeckHost.Core.Models.WorkflowTraceKind kind, int run = 7, string? shared = null) =>
+            new("device", "layout", "key.0", run, wait.Id, kind, "Paused at a breakpoint", DateTimeOffset.Now) { WorkflowId = shared };
+        editor.ShowTrace(Trace(DeckHost.Core.Models.WorkflowTraceKind.Paused));
+        Assert.That(editor.IsPaused, Is.True);
+        Assert.That(editor.IsPausedAt(wait), Is.True);
+        Assert.That(editor.ContinueCommand.CanExecute(null), Is.True);
+
+        editor.ShowTrace(Trace(DeckHost.Core.Models.WorkflowTraceKind.Finished, run: 8));
+        Assert.That(editor.IsPaused, Is.True, "another run ending doesn't release it");
+
+        editor.ShowTrace(Trace(DeckHost.Core.Models.WorkflowTraceKind.Resumed));
+        Assert.That(editor.IsPaused, Is.False);
+        Assert.That(editor.ContinueCommand.CanExecute(null), Is.False);
+
+        var other = editor.AddNode(WorkflowNodeKinds.Wait, 600, 40);
+        editor.ShowTrace(new("device", "layout", "key.0", 9, other.Id, DeckHost.Core.Models.WorkflowTraceKind.Node, "Waiting", DateTimeOffset.Now) { WorkflowId = "wf.1" });
+        Assert.That(editor.IsActive(other), Is.False, "a step in a shared workflow does not light this workflow's node with the same id");
+        Assert.That(editor.RunLog[0], Does.Contain("↳"));
+
+        editor.ToggleBreakpoint(wait.Id);
+        Assert.That(editor.HasBreakpoint(wait), Is.False);
+    }
+
     [Test]
     public void A_node_with_links_or_a_node_without_a_way_through_cannot_be_put_into_a_link()
     {

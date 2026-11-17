@@ -84,6 +84,30 @@ public sealed class RenderingTests
     }
 
     [AvaloniaTest]
+    public void A_breakpoint_is_a_red_dot_on_the_node_and_a_held_node_gets_an_amber_border()
+    {
+        using var editor = Editor(out var wait);
+        var canvas = new WorkflowCanvas { DataContext = editor, Width = 500, Height = 300 };
+        var window = new Window { Width = 500, Height = 300, Content = canvas };
+        window.Show();
+        using var plain = window.CaptureRenderedFrame()!;
+
+        editor.ToggleBreakpoint(wait.Id);
+        canvas.InvalidateVisual();
+        using var withBreakpoint = window.CaptureRenderedFrame()!;
+        var dot = Pixel(withBreakpoint, 102, 102);
+        Assert.That(dot, Is.EqualTo(Color.Parse("#EF4444")), "the dot sits on the node's top left corner");
+        Assert.That(Pixel(plain, 102, 102), Is.Not.EqualTo(dot));
+
+        editor.ShowTrace(new WorkflowTrace("device", "layout", "key.0", 1, wait.Id, WorkflowTraceKind.Paused, "Paused at a breakpoint", DateTimeOffset.Now));
+        canvas.InvalidateVisual();
+        using var held = window.CaptureRenderedFrame()!;
+        // The node's right edge (x = 100 + 210) is drawn with the amber border while the run is held.
+        var edge = Pixel(held, 310, 130);
+        Assert.That(edge, Is.EqualTo(Color.Parse("#F59E0B")), "amber, not the grey border");
+    }
+
+    [AvaloniaTest]
     public void A_link_between_two_nodes_is_drawn_in_the_gap_between_them()
     {
         using var editor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", new Workflow(), [], _ => true);

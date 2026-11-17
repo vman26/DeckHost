@@ -14,7 +14,8 @@ public sealed record ProfileDocument(
     IReadOnlyList<DeviceProfile> Profiles,
     bool AutoSwitchEnabled = true,
     ProfileBackground? DefaultBackground = null,
-    IReadOnlyDictionary<string, LightStyle>? DeviceLights = null)
+    IReadOnlyDictionary<string, LightStyle>? DeviceLights = null,
+    IReadOnlyList<Workflow>? SharedWorkflows = null)
 {
     public const int CurrentVersion = 1;
 }

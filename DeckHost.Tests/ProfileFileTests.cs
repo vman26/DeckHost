@@ -42,6 +42,48 @@ public sealed class ProfileFileTests : IDisposable
                 new ActionSettings(settings.Select(static pair => new KeyValuePair<string, string>(pair.Item1, pair.Item2)))),
             new ControlAppearance(ImagePath: image), []);
 
+    private static WorkflowNode CallNode(string id, string shared) =>
+        new(id, WorkflowNodeKinds.Call) { Settings = new ActionSettings(new Dictionary<string, string> { [WorkflowKeys.Workflow] = shared }) };
+
+    private static Workflow SharedFlow(string id, params WorkflowNode[] nodes) =>
+        new() { Id = id, Name = "Shared " + id, Nodes = [new WorkflowNode("t", WorkflowNodeKinds.Trigger), .. nodes] };
+
+    [Test]
+    public void A_profile_takes_the_shared_workflows_it_calls_along_with_new_ids_and_leaves_the_others()
+    {
+        var calling = new ControlBinding("key.0", ProfileActionKind.Workflow, Binding("key.0", WorkflowAction.ActionId).Action, new ControlAppearance(), [])
+        {
+            Workflow = new Workflow { Nodes = [new WorkflowNode("t", WorkflowNodeKinds.Trigger), CallNode("c", "a")] },
+        };
+        var profile = new DeviceProfile("p", "Studio", "dev", [calling]);
+        var shared = new[] { SharedFlow("a", CallNode("inner", "b")), SharedFlow("b"), SharedFlow("unused") };
+        var file = Path.Combine(_root, "shared" + ProfileBundle.Extension);
+
+        ProfileBundle.Export([profile], file, shared);
+        var imported = ProfileBundle.ImportBundle(file, "dev", Path.Combine(_root, "assets"));
+
+        Assert.That(imported.SharedWorkflows.Select(static workflow => workflow.Name), Is.EquivalentTo(new[] { "Shared a", "Shared b" }), "the one nothing calls stays behind");
+        var a = imported.SharedWorkflows.Single(static workflow => workflow.Name == "Shared a");
+        var b = imported.SharedWorkflows.Single(static workflow => workflow.Name == "Shared b");
+        Assert.That(a.Id, Is.Not.EqualTo("a").And.StartWith("a."), "new ids, so an import never replaces yours");
+        var calledFromProfile = imported.Layouts[0].Bindings[0].Workflow!.Nodes.Single(static node => node.Kind == WorkflowNodeKinds.Call).EffectiveSettings.Get(WorkflowKeys.Workflow);
+        Assert.That(calledFromProfile, Is.EqualTo(a.Id), "the profile's Call node follows");
+        Assert.That(a.Nodes.Single(static node => node.Kind == WorkflowNodeKinds.Call).EffectiveSettings.Get(WorkflowKeys.Workflow), Is.EqualTo(b.Id), "so does a call inside a shared workflow");
+        Assert.That(ProfileBundle.Import(file, "dev", Path.Combine(_root, "assets")), Has.Count.EqualTo(1), "the plain Import still works");
+    }
+
+    [Test]
+    public void A_bundle_without_shared_workflows_has_none_and_used_ones_are_found_through_calls_only()
+    {
+        var plain = new DeviceProfile("p", "Plain", "dev", [Binding("key.0", FolderBackAction.ActionId)]);
+        var file = Path.Combine(_root, "plain" + ProfileBundle.Extension);
+
+        ProfileBundle.Export([plain], file, [SharedFlow("a")]);
+
+        Assert.That(ProfileBundle.ImportBundle(file, "dev", Path.Combine(_root, "assets")).SharedWorkflows, Is.Empty);
+        Assert.That(ProfileBundle.SharedWorkflowsUsed([plain], [SharedFlow("a")]), Is.Empty);
+    }
+
     [Test]
     public void A_profile_travels_with_its_pages_folders_and_images()
     {

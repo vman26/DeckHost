@@ -102,6 +102,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
 
         SelectNode(_workflow.Nodes.FirstOrDefault()?.Id);
         RefreshVariables();
+        RefreshShared();
     }
 
     /// <summary>The time the live view goes by (tests set it to hold a wait half way).</summary>
@@ -479,7 +480,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
                 { Kind: WorkflowNodeKinds.Action, Action: { } action } when _actionsByKey.TryGetValue(EditorActionIds.Key(action.PluginId, action.ActionId), out var item) =>
                     new SettingsEditorViewModel(item.SettingDefinitions, action.EffectiveSettings, Control.Inputs),
                 { Kind: WorkflowNodeKinds.Action } => null,
-                _ => new SettingsEditorViewModel(TypeOf(node).Settings, node.EffectiveSettings, Control.Inputs),
+                _ => new SettingsEditorViewModel(SettingsOf(node), node.EffectiveSettings, Control.Inputs),
             };
             if (_nodeSettings is not null)
             {
@@ -499,7 +500,7 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
                      {
                          nameof(SelectedNode), nameof(HasSelectedNode), nameof(HasSelectedLink), nameof(HasSelection), nameof(ShowNoSelection),
                          nameof(SelectedKindName), nameof(SelectedDescription), nameof(SelectedLinkText), nameof(SelectedIsAction),
-                         nameof(SelectedIsTrigger), nameof(SelectedIsMissing), nameof(SelectedAction), nameof(NodeTitlePlaceholder),
+                         nameof(SelectedIsTrigger), nameof(SelectedIsCall), nameof(SelectedIsMissing), nameof(SelectedAction), nameof(NodeTitlePlaceholder),
                      })
             {
                 OnPropertyChanged(name);
@@ -937,6 +938,21 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
     public void ShowTrace(WorkflowTrace trace)
     {
         RefreshVariables();
+        TrackPause(trace);
+        if (!string.Equals(trace.WorkflowId, _workflow.Id, StringComparison.Ordinal))
+        {
+            // A step in another workflow (a shared one this control calls, or the control's own): logged, not drawn here.
+            RunLog.Insert(0, $"{trace.Time.ToLocalTime().ToString("HH:mm:ss.f", CultureInfo.InvariantCulture)}  #{trace.RunId}  ↳ {(trace.WorkflowId is null ? "the control's workflow" : SharedName(trace.WorkflowId))}: {trace.Detail}");
+            while (RunLog.Count > 80)
+            {
+                RunLog.RemoveAt(RunLog.Count - 1);
+            }
+
+            OnPropertyChanged(nameof(HasRunLog));
+            RaiseChanged();
+            return;
+        }
+
         if (trace.NodeId is { } nodeId)
         {
             var map = trace.Kind == WorkflowTraceKind.Failed ? _failedUntil : _activeUntil;
@@ -962,6 +978,8 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
             WorkflowTraceKind.Finished => $"■ {trace.Detail}",
             WorkflowTraceKind.Stopped => $"■ {trace.Detail}",
             WorkflowTraceKind.Ignored => $"· {trace.Detail}",
+            WorkflowTraceKind.Paused => $"⏸ {(node is null ? string.Empty : SummaryOf(node) + ": ")}{trace.Detail}",
+            WorkflowTraceKind.Resumed => $"▶ {trace.Detail}",
             WorkflowTraceKind.Failed => $"✕ {(node is null ? string.Empty : SummaryOf(node) + ": ")}{trace.Detail}",
             _ => node is null ? trace.Detail : $"{SummaryOf(node)}{(trace.Detail.Length > 0 && trace.Detail != SummaryOf(node) ? " → " + trace.Detail : string.Empty)}",
         };
@@ -974,6 +992,8 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HasRunLog));
         RaiseChanged();
     }
+
+    private string SharedName(string id) => (SharedSource?.Invoke() ?? []).FirstOrDefault(workflow => workflow.Id == id)?.Name ?? id;
 
     private void FadeHighlights()
     {
@@ -1091,6 +1111,10 @@ public sealed partial class WorkflowEditorViewModel : ViewModelBase, IDisposable
         }
 
         _fadeTimer?.Stop();
+        if (_breakpoints is not null)
+        {
+            _breakpoints.Changed -= OnBreakpointsChanged;
+        }
     }
 }
 
