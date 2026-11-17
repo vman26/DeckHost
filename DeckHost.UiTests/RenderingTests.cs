@@ -194,6 +194,92 @@ public sealed class RenderingTests
         Assert.That(changed, Is.GreaterThan(40), "the link is drawn");
     }
 
+    private const string NodeFillColor = "#111827";
+    private const string CanvasColor = "#0B1120";
+    private const string CanvasDotColor = "#1E293B";
+    private const int SpacingWindowWidth = 800;
+    private const int SpacingWindowHeight = 200;
+    private const double FirstNodeX = 20;
+    private const double TargetNodeX = 260;
+    private const double RowY = 20;
+    private const int PixelsOffTheEdge = 5;
+    private const int BodyInset = 8;
+    private const int BottomInset = 6;
+
+    private static WriteableBitmap RenderCanvasOf(WorkflowEditorViewModel editor, int width, int height)
+    {
+        var canvas = new WorkflowCanvas { DataContext = editor, Width = width, Height = height };
+        var window = new Window { Width = width, Height = height, Content = canvas };
+        window.Show();
+        var frame = window.CaptureRenderedFrame()!;
+        window.Close();
+        return frame;
+    }
+
+    private static bool EveryPixelIsCanvas(WriteableBitmap frame, int fromX, int toX, int y)
+    {
+        var canvas = new[] { Color.Parse(CanvasColor), Color.Parse(CanvasDotColor) };
+        for (var x = fromX; x <= toX; x++)
+        {
+            if (!canvas.Contains(Pixel(frame, x, y)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    [AvaloniaTest]
+    public void InsertIntoLink_NodeDroppedBetweenCloseNeighbours_LeavesTheGapBeforeTheNextNodeFreeOfNodes()
+    {
+        // Arrange
+        using var editor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", new Workflow(), [], _ => true);
+        var first = editor.AddNode(WorkflowNodeKinds.Wait, FirstNodeX, RowY);
+        var target = editor.AddNode(WorkflowNodeKinds.Wait, TargetNodeX, RowY);
+        editor.Connect(first.Id, WorkflowPorts.Next, target.Id);
+        var link = editor.Workflow.Links.Single();
+        var dropped = editor.AddNode(WorkflowNodeKinds.Wait, TargetNodeX, SpacingWindowHeight / 2d);
+
+        // Act
+        editor.InsertIntoLink(dropped.Id, link, TargetNodeX, RowY);
+        editor.SelectNode(null);
+        using var frame = RenderCanvasOf(editor, SpacingWindowWidth, SpacingWindowHeight);
+
+        // Assert
+        var inserted = editor.Workflow.Find(dropped.Id)!;
+        var moved = editor.Workflow.Find(target.Id)!;
+        var belowTheLink = (int)(RowY + WorkflowEditorViewModel.HeightOf(inserted)) - BottomInset;
+        var gapStart = (int)(inserted.X + WorkflowEditorViewModel.NodeWidth) + PixelsOffTheEdge;
+        var gapEnd = (int)moved.X - PixelsOffTheEdge;
+        Assert.That(gapEnd, Is.GreaterThan(gapStart), "the next node starts after the inserted one ends");
+        Assert.That(EveryPixelIsCanvas(frame, gapStart, gapEnd, belowTheLink), Is.True, "nothing but canvas between them");
+    }
+
+    [AvaloniaTest]
+    public void InsertIntoLink_NodeDroppedBetweenCloseNeighbours_DrawsBothNodesWithTheirOwnBodies()
+    {
+        // Arrange
+        using var editor = new WorkflowEditorViewModel("device", "layout", Key, "Key 1", new Workflow(), [], _ => true);
+        var first = editor.AddNode(WorkflowNodeKinds.Wait, FirstNodeX, RowY);
+        var target = editor.AddNode(WorkflowNodeKinds.Wait, TargetNodeX, RowY);
+        editor.Connect(first.Id, WorkflowPorts.Next, target.Id);
+        var link = editor.Workflow.Links.Single();
+        var dropped = editor.AddNode(WorkflowNodeKinds.Wait, TargetNodeX, SpacingWindowHeight / 2d);
+
+        // Act
+        editor.InsertIntoLink(dropped.Id, link, TargetNodeX, RowY);
+        editor.SelectNode(null);
+        using var frame = RenderCanvasOf(editor, SpacingWindowWidth, SpacingWindowHeight);
+
+        // Assert
+        var inserted = editor.Workflow.Find(dropped.Id)!;
+        var moved = editor.Workflow.Find(target.Id)!;
+        var bodyY = (int)(RowY + WorkflowEditorViewModel.HeightOf(inserted)) - BottomInset;
+        Assert.That(Pixel(frame, (int)inserted.X + BodyInset, bodyY), Is.EqualTo(Color.Parse(NodeFillColor)), "the inserted node");
+        Assert.That(Pixel(frame, (int)moved.X + BodyInset, bodyY), Is.EqualTo(Color.Parse(NodeFillColor)), "the node that moved");
+    }
+
     private static WriteableBitmap RenderCanvas(WorkflowEditorViewModel editor)
     {
         var canvas = new WorkflowCanvas { DataContext = editor, Width = 560, Height = 120 };
@@ -238,5 +324,75 @@ public sealed class RenderingTests
 
         Assert.That(colors.Count, Is.GreaterThan(2), "a body, its edge and the screens, not one flat color");
         Assert.That(colors, Does.Not.Contain(Color.Parse("#2563EB")), "and not the blue box it used to be");
+    }
+
+    private const string PreviewRed = "#FF0000";
+    private const string PreviewBlack = "#000000";
+    private const string PreviewCpu = "system.cpu";
+    private const double PreviewFullLoad = 100.0;
+
+    private static DeviceDefinition TwoKeyDevice() => new(
+        "preview.device",
+        "Preview device",
+        [
+            new PhysicalControl("key.0", "Key 1", ControlType.Key, new DeckHost.Contracts.Models.Rect(0, 0, 10, 10), InputCapabilities.Press, OutputCapabilities.ColorImage, 8, 8),
+            new PhysicalControl("key.1", "Key 2", ControlType.Key, new DeckHost.Contracts.Models.Rect(12, 0, 10, 10), InputCapabilities.Press, OutputCapabilities.ColorImage, 8, 8),
+        ],
+        true);
+
+    private static ProfileBackground FollowingCpu() => new()
+    {
+        Layers = [new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = PreviewBlack, Binding = new BackgroundBinding(PreviewCpu) { FromColor = PreviewBlack, ToColor = PreviewRed } }],
+    };
+
+    private static Window ShowPreview(BackgroundPreviewViewModel preview)
+    {
+        var view = new BackgroundPreviewView { DataContext = preview };
+        var window = new Window { Width = preview.Geometry.Width, Height = preview.Geometry.Height, Content = view };
+        window.Show();
+        return window;
+    }
+
+    private static Color TileCenter(WriteableBitmap frame, BackgroundPreviewViewModel preview, string controlId)
+    {
+        var bounds = preview.Tiles.Single(tile => tile.Frame.ControlId == controlId).Bounds;
+        return Pixel(frame, (int)(bounds.X + (bounds.Width / 2)), (int)(bounds.Y + (bounds.Height / 2)));
+    }
+
+    [AvaloniaTest]
+    public void BackgroundPreviewView_SolidLayer_DrawsTheLayerColorOnEachScreenTile()
+    {
+        // Arrange
+        using var store = new DeckHost.Core.State.VariableStore();
+        var background = new ProfileBackground { Layers = [new BackgroundLayer(BackgroundLayerKinds.Solid) { Color = PreviewRed }] };
+        using var preview = new BackgroundPreviewViewModel(store, TwoKeyDevice, () => background, renderInline: true);
+        var window = ShowPreview(preview);
+
+        // Act
+        using var frame = window.CaptureRenderedFrame()!;
+        window.Close();
+
+        // Assert
+        Assert.That(TileCenter(frame, preview, "key.0"), Is.EqualTo(Color.Parse(PreviewRed)));
+        Assert.That(TileCenter(frame, preview, "key.1"), Is.EqualTo(Color.Parse(PreviewRed)));
+    }
+
+    [AvaloniaTest]
+    public void BackgroundPreviewView_BoundVariableChanged_RedrawsTheTileInTheNewColor()
+    {
+        // Arrange
+        using var store = new DeckHost.Core.State.VariableStore();
+        using var preview = new BackgroundPreviewViewModel(store, TwoKeyDevice, FollowingCpu, renderInline: true);
+        var window = ShowPreview(preview);
+        using var before = window.CaptureRenderedFrame()!;
+
+        // Act
+        store.Publish(PreviewCpu, PreviewFullLoad);
+        using var after = window.CaptureRenderedFrame()!;
+        window.Close();
+
+        // Assert
+        Assert.That(TileCenter(before, preview, "key.0"), Is.Not.EqualTo(Color.Parse(PreviewRed)), "dark while the CPU is idle");
+        Assert.That(TileCenter(after, preview, "key.0"), Is.EqualTo(Color.Parse(PreviewRed)), "red at full load");
     }
 }

@@ -21,7 +21,7 @@ public partial class ProfileManagerViewModel : ViewModelBase
     private string? _selectedRunningApp;
     private bool _confirmingDelete;
 
-    public ProfileManagerViewModel(MainViewModel main)
+    public ProfileManagerViewModel(MainViewModel main, Core.State.VariableStore? variables = null)
     {
         _main = main;
         _main.PropertyChanged += OnMainPropertyChanged;
@@ -35,8 +35,18 @@ public partial class ProfileManagerViewModel : ViewModelBase
             }
         });
         DefaultLayers = new BackgroundLayersViewModel(main.DefaultBackgroundLayers, layers => _main.DefaultBackgroundLayers = layers);
+        ProfilePreview = new BackgroundPreviewViewModel(variables,
+            () => EditingProfile is { } profile ? _main.DeviceOf(profile.DeviceId) : _main.SelectedDevice,
+            () => EditingProfile is { } profile ? _main.EffectiveBackground(profile) : null);
+        DefaultPreview = new BackgroundPreviewViewModel(variables, () => _main.SelectedDevice, () => _main.DefaultBackground);
         RefreshRunningApps();
     }
+
+    /// <summary>The edited profile's background on its device, as the device shows it.</summary>
+    public BackgroundPreviewViewModel ProfilePreview { get; }
+
+    /// <summary>The default background on the device being edited.</summary>
+    public BackgroundPreviewViewModel DefaultPreview { get; }
 
     /// <summary>The layers over the edited profile's background color and image (Background Studio).</summary>
     public BackgroundLayersViewModel ProfileLayers { get; }
@@ -60,6 +70,7 @@ public partial class ProfileManagerViewModel : ViewModelBase
                 OnPropertyChanged(nameof(EditingBackgroundColor));
                 OnPropertyChanged(nameof(EditingBackgroundImage));
                 ProfileLayers.Load(value?.BackgroundLayers);
+                ProfilePreview?.Invalidate();
                 OnPropertyChanged(nameof(BackgroundColorError));
                 OnPropertyChanged(nameof(HasBackgroundColorError));
                 OnPropertyChanged(nameof(HasEditingProfile));
@@ -230,7 +241,12 @@ public partial class ProfileManagerViewModel : ViewModelBase
         set => SetProperty(ref _selectedRunningApp, value);
     }
 
-    public void Detach() => _main.PropertyChanged -= OnMainPropertyChanged;
+    public void Detach()
+    {
+        _main.PropertyChanged -= OnMainPropertyChanged;
+        ProfilePreview.Dispose();
+        DefaultPreview.Dispose();
+    }
 
     private string _message = string.Empty;
 
@@ -453,6 +469,13 @@ public partial class ProfileManagerViewModel : ViewModelBase
                 break;
             case nameof(MainViewModel.SelectedProfile):
                 OnPropertyChanged(nameof(IsEditingActiveProfile));
+                break;
+            case nameof(MainViewModel.CanvasBackground):
+            case nameof(MainViewModel.SelectedDevice):
+            case nameof(MainViewModel.CanvasGeometry):
+                // Every edit of a background reaches the host through the main view model (CanvasBackground), and so does the device.
+                ProfilePreview.Invalidate();
+                DefaultPreview.Invalidate();
                 break;
         }
     }

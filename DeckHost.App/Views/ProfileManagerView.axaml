@@ -108,6 +108,7 @@
 					<Border Classes="card">
 						<StackPanel Spacing="10">
 							<TextBlock Classes="section" Text="BACKGROUND OF THIS PROFILE" />
+							<local:BackgroundPreviewView DataContext="{Binding ProfilePreview}" />
 							<TextBlock Classes="hint" Text="Shown behind every control of this profile. Leave it empty to use the default background for all profiles (below). An image spans the whole device, so each key shows its own part of it. Animated GIFs play (about 10 frames per second)." />
 							<TextBlock Text="Color" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
 							<local:ColorField Hex="{Binding EditingBackgroundColor, Mode=TwoWay}" DefaultHex="#0B1220" Placeholder="DeckHost dark blue" Width="280" HorizontalAlignment="Left" />
@@ -147,6 +148,7 @@
 					<Border Classes="card">
 						<StackPanel Spacing="10">
 							<TextBlock Classes="section" Text="DEFAULT BACKGROUND FOR ALL PROFILES" />
+							<local:BackgroundPreviewView DataContext="{Binding DefaultPreview}" />
 							<TextBlock Classes="hint" Text="Used by every profile that has no background of its own, so one background can serve all profiles while some override it." />
 							<TextBlock Text="Color" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
 							<local:ColorField Hex="{Binding DefaultBackgroundColor, Mode=TwoWay}" DefaultHex="#0B1220" Placeholder="DeckHost dark blue" Width="280" HorizontalAlignment="Left" />

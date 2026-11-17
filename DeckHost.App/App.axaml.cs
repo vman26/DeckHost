@@ -389,7 +389,7 @@ public partial class App : Application
             provider.GetRequiredService<IDeviceHostService>(),
             provider.GetRequiredService<DeviceSettingsService>(),
             provider.GetRequiredService<PluginUpdatesViewModel>()));
-        services.AddTransient(provider => new ProfileManagerViewModel(provider.GetRequiredService<MainViewModel>()));
+        services.AddTransient(provider => new ProfileManagerViewModel(provider.GetRequiredService<MainViewModel>(), provider.GetService<VariableStore>()));
 
         // Updates: GitHub releases of DeckHost.
         services.AddSingleton(_ => new UpdateViewModel(

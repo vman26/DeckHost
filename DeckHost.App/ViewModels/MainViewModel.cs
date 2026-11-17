@@ -1790,7 +1790,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         _deviceHostService.SetSharedWorkflows([.. _sharedWorkflows]);
         var hostModels = EveryLayout.Select(ToHostModel).ToList();
         _deviceHostService.SetProfiles(hostModels);
-        _systemData.Want(hostModels.SelectMany(static profile => Core.Rendering.BackgroundLayers.BoundVariables(profile.Background)));
+        WantBackgroundVariables(hostModels);
         if (SelectedProfile is not null)
         {
             _deviceHostService.SetActiveProfile(SelectedProfile.Id);
@@ -1875,20 +1875,30 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     {
         // Pages and folders look like their profile unless they have a background of their own.
         var model = profile.ToModel();
-        if (model.Background is { IsEmpty: false })
-        {
-            return model;
-        }
-
         var inherited = profile.IsRoot ? null : profile.RootProfile.ToModel().Background;
-        return inherited is { IsEmpty: false } ? model with { Background = inherited }
-            : DefaultBackground is null ? model
-            : model with { Background = DefaultBackground };
+        return DeckHost.App.Profiles.ProfileBackgrounds.Effective(model.Background, inherited, DefaultBackground) is { } background && !ReferenceEquals(background, model.Background)
+            ? model with { Background = background }
+            : model;
     }
+
+    /// <summary>The background the profile is drawn with (its own, its root's or the default), as the host gets it.</summary>
+    public ProfileBackground? EffectiveBackground(ProfileItemViewModel profile) => ToHostModel(profile).Background;
+
+    /// <summary>The device with this id as the host lists it, else the one being edited when that is it.</summary>
+    internal DeviceDefinition? DeviceOf(string deviceId) =>
+        _deviceHostService.Devices.FirstOrDefault(device => SameId(device.Id, deviceId))
+        ?? (SelectedDevice is { } selected && SameId(selected.Id, deviceId) ? selected : null);
+
+    /// <summary>Starts publishing the system values (CPU, memory) the backgrounds follow: the profiles' and the default's (the Studio previews it).</summary>
+    private void WantBackgroundVariables(IEnumerable<DeviceProfile> hostModels) =>
+        _systemData.Want(hostModels.SelectMany(static profile => Core.Rendering.BackgroundLayers.BoundVariables(profile.Background))
+            .Concat(Core.Rendering.BackgroundLayers.BoundVariables(DefaultBackground)));
 
     private void SyncProfilesToHost()
     {
-        _deviceHostService.SetProfiles(EveryLayout.Select(ToHostModel).ToList());
+        var hostModels = EveryLayout.Select(ToHostModel).ToList();
+        _deviceHostService.SetProfiles(hostModels);
+        WantBackgroundVariables(hostModels);
 
         if (SelectedProfile is not null)
         {

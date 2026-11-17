@@ -142,23 +142,7 @@ public class ControlItemViewModel : ViewModelBase
 
     public void SetPreview(int width, int height, byte[] rgba)
     {
-        var bitmap = PreviewBitmap;
-        if (bitmap is null || bitmap.PixelSize.Width != width || bitmap.PixelSize.Height != height)
-        {
-            bitmap = new Avalonia.Media.Imaging.WriteableBitmap(
-                new Avalonia.PixelSize(width, height),
-                new Avalonia.Vector(96, 96),
-                Avalonia.Platform.PixelFormat.Rgba8888,
-                Avalonia.Platform.AlphaFormat.Premul);
-        }
-
-        using (var buffer = bitmap.Lock())
-        {
-            for (var row = 0; row < height; row++)
-            {
-                System.Runtime.InteropServices.Marshal.Copy(rgba, row * width * 4, buffer.Address + (row * buffer.RowBytes), width * 4);
-            }
-        }
+        var bitmap = Views.FrameBitmaps.Copy(width, height, rgba, PreviewBitmap);
 
         // A new instance makes the Image control redraw.
         PreviewBitmap = null;

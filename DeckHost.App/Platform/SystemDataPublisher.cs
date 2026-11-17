@@ -19,6 +19,7 @@ internal sealed class SystemDataPublisher(IDeviceHostService host) : IDisposable
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(2);
 
     private CancellationTokenSource? _running;
+    private (bool Cpu, bool Memory) _wanted;
 
     public bool IsRunning => _running is not null;
 
@@ -33,6 +34,13 @@ internal sealed class SystemDataPublisher(IDeviceHostService host) : IDisposable
             memory |= key == MemoryKey;
         }
 
+        // Called with every edit of the profiles: nothing restarts while the same values are wanted.
+        if (_wanted == (cpu, memory))
+        {
+            return;
+        }
+
+        _wanted = (cpu, memory);
         Stop();
         if (cpu || memory)
         {
