@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NCalcSync" Version="7.4.0" />
     <PackageReference Include="SkiaSharp" Version="4.151.1" />
     <PackageReference Include="Svg.Skia" Version="5.2.3" />
     <PackageReference Include="System.Reactive" Version="7.0.0" />

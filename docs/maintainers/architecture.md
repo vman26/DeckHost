@@ -49,6 +49,7 @@ The rules ([0001](adr/0001-dependency-rule.md)) are checked by `ArchitectureTest
 | Microsoft.Extensions.DependencyInjection | Composition | MIT |
 | NLog | Logging | BSD-3-Clause |
 | System.Reactive | Variable store | MIT |
+| NCalcSync (NCalc) | Workflow expressions, behind `WorkflowExpression` | MIT |
 | HidSharp | Elgato Stream Deck over USB | Apache-2.0 |
 | Markdig | Plugin READMEs in the store | BSD-2-Clause |
 | Microsoft.Web.WebView2 | HTML Stream Deck plugins on Windows | Microsoft (redistributable) |
