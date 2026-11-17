@@ -75,14 +75,15 @@ public sealed class SettingsBrowserHostTests
     [AvaloniaTest]
     public void Failed_WebViewThatFailsWhileRunning_SwitchesToTheMessage()
     {
-        // Arrange
+        // Arrange (the marker goes to a scratch folder, never the real one)
         NoWebViewRuntime();
+        WebViewSupport.MarkerPath = Path.Combine(Path.GetTempPath(), "deckhost-webview-ui-" + Guid.NewGuid().ToString("N"), "webview-disabled.txt");
         var host = new SettingsBrowserHost();
         var window = Show(host);
         host.Source = Page;
 
         // Act
-        WebViewSupport.ReportFailure(new InvalidOperationException("the web view failed"));
+        WebViewSupport.ReportFailure(new System.Runtime.InteropServices.COMException("Class not registered", unchecked((int)0x80040154)));
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         var content = host.Content;
         window.Close();

@@ -9,6 +9,7 @@ public sealed class WebViewSupportTests : IDisposable
     private const string Runtime = "130.0.1";
     private const string NewerRuntime = "131.0.0";
     private const int ClassNotRegistered = unchecked((int)0x80040154);
+    private const int Aborted = unchecked((int)0x80004004);
 
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "deckhost-webview-" + Guid.NewGuid().ToString("N"));
 
@@ -128,6 +129,31 @@ public sealed class WebViewSupportTests : IDisposable
 
         // Assert
         Assert.That(File.ReadLines(WebViewSupport.MarkerPath).First(), Is.EqualTo(Runtime));
+    }
+
+    [Test]
+    public void ReportFailure_WebViewTornDownWhileStarting_StopsWebViewsForThisRunOnly()
+    {
+        // Arrange (E_ABORT: the editor was rebuilt while the control started; the runtime itself is fine)
+        var aborted = new COMException("Operation aborted", Aborted);
+
+        // Act
+        WebViewSupport.ReportFailure(aborted);
+
+        // Assert
+        Assert.That(WebViewSupport.IsAvailable, Is.False);
+        Assert.That(File.Exists(WebViewSupport.MarkerPath), Is.False, "the next start tries the web view again");
+    }
+
+    [TestCase(ClassNotRegistered, true)]
+    [TestCase(Aborted, false)]
+    public void IsRuntimeUnusable_ByErrorCode_IsTrueOnlyWhenTheRuntimeCantBeUsed(int hresult, bool expected)
+    {
+        // Act
+        var unusable = WebViewSupport.IsRuntimeUnusable(new COMException("failure", hresult));
+
+        // Assert
+        Assert.That(unusable, Is.EqualTo(expected));
     }
 
     [Test]

@@ -29,48 +29,112 @@ public class ArchitectureTests
     private static string[] DeckHostReferences(Assembly assembly) =>
         [.. References(assembly).Where(static name => name.StartsWith("DeckHost.", StringComparison.Ordinal)).Order()];
 
+    private const string ContractsName = "DeckHost.Contracts";
+    private const string UiPrefix = "Avalonia";
+    private const string DrawingPrefix = "SkiaSharp";
+    private const string HidPrefix = "HidSharp";
+
+    private static bool ReferencesUi(Assembly assembly) =>
+        References(assembly).Any(static name => name.StartsWith(UiPrefix, StringComparison.Ordinal));
+
+    public static IEnumerable<Assembly> DevicePluginAssemblies() => DevicePlugins;
+
     [Test]
-    public void Contracts_depends_on_nothing_of_DeckHost_and_on_no_UI_or_drawing_library()
+    public void Contracts_References_NothingOfDeckHost()
     {
-        Assert.That(DeckHostReferences(Contracts), Is.Empty);
-        Assert.That(References(Contracts).Any(static name => name.StartsWith("Avalonia", StringComparison.Ordinal) || name.StartsWith("SkiaSharp", StringComparison.Ordinal)), Is.False);
+        // Act
+        var references = DeckHostReferences(Contracts);
+
+        // Assert
+        Assert.That(references, Is.Empty);
     }
 
     [Test]
-    public void Core_depends_only_on_Contracts_and_never_on_a_device_plugin_or_the_UI()
+    public void Contracts_References_NoUiOrDrawingLibrary()
     {
-        Assert.That(DeckHostReferences(Core), Is.EqualTo(new[] { "DeckHost.Contracts" }));
-        Assert.That(References(Core).Any(static name => name.StartsWith("Avalonia", StringComparison.Ordinal) || name.StartsWith("HidSharp", StringComparison.Ordinal)), Is.False);
+        // Act
+        var referencesUiOrDrawing = References(Contracts).Any(static name => name.StartsWith(UiPrefix, StringComparison.Ordinal) || name.StartsWith(DrawingPrefix, StringComparison.Ordinal));
+
+        // Assert
+        Assert.That(referencesUiOrDrawing, Is.False);
     }
 
     [Test]
-    public void Device_plugins_depend_only_on_Contracts()
+    public void Core_References_OnlyContractsOfDeckHost()
     {
-        foreach (var plugin in DevicePlugins)
-        {
-            Assert.That(DeckHostReferences(plugin).SequenceEqual(["DeckHost.Contracts"]), Is.True, $"{plugin.GetName().Name} references {string.Join(", ", DeckHostReferences(plugin))}");
-            Assert.That(References(plugin).Any(static name => name.StartsWith("Avalonia", StringComparison.Ordinal)), Is.False);
-        }
+        // Act
+        var references = DeckHostReferences(Core);
+
+        // Assert
+        Assert.That(references, Is.EqualTo(new[] { ContractsName }));
     }
 
     [Test]
-    public void Every_device_plugin_implements_IDevicePlugin()
+    public void Core_References_NeitherTheUiNorAHidLibrary()
     {
-        foreach (var plugin in DevicePlugins)
-        {
-            Assert.That(plugin.GetExportedTypes().Any(static type => typeof(IDevicePlugin).IsAssignableFrom(type) && !type.IsAbstract), Is.True);
-        }
+        // Act
+        var referencesUiOrHid = References(Core).Any(static name => name.StartsWith(UiPrefix, StringComparison.Ordinal) || name.StartsWith(HidPrefix, StringComparison.Ordinal));
+
+        // Assert
+        Assert.That(referencesUiOrHid, Is.False);
+    }
+
+    [TestCaseSource(nameof(DevicePluginAssemblies))]
+    public void DevicePlugin_References_OnlyContractsOfDeckHost(Assembly plugin)
+    {
+        // Act
+        var references = DeckHostReferences(plugin);
+
+        // Assert
+        Assert.That(references, Is.EqualTo(new[] { ContractsName }), $"{plugin.GetName().Name} references {string.Join(", ", references)}");
+    }
+
+    [TestCaseSource(nameof(DevicePluginAssemblies))]
+    public void DevicePlugin_References_NoUiLibrary(Assembly plugin)
+    {
+        // Act
+        var referencesUi = ReferencesUi(plugin);
+
+        // Assert
+        Assert.That(referencesUi, Is.False);
+    }
+
+    [TestCaseSource(nameof(DevicePluginAssemblies))]
+    public void DevicePlugin_Exports_ADevicePluginType(Assembly plugin)
+    {
+        // Act
+        var implementsInterface = plugin.GetExportedTypes().Any(static type => typeof(IDevicePlugin).IsAssignableFrom(type) && !type.IsAbstract);
+
+        // Assert
+        Assert.That(implementsInterface, Is.True);
+    }
+
+    private static HashSet<string?> DevicePluginNames() => DevicePlugins.Select(static plugin => plugin.GetName().Name).ToHashSet();
+
+    [Test]
+    public void App_References_TheDevicePlugins()
+    {
+        // Arrange
+        var names = DevicePluginNames();
+
+        // Act
+        var knowsThem = DeckHostReferences(App).Any(name => names.Contains(name));
+
+        // Assert
+        Assert.That(knowsThem, Is.True);
     }
 
     [Test]
-    public void The_app_is_the_only_assembly_that_knows_the_device_plugins()
+    public void ContractsCoreAndTheDevicePlugins_DoNotReferenceADevicePlugin()
     {
-        var names = DevicePlugins.Select(static plugin => plugin.GetName().Name).ToHashSet();
-        Assert.That(DeckHostReferences(App).Any(name => names.Contains(name)), Is.True);
-        foreach (var assembly in DevicePlugins.Append(Core).Append(Contracts))
-        {
-            Assert.That(DeckHostReferences(assembly).Any(name => names.Contains(name)), Is.False);
-        }
+        // Arrange
+        var names = DevicePluginNames();
+
+        // Act
+        var knowers = DevicePlugins.Append(Core).Append(Contracts).Where(assembly => DeckHostReferences(assembly).Any(name => names.Contains(name))).Select(static assembly => assembly.GetName().Name).ToList();
+
+        // Assert
+        Assert.That(knowers, Is.Empty);
     }
 
     /// <summary>
@@ -81,7 +145,7 @@ public class ArchitectureTests
     /// <c>UPDATE_API_BASELINE=1</c>).
     /// </summary>
     [Test]
-    public void The_plugin_API_only_grows_unless_the_host_API_version_is_bumped()
+    public void ContractsApi_AfterAChange_OnlyGrowsUnlessTheHostApiVersionIsBumped()
     {
         var current = DescribeApi(Contracts);
         var path = Path.Combine(SourceDirectory(), "ContractsApi.txt");

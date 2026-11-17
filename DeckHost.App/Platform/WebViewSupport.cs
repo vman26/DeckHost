@@ -39,10 +39,33 @@ internal static class WebViewSupport
         _available = null;
     }
 
-    /// <summary>A web view failed after it was created: no more web views in this run or the next ones (until the runtime changes).</summary>
+    /// <summary>
+    /// A web view failed after it was created: no more web views in this run. When the failure says the runtime itself
+    /// can't be used (not registered, not found) it is remembered for the next starts too, until the runtime changes;
+    /// a view that was only torn down while it started (<c>E_ABORT</c>, e.g. the editor was rebuilt) is not.
+    /// </summary>
     public static void ReportFailure(Exception exception)
     {
         _available = false;
+        if (IsRuntimeUnusable(exception))
+        {
+            Remember(exception);
+        }
+
+        Failed?.Invoke();
+    }
+
+    /// <summary>Whether the failure means this computer's web view runtime can't be used at all, so trying again at the next start would fail too.</summary>
+    internal static bool IsRuntimeUnusable(Exception exception) =>
+        exception is System.Runtime.InteropServices.COMException { HResult: ClassNotRegistered or FileNotFound or ModuleNotFound } ||
+        exception.GetType().Name.Contains("RuntimeNotFound", StringComparison.Ordinal);
+
+    private const int ClassNotRegistered = unchecked((int)0x80040154);
+    private const int FileNotFound = unchecked((int)0x80070002);
+    private const int ModuleNotFound = unchecked((int)0x8007007E);
+
+    private static void Remember(Exception exception)
+    {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(MarkerPath)!);
@@ -52,8 +75,6 @@ internal static class WebViewSupport
         {
             // The marker is a courtesy; this run already stopped using web views.
         }
-
-        Failed?.Invoke();
     }
 
     /// <summary>Whether this exception is a web view control failing (it arrives on the UI thread, not from a call we made).</summary>

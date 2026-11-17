@@ -17,11 +17,28 @@ namespace DeckHost.Tests;
 /// </summary>
 public class ReferenceDocsTests
 {
-    [Test]
-    public void The_built_in_actions_reference_is_up_to_date() => Check("actions.md", ActionsReference());
+    private const string ActionsPage = "actions.md";
+    private const string ApiPage = "api.md";
 
     [Test]
-    public void The_plugin_API_reference_is_up_to_date() => Check("api.md", ApiReference());
+    public void ActionsReference_TheBuiltInActions_MatchTheGeneratedPage()
+    {
+        // Act
+        var generated = ActionsReference();
+
+        // Assert
+        Check(ActionsPage, generated);
+    }
+
+    [Test]
+    public void ApiReference_ThePluginApi_MatchesTheGeneratedPage()
+    {
+        // Act
+        var generated = ApiReference();
+
+        // Assert
+        Check(ApiPage, generated);
+    }
 
     private static void Check(string name, string generated)
     {
