@@ -242,7 +242,7 @@ public sealed class StreamDeckTests : IDisposable
     public async Task WillAppear_ANodePlugin_SetsItsTitle()
     {
         // Arrange
-        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
+        Assume.That(NodeJs.IsAvailable, "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
         var logs = new List<string>();
         using var runtime = NewRuntime((level, message) => { lock (logs) { logs.Add($"{level}: {message}"); } });
         using var catalog = NewCatalog(runtime);
@@ -258,7 +258,7 @@ public sealed class StreamDeckTests : IDisposable
     public async Task KeyDown_ANodePlugin_AnswersWithAnUpdatedTitle()
     {
         // Arrange
-        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
+        Assume.That(NodeJs.IsAvailable, "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
         using var runtime = NewRuntime();
         using var catalog = NewCatalog(runtime);
         await using var running = await StartNodePluginAsync(TestPluginScript, runtime, catalog);
@@ -275,7 +275,7 @@ public sealed class StreamDeckTests : IDisposable
     public async Task SetSettings_ANodePlugin_GetsTheStoredSettingsBackWithTheNextEvent()
     {
         // Arrange
-        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
+        Assume.That(NodeJs.IsAvailable, "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
         using var runtime = NewRuntime();
         using var catalog = NewCatalog(runtime);
         await using var running = await StartNodePluginAsync(TestPluginScript, runtime, catalog);
@@ -324,7 +324,7 @@ public sealed class StreamDeckTests : IDisposable
     public async Task OnProcessExited_APluginWhoseProcessDies_IsRestartedAndItsKeysComeBack()
     {
         // Arrange
-        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine");
+        Assume.That(NodeJs.IsAvailable, "Node.js isn't installed on this machine");
         using var runtime = NewRuntime(null, ShortRestartDelay, ShortRestartDelay);
         using var catalog = NewCatalog(runtime);
         var changes = 0;
@@ -360,7 +360,7 @@ public sealed class StreamDeckTests : IDisposable
     public async Task Start_APluginThatReadsItsArgumentsByPosition_ConnectsOnTheSecondTry()
     {
         // Arrange
-        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine");
+        Assume.That(NodeJs.IsAvailable, "Node.js isn't installed on this machine");
         var logs = new List<string>();
         using var runtime = NewRuntime((_, message) => { lock (logs) { logs.Add(message); } });
         using var catalog = NewCatalog(runtime);
@@ -437,7 +437,7 @@ public sealed class StreamDeckTests : IDisposable
     public async Task ProblemOf_APluginThatKeepsCrashing_SaysItStoppedThreeTimes()
     {
         // Arrange
-        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine");
+        Assume.That(NodeJs.IsAvailable, "Node.js isn't installed on this machine");
         var (runtime, catalog) = await StartAPluginThatExitsAtOnce();
         using var _ = runtime;
         using var __ = catalog;
@@ -454,7 +454,7 @@ public sealed class StreamDeckTests : IDisposable
     public async Task SetEnabled_DisablingAndEnablingACrashedPlugin_StartsItFresh()
     {
         // Arrange
-        Assume.That(IsNodeAvailable(), "Node.js isn't installed on this machine");
+        Assume.That(NodeJs.IsAvailable, "Node.js isn't installed on this machine");
         var (runtime, catalog) = await StartAPluginThatExitsAtOnce();
         using var _ = runtime;
         using var __ = catalog;
@@ -530,20 +530,6 @@ public sealed class StreamDeckTests : IDisposable
         }
 
         return false;
-    }
-
-    private static bool IsNodeAvailable()
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo("node", "--version") { RedirectStandardOutput = true, UseShellExecute = false });
-            process?.WaitForExit(5000);
-            return process?.ExitCode == 0;
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            return false;
-        }
     }
 
     private sealed class CapturingRenderContext : IRenderContext

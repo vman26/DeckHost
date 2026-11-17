@@ -4,7 +4,6 @@ using DeckHost.Contracts.Models;
 using DeckHost.Core.Plugins;
 using DeckHost.Core.StreamDeck;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json.Nodes;
 
@@ -533,7 +532,7 @@ public sealed class OpenActionDeviceTests : IDisposable
     [Test]
     public async Task Start_PluginProcess_RegistersADeviceAndGetsItsImagesAndBrightness()
     {
-        Assume.That(IsNodeAvailable(), Is.True, "Node.js is needed to run the fake plugin process");
+        Assume.That(NodeJs.IsAvailable, Is.True, "Node.js is needed to run the fake plugin process");
 
         var logs = new List<string>();
         using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), (level, message) => { lock (logs) { logs.Add($"{level}: {message}"); } });
@@ -566,20 +565,6 @@ public sealed class OpenActionDeviceTests : IDisposable
         {
             Assert.That(DateTime.UtcNow, Is.LessThan(deadline), "timed out: " + string.Join(" | ", logs));
             await Task.Delay(25);
-        }
-    }
-
-    private static bool IsNodeAvailable()
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo("node", "--version") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true });
-            process?.WaitForExit(5000);
-            return process?.ExitCode == 0;
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            return false;
         }
     }
 
