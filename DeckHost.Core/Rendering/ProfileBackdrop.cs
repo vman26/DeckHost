@@ -32,10 +32,8 @@ public static class ProfileBackdrop
                 case BackgroundLayerKinds.Solid:
                     top = layer.Color;
                     break;
-                case BackgroundLayerKinds.Gradient:
-                    top = new SKColor(
-                        (byte)((layer.Color.Red + layer.ToColor.Red) / 2), (byte)((layer.Color.Green + layer.ToColor.Green) / 2),
-                        (byte)((layer.Color.Blue + layer.ToColor.Blue) / 2), (byte)((layer.Color.Alpha + layer.ToColor.Alpha) / 2));
+                case BackgroundLayerKinds.Gradient or BackgroundLayerKinds.Radial:
+                    top = ColorHalfWayAlong(layer);
                     break;
                 default:
                     continue;
@@ -46,6 +44,23 @@ public static class ProfileBackdrop
         }
 
         return (color.Red, color.Green, color.Blue);
+
+        static SKColor ColorHalfWayAlong(ResolvedLayer layer)
+        {
+            var stops = layer.Stops ?? new GradientColors([layer.Color, layer.ToColor], [0f, 1f]);
+            var after = Array.FindIndex(stops.Positions, static position => position >= 0.5f);
+            if (after <= 0)
+            {
+                return stops.Colors[Math.Max(after, 0)];
+            }
+
+            var (from, to) = (stops.Colors[after - 1], stops.Colors[after]);
+            var span = stops.Positions[after] - stops.Positions[after - 1];
+            var t = span <= 0 ? 1f : (0.5f - stops.Positions[after - 1]) / span;
+            return new SKColor(
+                (byte)MathF.Round(from.Red + ((to.Red - from.Red) * t)), (byte)MathF.Round(from.Green + ((to.Green - from.Green) * t)),
+                (byte)MathF.Round(from.Blue + ((to.Blue - from.Blue) * t)), (byte)MathF.Round(from.Alpha + ((to.Alpha - from.Alpha) * t)));
+        }
 
         static byte Blend(byte top, byte bottom, float alpha) => (byte)MathF.Round((top * alpha) + (bottom * (1f - alpha)));
     }

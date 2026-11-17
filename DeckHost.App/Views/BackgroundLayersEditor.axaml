@@ -17,6 +17,7 @@
 			<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
 				<Button Content="+ Solid" Command="{Binding AddSolidCommand}" />
 				<Button Content="+ Gradient" Command="{Binding AddGradientCommand}" />
+				<Button Content="+ Radial" Command="{Binding AddRadialCommand}" ToolTip.Tip="A gradient from a center point outwards" />
 				<Button Content="+ Image" Command="{Binding AddImageCommand}" />
 				<Button Content="+ CPU glow" Command="{Binding AddCpuGlowCommand}" ToolTip.Tip="A red layer that gets stronger as the CPU gets busier" />
 			</StackPanel>
@@ -54,15 +55,48 @@
 									<local:ColorField Hex="{Binding Color, Mode=TwoWay}" AllowOpacity="True" DefaultHex="#1E293B" Width="320" HorizontalAlignment="Left" />
 								</StackPanel>
 								<StackPanel Spacing="8" IsVisible="{Binding IsGradient}">
-									<StackPanel Spacing="4">
-										<TextBlock Text="To" Foreground="{DynamicResource C.CBD5E1}" />
-										<local:ColorField Hex="{Binding ToColor, Mode=TwoWay}" AllowOpacity="True" DefaultHex="#7C3AED" Width="320" HorizontalAlignment="Left" />
-									</StackPanel>
-									<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+									<TextBlock Text="Colors (each starts where its % says)" Foreground="{DynamicResource C.CBD5E1}" />
+									<ItemsControl ItemsSource="{Binding Stops}">
+										<ItemsControl.ItemsPanel>
+											<ItemsPanelTemplate>
+												<StackPanel Spacing="6" />
+											</ItemsPanelTemplate>
+										</ItemsControl.ItemsPanel>
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="vm:GradientStopRowViewModel">
+												<Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6">
+													<local:ColorField Hex="{Binding Color, Mode=TwoWay}" AllowOpacity="True" DefaultHex="#7C3AED" Width="210" />
+													<NumericUpDown Grid.Column="1" Minimum="0" Maximum="100" Increment="5" FormatString="0" Value="{Binding PositionPercent, Mode=TwoWay}" Width="96" ToolTip.Tip="Where this color starts along the gradient (%)" />
+													<Button Grid.Column="2" Content="↑" Padding="8,2" Click="StopUp_OnClick" ToolTip.Tip="Trade places with the color before it" />
+													<Button Grid.Column="3" Content="↓" Padding="8,2" Click="StopDown_OnClick" ToolTip.Tip="Trade places with the color after it" />
+													<Button Grid.Column="4" Content="✕" Padding="8,2" Click="StopRemove_OnClick" ToolTip.Tip="Remove this color (two are kept)" />
+												</Grid>
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+									<Button Content="+ Add a color" Click="StopAdd_OnClick" HorizontalAlignment="Left" />
+									<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" IsVisible="{Binding IsLinearGradient}">
 										<TextBlock Text="Direction" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
 										<Slider Grid.Column="1" Minimum="0" Maximum="360" Value="{Binding Angle, Mode=TwoWay}" />
 										<TextBlock Grid.Column="2" Text="{Binding Angle, StringFormat={}{0:0}°}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
 									</Grid>
+									<StackPanel Spacing="6" IsVisible="{Binding IsRadial}">
+										<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+											<TextBlock Text="Center across" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+											<Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding CenterXPercent, Mode=TwoWay}" />
+											<TextBlock Grid.Column="2" Text="{Binding CenterXPercent, StringFormat={}{0:0} %}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
+										</Grid>
+										<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+											<TextBlock Text="Center down" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+											<Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding CenterYPercent, Mode=TwoWay}" />
+											<TextBlock Grid.Column="2" Text="{Binding CenterYPercent, StringFormat={}{0:0} %}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
+										</Grid>
+										<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+											<TextBlock Text="Size" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+											<Slider Grid.Column="1" Minimum="10" Maximum="200" Value="{Binding RadiusPercent, Mode=TwoWay}" />
+											<TextBlock Grid.Column="2" Text="{Binding RadiusPercent, StringFormat={}{0:0} %}" VerticalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" MinWidth="44" />
+										</Grid>
+									</StackPanel>
 								</StackPanel>
 								<StackPanel Spacing="4" IsVisible="{Binding IsImage}">
 									<TextBlock Text="Image (PNG, JPG, SVG or animated GIF)" Foreground="{DynamicResource C.CBD5E1}" />

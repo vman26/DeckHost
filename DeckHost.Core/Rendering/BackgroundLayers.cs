@@ -7,7 +7,31 @@ using SkiaSharp;
 namespace DeckHost.Core.Rendering;
 
 /// <summary>A background layer with everything that follows a variable worked out, ready to draw.</summary>
-internal readonly record struct ResolvedLayer(string Kind, double Opacity, SKColor Color, SKColor ToColor, double Angle, string? ImagePath);
+internal readonly record struct ResolvedLayer(string Kind, double Opacity, SKColor Color, SKColor ToColor, double Angle, string? ImagePath)
+{
+    /// <summary>A gradient's colors with their places (two at least); null for the other kinds.</summary>
+    public GradientColors? Stops { get; init; }
+
+    public double CenterX { get; init; }
+
+    public double CenterY { get; init; }
+
+    public double Radius { get; init; }
+}
+
+/// <summary>The colors of a gradient and where each starts (0 to 1, in order). Compared by value, so two resolved backgrounds can be told apart.</summary>
+internal sealed class GradientColors(SKColor[] colors, float[] positions) : IEquatable<GradientColors>
+{
+    public SKColor[] Colors { get; } = colors;
+
+    public float[] Positions { get; } = positions;
+
+    public bool Equals(GradientColors? other) => other is not null && Colors.SequenceEqual(other.Colors) && Positions.SequenceEqual(other.Positions);
+
+    public override bool Equals(object? obj) => Equals(obj as GradientColors);
+
+    public override int GetHashCode() => HashCode.Combine(Colors.Length, Positions.Length, Colors.Length > 0 ? Colors[0] : default);
+}
 
 /// <summary>
 /// A profile background as layers: the old <see cref="ProfileBackground.Color"/> and <see cref="ProfileBackground.ImagePath"/>
@@ -73,6 +97,13 @@ public static class BackgroundLayers
             var opacity = EffectiveOpacity(layer);
             var color = Parse(layer.Color, new SKColor(0, 0, 0, 0));
             var toColor = Parse(layer.ToColor, color);
+            var isGradient = layer.Kind is BackgroundLayerKinds.Gradient or BackgroundLayerKinds.Radial;
+            var stops = isGradient ? StopsOf(layer, color, toColor) : [];
+            if (isGradient)
+            {
+                (color, toColor) = (stops[0].Color, stops[^1].Color);
+            }
+
             if (layer.Binding is { Variable.Length: > 0 } binding)
             {
                 var value = ReadNumber(variables, binding);
@@ -92,11 +123,13 @@ public static class BackgroundLayers
                     default:
                     {
                         var from = Parse(binding.FromColor, color);
-                        var to = Parse(binding.ToColor, layer.Kind == BackgroundLayerKinds.Gradient ? toColor : color);
+                        var to = Parse(binding.ToColor, isGradient ? toColor : color);
                         var mixed = Lerp(from, to, t);
-                        if (layer.Kind == BackgroundLayerKinds.Gradient)
+                        if (isGradient)
                         {
+                            // The color that follows the variable is the gradient's last one.
                             toColor = mixed;
+                            stops[^1] = (mixed, stops[^1].Position);
                         }
                         else
                         {
@@ -113,10 +146,34 @@ public static class BackgroundLayers
                 continue;
             }
 
-            resolved.Add(new ResolvedLayer(layer.Kind, opacity, color, toColor, layer.Angle ?? 0, layer.ImagePath));
+            resolved.Add(new ResolvedLayer(layer.Kind, opacity, color, toColor, layer.Angle ?? 0, layer.ImagePath)
+            {
+                Stops = isGradient ? new GradientColors([.. stops.Select(static stop => stop.Color)], [.. stops.Select(static stop => stop.Position)]) : null,
+                CenterX = Math.Clamp(layer.CenterX ?? 0.5, 0, 1),
+                CenterY = Math.Clamp(layer.CenterY ?? 0.5, 0, 1),
+                Radius = Math.Clamp(layer.Radius ?? 1, 0.01, 4),
+            });
         }
 
         return resolved;
+    }
+
+    /// <summary>The colors of a gradient with their places, in order: its <see cref="BackgroundLayer.Stops"/> when it has two or more, else Color to ToColor.</summary>
+    private static List<(SKColor Color, float Position)> StopsOf(BackgroundLayer layer, SKColor color, SKColor toColor)
+    {
+        if (layer.Stops is { Count: >= 2 } given)
+        {
+            return
+            [
+                .. given
+                    .Select((stop, index) => (Index: index, Color: Parse(stop.Color, color), Position: (float)Math.Clamp(double.IsFinite(stop.Position) ? stop.Position : 0, 0, 1)))
+                    .OrderBy(static stop => stop.Position)
+                    .ThenBy(static stop => stop.Index)
+                    .Select(static stop => (stop.Color, stop.Position)),
+            ];
+        }
+
+        return [(color, 0f), (toColor, 1f)];
     }
 
     private static SKColor Parse(string? text, SKColor fallback) =>

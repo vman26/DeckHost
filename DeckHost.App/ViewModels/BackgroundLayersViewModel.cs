@@ -12,6 +12,52 @@ namespace DeckHost.App.ViewModels;
 /// <summary>What a bound layer property follows, as the editor words it.</summary>
 public sealed record BindingTargetOption(string Value, string Label);
 
+/// <summary>One color of a gradient in the Studio: its color and where along the gradient it starts (0 to 100 %).</summary>
+public sealed class GradientStopRowViewModel : ViewModelBase
+{
+    private readonly BackgroundLayerRowViewModel _owner;
+    private string _color;
+    private double _positionPercent;
+
+    internal GradientStopRowViewModel(BackgroundLayerRowViewModel owner, string color, double positionPercent)
+    {
+        _owner = owner;
+        _color = color;
+        _positionPercent = positionPercent;
+    }
+
+    public string Color
+    {
+        get => _color;
+        set
+        {
+            if (SetProperty(ref _color, value ?? string.Empty))
+            {
+                _owner.StopsChanged();
+            }
+        }
+    }
+
+    /// <summary>Where the color starts along the gradient, 0 to 100.</summary>
+    public double PositionPercent
+    {
+        get => _positionPercent;
+        set
+        {
+            if (SetProperty(ref _positionPercent, Math.Round(Math.Clamp(value, 0, 100))))
+            {
+                _owner.StopsChanged();
+            }
+        }
+    }
+
+    public void MoveUp() => _owner.MoveStop(this, -1);
+
+    public void MoveDown() => _owner.MoveStop(this, 1);
+
+    public void Remove() => _owner.RemoveStop(this);
+}
+
 /// <summary>One background layer as a card in the Background Studio.</summary>
 public sealed class BackgroundLayerRowViewModel : ViewModelBase
 {
@@ -36,6 +82,9 @@ public sealed class BackgroundLayerRowViewModel : ViewModelBase
     private string _max;
     private string _fromColor;
     private string _boundToColor;
+    private double _centerXPercent;
+    private double _centerYPercent;
+    private double _radiusPercent;
 
     internal BackgroundLayerRowViewModel(BackgroundLayersViewModel owner, BackgroundLayer layer)
     {
@@ -54,6 +103,60 @@ public sealed class BackgroundLayerRowViewModel : ViewModelBase
         _max = (layer.Binding?.Max ?? 100).ToString("0.###", CultureInfo.InvariantCulture);
         _fromColor = layer.Binding?.FromColor ?? string.Empty;
         _boundToColor = layer.Binding?.ToColor ?? string.Empty;
+        _centerXPercent = Math.Round(Math.Clamp(layer.CenterX ?? 0.5, 0, 1) * 100);
+        _centerYPercent = Math.Round(Math.Clamp(layer.CenterY ?? 0.5, 0, 1) * 100);
+        _radiusPercent = Math.Round(Math.Clamp(layer.Radius ?? 1, 0.01, 4) * 100);
+        foreach (var stop in StopsOf(layer))
+        {
+            Stops.Add(new GradientStopRowViewModel(this, stop.Color, stop.PositionPercent));
+        }
+    }
+
+    private static IEnumerable<(string Color, double PositionPercent)> StopsOf(BackgroundLayer layer) =>
+        layer.Stops is { Count: >= 2 } given
+            ? given.Select(static stop => (stop.Color, Math.Round(Math.Clamp(stop.Position, 0, 1) * 100)))
+            : [(layer.Color ?? "#1E3A8A", 0d), (layer.ToColor ?? "#7C3AED", 100d)];
+
+    /// <summary>The colors of a gradient or radial gradient layer, in order along it.</summary>
+    public ObservableCollection<GradientStopRowViewModel> Stops { get; } = [];
+
+    public bool CanRemoveStop => Stops.Count > 2;
+
+    internal void StopsChanged() => _owner.Changed();
+
+    /// <summary>Adds a color halfway between the last two (a gradient goes from one color through the new one to the other).</summary>
+    public void AddStop()
+    {
+        var last = Stops[^1];
+        var before = Stops.Count > 1 ? Stops[^2] : last;
+        var position = Math.Round((last.PositionPercent + before.PositionPercent) / 2);
+        Stops.Insert(Stops.Count - 1, new GradientStopRowViewModel(this, before.Color, position));
+        OnPropertyChanged(nameof(CanRemoveStop));
+        _owner.Changed();
+    }
+
+    internal void RemoveStop(GradientStopRowViewModel stop)
+    {
+        if (Stops.Count > 2 && Stops.Remove(stop))
+        {
+            OnPropertyChanged(nameof(CanRemoveStop));
+            _owner.Changed();
+        }
+    }
+
+    /// <summary>Moves a color one place earlier or later in the gradient: the colors trade places, the places along the gradient stay.</summary>
+    internal void MoveStop(GradientStopRowViewModel stop, int direction)
+    {
+        var index = Stops.IndexOf(stop);
+        var other = index + direction;
+        if (index < 0 || other < 0 || other >= Stops.Count)
+        {
+            return;
+        }
+
+        var color = Stops[index].Color;
+        Stops[index].Color = Stops[other].Color;
+        Stops[other].Color = color;
     }
 
     /// <summary>The layer as it was loaded: a layer of a kind this version doesn't know is written back from it unchanged.</summary>
@@ -65,24 +168,30 @@ public sealed class BackgroundLayerRowViewModel : ViewModelBase
 
     public bool IsSolid => Kind == BackgroundLayerKinds.Solid;
 
-    public bool IsGradient => Kind == BackgroundLayerKinds.Gradient;
+    /// <summary>A linear or radial gradient (colors along a line or from a center).</summary>
+    public bool IsGradient => Kind is BackgroundLayerKinds.Gradient or BackgroundLayerKinds.Radial;
+
+    public bool IsLinearGradient => Kind == BackgroundLayerKinds.Gradient;
+
+    public bool IsRadial => Kind == BackgroundLayerKinds.Radial;
 
     public bool IsImage => Kind == BackgroundLayerKinds.Image;
 
     /// <summary>Whether it has a color (or two) to set.</summary>
-    public bool HasColor => IsSolid || IsGradient;
+    public bool HasColor => IsSolid;
 
     public string KindLabel => Kind switch
     {
         BackgroundLayerKinds.Solid => "Solid color",
         BackgroundLayerKinds.Gradient => "Gradient",
+        BackgroundLayerKinds.Radial => "Radial gradient",
         BackgroundLayerKinds.Image => "Image",
         _ => $"Layer of a kind this version doesn't know ({Kind}); kept as it is",
     };
 
-    public string ColorLabel => IsGradient ? "From" : "Color";
+    public string ColorLabel => "Color";
 
-    public string BoundColorsHint => IsGradient ? "The gradient's end color follows the variable." : "The color follows the variable.";
+    public string BoundColorsHint => IsGradient ? "The gradient's last color follows the variable." : "The color follows the variable.";
 
     public bool Visible
     {
@@ -114,6 +223,27 @@ public sealed class BackgroundLayerRowViewModel : ViewModelBase
     {
         get => _angle;
         set => Set(ref _angle, Math.Clamp(value, 0, 360));
+    }
+
+    /// <summary>A radial gradient's center across the layout, 0 (left) to 100 (right).</summary>
+    public double CenterXPercent
+    {
+        get => _centerXPercent;
+        set => Set(ref _centerXPercent, Math.Clamp(value, 0, 100));
+    }
+
+    /// <summary>A radial gradient's center down the layout, 0 (top) to 100 (bottom).</summary>
+    public double CenterYPercent
+    {
+        get => _centerYPercent;
+        set => Set(ref _centerYPercent, Math.Clamp(value, 0, 100));
+    }
+
+    /// <summary>A radial gradient's size as a share of the layout's half diagonal: 100 reaches the corners.</summary>
+    public double RadiusPercent
+    {
+        get => _radiusPercent;
+        set => Set(ref _radiusPercent, Math.Clamp(value, 1, 400));
     }
 
     public string ImagePath
@@ -194,11 +324,18 @@ public sealed class BackgroundLayerRowViewModel : ViewModelBase
         static double Number(string text, double fallback) =>
             double.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value) ? value : fallback;
 
+        // A gradient with two colors at the ends keeps the old two-color form (older versions read it); more colors, or colors
+        // that start somewhere else, are stored as stops, with the first and last color also in Color and ToColor.
+        var plain = Stops.Count == 2 && Stops[0].PositionPercent == 0 && Stops[1].PositionPercent == 100;
         return new BackgroundLayer(Kind, Visible, Math.Round(OpacityPercent / 100d, 3))
         {
-            Color = HasColor ? Blank(Color) : null,
-            ToColor = IsGradient ? Blank(ToColor) : null,
-            Angle = IsGradient ? Angle : null,
+            Color = IsGradient && Stops.Count > 0 ? Blank(Stops[0].Color) : HasColor ? Blank(Color) : null,
+            ToColor = IsGradient && Stops.Count > 0 ? Blank(Stops[^1].Color) : null,
+            Stops = IsGradient && !plain ? [.. Stops.Select(static stop => new GradientStop(stop.Color.Trim(), stop.PositionPercent / 100d))] : null,
+            Angle = IsLinearGradient ? Angle : null,
+            CenterX = IsRadial ? Math.Round(CenterXPercent / 100d, 3) : null,
+            CenterY = IsRadial ? Math.Round(CenterYPercent / 100d, 3) : null,
+            Radius = IsRadial ? Math.Round(RadiusPercent / 100d, 3) : null,
             ImagePath = IsImage ? Blank(ImagePath) : null,
             Binding = IsBound && Blank(Variable) is { } variable
                 ? new BackgroundBinding(variable, Target.Value, Number(Min, 0), Number(Max, 100))
@@ -275,15 +412,25 @@ public sealed partial class BackgroundLayersViewModel : ViewModelBase
     private void AddGradient() => Add(new BackgroundLayer(BackgroundLayerKinds.Gradient) { Color = "#1E3A8A", ToColor = "#7C3AED", Angle = 45 });
 
     [RelayCommand]
+    private void AddRadial() => Add(new BackgroundLayer(BackgroundLayerKinds.Radial) { Color = "#7C3AED", ToColor = "#0B1220", CenterX = 0.5, CenterY = 0.5, Radius = 1 });
+
+    [RelayCommand]
     private void AddImage() => Add(new BackgroundLayer(BackgroundLayerKinds.Image));
 
-    /// <summary>A red glow that gets stronger as the CPU gets busier (a layer that follows <c>system.cpu</c>).</summary>
+    /// <summary>
+    /// A red glow that gets stronger as the CPU gets busier: invisible when idle, full at 60 % load, so ordinary load already shows
+    /// (a layer that follows <c>system.cpu</c>; the picture between the keys isn't part of a layer that follows a variable).
+    /// </summary>
     [RelayCommand]
-    private void AddCpuGlow() => Add(new BackgroundLayer(BackgroundLayerKinds.Solid, Opacity: 0.8)
+    private void AddCpuGlow() => Add(new BackgroundLayer(BackgroundLayerKinds.Solid, Opacity: 0.9)
     {
-        Color = "#EF4444",
-        Binding = new BackgroundBinding("system.cpu", BackgroundBindingTargets.Opacity, 0, 100),
+        Color = CpuGlowColor,
+        Binding = new BackgroundBinding(CpuGlowVariable, BackgroundBindingTargets.Opacity, 0, CpuGlowFullAt),
     });
+
+    internal const string CpuGlowVariable = "system.cpu";
+    internal const string CpuGlowColor = "#EF4444";
+    internal const double CpuGlowFullAt = 60;
 
     public void Remove(BackgroundLayerRowViewModel row)
     {

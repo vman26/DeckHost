@@ -108,7 +108,7 @@ public sealed class BackgroundStudioTests
         studio.AddCpuGlowCommand.Execute(null);
 
         var glow = reported.Last().Single();
-        Assert.That(glow.Binding, Is.EqualTo(new BackgroundBinding("system.cpu", BackgroundBindingTargets.Opacity, 0, 100)));
+        Assert.That(glow.Binding, Is.EqualTo(new BackgroundBinding("system.cpu", BackgroundBindingTargets.Opacity, 0, 60)));
 
         var profile = new ProfileItemViewModel("p", "Studio", "dev", null, new ProfileBackground("#101010") { Layers = [glow] });
         Assert.That(profile.BackgroundLayers, Has.Count.EqualTo(1));

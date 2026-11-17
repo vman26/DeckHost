@@ -12,6 +12,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Added
 
+- Backgrounds: gradients can have more than two colors (add, reorder, set where each starts) and there are radial
+  gradients; the CPU glow preset is visible at ordinary load (full at 60 %) and the CPU value is read right away.
+
 - Plugin store: open-source Elgato plugins can come from a checksummed copy kept in DeckHost's plugin
   repository instead of the community archive (the copying itself stays off for now).
 - Linux: an AppImage next to the tar.gz, one file that runs without installing. DeckHost doesn't replace it
@@ -121,6 +124,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 The first public pre-release.
 
 ### Added
+
+- Backgrounds: gradients can have more than two colors (add, reorder, set where each starts) and there are radial
+  gradients; the CPU glow preset is visible at ordinary load (full at 60 %) and the CPU value is read right away.
 
 - Devices: the MiraBox StreamDock N4 Pro, Elgato Stream Decks (preview, no Elgato software needed),
   generic USB HID devices you describe yourself, and the Web Deck on a phone, tablet or browser.

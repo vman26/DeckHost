@@ -422,6 +422,9 @@ namespace DeckHost.Core.Rendering
                     case BackgroundLayerKinds.Gradient:
                         DrawLayoutGradient(layer, layout, control);
                         break;
+                    case BackgroundLayerKinds.Radial:
+                        DrawLayoutRadialGradient(layer, layout, control);
+                        break;
                     case BackgroundLayerKinds.Image when !string.IsNullOrWhiteSpace(layer.ImagePath):
                         DrawLayoutSlice(layer.ImagePath, layout, control, layer.Opacity);
                         break;
@@ -448,16 +451,44 @@ namespace DeckHost.Core.Rendering
             var (dx, dy) = (Math.Cos(radians), Math.Sin(radians));
             var half = ((Math.Abs(layout.Width * dx)) + Math.Abs(layout.Height * dy)) / 2d;
             var (cx, cy) = (layout.X + (layout.Width / 2d), layout.Y + (layout.Height / 2d));
-            SKPoint ToControl(double x, double y) => new((float)((x - control.X) * Width / control.Width), (float)((y - control.Y) * Height / control.Height));
 
-            var alpha = Math.Clamp(layer.Opacity, 0, 1);
+            var (colors, positions) = GradientShaderColors(layer);
             using var shader = SKShader.CreateLinearGradient(
-                ToControl(cx - (dx * half), cy - (dy * half)),
-                ToControl(cx + (dx * half), cy + (dy * half)),
-                [layer.Color.WithAlpha((byte)Math.Round(layer.Color.Alpha * alpha)), layer.ToColor.WithAlpha((byte)Math.Round(layer.ToColor.Alpha * alpha))],
+                ToControl(cx - (dx * half), cy - (dy * half), control),
+                ToControl(cx + (dx * half), cy + (dy * half), control),
+                colors,
+                positions,
                 SKShaderTileMode.Clamp);
             using var paint = new SKPaint { IsAntialias = false, Style = SKPaintStyle.Fill, Shader = shader };
             _canvas.DrawRect(0, 0, Width, Height, paint);
+        }
+
+        /// <summary>A radial gradient across the whole layout: from its center out to a share of the half diagonal; this control draws its part.</summary>
+        private void DrawLayoutRadialGradient(ResolvedLayer layer, Rect layout, Rect control)
+        {
+            if (layout.Width <= 0 || layout.Height <= 0 || control.Width <= 0 || control.Height <= 0)
+            {
+                return;
+            }
+
+            var center = ToControl(layout.X + (layer.CenterX * layout.Width), layout.Y + (layer.CenterY * layout.Height), control);
+            var radiusInLayout = layer.Radius * 0.5 * Math.Sqrt((layout.Width * layout.Width) + (layout.Height * layout.Height));
+            var radius = (float)Math.Max(radiusInLayout * Width / control.Width, 0.5);
+            var (colors, positions) = GradientShaderColors(layer);
+            using var shader = SKShader.CreateRadialGradient(center, radius, colors, positions, SKShaderTileMode.Clamp);
+            using var paint = new SKPaint { IsAntialias = false, Style = SKPaintStyle.Fill, Shader = shader };
+            _canvas.DrawRect(0, 0, Width, Height, paint);
+        }
+
+        private SKPoint ToControl(double x, double y, Rect control) =>
+            new((float)((x - control.X) * Width / control.Width), (float)((y - control.Y) * Height / control.Height));
+
+        /// <summary>The gradient's colors (with the layer's opacity in their alpha) and where each starts.</summary>
+        private static (SKColor[] Colors, float[] Positions) GradientShaderColors(ResolvedLayer layer)
+        {
+            var alpha = Math.Clamp(layer.Opacity, 0, 1);
+            var stops = layer.Stops ?? new GradientColors([layer.Color, layer.ToColor], [0f, 1f]);
+            return ([.. stops.Colors.Select(color => color.WithAlpha((byte)Math.Round(color.Alpha * alpha)))], stops.Positions);
         }
 
         /// <summary>Fills the control with a #RRGGBB / #AARRGGBB color. Returns false for an invalid color.</summary>

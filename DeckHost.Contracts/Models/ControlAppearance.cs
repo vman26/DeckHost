@@ -77,10 +77,16 @@ public static class BackgroundLayerKinds
     /// <summary>A gradient across the whole layout, from <see cref="BackgroundLayer.Color"/> to <see cref="BackgroundLayer.ToColor"/> at <see cref="BackgroundLayer.Angle"/> degrees.</summary>
     public const string Gradient = "gradient";
 
+    /// <summary>
+    /// A radial gradient across the whole layout: from the center (<see cref="BackgroundLayer.CenterX"/>, <see cref="BackgroundLayer.CenterY"/>)
+    /// out to <see cref="BackgroundLayer.Radius"/>, through the same colors as a <see cref="Gradient"/>.
+    /// </summary>
+    public const string Radial = "radial";
+
     /// <summary>A picture (or animated GIF) spread over the whole layout, every control showing its slice.</summary>
     public const string Image = "image";
 
-    public static IReadOnlyList<string> Known { get; } = [Solid, Gradient, Image];
+    public static IReadOnlyList<string> Known { get; } = [Solid, Gradient, Radial, Image];
 }
 
 /// <summary>What a bound property of a layer follows.</summary>
@@ -115,11 +121,29 @@ public sealed record BackgroundLayer(string Kind, bool Visible = true, double Op
     /// <summary>A gradient's direction in degrees: 0 left to right, 90 top to bottom.</summary>
     public double? Angle { get; init; }
 
+    /// <summary>
+    /// A gradient's colors with their places along it. With two or more, they replace <see cref="Color"/> and <see cref="ToColor"/>
+    /// (which still hold the first and last color, so older versions show a two-color gradient).
+    /// </summary>
+    public IReadOnlyList<GradientStop>? Stops { get; init; }
+
+    /// <summary>A radial gradient's center across the layout, 0 (left) to 1 (right); 0.5 when not set.</summary>
+    public double? CenterX { get; init; }
+
+    /// <summary>A radial gradient's center down the layout, 0 (top) to 1 (bottom); 0.5 when not set.</summary>
+    public double? CenterY { get; init; }
+
+    /// <summary>A radial gradient's radius as a share of the layout's half diagonal (1 reaches the corners); 1 when not set.</summary>
+    public double? Radius { get; init; }
+
     public string? ImagePath { get; init; }
 
     /// <summary>Makes a property of the layer follow a variable (the CPU load, a Set variable node's value, …).</summary>
     public BackgroundBinding? Binding { get; init; }
 }
+
+/// <summary>One color of a gradient and where it starts: <paramref name="Position"/> 0 (the start) to 1 (the end).</summary>
+public sealed record GradientStop(string Color, double Position);
 
 /// <summary>
 /// A layer property that follows a variable. The value is read as a number between <paramref name="Min"/> and

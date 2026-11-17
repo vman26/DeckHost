@@ -17,6 +17,28 @@ public partial class BackgroundLayersEditor : UserControl
 
     private void LayerRemove_OnClick(object? sender, RoutedEventArgs e) => With(sender, static (vm, row) => vm.Remove(row));
 
+    private static void OnStop(object? sender, Action<GradientStopRowViewModel> action)
+    {
+        if (sender is Control { DataContext: GradientStopRowViewModel stop })
+        {
+            action(stop);
+        }
+    }
+
+    private void StopUp_OnClick(object? sender, RoutedEventArgs e) => OnStop(sender, static stop => stop.MoveUp());
+
+    private void StopDown_OnClick(object? sender, RoutedEventArgs e) => OnStop(sender, static stop => stop.MoveDown());
+
+    private void StopRemove_OnClick(object? sender, RoutedEventArgs e) => OnStop(sender, static stop => stop.Remove());
+
+    private void StopAdd_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: BackgroundLayerRowViewModel row })
+        {
+            row.AddStop();
+        }
+    }
+
     private async void LayerBrowse_OnClick(object? sender, RoutedEventArgs e)
     {
         if (sender is not Control { DataContext: BackgroundLayerRowViewModel row } || TopLevel.GetTopLevel(this) is not { } top)

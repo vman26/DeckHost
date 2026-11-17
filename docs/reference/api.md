@@ -456,10 +456,14 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `BackgroundLayer(string Kind, bool Visible = true, double Opacity = 1)` | One layer of a profile background, drawn over the layers before it. `Kind` is text so a layer of a kind this version doesn't know survives a save. |
 | `double? Angle { get; init; }` | A gradient's direction in degrees: 0 left to right, 90 top to bottom. |
 | `BackgroundBinding Binding { get; init; }` | Makes a property of the layer follow a variable (the CPU load, a Set variable node's value, …). |
+| `double? CenterX { get; init; }` | A radial gradient's center across the layout, 0 (left) to 1 (right); 0.5 when not set. |
+| `double? CenterY { get; init; }` | A radial gradient's center down the layout, 0 (top) to 1 (bottom); 0.5 when not set. |
 | `string Color { get; init; }` | #RRGGBB or #AARRGGBB: a solid layer's color, a gradient's start. |
 | `string ImagePath { get; init; }` |  |
 | `string Kind { get; init; }` |  |
 | `double Opacity { get; init; }` | 0 to 1. |
+| `double? Radius { get; init; }` | A radial gradient's radius as a share of the layout's half diagonal (1 reaches the corners); 1 when not set. |
+| `IReadOnlyList<GradientStop> Stops { get; init; }` | A gradient's colors with their places along it. With two or more, they replace `Color` and `ToColor` (which still hold the first and last color, so older versions show a two-color gradient). |
 | `string ToColor { get; init; }` | A gradient's end color. |
 | `bool Visible { get; init; }` | Off keeps the layer but doesn't draw it. |
 
@@ -472,6 +476,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `IReadOnlyList<string> Known` |  |
 | `const string Gradient` | A gradient across the whole layout, from `Color` to `ToColor` at `Angle` degrees. |
 | `const string Image` | A picture (or animated GIF) spread over the whole layout, every control showing its slice. |
+| `const string Radial` | A radial gradient across the whole layout: from the center (`CenterX`, `CenterY`) out to `Radius`, through the same colors as a `Gradient`. |
 | `const string Solid` | One color over the whole layout. |
 
 ### ControlAppearance
@@ -714,6 +719,16 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `string Message { get; init; }` |  |
 | `FirmwareUpdateResult NotSupported` |  |
 | `bool Success { get; init; }` |  |
+
+### GradientStop
+
+*record* — One color of a gradient and where it starts: `Position` 0 (the start) to 1 (the end).
+
+| Member | |
+|---|---|
+| `GradientStop(string Color, double Position)` | One color of a gradient and where it starts: `Position` 0 (the start) to 1 (the end). |
+| `string Color { get; init; }` |  |
+| `double Position { get; init; }` |  |
 
 ### LightColor
 

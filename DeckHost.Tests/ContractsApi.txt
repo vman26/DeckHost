@@ -247,6 +247,8 @@
   DeckHost.Contracts.Models.BackgroundLayer.<Clone>$() : DeckHost.Contracts.Models.BackgroundLayer
   DeckHost.Contracts.Models.BackgroundLayer.Angle : System.Nullable<System.Double> {set}
   DeckHost.Contracts.Models.BackgroundLayer.Binding : DeckHost.Contracts.Models.BackgroundBinding {set}
+  DeckHost.Contracts.Models.BackgroundLayer.CenterX : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundLayer.CenterY : System.Nullable<System.Double> {set}
   DeckHost.Contracts.Models.BackgroundLayer.Color : System.String {set}
   DeckHost.Contracts.Models.BackgroundLayer.Deconstruct(System.String& Kind, System.Boolean& Visible, System.Double& Opacity) : System.Void
   DeckHost.Contracts.Models.BackgroundLayer.Equals(DeckHost.Contracts.Models.BackgroundLayer other) : System.Boolean
@@ -255,12 +257,15 @@
   DeckHost.Contracts.Models.BackgroundLayer.ImagePath : System.String {set}
   DeckHost.Contracts.Models.BackgroundLayer.Kind : System.String {set}
   DeckHost.Contracts.Models.BackgroundLayer.Opacity : System.Double {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Radius : System.Nullable<System.Double> {set}
+  DeckHost.Contracts.Models.BackgroundLayer.Stops : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Models.GradientStop> {set}
   DeckHost.Contracts.Models.BackgroundLayer.ToColor : System.String {set}
   DeckHost.Contracts.Models.BackgroundLayer.ToString() : System.String
   DeckHost.Contracts.Models.BackgroundLayer.Visible : System.Boolean {set}
   DeckHost.Contracts.Models.BackgroundLayerKinds.Gradient : System.String const
   DeckHost.Contracts.Models.BackgroundLayerKinds.Image : System.String const
   DeckHost.Contracts.Models.BackgroundLayerKinds.Known : System.Collections.Generic.IReadOnlyList<System.String>
+  DeckHost.Contracts.Models.BackgroundLayerKinds.Radial : System.String const
   DeckHost.Contracts.Models.BackgroundLayerKinds.Solid : System.String const
   DeckHost.Contracts.Models.ControlAppearance(System.String Text, System.String ImagePath, DeckHost.Contracts.Models.RgbFeedback RgbFeedback, System.String BackgroundColor, DeckHost.Contracts.Models.TextStyle TextStyle)
   DeckHost.Contracts.Models.ControlAppearance.<Clone>$() : DeckHost.Contracts.Models.ControlAppearance
@@ -459,6 +464,15 @@
   DeckHost.Contracts.Models.FirmwareUpdateResult.NotSupported : DeckHost.Contracts.Models.FirmwareUpdateResult
   DeckHost.Contracts.Models.FirmwareUpdateResult.Success : System.Boolean {set}
   DeckHost.Contracts.Models.FirmwareUpdateResult.ToString() : System.String
+  DeckHost.Contracts.Models.GradientStop(System.String Color, System.Double Position)
+  DeckHost.Contracts.Models.GradientStop.<Clone>$() : DeckHost.Contracts.Models.GradientStop
+  DeckHost.Contracts.Models.GradientStop.Color : System.String {set}
+  DeckHost.Contracts.Models.GradientStop.Deconstruct(System.String& Color, System.Double& Position) : System.Void
+  DeckHost.Contracts.Models.GradientStop.Equals(DeckHost.Contracts.Models.GradientStop other) : System.Boolean
+  DeckHost.Contracts.Models.GradientStop.Equals(System.Object obj) : System.Boolean
+  DeckHost.Contracts.Models.GradientStop.GetHashCode() : System.Int32
+  DeckHost.Contracts.Models.GradientStop.Position : System.Double {set}
+  DeckHost.Contracts.Models.GradientStop.ToString() : System.String
   DeckHost.Contracts.Models.LightColor(System.String ControlId, System.Byte Red, System.Byte Green, System.Byte Blue)
   DeckHost.Contracts.Models.LightColor.<Clone>$() : DeckHost.Contracts.Models.LightColor
   DeckHost.Contracts.Models.LightColor.Blue : System.Byte {set}
@@ -886,6 +900,7 @@ class DeckHost.Contracts.Models.FirmwareImage
 class DeckHost.Contracts.Models.FirmwareProgress
 class DeckHost.Contracts.Models.FirmwareRelease
 class DeckHost.Contracts.Models.FirmwareUpdateResult
+class DeckHost.Contracts.Models.GradientStop
 class DeckHost.Contracts.Models.LightColor
 class DeckHost.Contracts.Models.LightStep
 class DeckHost.Contracts.Models.LightStyle

@@ -18,6 +18,9 @@ internal sealed class SystemDataPublisher(IDeviceHostService host) : IDisposable
 
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(2);
 
+    /// <summary>The CPU load is measured between two readings; this long after the first one the second is taken.</summary>
+    private static readonly TimeSpan FirstReadingAfter = TimeSpan.FromMilliseconds(600);
+
     private CancellationTokenSource? _running;
     private (bool Cpu, bool Memory) _wanted;
 
@@ -55,6 +58,13 @@ internal sealed class SystemDataPublisher(IDeviceHostService host) : IDisposable
         using var timer = new PeriodicTimer(Interval);
         try
         {
+            if (cpu)
+            {
+                // The first reading has nothing to compare with (it would say 0 %): take it now, publish the first real one shortly after.
+                _ = SystemMetrics.CpuUsage();
+                await Task.Delay(FirstReadingAfter, cancellationToken).ConfigureAwait(false);
+            }
+
             do
             {
                 if (cpu && SystemMetrics.CpuUsage() is { } load)
