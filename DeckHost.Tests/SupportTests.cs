@@ -22,46 +22,105 @@ public sealed class SupportTests : IDisposable
         }
     }
 
+    private const string Version = "1.2.3";
+    private const string Origin = "test";
+    private const int ReportsKept = 1;
+    private const int MaxIssueLinkLength = 12_000;
+    private const string TodayLog = "logs/deckhost-today.log";
+
+    private static string HomeFolder => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    private static DateTimeOffset FirstCrashTime() =>
+        new(2026, 11, 1, 10, 0, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 11, 1)));
+
+    private string CrashFolder => Path.Combine(_root, "crashes");
+
     [Test]
-    public void A_crash_report_is_written_found_once_and_has_no_home_folder()
+    public void Write_ACrash_RecordsTheVersionAndTheException()
     {
-        var crashes = Path.Combine(_root, "crashes");
-        var first = new DateTimeOffset(2026, 11, 1, 10, 0, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 11, 1)));
-        var path = CrashReports.Write(crashes, Thrown(), "1.2.3", "test", first);
-        CrashReports.Write(crashes, Thrown(), "1.2.3", "test", first.AddHours(1));
+        // Act
+        var path = CrashReports.Write(CrashFolder, Thrown(), Version, Origin, FirstCrashTime());
 
-        Assert.That(path, Is.Not.Null);
+        // Assert
         var text = File.ReadAllText(path!);
-        Assert.That(text, Does.Contain("DeckHost 1.2.3 closed unexpectedly (test)."));
+        Assert.That(text, Does.Contain($"DeckHost {Version} closed unexpectedly ({Origin})."));
         Assert.That(text, Does.Contain("InvalidOperationException"));
-        Assert.That(text, Does.Not.Contain(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
-
-        Assert.That(CrashReports.Find(crashes).Count, Is.EqualTo(2));
-        var newer = Expect.Single(CrashReports.Find(crashes, seenUntil: first));
-        Assert.That(newer.Time, Is.EqualTo(first.AddHours(1)));
-
-        CrashReports.Prune(crashes, keep: 1);
-        Assert.That(CrashReports.Find(crashes), Has.Exactly(1).Items);
     }
 
     [Test]
-    public void The_issue_link_carries_the_report_and_stays_short()
+    public void Write_ACrash_HidesTheHomeFolder()
     {
-        var body = CrashReports.IssueBody("1.2.3", new string('x', 20_000), ["N4 Pro (connected)"]);
+        // Act
+        var path = CrashReports.Write(CrashFolder, Thrown(), Version, Origin, FirstCrashTime());
+
+        // Assert
+        Assert.That(File.ReadAllText(path!), Does.Not.Contain(HomeFolder));
+    }
+
+    [Test]
+    public void Find_AfterTwoCrashes_ListsBoth()
+    {
+        // Arrange
+        CrashReports.Write(CrashFolder, Thrown(), Version, Origin, FirstCrashTime());
+        CrashReports.Write(CrashFolder, Thrown(), Version, Origin, FirstCrashTime().AddHours(1));
+
+        // Act
+        var reports = CrashReports.Find(CrashFolder);
+
+        // Assert
+        Assert.That(reports.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void Find_WithTheTimeTheUserLastSaw_ListsOnlyTheNewerCrash()
+    {
+        // Arrange
+        var first = FirstCrashTime();
+        CrashReports.Write(CrashFolder, Thrown(), Version, Origin, first);
+        CrashReports.Write(CrashFolder, Thrown(), Version, Origin, first.AddHours(1));
+
+        // Act
+        var unseen = CrashReports.Find(CrashFolder, seenUntil: first);
+
+        // Assert
+        Assert.That(Expect.Single(unseen).Time, Is.EqualTo(first.AddHours(1)));
+    }
+
+    [Test]
+    public void Prune_KeepingOne_LeavesTheNewestReport()
+    {
+        // Arrange
+        CrashReports.Write(CrashFolder, Thrown(), Version, Origin, FirstCrashTime());
+        CrashReports.Write(CrashFolder, Thrown(), Version, Origin, FirstCrashTime().AddHours(1));
+
+        // Act
+        CrashReports.Prune(CrashFolder, keep: ReportsKept);
+
+        // Assert
+        Assert.That(CrashReports.Find(CrashFolder), Has.Exactly(ReportsKept).Items);
+    }
+
+    [Test]
+    public void IssueUri_ALongReport_CarriesTheDeviceAndStaysShort()
+    {
+        // Arrange
+        var body = CrashReports.IssueBody(Version, new string('x', 20_000), ["N4 Pro (connected)"]);
+
+        // Act
         var uri = CrashReports.IssueUri("owner/releases", "Crash in DeckHost", body);
 
+        // Assert
         Assert.That(uri.AbsoluteUri, Does.StartWith("https://github.com/owner/releases/issues/new?title=Crash%20in%20DeckHost&body="));
         Assert.That(uri.AbsoluteUri, Does.Contain("N4%20Pro"));
-        Assert.That(uri.AbsoluteUri.Length < 12_000, Is.True);
+        Assert.That(uri.AbsoluteUri.Length, Is.LessThan(MaxIssueLinkLength));
         Assert.That(uri.AbsoluteUri, Does.Contain("cut%20short"));
     }
 
-    [Test]
-    public void A_support_bundle_has_logs_crashes_and_settings_but_not_profiles_unless_asked()
+    private string MakeSupportFolder()
     {
         Directory.CreateDirectory(Path.Combine(_root, "logs", "plugins"));
         Directory.CreateDirectory(Path.Combine(_root, "devices"));
-        File.WriteAllText(Path.Combine(_root, "logs", "deckhost-today.log"), "pressed key in " + Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        File.WriteAllText(Path.Combine(_root, "logs", "deckhost-today.log"), "pressed key in " + HomeFolder);
         File.WriteAllText(Path.Combine(_root, "logs", "plugins", "x.log"), "plugin");
         var old = Path.Combine(_root, "logs", "deckhost-old.log");
         File.WriteAllText(old, "old");
@@ -69,34 +128,86 @@ public sealed class SupportTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "devices", "n4.json"), "{}");
         File.WriteAllText(Path.Combine(_root, "settings.json"), "{}");
         File.WriteAllText(Path.Combine(_root, "profiles.json"), "{\"password\":\"hunter2\"}");
-        CrashReports.Write(Path.Combine(_root, "crashes"), Thrown(), "1.2.3", "test");
+        CrashReports.Write(CrashFolder, Thrown(), Version, Origin);
+        return Path.Combine(_root, "bundle.zip");
+    }
 
-        var bundle = Path.Combine(_root, "bundle.zip");
-        SupportBundle.Create(_root, bundle, "summary here");
-        using (var zip = ZipFile.OpenRead(bundle))
-        {
-            var names = zip.Entries.Select(entry => entry.FullName).ToList();
-            Assert.That(names, Does.Contain("summary.txt"));
-            Assert.That(names, Does.Contain("logs/deckhost-today.log"));
-            Assert.That(names, Does.Contain("logs/plugins/x.log"));
-            Assert.That(names, Does.Contain("devices/n4.json"));
-            Assert.That(names, Does.Contain("settings.json"));
-            Assert.That(names.Any(name => name.StartsWith("crashes/crash-", StringComparison.Ordinal)), Is.True);
-            Assert.That(names, Does.Not.Contain("logs/deckhost-old.log"));
-            Assert.That(names, Does.Not.Contain("profiles.json"));
-            using var log = new StreamReader(zip.GetEntry("logs/deckhost-today.log")!.Open());
-            Assert.That(log.ReadToEnd(), Is.EqualTo("pressed key in ~"));
-        }
-
-        SupportBundle.Create(_root, bundle, "summary", includeProfiles: true);
-        using var withProfiles = ZipFile.OpenRead(bundle);
-        Assert.That(withProfiles.Entries.Any(entry => entry.FullName == "profiles.json"), Is.True);
+    private static List<string> EntryNames(string bundle)
+    {
+        using var zip = ZipFile.OpenRead(bundle);
+        return [.. zip.Entries.Select(entry => entry.FullName)];
     }
 
     [Test]
-    public void The_documentation_lives_on_the_repository_pages()
+    public void Create_ASupportBundle_HasTheSummaryRecentLogsDevicesSettingsAndCrashes()
     {
-        Assert.That(SupportViewModel.DocumentationUrlFor("Vman26/DeckHost"), Is.EqualTo("https://vman26.github.io/DeckHost/"));
-        Assert.That(SupportViewModel.DocumentationUrlFor("odd"), Is.EqualTo("https://github.com/odd"));
+        // Arrange
+        var bundle = MakeSupportFolder();
+
+        // Act
+        SupportBundle.Create(_root, bundle, "summary here");
+
+        // Assert
+        var names = EntryNames(bundle);
+        Assert.That(names, Does.Contain("summary.txt"));
+        Assert.That(names, Does.Contain(TodayLog));
+        Assert.That(names, Does.Contain("logs/plugins/x.log"));
+        Assert.That(names, Does.Contain("devices/n4.json"));
+        Assert.That(names, Does.Contain("settings.json"));
+        Assert.That(names.Any(name => name.StartsWith("crashes/crash-", StringComparison.Ordinal)), Is.True);
+    }
+
+    [Test]
+    public void Create_ASupportBundle_LeavesOutOldLogsAndTheProfilesUnlessAsked()
+    {
+        // Arrange
+        var bundle = MakeSupportFolder();
+
+        // Act
+        SupportBundle.Create(_root, bundle, "summary here");
+
+        // Assert
+        var names = EntryNames(bundle);
+        Assert.That(names, Does.Not.Contain("logs/deckhost-old.log"));
+        Assert.That(names, Does.Not.Contain("profiles.json"));
+    }
+
+    [Test]
+    public void Create_ASupportBundle_HidesTheHomeFolderInLogs()
+    {
+        // Arrange
+        var bundle = MakeSupportFolder();
+
+        // Act
+        SupportBundle.Create(_root, bundle, "summary here");
+
+        // Assert
+        using var zip = ZipFile.OpenRead(bundle);
+        using var log = new StreamReader(zip.GetEntry(TodayLog)!.Open());
+        Assert.That(log.ReadToEnd(), Is.EqualTo("pressed key in ~"));
+    }
+
+    [Test]
+    public void Create_ASupportBundleWithProfilesAsked_IncludesThem()
+    {
+        // Arrange
+        var bundle = MakeSupportFolder();
+
+        // Act
+        SupportBundle.Create(_root, bundle, "summary", includeProfiles: true);
+
+        // Assert
+        Assert.That(EntryNames(bundle), Does.Contain("profiles.json"));
+    }
+
+    [TestCase("Vman26/DeckHost", "https://vman26.github.io/DeckHost/")]
+    [TestCase("odd", "https://github.com/odd")]
+    public void DocumentationUrlFor_ARepository_LivesOnItsPagesOrItsGitHubPage(string repository, string expected)
+    {
+        // Act
+        var url = SupportViewModel.DocumentationUrlFor(repository);
+
+        // Assert
+        Assert.That(url, Is.EqualTo(expected));
     }
 }

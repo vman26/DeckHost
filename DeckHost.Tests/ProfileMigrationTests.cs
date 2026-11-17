@@ -18,59 +18,134 @@ public class ProfileMigrationTests
         new(2, "nothing", static _ => { }),
     ];
 
+    private const string OldFile = """{ "version": 1, "selected": "p1", "profiles": [] }""";
+    private const string NewerFile = """{ "version": 7, "selectedProfileId": "p2", "profiles": [], "somethingNew": 1 }""";
+    private const int TargetVersion = 3;
+    private const int FarFutureVersion = 99;
+
     [Test]
-    public void An_old_document_runs_every_step_up_to_the_target_and_gets_its_version()
+    public void Migrate_AnOldDocument_RunsEveryStepUpToTheTarget()
     {
+        // Arrange
         var document = JsonNode.Parse("""{ "selected": "p1", "profiles": [] }""")!.AsObject();
 
-        var applied = ProfileMigrations.Migrate(document, 3, Steps);
+        // Act
+        var applied = ProfileMigrations.Migrate(document, TargetVersion, Steps);
 
+        // Assert
         Assert.That(applied.Count, Is.EqualTo(2));
         Assert.That(document["selectedProfileId"]!.GetValue<string>(), Is.EqualTo("p1"));
-        Assert.That(ProfileMigrations.VersionOf(document), Is.EqualTo(3));
     }
 
     [Test]
-    public void A_missing_step_is_an_error_and_a_newer_document_is_left_alone()
+    public void Migrate_AnOldDocument_GetsTheTargetVersion()
     {
-        Assert.Throws<InvalidOperationException>(() => ProfileMigrations.Migrate(JsonNode.Parse("""{ "version": 1 }""")!.AsObject(), 5, Steps));
+        // Arrange
+        var document = JsonNode.Parse("""{ "selected": "p1", "profiles": [] }""")!.AsObject();
 
+        // Act
+        ProfileMigrations.Migrate(document, TargetVersion, Steps);
+
+        // Assert
+        Assert.That(ProfileMigrations.VersionOf(document), Is.EqualTo(TargetVersion));
+    }
+
+    [Test]
+    public void Migrate_ADocumentWithAMissingStep_IsAnError()
+    {
+        // Arrange
+        var document = JsonNode.Parse("""{ "version": 1 }""")!.AsObject();
+
+        // Act
+        TestDelegate migrate = () => ProfileMigrations.Migrate(document, 5, Steps);
+
+        // Assert
+        Assert.Throws<InvalidOperationException>(migrate);
+    }
+
+    [Test]
+    public void Migrate_ANewerDocument_IsLeftAlone()
+    {
+        // Arrange
         var newer = JsonNode.Parse("""{ "version": 9 }""")!.AsObject();
-        Assert.That(ProfileMigrations.Migrate(newer, 3, Steps), Is.Empty);
+
+        // Act
+        var applied = ProfileMigrations.Migrate(newer, TargetVersion, Steps);
+
+        // Assert
+        Assert.That(applied, Is.Empty);
         Assert.That(ProfileMigrations.VersionOf(newer), Is.EqualTo(9));
     }
 
     [Test]
-    public void Reading_migrates_older_files_and_reports_newer_ones()
+    public void Read_AnOlderFile_IsMigrated()
     {
-        var (old, newerOld, migrated) = ProfileStore.Read("""{ "version": 1, "selected": "p1", "profiles": [] }""", 3, Steps);
-        Assert.That(old!.SelectedProfileId, Is.EqualTo("p1"));
-        Assert.That(old.Version, Is.EqualTo(3));
-        Assert.That(newerOld, Is.Null);
-        Assert.That(migrated.Count, Is.EqualTo(2));
+        // Act
+        var (document, newerVersion, migrated) = ProfileStore.Read(OldFile, TargetVersion, Steps);
 
-        var (future, newer, none) = ProfileStore.Read("""{ "version": 7, "selectedProfileId": "p2", "profiles": [], "somethingNew": 1 }""", 3, Steps);
-        Assert.That(future!.SelectedProfileId, Is.EqualTo("p2"));
-        Assert.That(newer, Is.EqualTo(7));
-        Assert.That(none, Is.Empty);
+        // Assert
+        Assert.That(document!.SelectedProfileId, Is.EqualTo("p1"));
+        Assert.That(document.Version, Is.EqualTo(TargetVersion));
+        Assert.That(newerVersion, Is.Null);
+        Assert.That(migrated.Count, Is.EqualTo(2));
     }
 
     [Test]
-    public void A_file_from_a_newer_version_is_kept_in_the_backups_before_it_is_saved_over()
+    public void Read_ANewerFile_ReportsItsVersionAndStillReadsWhatItCan()
     {
+        // Act
+        var (document, newerVersion, migrated) = ProfileStore.Read(NewerFile, TargetVersion, Steps);
+
+        // Assert
+        Assert.That(document!.SelectedProfileId, Is.EqualTo("p2"));
+        Assert.That(newerVersion, Is.EqualTo(7));
+        Assert.That(migrated, Is.Empty);
+    }
+
+    [Test]
+    public void Save_AfterLoadingAFileFromANewerVersion_KeepsThatFileInTheBackups()
+    {
+        // Arrange
         var folder = Path.Combine(Path.GetTempPath(), "deckhost-migration-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {
             var path = Path.Combine(folder, "profiles.json");
-            File.WriteAllText(path, """{ "version": 99, "selectedProfileId": null, "profiles": [] }""");
+            File.WriteAllText(path, $$"""{ "version": {{FarFutureVersion}}, "selectedProfileId": null, "profiles": [] }""");
             var store = new ProfileStore(path);
-
             var document = store.Load()!;
-            Assert.That(store.NewerVersionLoaded, Is.EqualTo(99));
+
+            // Act
             store.Save(document);
 
-            Assert.That(File.ReadAllText(Path.Combine(store.BackupDirectory, "profiles-from-v99.json")), Does.Contain("99"));
+            // Assert
+            Assert.That(File.ReadAllText(Path.Combine(store.BackupDirectory, $"profiles-from-v{FarFutureVersion}.json")), Does.Contain(FarFutureVersion.ToString()));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Save_AfterLoadingAFileFromANewerVersion_WritesTheCurrentVersionAndForgetsTheNewerOne()
+    {
+        // Arrange
+        var folder = Path.Combine(Path.GetTempPath(), "deckhost-migration-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var path = Path.Combine(folder, "profiles.json");
+            File.WriteAllText(path, $$"""{ "version": {{FarFutureVersion}}, "selectedProfileId": null, "profiles": [] }""");
+            var store = new ProfileStore(path);
+            var document = store.Load()!;
+            var newerBefore = store.NewerVersionLoaded;
+
+            // Act
+            store.Save(document);
+
+            // Assert
+            Assert.That(newerBefore, Is.EqualTo(FarFutureVersion));
             Assert.That(ProfileMigrations.VersionOf(JsonNode.Parse(File.ReadAllText(path))!.AsObject()), Is.EqualTo(ProfileDocument.CurrentVersion));
             Assert.That(store.NewerVersionLoaded, Is.Null);
         }
