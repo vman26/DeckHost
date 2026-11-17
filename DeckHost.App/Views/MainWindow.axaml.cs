@@ -181,6 +181,20 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         PageHost.IsVisible = true;
     }
 
+    /// <summary>Closes every page at once and shows the device layout (the Home button, Ctrl+Home).</summary>
+    public void GoHome()
+    {
+        if (_pages.Count == 0)
+        {
+            return;
+        }
+
+        _pages.Clear();
+        ShowTopPage();
+    }
+
+    private void PageHome_OnClick(object? sender, RoutedEventArgs e) => GoHome();
+
     private void PageBack_OnClick(object? sender, RoutedEventArgs e)
     {
         if (_pages.Count > 0)
@@ -197,6 +211,15 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         {
             e.Handled = true;
             PageBack_OnClick(sender, e);
+            return;
+        }
+
+        // Ctrl+Home (Cmd+Home) goes back to the layout from any number of pages.
+        var homeModifier = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+        if (e.Key == Key.Home && e.KeyModifiers.HasFlag(homeModifier) && !e.Handled && _pages.Count > 0)
+        {
+            e.Handled = true;
+            GoHome();
             return;
         }
 

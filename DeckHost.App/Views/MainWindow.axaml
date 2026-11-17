@@ -536,6 +536,12 @@
 									<TextBlock Text="Back" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
 								</StackPanel>
 							</Button>
+							<Button Classes="tool" Click="PageHome_OnClick" ToolTip.Tip="Back to the layout (Ctrl+Home)">
+								<StackPanel Orientation="Horizontal" Spacing="6">
+									<Viewbox Width="16" Height="16"><Canvas Width="24" Height="24"><Path Classes="toolIcon" Data="F0 M12 3 2 12h3v8h5v-6h4v6h5v-8h3Z" /></Canvas></Viewbox>
+									<TextBlock Text="Layout" VerticalAlignment="Center" Foreground="{DynamicResource C.CBD5E1}" />
+								</StackPanel>
+							</Button>
 							<TextBlock x:Name="PageTitle" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" VerticalAlignment="Center" />
 						</StackPanel>
 					</Border>
