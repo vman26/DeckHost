@@ -146,6 +146,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `void CloseFolder(string deviceId)` | Leaves the open folder: back to the layout whose key opened it. |
 | `void OpenFolder(string deviceId, string folderId)` | Opens a folder (a layout of the active profile) on the device. |
 | `void RequestRender(string deviceId)` | Re-renders the device's controls (only changed controls are pushed). |
+| `void RequestRender(string deviceId, string controlId)` | Re-renders one control (and the display it is shown on, for a knob). Hosts that don't know the difference draw the whole device again, which is what `RequestRender` does. |
 
 ### IApplicationPlugin
 

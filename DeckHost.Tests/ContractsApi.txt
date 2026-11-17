@@ -65,6 +65,7 @@
   DeckHost.Contracts.Interfaces.IActionHost.CloseFolder(System.String deviceId) : System.Void
   DeckHost.Contracts.Interfaces.IActionHost.OpenFolder(System.String deviceId, System.String folderId) : System.Void
   DeckHost.Contracts.Interfaces.IActionHost.RequestRender(System.String deviceId) : System.Void abstract
+  DeckHost.Contracts.Interfaces.IActionHost.RequestRender(System.String deviceId, System.String controlId) : System.Void
   DeckHost.Contracts.Interfaces.IApplicationPlugin.Actions : System.Collections.Generic.IReadOnlyCollection<DeckHost.Contracts.Interfaces.IDeckAction> abstract
   DeckHost.Contracts.Interfaces.IApplicationPlugin.Author : System.String
   DeckHost.Contracts.Interfaces.IApplicationPlugin.Description : System.String

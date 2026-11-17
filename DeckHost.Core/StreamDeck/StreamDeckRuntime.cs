@@ -1135,7 +1135,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
         public (DateTime Until, bool Ok)? Flash { get; set; }
 
-        public void RequestRender() => Host.RequestRender(DeviceId);
+        public void RequestRender() => Host.RequestRender(DeviceId, ControlId);
     }
 
     private sealed class Connection(WebSocket socket)

@@ -56,7 +56,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private readonly Dictionary<string, DeviceProfile> _profilesById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _activeProfilesByDeviceId = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DeviceEntry> _devicesById = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _dirtyDevices = new(StringComparer.OrdinalIgnoreCase);
+    private readonly DirtySet _dirty = new();
+    private readonly Dictionary<string, IReadOnlyList<ResolvedLayer>> _drawnBackgrounds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string DeviceId, string ControlId), byte[]> _lastFrames = [];
     private readonly Dictionary<string, (byte Red, byte Green, byte Blue)> _lastBackdrops = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(int Width, int Height), SurfaceRenderer> _renderers = [];
@@ -77,6 +78,11 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private volatile HashSet<string> _backgroundKeys = [];
     private int _backgroundPending;
     private int _backgroundScheduled;
+
+    // Variables that changed (any thread), and the controls they mark on the worker.
+    private readonly ConcurrentQueue<string> _changedKeys = new();
+    private int _changedKeysScheduled;
+    private int _renderingThreadId;
     private readonly Dictionary<string, string> _eventValues = new(StringComparer.Ordinal);
     private readonly Dictionary<(string DeviceId, string ControlId, string NodeId), DateTime> _timerLastStart = [];
     private IDisposable? _variableChanges;
@@ -129,7 +135,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 _ => Enqueue(() =>
                 {
                     work();
-                    _dirtyDevices.Add(deviceId);
+                    _dirty.MarkDevice(deviceId);
                 }),
                 TaskScheduler.Default);
         }
@@ -142,13 +148,18 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         if (variableStore is State.VariableStore observable)
         {
             _variableChanges = observable.Changes
-                .Where(change => IsEventVariable(change.Key) || _backgroundKeys.Contains(change.Key))
+                .Where(change => IsEventVariable(change.Key) || IsControlVariable(change.Key) || _backgroundKeys.Contains(change.Key))
                 .Subscribe(change =>
                 {
                     var key = change.Key;
                     if (_backgroundKeys.Contains(key))
                     {
                         RequestBackgroundRedraw();
+                    }
+
+                    if (IsControlVariable(key) || key.StartsWith("vars.", StringComparison.Ordinal))
+                    {
+                        QueueChangedKey(key);
                     }
 
                     if (IsEventVariable(key))
@@ -245,7 +256,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             if (!paused)
             {
                 ForgetFrames(deviceId);
-                _dirtyDevices.Add(deviceId);
+                _dirty.MarkDevice(deviceId);
                 ApplyIdleLights(deviceId);
             }
         }
@@ -254,7 +265,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     public void Redraw(string deviceId) => Enqueue(() =>
     {
         ForgetControlFrames(deviceId);
-        _dirtyDevices.Add(deviceId);
+        _dirty.MarkDevice(deviceId);
     });
 
     public void AppendLog(string level, string message) => Log(level, message);
@@ -298,7 +309,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     {
         if (_actionRouter is ActionRouter router && router.Workflows.Continue(runId))
         {
-            _dirtyDevices.UnionWith(_devicesById.Keys);
+            _dirty.MarkDevices(_devicesById.Keys);
         }
     });
 
@@ -306,7 +317,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     {
         if (_actionRouter is ActionRouter router && router.Workflows.Step(runId))
         {
-            _dirtyDevices.UnionWith(_devicesById.Keys);
+            _dirty.MarkDevices(_devicesById.Keys);
         }
     });
 
@@ -344,7 +355,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             _ => (InputCapabilities.Press, 1),
         };
         router.Workflows.Fire(profile, binding, trigger, new DeviceInputEvent(deviceId, controlId, eventType, value), _actionHost);
-        _dirtyDevices.Add(deviceId);
+        MarkControlDirty(deviceId, controlId);
     });
 
     private void OnWorkflowTraced(WorkflowTrace trace)
@@ -398,10 +409,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             }
 
             // Bindings may now resolve to different (or no) actions.
-            foreach (var deviceId in _devicesById.Keys)
-            {
-                _dirtyDevices.Add(deviceId);
-            }
+            _dirty.MarkDevices(_devicesById.Keys);
 
             Log("Info", $"{snapshot.Length} application plugin(s) enabled.");
         });
@@ -570,7 +578,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 // push every image and light again. A steady light (or Off) would otherwise never
                 // be sent again and the device's own lighting stayed on.
                 ForgetFrames(deviceId);
-                _dirtyDevices.Add(deviceId);
+                _dirty.MarkDevice(deviceId);
                 ApplyIdleLights(deviceId);
             }));
             try
@@ -598,7 +606,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
         foreach (var deviceId in _devicesById.Keys)
         {
-            _dirtyDevices.Add(deviceId);
+            _dirty.MarkDevice(deviceId);
             ApplyIdleLights(deviceId);
         }
     }
@@ -627,7 +635,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             _actionRouter is ActionRouter keyLogicRouter)
         {
             HandleKeyLogic(keyLogicRouter, activeProfile, keyLogic, inputEvent);
-            _dirtyDevices.Add(inputEvent.DeviceId);
+            MarkControlDirty(inputEvent.DeviceId, inputEvent.ControlId);
             return;
         }
 
@@ -637,7 +645,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             _actionRouter is ActionRouter workflowRouter)
         {
             HandleWorkflowInput(workflowRouter, activeProfile, workflow, inputEvent);
-            _dirtyDevices.Add(inputEvent.DeviceId);
+            MarkControlDirty(inputEvent.DeviceId, inputEvent.ControlId);
             return;
         }
 
@@ -670,8 +678,13 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             HandleLightFeedback(activeProfile, target ?? inputEvent.ControlId);
         }
 
-        // Actions can change any variable a renderer reads; unchanged controls are skipped at push time.
-        _dirtyDevices.Add(inputEvent.DeviceId);
+        // What an action changes for other controls reaches them through variables (marked when they change);
+        // here only the control itself and the control it was a press of are drawn again.
+        MarkControlDirty(inputEvent.DeviceId, inputEvent.ControlId);
+        if (target is not null)
+        {
+            MarkControlDirty(inputEvent.DeviceId, target);
+        }
     }
 
     /// <summary>How long Key Logic waits for a second press before it runs the single press.</summary>
@@ -798,7 +811,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                         {
                             state.Pending = false;
                             run(StepGroups.Press);
-                            _dirtyDevices.Add(inputEvent.DeviceId);
+                            MarkControlDirty(inputEvent.DeviceId, inputEvent.ControlId);
                         }
                     }),
                     TaskScheduler.Default);
@@ -850,7 +863,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
         _activeProfilesByDeviceId[profile.DeviceId] = profile.Id;
         Log("Info", $"Activated profile '{profile.Name}' for device '{profile.DeviceId}'.");
-        OnActiveProfilesChanged();
+        OnActiveProfilesChanged(profile.DeviceId);
         SafeInvoke(() => ActiveProfileChanged?.Invoke(profile.DeviceId, profile.Id));
 
         // Timers count from when the profile came; its "profile shown" workflows start.
@@ -881,9 +894,16 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         Volatile.Write(ref _backgroundPending, 0);
         foreach (var deviceId in _devicesById.Keys)
         {
-            if (BackgroundLayers.IsReactive(GetActiveProfile(deviceId)?.Background))
+            var background = GetActiveProfile(deviceId)?.Background;
+            if (!BackgroundLayers.IsReactive(background))
             {
-                _dirtyDevices.Add(deviceId);
+                continue;
+            }
+
+            // Only a background that looks different now (a hidden layer, or a value that moved a layer no further) needs the keys again.
+            if (!_drawnBackgrounds.TryGetValue(deviceId, out var drawn) || !BackgroundLayers.Same(drawn, BackgroundLayers.Resolve(background, _variableStore)))
+            {
+                _dirty.MarkDevice(deviceId);
             }
         }
 
@@ -940,7 +960,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 var scope = new WorkflowScope(profile.Id, deviceId, binding.ControlId);
                 if (router.Workflows.Fire(profile, binding, trigger, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Press, 1), _actionHost, accept is null ? null : node => accept(node, scope)))
                 {
-                    _dirtyDevices.Add(deviceId);
+                    MarkControlDirty(deviceId, binding.ControlId);
                 }
             }
         }
@@ -1005,7 +1025,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                     _timerLastStart[key] = now;
                     if (router.Workflows.Fire(profile, binding, WorkflowTriggers.Timer, new DeviceInputEvent(deviceId, binding.ControlId, InputCapabilities.Press, 1), _actionHost, candidate => candidate.Id == node.Id))
                     {
-                        _dirtyDevices.Add(deviceId);
+                        MarkControlDirty(deviceId, binding.ControlId);
                     }
                 }
             }
@@ -1147,17 +1167,23 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
     }
 
-    private void OnActiveProfilesChanged()
+    /// <summary>Profiles or the active profile changed: draws the devices again (only <paramref name="onlyDeviceId"/> when a single device switched).</summary>
+    private void OnActiveProfilesChanged(string? onlyDeviceId = null)
     {
         foreach (var deviceId in _devicesById.Keys)
         {
+            if (onlyDeviceId is not null && !string.Equals(deviceId, onlyDeviceId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var profile = GetActiveProfile(deviceId);
             if (profile is not null)
             {
                 PublishAppearanceState(profile);
             }
 
-            _dirtyDevices.Add(deviceId);
+            _dirty.MarkDevice(deviceId);
             ApplyIdleLights(deviceId);
         }
     }
@@ -1210,7 +1236,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
                 if (_pluginsInitialized && device.IsConnected)
                 {
-                    _dirtyDevices.Add(device.Id);
+                    _dirty.MarkDevice(device.Id);
                     ApplyIdleLights(device.Id);
                 }
             }
@@ -1368,22 +1394,133 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
     private void RenderDirtyDevices()
     {
-        if (!_pluginsInitialized || _dirtyDevices.Count == 0)
+        if (!_pluginsInitialized || _dirty.IsEmpty)
         {
             return;
         }
 
         UpdateAppearances();
 
-        foreach (var deviceId in _dirtyDevices)
+        // A variable an action's Render publishes must not mark what is being drawn (that would draw forever).
+        Volatile.Write(ref _renderingThreadId, Environment.CurrentManagedThreadId);
+        try
         {
-            RenderDevice(deviceId);
+            foreach (var (deviceId, controls) in _dirty.Drain())
+            {
+                RenderDevice(deviceId, controls);
+            }
         }
-
-        _dirtyDevices.Clear();
+        finally
+        {
+            Volatile.Write(ref _renderingThreadId, 0);
+        }
     }
 
-    private void RenderDevice(string deviceId)
+    // ---------------------------------------------------------------- what to draw again
+
+    private static bool IsControlVariable(string key) => key.StartsWith("devices.", StringComparison.Ordinal);
+
+    /// <summary>A variable changed on any thread: the worker marks what shows it (one drain at a time).</summary>
+    private void QueueChangedKey(string key)
+    {
+        if (Environment.CurrentManagedThreadId == Volatile.Read(ref _renderingThreadId))
+        {
+            return;
+        }
+
+        _changedKeys.Enqueue(key);
+        if (Interlocked.Exchange(ref _changedKeysScheduled, 1) == 0)
+        {
+            Enqueue(DrainChangedKeys);
+        }
+    }
+
+    private void DrainChangedKeys()
+    {
+        Volatile.Write(ref _changedKeysScheduled, 0);
+        var devices = _devicesById.Values.Select(static entry => entry.Device).ToList();
+        while (_changedKeys.TryDequeue(out var key))
+        {
+            if (key.StartsWith("vars.control|", StringComparison.Ordinal))
+            {
+                // vars.control|device|control|name: the control that owns it.
+                var parts = key.Split('|', 4);
+                if (parts.Length == 4)
+                {
+                    MarkControlDirty(parts[1], parts[2]);
+                }
+            }
+            else if (key.StartsWith("vars.", StringComparison.Ordinal))
+            {
+                // A user or profile variable can be shown anywhere.
+                _dirty.MarkDevices(_devicesById.Keys);
+            }
+            else
+            {
+                foreach (var (deviceId, controlId) in ControlsOfKey(key, devices))
+                {
+                    MarkControlDirty(deviceId, controlId);
+                }
+            }
+        }
+    }
+
+    /// <summary>The controls whose own variable this is (<c>devices.{device}.{control}.…</c>). Ids contain dots, so the key is matched against the known ones.</summary>
+    internal static IEnumerable<(string DeviceId, string ControlId)> ControlsOfKey(string key, IEnumerable<DeviceDefinition> devices)
+    {
+        foreach (var device in devices)
+        {
+            if (!key.StartsWith(VariableKeys.Device(device.Id), StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var control in device.Controls)
+            {
+                if (key.StartsWith(VariableKeys.Control(device.Id, control.Id), StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return (device.Id, control.Id);
+                }
+            }
+        }
+    }
+
+    /// <summary>The images that show a control: its own, and the display it is linked to (a knob on the touch strip).</summary>
+    internal static IEnumerable<string> ImageTargetsOf(DeviceDefinition device, string controlId)
+    {
+        var control = device.Controls.FirstOrDefault(candidate => string.Equals(candidate.Id, controlId, StringComparison.OrdinalIgnoreCase));
+        if (control is null)
+        {
+            yield break;
+        }
+
+        if (control.HasImageOutput)
+        {
+            yield return control.Id;
+        }
+
+        if (control.DisplayControlId is { Length: > 0 } display)
+        {
+            yield return display;
+        }
+    }
+
+    /// <summary>Marks one control (and the display it is shown on) to be drawn again.</summary>
+    private void MarkControlDirty(string deviceId, string controlId)
+    {
+        if (!_devicesById.TryGetValue(deviceId, out var entry))
+        {
+            return;
+        }
+
+        foreach (var target in ImageTargetsOf(entry.Device, controlId))
+        {
+            _dirty.MarkControl(deviceId, target);
+        }
+    }
+
+    /// <summary>Draws a device's controls: all of them (<paramref name="only"/> null) or just those marked.</summary>
+    private void RenderDevice(string deviceId, IReadOnlySet<string>? only)
     {
         if (!_devicesById.TryGetValue(deviceId, out var entry))
         {
@@ -1397,14 +1534,23 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         var clock = _clock.Elapsed;
         var pushed = 0;
 
-        if (connected)
+        if (connected && PushBackdrop(deviceId, entry, profile))
         {
-            PushBackdrop(deviceId, entry, profile);
+            // The device may have drawn the backdrop over every image: all of them go out again.
+            only = null;
+        }
+
+        // The background is worked out once for a whole-device draw; a single control reuses it so no key
+        // shows a newer background than its neighbours before the next whole-device draw.
+        if (only is null || !_drawnBackgrounds.TryGetValue(deviceId, out var background))
+        {
+            background = profile?.Background is null ? [] : BackgroundLayers.Resolve(profile.Background, _variableStore);
+            _drawnBackgrounds[deviceId] = background;
         }
 
         foreach (var control in entry.Device.Controls)
         {
-            if (!control.HasImageOutput)
+            if (!control.HasImageOutput || (only is not null && !only.Contains(control.Id)))
             {
                 continue;
             }
@@ -1420,7 +1566,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 pixels = renderer.Render(canvas =>
                 {
                     var context = new SkiaRenderContext(canvas, renderer.Width, renderer.Height, deviceId, control.Id, _variableStore, _drawingResources, binding?.Action.EffectiveSettings, clock, profile?.Id ?? string.Empty);
-                    ControlRenderer.Draw(context, binding, action, profile?.Background, layoutBounds, control.Bounds, linked);
+                    ControlRenderer.Draw(context, binding, action, background, layoutBounds, control.Bounds, linked);
                 });
             }
             catch (Exception ex)
@@ -1429,6 +1575,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 continue;
             }
 
+            Count(deviceId, static statistics => statistics with { FramesRendered = statistics.FramesRendered + 1 });
             var key = (deviceId, control.Id);
             if (_lastFrames.TryGetValue(key, out var lastFrame) && pixels.SequenceEqual(lastFrame))
             {
@@ -1469,19 +1616,19 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     /// <summary>
     /// Fills the screen around the control images with the profile's background color. Without
     /// it a device that stores a picture of its own (the N4 Pro's idle screen) keeps showing that
-    /// picture between the keys, whatever the profile is.
+    /// picture between the keys, whatever the profile is. True when it was sent (every image has to follow).
     /// </summary>
-    private void PushBackdrop(string deviceId, DeviceEntry entry, DeviceProfile? profile)
+    private bool PushBackdrop(string deviceId, DeviceEntry entry, DeviceProfile? profile)
     {
         if (entry.Plugin.Output is not IDeviceBackdropOutput output)
         {
-            return;
+            return false;
         }
 
         var color = ProfileBackdrop.GetColor(profile?.Background);
         if (_lastBackdrops.TryGetValue(deviceId, out var last) && last == color)
         {
-            return;
+            return false;
         }
 
         // Remembered even when it fails, so a device that can't do this isn't asked on every frame.
@@ -1489,11 +1636,12 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         if (!output.TrySetBackdrop(deviceId, color.Red, color.Green, color.Blue, out var error))
         {
             Log("Warning", $"Could not set the background of '{deviceId}': {error}");
-            return;
+            return false;
         }
 
         // The device may have drawn it over the control images: send those again.
         ForgetControlFrames(deviceId);
+        return true;
     }
 
     private void RaiseFrame(string deviceId, string controlId, int width, int height, ReadOnlySpan<byte> pixels)
@@ -1809,7 +1957,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                Enqueue(MarkDueLiveControlsDirty);
+                Enqueue(() => MarkDueLiveControlsDirty(DateTimeOffset.UtcNow));
             }
         }
         catch (OperationCanceledException)
@@ -1841,9 +1989,15 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
     }
 
-    private void MarkDueLiveControlsDirty()
+    /// <summary>Runs <see cref="MarkDueLiveControlsDirty"/> on the worker at a given time and waits for the redraw (tests).</summary>
+    internal Task RefreshLiveControlsAsync(DateTimeOffset now)
     {
-        var now = DateTimeOffset.UtcNow;
+        Enqueue(() => MarkDueLiveControlsDirty(now));
+        return WhenIdleAsync();
+    }
+
+    private void MarkDueLiveControlsDirty(DateTimeOffset now)
+    {
         foreach (var (deviceId, entry) in _devicesById)
         {
             if (GetActiveProfile(deviceId) is not { } profile)
@@ -1858,7 +2012,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 if (!_nextLiveRender.TryGetValue(backgroundKey, out var backgroundDue) || backgroundDue <= now)
                 {
                     _nextLiveRender[backgroundKey] = now + AnimationInterval;
-                    _dirtyDevices.Add(deviceId);
+                    _dirty.MarkDevice(deviceId);
                 }
             }
 
@@ -1882,7 +2036,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 }
 
                 _nextLiveRender[key] = now + (interval.Value < AnimationInterval ? AnimationInterval : interval.Value);
-                _dirtyDevices.Add(deviceId);
+                MarkControlDirty(deviceId, binding.ControlId);
             }
         }
     }
@@ -1890,7 +2044,9 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     /// <summary>What actions may ask of the host. Everything is queued onto the worker.</summary>
     private sealed class ActionHostServices(DeviceHostService host) : IActionHost
     {
-        public void RequestRender(string deviceId) => host.Enqueue(() => host._dirtyDevices.Add(deviceId));
+        public void RequestRender(string deviceId) => host.Enqueue(() => host._dirty.MarkDevice(deviceId));
+
+        public void RequestRender(string deviceId, string controlId) => host.Enqueue(() => host.MarkControlDirty(deviceId, controlId));
 
         public void ActivateProfile(string deviceId, string profileIdOrName) =>
             host.Enqueue(() => host.ActivateProfileByIdOrName(deviceId, profileIdOrName));

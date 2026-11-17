@@ -18,6 +18,8 @@ internal sealed class RecordingAction(string id, InputCapabilities requiredInput
 
     public IReadOnlyList<ActionSettingDefinition> Settings { get; init; } = [];
 
+    public TimeSpan? RefreshInterval { get; init; }
+
     public List<ActionContext> Executions { get; } = [];
 
     public Action<ActionContext>? OnExecute { get; set; }
@@ -45,7 +47,7 @@ internal sealed class TestApplicationPlugin(string id, params IDeckAction[] acti
     public IReadOnlyCollection<IDeckAction> Actions { get; } = actions;
 }
 
-internal sealed class FakeDevicePlugin : IDevicePlugin, IDeviceOutput
+internal sealed class FakeDevicePlugin : IDeviceWithContext, IDeviceOutput
 {
     public const string DeviceId = "fake.device";
 
@@ -115,6 +117,12 @@ internal sealed class FakeDevicePlugin : IDevicePlugin, IDeviceOutput
             new PhysicalControl("encoder.0", "Knob", ControlType.Encoder, new Rect(0, 10, 10, 10), InputCapabilities.Rotate | InputCapabilities.Press, OutputCapabilities.None, LedIndex: 0),
         ],
         connected);
+}
+
+/// <summary>A device plugin that keeps the context the host gave it, so a test can report input.</summary>
+internal interface IDeviceWithContext : IDevicePlugin
+{
+    IDevicePluginContext? Context { get; }
 }
 
 internal static class Bindings
@@ -244,6 +252,73 @@ internal sealed class AppearanceOnlyAction(string id) : IDeckAction
     public void Execute(ActionContext context) => Executions.Enqueue(context.EventType);
 
     public void Render(IRenderContext context)
+    {
+    }
+}
+
+/// <summary>Two touch zones, each with a knob that borrows its display: a device to check that a knob only draws its own zone.</summary>
+internal sealed class TwoZoneDevicePlugin : IDeviceWithContext, IDeviceOutput
+{
+    public const string DeviceId = "zones.device";
+    public const string FirstZone = "touch.0";
+    public const string SecondZone = "touch.1";
+    public const string FirstKnob = "encoder.0";
+    public const string SecondKnob = "encoder.1";
+
+    public event EventHandler? DevicesChanged
+    {
+        add { }
+        remove { }
+    }
+
+    public string Id => "zones.plugin";
+
+    public string Name => "Zones";
+
+    public IReadOnlyCollection<DeviceDefinition> Devices { get; } =
+    [
+        new DeviceDefinition(
+            DeviceId,
+            "Zones device",
+            [
+                new PhysicalControl(FirstZone, "Touch 1", ControlType.TouchSurface, new Rect(0, 0, 10, 10), InputCapabilities.Press, OutputCapabilities.ColorImage, 8, 8),
+                new PhysicalControl(SecondZone, "Touch 2", ControlType.TouchSurface, new Rect(10, 0, 10, 10), InputCapabilities.Press, OutputCapabilities.ColorImage, 8, 8),
+                new PhysicalControl(FirstKnob, "Knob 1", ControlType.Encoder, new Rect(0, 10, 10, 10), InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release, OutputCapabilities.None, DisplayControlId: FirstZone),
+                new PhysicalControl(SecondKnob, "Knob 2", ControlType.Encoder, new Rect(10, 10, 10, 10), InputCapabilities.Rotate | InputCapabilities.Press | InputCapabilities.Release, OutputCapabilities.None, DisplayControlId: SecondZone),
+            ],
+            IsConnected: true),
+    ];
+
+    public IDeviceOutput Output => this;
+
+    public IDevicePluginContext? Context { get; private set; }
+
+    public ConcurrentQueue<string> PushedImages { get; } = new();
+
+    public Task InitializeAsync(IDevicePluginContext context, CancellationToken cancellationToken)
+    {
+        Context = context;
+        return Task.CompletedTask;
+    }
+
+    public bool TryPushImage(string deviceId, string controlId, ReadOnlySpan<byte> rgba, int width, int height, out string? error)
+    {
+        PushedImages.Enqueue(controlId);
+        error = null;
+        return true;
+    }
+
+    public bool TrySetLight(string deviceId, string controlId, byte red, byte green, byte blue, out string? error)
+    {
+        error = null;
+        return true;
+    }
+
+    public void Clear(string deviceId)
+    {
+    }
+
+    public void Dispose()
     {
     }
 }

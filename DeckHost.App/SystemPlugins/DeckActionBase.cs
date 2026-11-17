@@ -345,7 +345,7 @@ internal abstract class DeckActionBase(
                 context.Variables.Publish(errorKey, ShortError(ex));
             }
 
-            context.Host.RequestRender(context.DeviceId);
+            context.Host.RequestRender(context.DeviceId, context.ControlId);
         });
     }
 
@@ -377,7 +377,7 @@ internal abstract class DeckActionBase(
             {
                 context.Variables.Publish(errorKey, task.Exception is { } failure ? ShortError(failure) : string.Empty);
                 after?.Invoke();
-                context.Host.RequestRender(context.DeviceId);
+                context.Host.RequestRender(context.DeviceId, context.ControlId);
             },
             TaskScheduler.Default);
     }

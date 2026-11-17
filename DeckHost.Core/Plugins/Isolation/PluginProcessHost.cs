@@ -257,7 +257,7 @@ public sealed class PluginProcessHost : IDisposable
                     host = _actionHost;
                 }
 
-                host?.RequestRender(request.Key.DeviceId);
+                host?.RequestRender(request.Key.DeviceId, request.Key.ControlId);
                 break;
             case Message.Answer when message.Id is { } id && _answers.TryRemove(id, out var answer):
                 answer.TrySetResult(message.Text);

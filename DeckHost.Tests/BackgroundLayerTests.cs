@@ -121,6 +121,50 @@ public sealed class BackgroundLayerTests
         Assert.That(BackgroundLayers.BoundVariables(Of(new BackgroundBinding(" vars.level "))), Is.EquivalentTo(new[] { "vars.level" }));
     }
 
+    private const string BoundVariable = "vars.level";
+    private const string LayerColor = "#FFFFFF";
+
+    private static ProfileBackground WithLayer(BackgroundLayer layer) => new() { Layers = [layer] };
+
+    [Test]
+    public void BoundVariables_HiddenBoundLayer_IsEmpty()
+    {
+        // Arrange
+        var background = WithLayer(new BackgroundLayer(BackgroundLayerKinds.Solid, Visible: false) { Color = LayerColor, Binding = new BackgroundBinding(BoundVariable) });
+
+        // Act
+        var variables = BackgroundLayers.BoundVariables(background);
+
+        // Assert
+        Assert.That(variables, Is.Empty);
+    }
+
+    [Test]
+    public void BoundVariables_BoundLayerWithoutOpacity_IsEmpty()
+    {
+        // Arrange
+        var background = WithLayer(new BackgroundLayer(BackgroundLayerKinds.Solid, Opacity: 0) { Color = LayerColor, Binding = new BackgroundBinding(BoundVariable) });
+
+        // Act
+        var variables = BackgroundLayers.BoundVariables(background);
+
+        // Assert
+        Assert.That(variables, Is.Empty);
+    }
+
+    [Test]
+    public void BoundVariables_BoundLayerOfAnUnknownKind_IsEmpty()
+    {
+        // Arrange
+        var background = WithLayer(new BackgroundLayer("hologram") { Binding = new BackgroundBinding(BoundVariable) });
+
+        // Act
+        var variables = BackgroundLayers.BoundVariables(background);
+
+        // Assert
+        Assert.That(variables, Is.Empty);
+    }
+
     [Test]
     public async Task A_layer_that_follows_a_variable_redraws_the_device_when_the_variable_changes()
     {

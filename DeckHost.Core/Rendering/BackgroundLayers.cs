@@ -39,9 +39,23 @@ public static class BackgroundLayers
         return layers;
     }
 
-    /// <summary>The variables the background's layers follow (what the host redraws for when one changes).</summary>
+    /// <summary>
+    /// The variables the background's visible layers follow (what the host redraws for when one changes). A layer
+    /// that can never show (hidden, an unknown kind, an opacity of 0) follows nothing.
+    /// </summary>
     public static IReadOnlySet<string> BoundVariables(ProfileBackground? background) =>
-        Effective(background).Where(static layer => layer.Binding is { Variable.Length: > 0 }).Select(static layer => layer.Binding!.Variable.Trim()).ToHashSet(StringComparer.Ordinal);
+        Effective(background)
+            .Where(static layer => layer.Binding is { Variable.Length: > 0 } && CanShow(layer))
+            .Select(static layer => layer.Binding!.Variable.Trim())
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static bool CanShow(BackgroundLayer layer) =>
+        layer.Visible && BackgroundLayerKinds.Known.Contains(layer.Kind) && EffectiveOpacity(layer) > 0;
+
+    private static double EffectiveOpacity(BackgroundLayer layer) => Math.Clamp(double.IsFinite(layer.Opacity) ? layer.Opacity : 1, 0, 1);
+
+    /// <summary>Whether two resolved backgrounds draw the same picture (so a device showing one needs no redraw for the other).</summary>
+    internal static bool Same(IReadOnlyList<ResolvedLayer> first, IReadOnlyList<ResolvedLayer> second) => first.SequenceEqual(second);
 
     /// <summary>Whether the background has a layer that follows a variable.</summary>
     public static bool IsReactive(ProfileBackground? background) => BoundVariables(background).Count > 0;
@@ -56,7 +70,7 @@ public static class BackgroundLayers
                 continue;
             }
 
-            var opacity = Math.Clamp(double.IsFinite(layer.Opacity) ? layer.Opacity : 1, 0, 1);
+            var opacity = EffectiveOpacity(layer);
             var color = Parse(layer.Color, new SKColor(0, 0, 0, 0));
             var toColor = Parse(layer.ToColor, color);
             if (layer.Binding is { Variable.Length: > 0 } binding)
