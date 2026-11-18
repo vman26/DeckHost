@@ -40,6 +40,9 @@ DeckHost uses third-party packages under their own licenses (MIT, BSD, Apache-2.
 [architecture page](docs/maintainers/architecture.md#third-party-code). The StreamDock SDK
 (`native/StreamDock-SDK`) is © MiraboxSpace, MIT License. The workflow expression engine is
 [NCalc](https://github.com/ncalc/ncalc) (the `NCalcSync` package), MIT License, © its contributors; it is
-used behind `WorkflowExpression` and not exposed to plugins.
+used behind `WorkflowExpression` and not exposed to plugins. Installing and updating is
+[Velopack](https://github.com/velopack/velopack), MIT License, © its contributors: its updater
+(`Update.exe` on Windows, and the one inside the macOS app and the AppImage) and the Windows
+installers ship with DeckHost; the MSI is built with Velopack's fork of the WiX Toolset (MS-RL).
 
 *This notice isn't legal advice; for questions about using DeckHost commercially, open an issue.*

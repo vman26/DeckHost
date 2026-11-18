@@ -1,3 +1,6 @@
+; The older Inno setup, kept only for the move to Velopack: DeckHost versions from before it update
+; by running *-win-x64-setup.exe, which brings them to a version that offers "Switch to the new
+; installer" (Platform/UpdateInstaller). New installs use Velopack's installer (scripts/package-velopack.sh).
 ; Inno Setup script for the Windows installer. Built by .github/workflows/release.yml:
 ;   iscc /DAppVersion=1.2.0 /DFileVersion=1.2.0 /DNumericVersion=1.2.0 /DSourceDir=<publish folder> /DOutputDir=<dir> DeckHost.iss
 ; A pre-release: AppVersion 1.3.0-alpha.3+4b09090 (shown), FileVersion 1.3.0-alpha.3-4b09090 (file name).

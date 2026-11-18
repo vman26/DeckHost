@@ -1,119 +1,122 @@
 using DeckHost.Core.Updates;
 using System;
 using System.Diagnostics;
-using System.Formats.Tar;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Threading;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace DeckHost.App.Platform;
 
 /// <summary>
-/// Installs a downloaded update. DeckHost can't replace itself while it runs, so a small helper
-/// waits for it to exit, installs, and starts DeckHost again:
+/// What DeckHost does with a release outside Velopack (<see cref="AppUpdater"/>):
 /// <list type="bullet">
-/// <item>Windows: the setup program. Installed by setup (unins000.exe next to DeckHost): silently,
-/// into the same folder; otherwise the setup wizard opens.</item>
-/// <item>Linux: the tar.gz is unpacked first; the helper swaps DeckHost's folder for the new one
-/// (keeping the old one until the copy succeeded).</item>
-/// <item>macOS: the zip is unpacked with ditto; the helper swaps the DeckHost.app bundle.</item>
+/// <item>Shows a downloaded package for installing by hand (the Linux tar.gz, a development build).</item>
+/// <item>Moves a DeckHost installed by the older Windows setup to the Velopack install, once: runs the new
+/// installer, then (after DeckHost exits) the old uninstaller, and starts the new DeckHost. Profiles and
+/// settings live in DeckHost's data folder and stay; start at sign-in is carried over (<see cref="MigrationNote"/>).</item>
 /// </list>
-/// Where that isn't possible (a folder DeckHost can't write), the download is shown instead.
 /// </summary>
 internal static class UpdateInstaller
 {
-    /// <summary>Passed to the setup program so it starts DeckHost again after a silent update (see DeckHost.iss).</summary>
-    public const string RelaunchParameter = "/relaunch=1";
+    /// <summary>Win32 ERROR_CANCELLED: the user said no to the UAC prompt.</summary>
+    private const int ErrorCancelled = 1223;
 
-    /// <summary>Where DeckHost runs from: the folder (Windows, Linux) or the .app bundle (macOS).</summary>
-    public static string InstallLocation
+    /// <summary>Where DeckHost runs from.</summary>
+    public static string InstallLocation => Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+
+    /// <summary>The older setup installed DeckHost for all users (Program Files): the MSI moves it, asking for administrator rights.</summary>
+    public static bool IsInstalledForAllUsers
     {
         get
         {
-            var directory = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
-            if (OperatingSystem.IsMacOS() && FindBundle(directory) is { } bundle)
-            {
-                return bundle;
-            }
-
-            return directory;
+            var location = InstallLocation;
+            return new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 }
+                .Select(Environment.GetFolderPath)
+                .Any(folder => folder.Length > 0 && location.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
         }
     }
 
-    /// <summary>Whether this installation can be updated in place (else the download is shown).</summary>
-    /// <remarks>
-    /// Only a released (self-contained) DeckHost: a development build (bin/Debug) is never swapped,
-    /// and neither is an AppImage (a read-only mount; the user replaces the file).
-    /// </remarks>
-    public static bool CanInstallInPlace => OperatingSystem.IsWindows() ||
-        (!AppImage.IsActive && Environment.ProcessPath is not null && IsSelfContained && CanReplace(InstallLocation));
-
-    private static bool IsSelfContained =>
-        new[] { "libcoreclr.so", "libcoreclr.dylib", "coreclr.dll" }.Any(name => File.Exists(Path.Combine(AppContext.BaseDirectory, name)));
-
-    /// <summary>
-    /// Whether an update can install without a question: a setup-installed DeckHost on Windows
-    /// (the setup runs silently), or an install that can be swapped on Linux and macOS.
-    /// </summary>
-    public static bool CanInstallSilently => OperatingSystem.IsWindows()
-        ? File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"))
-        : CanInstallInPlace;
-
-    /// <summary>What the install button does here.</summary>
-    public static string InstallLabel => CanInstallInPlace ? "Install and restart" : "Download";
-
-    /// <summary>
-    /// Gets a downloaded package ready (unpacks it) and returns the helper to start, or null when
-    /// the update has to be installed by hand (the package is then shown in the file manager).
-    /// </summary>
-    /// <remarks><paramref name="relaunch"/> false: DeckHost isn't started again (an update installed when the user quits).</remarks>
-    public static async Task<ProcessStartInfo?> PrepareAsync(string package, CancellationToken cancellationToken, bool relaunch = true)
+    /// <summary>The release file the move needs: the per-user installer, or the MSI for an install in Program Files.</summary>
+    internal static ReleaseAsset? SelectMigrationAsset(ReleaseInfo release, string runtimeIdentifier, bool forAllUsers)
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return package.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? WindowsSetup(package, relaunch) : null;
-        }
-
-        if (!CanInstallInPlace)
-        {
-            return null;
-        }
-
-        var unpacked = Path.Combine(Path.GetDirectoryName(package)!, "unpacked");
-        if (Directory.Exists(unpacked))
-        {
-            Directory.Delete(unpacked, recursive: true);
-        }
-
-        Directory.CreateDirectory(unpacked);
-        string source;
-        if (OperatingSystem.IsMacOS())
-        {
-            await Task.Run(() => ExternalTool.Run("/usr/bin/ditto", ["-x", "-k", package, unpacked], TimeSpan.FromMinutes(2)), cancellationToken).ConfigureAwait(false);
-            source = Directory.EnumerateDirectories(unpacked, "*.app").FirstOrDefault()
-                     ?? throw new UpdateException("The update package has no DeckHost.app.");
-        }
-        else
-        {
-            await using (var file = File.OpenRead(package))
-            await using (var gzip = new GZipStream(file, CompressionMode.Decompress))
-            {
-                await TarFile.ExtractToDirectoryAsync(gzip, unpacked, overwriteFiles: true, cancellationToken).ConfigureAwait(false);
-            }
-
-            source = Directory.EnumerateDirectories(unpacked, "DeckHost", SearchOption.AllDirectories)
-                         .FirstOrDefault(directory => File.Exists(Path.Combine(directory, Path.GetFileName(Environment.ProcessPath!))))
-                     ?? throw new UpdateException("The update package has no DeckHost folder.");
-        }
-
-        return SwapScript(source, InstallLocation, relaunch);
+        ArgumentNullException.ThrowIfNull(release);
+        var suffix = forAllUsers ? $"-{runtimeIdentifier}.msi" : $"-{runtimeIdentifier}-install.exe";
+        return release.Assets.FirstOrDefault(asset => asset.Name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Starts the helper; DeckHost must exit right after, which the helper waits for.</summary>
-    public static void Start(ProcessStartInfo helper) =>
+    /// <summary>
+    /// Runs the new installer and waits for it: the per-user setup silently, the MSI with its own
+    /// window (where to install, the UAC prompt).
+    /// </summary>
+    /// <exception cref="OperationCanceledException">The administrator prompt was declined.</exception>
+    /// <exception cref="UpdateException">The installer failed.</exception>
+    public static async Task RunNewInstallerAsync(string installer)
+    {
+        var msi = installer.EndsWith(".msi", StringComparison.OrdinalIgnoreCase);
+        var start = msi
+            ? new ProcessStartInfo("msiexec.exe") { UseShellExecute = true, ArgumentList = { "/i", installer } }
+            : new ProcessStartInfo(installer) { UseShellExecute = false, ArgumentList = { "--silent" } };
+        int exitCode;
+        try
+        {
+            using var process = Process.Start(start) ?? throw new UpdateException("The installer didn't start.");
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            exitCode = process.ExitCode;
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            throw new OperationCanceledException("The administrator prompt was declined.", ex);
+        }
+
+        // msiexec: 1602 = cancelled by the user.
+        if (msi && exitCode == 1602)
+        {
+            throw new OperationCanceledException("The installation was cancelled.");
+        }
+
+        if (exitCode != 0)
+        {
+            throw new UpdateException($"The installer stopped with code {exitCode}. DeckHost is unchanged.");
+        }
+    }
+
+    /// <summary>
+    /// After the new DeckHost is installed: notes what to carry over, and starts a hidden helper that
+    /// waits for this DeckHost to exit, removes the old install with its uninstaller and starts the new
+    /// one. DeckHost must exit right after.
+    /// </summary>
+    public static void FinishMigrationAfterExit(bool startAtLogin)
+    {
+        MigrationNote.Write(new MigrationNote(startAtLogin));
+        var uninstaller = Path.Combine(InstallLocation, "unins000.exe");
+        var launchers = string.Join(',', NewLauncherCandidates().Select(Quote));
+        var command =
+            $"Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue; " +
+            $"if (Test-Path -LiteralPath {Quote(uninstaller)}) {{ Start-Process -Wait -FilePath {Quote(uninstaller)} -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' }}; " +
+            $"foreach ($launcher in @({launchers})) {{ if (Test-Path -LiteralPath $launcher) {{ Start-Process -FilePath $launcher; break }} }}";
+        var helper = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
+        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", command })
+        {
+            helper.ArgumentList.Add(argument);
+        }
+
         (Process.Start(helper) ?? throw new UpdateException("The update helper didn't start.")).Dispose();
+    }
+
+    /// <summary>Where the Velopack install puts its launcher: per user, or in Program Files from the MSI.</summary>
+    internal static string[] NewLauncherCandidates()
+    {
+        var exe = Path.GetFileName(Environment.ProcessPath) ?? "DeckHost.App.exe";
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var programs = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        return
+        [
+            Path.Combine(local, "DeckHost", exe),
+            Path.Combine(programs, "Marco Veltman", "DeckHost", exe),
+            Path.Combine(programs, "DeckHost", exe),
+        ];
+    }
 
     /// <summary>Shows a downloaded package in the file manager, for installing by hand.</summary>
     public static void Reveal(string package)
@@ -138,100 +141,43 @@ internal static class UpdateInstaller
         }
     }
 
-    /// <summary>
-    /// The script for Linux and macOS: wait for DeckHost (by process id), move the old install aside,
-    /// copy the new one in, put the old one back if that fails, start DeckHost. Paths are arguments,
-    /// never part of the script text.
-    /// </summary>
-    internal const string SwapScriptText = """
-        #!/bin/sh
-        # DeckHost update helper: $1 = DeckHost's process id, $2 = the new version, $3 = the install, $4 = how to start it ("none": not again)
-        pid="$1"; source="$2"; target="$3"; launch="$4"
-        while kill -0 "$pid" 2>/dev/null; do sleep 0.3; done
-        backup="$target.update-backup"
-        rm -rf "$backup"
-        if mv "$target" "$backup"; then
-            if cp -a "$source" "$target"; then
-                rm -rf "$backup"
-            else
-                rm -rf "$target"
-                mv "$backup" "$target"
-            fi
-        fi
-        if [ "$launch" = "none" ]; then
-            :
-        elif [ "$launch" = "open" ]; then
-            open "$target"
-        else
-            nohup "$target/$launch" >/dev/null 2>&1 &
-        fi
-        """;
-
-    private static ProcessStartInfo SwapScript(string source, string target, bool relaunch)
-    {
-        var script = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(source)!)!, "update.sh");
-        File.WriteAllText(script, SwapScriptText.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n");
-        var startInfo = new ProcessStartInfo("/bin/sh") { UseShellExecute = false };
-        startInfo.ArgumentList.Add(script);
-        startInfo.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        startInfo.ArgumentList.Add(source);
-        startInfo.ArgumentList.Add(target);
-        startInfo.ArgumentList.Add(!relaunch ? "none" : OperatingSystem.IsMacOS() ? "open" : Path.GetFileName(Environment.ProcessPath!));
-        return startInfo;
-    }
-
-    /// <summary>
-    /// Windows: PowerShell waits for DeckHost to exit, then starts setup (the setup's own check for
-    /// a running DeckHost would otherwise ask the user to close it).
-    /// </summary>
-    private static ProcessStartInfo WindowsSetup(string setup, bool relaunch)
-    {
-        var installedBySetup = File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"));
-        var arguments = !installedBySetup ? ["/SP-"]
-            : relaunch ? new[] { "/SILENT", "/SP-", "/NOCANCEL", RelaunchParameter }
-            : ["/SILENT", "/SP-", "/NOCANCEL"];
-        var command =
-            $"Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue; " +
-            $"Start-Process -FilePath {Quote(setup)} -ArgumentList {string.Join(',', arguments.Select(Quote))}";
-        var startInfo = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
-        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", command })
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        return startInfo;
-    }
-
     /// <summary>A PowerShell single-quoted string (a quote inside is doubled).</summary>
     internal static string Quote(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
+}
 
-    private static string? FindBundle(string directory)
+/// <summary>
+/// What the move from the older Windows setup carries over to the new install (its uninstaller removes
+/// the start-at-sign-in entry): written before the old DeckHost exits, read and deleted by the new one.
+/// </summary>
+internal sealed record MigrationNote(bool StartAtLogin)
+{
+    public static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost", "migration.json");
+
+    public static void Write(MigrationNote note, string? path = null)
     {
-        // DeckHost.app/Contents/MacOS
-        var contents = Path.GetDirectoryName(directory);
-        var bundle = contents is null ? null : Path.GetDirectoryName(contents);
-        return bundle is not null && bundle.EndsWith(".app", StringComparison.OrdinalIgnoreCase) ? bundle : null;
+        path ??= FilePath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(note));
     }
 
-    /// <summary>The install is swapped by renaming it, so its parent folder must be writable.</summary>
-    private static bool CanReplace(string location)
+    /// <summary>The note, once: it is deleted. Null when there is none (or it can't be read).</summary>
+    public static MigrationNote? Take(string? path = null)
     {
-        var parent = Path.GetDirectoryName(location);
-        if (parent is null)
-        {
-            return false;
-        }
-
+        path ??= FilePath;
         try
         {
-            var probe = Path.Combine(parent, $".deckhost-update-{Guid.NewGuid():N}");
-            File.WriteAllBytes(probe, []);
-            File.Delete(probe);
-            return true;
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var note = JsonSerializer.Deserialize<MigrationNote>(File.ReadAllText(path));
+            File.Delete(path);
+            return note;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            return false;
+            return null;
         }
     }
 }
