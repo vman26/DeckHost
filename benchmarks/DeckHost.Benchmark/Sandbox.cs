@@ -38,6 +38,9 @@ internal sealed class Sandbox : IDisposable
         _backup = backup;
     }
 
+    /// <summary>The sandbox's own folder (on Windows only temporary files; the data folder is the real one).</summary>
+    public string Root => _root;
+
     /// <summary>DeckHost's data folder (settings.json, profiles.json, simulator.json, logs).</summary>
     public string DataDirectory { get; }
 
