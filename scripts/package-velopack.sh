@@ -50,13 +50,17 @@ if [[ -n "${VELOPACK_REPOSITORY:-}" ]]; then
     vpk download github --repoUrl "https://github.com/$VELOPACK_REPOSITORY" --channel "$channel" "${pre[@]}" -o "$feed" || true
 fi
 
-args=(pack -u DeckHost -v "$version" -p "$pack" --channel "$channel" -o "$feed"
+args=(pack -u DeckHost -v "$version" -p "$pack" --channel "$channel" -o "$feed" -r "$rid"
       --packTitle DeckHost --packAuthors "Marco Veltman")
+
+# The installers' license page takes .txt, .md or .rtf only.
+license="$feed/LICENSE.txt"
+cp "$root/LICENSE" "$license"
 
 case "$channel" in
     win)
         args+=(-e DeckHost.App.exe -i "$root/DeckHost.App/Assets/deckhost.ico"
-               --msi --instLocation Either --instLicense "$root/LICENSE")
+               --msi --instLocation Either --instLicense "$license")
         if [[ -n "${WINDOWS_CERTIFICATE:-}" ]]; then
             # vpk runs the template as a Windows command: a Windows path, not Git Bash's /d/a/...
             signer="$root/scripts/sign-windows.ps1"
@@ -88,7 +92,7 @@ case "$channel" in
             args+=(--signAppIdentity "$MACOS_SIGN_IDENTITY" --signEntitlements "$root/packaging/macos/DeckHost.entitlements")
         fi
         if [[ -n "${MACOS_INSTALLER_IDENTITY:-}" ]]; then
-            args+=(--signInstallIdentity "$MACOS_INSTALLER_IDENTITY" --instLicense "$root/LICENSE")
+            args+=(--signInstallIdentity "$MACOS_INSTALLER_IDENTITY" --instLicense "$license")
         else
             args+=(--noInst)
         fi
