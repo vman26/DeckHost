@@ -50,5 +50,6 @@ dotnet run -c Release --project benchmarks/DeckHost.Benchmark -- --app publish/D
 
 Use `win-x64` and `DeckHost.App.exe` on Windows, `osx-arm64` on a Mac. On Linux without a desktop,
 put `xvfb-run -a` in front. `--phase-seconds` and `--warmup-seconds` shorten the run while you try
-things. On Windows the benchmark uses the real `%APPDATA%\DeckHost`: with `--replace-data` it moves
-yours aside and puts it back afterwards; without it, it refuses to run when that folder exists.
+things. On Windows and macOS the benchmark uses DeckHost's real data folder (`%APPDATA%\DeckHost`,
+`~/Library/Application Support/DeckHost`): with `--replace-data` it moves yours aside and puts it back
+afterwards; without it, it refuses to run when that folder exists.

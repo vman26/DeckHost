@@ -7,8 +7,8 @@ namespace DeckHost.Benchmark;
 
 /// <summary>
 /// DeckHost's data folder for a run, so the measurement doesn't depend on (or change) anyone's own
-/// setup. On Linux and macOS a fresh HOME (and XDG_CONFIG_HOME); on Windows, where the known folders
-/// ignore the environment, the real %APPDATA%\DeckHost, moved aside first and put back afterwards.
+/// setup. On Linux a fresh HOME (and XDG_CONFIG_HOME); on Windows and macOS, where the data folder
+/// ignores the environment, the real one, moved aside first and put back afterwards.
 /// </summary>
 internal sealed class Sandbox : IDisposable
 {
@@ -30,11 +30,10 @@ internal sealed class Sandbox : IDisposable
     private readonly string _root;
     private readonly string? _backup;
 
-    private Sandbox(string root, IReadOnlyList<string> dataDirectories, IReadOnlyDictionary<string, string> environment, string? backup)
+    private Sandbox(string root, string dataDirectory, IReadOnlyDictionary<string, string> environment, string? backup)
     {
         _root = root;
-        DataDirectories = dataDirectories;
-        DataDirectory = dataDirectories[0];
+        DataDirectory = dataDirectory;
         Environment = environment;
         _backup = backup;
     }
@@ -42,30 +41,8 @@ internal sealed class Sandbox : IDisposable
     /// <summary>The sandbox's own folder (on Windows only temporary files; the data folder is the real one).</summary>
     public string Root => _root;
 
-    /// <summary>
-    /// DeckHost's data folder (settings.json, profiles.json, simulator.json, logs): the first candidate until
-    /// <see cref="FindUsedDataDirectory"/> has seen which one DeckHost uses.
-    /// </summary>
-    public string DataDirectory { get; private set; }
-
-    /// <summary>
-    /// Where DeckHost may keep its data (.NET's ApplicationData). On macOS that is either XDG_CONFIG_HOME or
-    /// ~/Library/Application Support depending on the .NET version, so the setup is written to both and the
-    /// benchmark follows the one DeckHost writes to.
-    /// </summary>
-    public IReadOnlyList<string> DataDirectories { get; }
-
-    /// <summary>The candidate DeckHost writes to (its start-up state is the first file it writes), or null before it has.</summary>
-    public string? FindUsedDataDirectory()
-    {
-        var used = DataDirectories.FirstOrDefault(static folder => File.Exists(Path.Combine(folder, "startup-state.json")));
-        if (used is not null)
-        {
-            DataDirectory = used;
-        }
-
-        return used;
-    }
+    /// <summary>DeckHost's data folder (settings.json, profiles.json, simulator.json, logs).</summary>
+    public string DataDirectory { get; }
 
     /// <summary>Variables for DeckHost's process.</summary>
     public IReadOnlyDictionary<string, string> Environment { get; }
@@ -78,8 +55,10 @@ internal sealed class Sandbox : IDisposable
         var root = OperatingSystem.IsWindows()
             ? Directory.CreateTempSubdirectory("deckhost-benchmark").FullName
             : Directory.CreateDirectory(Path.Combine("/tmp", "dhb-" + Guid.NewGuid().ToString("N")[..8])).FullName;
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
         {
+            // Windows' known folders ignore the environment, and so does macOS's Application Support
+            // (.NET asks Foundation, which doesn't read HOME): the real folder, moved aside.
             var data = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "DeckHost");
             string? backup = null;
             if (Directory.Exists(data))
@@ -93,18 +72,17 @@ internal sealed class Sandbox : IDisposable
                 Directory.Move(data, backup);
             }
 
-            return new Sandbox(root, [data], new Dictionary<string, string>(), backup);
+            // macOS: the single-instance pipe still goes to a short TMPDIR of our own.
+            var environment = OperatingSystem.IsMacOS()
+                ? new Dictionary<string, string> { ["TMPDIR"] = Path.Combine(root, "tmp") }
+                : new Dictionary<string, string>();
+            return new Sandbox(root, data, environment, backup);
         }
 
         var home = Path.Combine(root, "home");
         var config = Path.Combine(home, ".config");
         Directory.CreateDirectory(config);
-
-        // .NET's ApplicationData: XDG_CONFIG_HOME on Linux; on macOS that or ~/Library/Application Support.
-        string[] dataDirectories = OperatingSystem.IsMacOS()
-            ? [Path.Combine(config, "DeckHost"), Path.Combine(home, "Library", "Application Support", "DeckHost")]
-            : [Path.Combine(config, "DeckHost")];
-        return new Sandbox(root, dataDirectories, new Dictionary<string, string>
+        return new Sandbox(root, Path.Combine(config, "DeckHost"), new Dictionary<string, string>
         {
             ["HOME"] = home,
             ["XDG_CONFIG_HOME"] = config,
@@ -120,6 +98,7 @@ internal sealed class Sandbox : IDisposable
     /// </summary>
     public void WriteSettings(bool startInTray)
     {
+        Directory.CreateDirectory(DataDirectory);
         if (Environment.TryGetValue("TMPDIR", out var temp))
         {
             Directory.CreateDirectory(temp);
@@ -134,11 +113,7 @@ internal sealed class Sandbox : IDisposable
             ["WelcomeShown"] = true,
             ["StartMinimized"] = startInTray,
         };
-        foreach (var folder in DataDirectories)
-        {
-            Directory.CreateDirectory(folder);
-            File.WriteAllText(Path.Combine(folder, "settings.json"), JsonSerializer.Serialize(settings));
-        }
+        File.WriteAllText(Path.Combine(DataDirectory, "settings.json"), JsonSerializer.Serialize(settings));
     }
 
     /// <summary>
@@ -154,12 +129,8 @@ internal sealed class Sandbox : IDisposable
             ParentId = ProfileId,
             Kind = ProfileKinds.Page,
         };
-        foreach (var folder in DataDirectories)
-        {
-            Directory.CreateDirectory(folder);
-            new ProfileStore(Path.Combine(folder, "profiles.json"))
-                .Save(new ProfileDocument(ProfileDocument.CurrentVersion, ProfileId, [page1, page2]));
-        }
+        new ProfileStore(Path.Combine(DataDirectory, "profiles.json"))
+            .Save(new ProfileDocument(ProfileDocument.CurrentVersion, ProfileId, [page1, page2]));
     }
 
     public void Dispose()

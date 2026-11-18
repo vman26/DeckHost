@@ -35,11 +35,7 @@ internal sealed class DeckHostRun : IAsyncDisposable
     /// <summary>Starts DeckHost and attaches the simulator once its endpoint is up; returns after the first key image.</summary>
     public static async Task<DeckHostRun> StartAsync(string program, Sandbox sandbox, bool inTray, CancellationToken cancellationToken)
     {
-        foreach (var folder in sandbox.DataDirectories)
-        {
-            File.Delete(Path.Combine(folder, SimulatorWire.EndpointFileName));
-        }
-
+        File.Delete(Path.Combine(sandbox.DataDirectory, SimulatorWire.EndpointFileName));
         var start = new ProcessStartInfo(program) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var (name, value) in sandbox.Environment)
         {
@@ -64,7 +60,7 @@ internal sealed class DeckHostRun : IAsyncDisposable
         try
         {
             SimulatorEndpoint? endpoint;
-            while ((endpoint = sandbox.FindUsedDataDirectory() is { } data ? SimulatorWire.ReadEndpoint(data) : null) is null)
+            while ((endpoint = SimulatorWire.ReadEndpoint(sandbox.DataDirectory)) is null)
             {
                 if (process.HasExited)
                 {
@@ -150,9 +146,9 @@ internal sealed class DeckHostRun : IAsyncDisposable
 
         // AttributesToSkip none: on Linux and macOS a dot folder (.config) counts as hidden.
         var everywhere = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
-        var folders = new[] { sandbox.Root }
-            .Concat(sandbox.DataDirectories.Where(folder => !folder.StartsWith(sandbox.Root + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
-            .Where(Directory.Exists).ToList();
+        var folders = new[] { sandbox.Root, sandbox.DataDirectory }
+            .Where(folder => Directory.Exists(folder) && (folder == sandbox.Root || !folder.StartsWith(sandbox.Root + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
+            .ToList();
         foreach (var folder in folders)
         {
             text.AppendLine($"Files under {folder}:");

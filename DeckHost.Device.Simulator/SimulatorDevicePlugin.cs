@@ -389,7 +389,7 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
             return false;
         }
 
-        connection.Send(new SimulatorMessage { Type = SimulatorMessage.Image, Control = controlId, Width = width, Height = height, Rgba = Convert.ToBase64String(rgba) });
+        connection.Send(new SimulatorMessage { Type = SimulatorMessage.Image, Control = controlId, Width = width, Height = height, Rgba = rgba.ToArray() });
         return true;
     }
 

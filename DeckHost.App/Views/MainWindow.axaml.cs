@@ -69,11 +69,30 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
             }
 
             ShowEditor();
+            UpdatePreviewShown();
         };
         AppSettingsViewModel.Changed += settings => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyDebugSetting(settings));
     }
 
     private MainViewModel? _workflowSource;
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty || change.Property == WindowStateProperty)
+        {
+            UpdatePreviewShown();
+        }
+    }
+
+    /// <summary>The device's pictures only go to the canvas while the window can show them (not in the tray, not minimized).</summary>
+    private void UpdatePreviewShown()
+    {
+        if (DataContext is MainViewModel main)
+        {
+            main.PreviewShown = IsVisible && WindowState != WindowState.Minimized;
+        }
+    }
 
     private void OnMainViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
