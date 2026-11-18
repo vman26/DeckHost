@@ -142,4 +142,23 @@ public sealed class BenchmarkTests
         // Assert
         Assert.That(name, Is.EqualTo(expected));
     }
+
+    [TestCase("windows")]
+    [TestCase("linux")]
+    [TestCase("macos")]
+    public void For_TheRepositoryBudgets_LimitsEveryCheckedNumber(string system)
+    {
+        // Arrange
+        var budgets = Budgets.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "benchmarks", "budgets.json")));
+        string[] checkedMetrics = [Metrics.StartupFirstFrame, Metrics.IdleWindowCpu, Metrics.IdleTrayCpu, Metrics.BusyCpu, Metrics.BusyMemoryGrowth, Metrics.LatencyP95];
+
+        // Act
+        var limits = budgets.For(system);
+
+        // Assert
+        Assert.That(checkedMetrics, Is.All.Matches<string>(metric => limits.ContainsKey(metric)));
+    }
+
+    private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
+        Path.GetDirectoryName(Path.GetDirectoryName(path))!;
 }

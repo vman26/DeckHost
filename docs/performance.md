@@ -37,6 +37,17 @@ system apart. A pull request whose numbers go over a limit fails its **performan
 comment on the pull request shows each number next to the last release's and the budget. A limit only
 changes in a reviewed pull request that says why.
 
+The busy limit is the loosest, and on purpose: ten inputs a second for a whole minute is far more
+than anyone presses, and on the runners DeckHost's window is drawn in software, without a graphics
+card. Most of that CPU is the window redrawing its preview of the device; the tray numbers are
+DeckHost's own work.
+
+If DeckHost stops during a run (it crashes, or the system ends it), the benchmark fails instead of
+measuring an empty minute, and prints DeckHost's crash report, the system's (on macOS) and the end of
+its log. That is how a random crash on macOS was found and fixed: the StreamDock device support had
+set up macOS's USB device watcher on a thread that could end. On macOS DeckHost also keeps App Nap
+away while it runs, so the system doesn't slow it down in the background.
+
 The runners are GitHub's shared virtual machines (Linux draws on a virtual screen without a graphics
 card), so numbers vary somewhat from run to run and are higher than on a typical desktop. They are
 meant to show changes and catch regressions; your own computer will usually do better.
