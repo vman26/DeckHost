@@ -20,9 +20,11 @@ env:
 permissions:
   contents: read
 
+# A new push waits for the run in progress instead of cancelling it: a measurement takes about ten
+# minutes and is wasted when cut off (GitHub keeps only the newest waiting run).
 concurrency:
   group: performance-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   measure:
