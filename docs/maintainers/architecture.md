@@ -52,6 +52,7 @@ The rules ([0001](adr/0001-dependency-rule.md)) are checked by `ArchitectureTest
 | NCalcSync (NCalc) | Workflow expressions, behind `WorkflowExpression` | MIT |
 | HidSharp | Elgato Stream Deck over USB | Apache-2.0 |
 | Markdig | Plugin READMEs in the store | BSD-2-Clause |
+| Velopack (+ `vpk`, its WiX fork for the MSI) | Installers and updates (`Platform/AppUpdater`, `scripts/package-velopack.sh`); its updater ships in every package | MIT (WiX: MS-RL) |
 | Microsoft.Web.WebView2 | HTML Stream Deck plugins on Windows | Microsoft (redistributable) |
 | StreamDock SDK (submodule) | MiraBox N4 Pro | MIT |
 | hidapi (bundled with the SDK) | USB HID for the SDK | BSD-3-Clause (one of its license options) |
