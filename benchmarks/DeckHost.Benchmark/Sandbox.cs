@@ -47,7 +47,11 @@ internal sealed class Sandbox : IDisposable
     /// <exception cref="InvalidOperationException">Windows, a DeckHost data folder exists and <paramref name="replaceData"/> is off.</exception>
     public static Sandbox Create(bool replaceData)
     {
-        var root = Directory.CreateTempSubdirectory("deckhost-benchmark").FullName;
+        // Short on Linux and macOS: DeckHost's single-instance pipe lives in TMPDIR, and a socket path
+        // may be at most 104 characters on macOS (whose own TMPDIR is already about 50).
+        var root = OperatingSystem.IsWindows()
+            ? Directory.CreateTempSubdirectory("deckhost-benchmark").FullName
+            : Directory.CreateDirectory(Path.Combine("/tmp", "dhb-" + Guid.NewGuid().ToString("N")[..8])).FullName;
         if (OperatingSystem.IsWindows())
         {
             var data = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData), "DeckHost");
