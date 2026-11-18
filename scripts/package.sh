@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Packages a published DeckHost (dotnet publish -r <rid> --self-contained) for release:
 #   linux-*  DeckHost-<version>-<rid>.tar.gz  the app, install.sh, desktop entry, udev rule
-#   osx-*    DeckHost-<version>-<rid>.zip     DeckHost.app (ad-hoc signed)
+#   osx-*    DeckHost-<version>-<rid>.zip     DeckHost.app (ad-hoc signed); with DECKHOST_BUNDLE_ONLY=1
+#                                             only the signed DeckHost.app in <output-dir>
 #
 #   scripts/package.sh <rid> <version> <publish-dir> <output-dir> [display-version]
 #
@@ -76,6 +77,13 @@ TEXT
         codesign "${outer[@]}" "$app/Contents/MacOS/DeckHost.App"
         codesign "${outer[@]}" "$app"
         codesign --verify --strict "$app"
+        if [[ -n "${DECKHOST_BUNDLE_ONLY:-}" ]]; then
+            # Only the signed app, not zipped or notarized (the performance workflow measures it).
+            rm -rf "$output/DeckHost.app"
+            ditto "$app" "$output/DeckHost.app"
+            echo "$output/DeckHost.app"
+            exit 0
+        fi
         (cd "$stage" && ditto -c -k --sequesterRsrc --keepParent DeckHost.app "$output/${name}.zip")
         if [[ "$identity" != "-" && -n "${MACOS_NOTARY_APPLE_ID:-}" && -n "${MACOS_NOTARY_TEAM_ID:-}" && -n "${MACOS_NOTARY_PASSWORD:-}" ]]; then
             # Apple checks the app and returns a ticket; stapled to the app, it works offline.

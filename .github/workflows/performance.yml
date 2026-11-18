@@ -105,11 +105,17 @@ jobs:
             if [[ -n "$latest" ]]; then echo "PREVIOUS=perf-data/$latest" >> "$GITHUB_ENV"; fi
           fi
 
+      # On macOS DeckHost is measured the way people run it: the signed DeckHost.app.
+      - name: App bundle (macOS)
+        if: runner.os == 'macOS'
+        run: DECKHOST_BUNDLE_ONLY=1 scripts/package.sh ${{ matrix.rid }} benchmark publish/DeckHost bundle
+
       - name: Measure
         id: measure
         run: |
           program=publish/DeckHost/DeckHost.App
           if [[ "$RUNNER_OS" == "Windows" ]]; then program=publish/DeckHost/DeckHost.App.exe; fi
+          if [[ "$RUNNER_OS" == "macOS" ]]; then program=bundle/DeckHost.app; fi
           args=(--app "$program" --out "result-${{ matrix.system }}.json" --budgets benchmarks/budgets.json --replace-data)
           if [[ -n "${PREVIOUS:-}" ]]; then args+=(--previous "$PREVIOUS"); fi
           run=(dotnet benchmark/DeckHost.Benchmark.dll "${args[@]}")

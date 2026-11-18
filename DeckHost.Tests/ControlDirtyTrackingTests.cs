@@ -290,6 +290,77 @@ public sealed class ControlDirtyTrackingTests
     }
 
     [Test]
+    public async Task LiveRefreshDelay_NothingLive_IsTheIdleInterval()
+    {
+        // Arrange
+        var start = DateTimeOffset.UtcNow;
+        await using var harness = await StartedFakeDeviceAsync(CountingAction(), null, FirstKey);
+
+        // Act
+        await harness.Host.RefreshLiveControlsAsync(start);
+
+        // Assert
+        Assert.That(harness.Host.LiveRefreshDelay(start), Is.EqualTo(DeviceHostService.LiveRefreshIdleInterval));
+    }
+
+    [Test]
+    public async Task LiveRefreshDelay_ALiveControl_SleepsUntilItIsDue()
+    {
+        // Arrange
+        var start = DateTimeOffset.UtcNow;
+        var interval = TimeSpan.FromMilliseconds(300);
+        await using var harness = await StartedFakeDeviceAsync(CountingAction(interval), null, FirstKey);
+
+        // Act
+        await harness.Host.RefreshLiveControlsAsync(start);
+
+        // Assert
+        Assert.That(harness.Host.LiveRefreshDelay(start), Is.EqualTo(interval));
+    }
+
+    [Test]
+    public async Task LiveRefreshDelay_AControlDueSoonerThanAFrame_WaitsOneFrame()
+    {
+        // Arrange
+        var start = DateTimeOffset.UtcNow;
+        await using var harness = await StartedFakeDeviceAsync(CountingAction(TimeSpan.FromMilliseconds(1)), null, FirstKey);
+
+        // Act
+        await harness.Host.RefreshLiveControlsAsync(start);
+
+        // Assert
+        Assert.That(harness.Host.LiveRefreshDelay(start), Is.EqualTo(DeviceHostService.AnimationInterval));
+    }
+
+    [Test]
+    public async Task AnimateLights_NoAnimatedEffect_LetsTheLightLoopSleep()
+    {
+        // Arrange
+        await using var harness = await StartedFakeDeviceAsync();
+        harness.Host.SetDeviceLight(harness.DeviceId, new LightStyle(Effect: LightEffects.Solid));
+
+        // Act
+        await harness.Host.AnimateLightsAsync();
+
+        // Assert
+        Assert.That(harness.Host.LightsAnimating, Is.False);
+    }
+
+    [Test]
+    public async Task AnimateLights_ABreathingKnob_KeepsTheLightLoopRunning()
+    {
+        // Arrange
+        await using var harness = await StartedFakeDeviceAsync();
+        harness.Host.SetDeviceLight(harness.DeviceId, new LightStyle(Effect: LightEffects.Breathe));
+
+        // Act
+        await harness.Host.AnimateLightsAsync();
+
+        // Assert
+        Assert.That(harness.Host.LightsAnimating, Is.True);
+    }
+
+    [Test]
     public async Task SetActiveProfile_OtherProfileOfTheDevice_RendersEveryDisplay()
     {
         // Arrange

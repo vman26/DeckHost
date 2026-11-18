@@ -7,12 +7,12 @@ using DeckHost.Contracts.Enums;
 // DeckHost's resource benchmark (docs/performance.md):
 //   DeckHost.Benchmark --app <published DeckHost.App[.exe] or DeckHost.app> --out result.json
 //       [--budgets benchmarks/budgets.json] [--previous last-release.json] [--summary summary.md]
-//       [--phase-seconds 60] [--warmup-seconds 30] [--replace-data]
+//       [--phase-seconds 60] [--warmup-seconds 60] [--replace-data]
 // Exit code: 0 within budget, 1 over a budget, 2 the run failed.
 var options = Options.Parse(args);
 if (options is null)
 {
-    Console.Error.WriteLine("Usage: DeckHost.Benchmark --app <DeckHost program or DeckHost.app> --out <result.json> [--budgets <budgets.json>] [--previous <result.json>] [--summary <file.md>] [--phase-seconds 60] [--warmup-seconds 30] [--replace-data]");
+    Console.Error.WriteLine("Usage: DeckHost.Benchmark --app <DeckHost program or DeckHost.app> --out <result.json> [--budgets <budgets.json>] [--previous <result.json>] [--summary <file.md>] [--phase-seconds 60] [--warmup-seconds 60] [--replace-data]");
     return 2;
 }
 
@@ -67,7 +67,7 @@ namespace DeckHost.Benchmark
 
             return Value("--app") is { } app && Value("--out") is { } output
                 ? new Options(app, output, Value("--budgets"), Value("--previous"), Value("--summary"),
-                    TimeSpan.FromSeconds(Seconds("--phase-seconds", 60)), TimeSpan.FromSeconds(Seconds("--warmup-seconds", 30)),
+                    TimeSpan.FromSeconds(Seconds("--phase-seconds", 60)), TimeSpan.FromSeconds(Seconds("--warmup-seconds", 60)),
                     Array.IndexOf(args, "--replace-data") >= 0)
                 : null;
         }

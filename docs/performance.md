@@ -18,8 +18,8 @@ pages. It measures DeckHost from the outside, the way the system's task manager 
 | | How |
 |---|---|
 | **Start to first key image** | From starting the program until the device shows its first key. |
-| **Idle, window open** | One minute with DeckHost's window open and the live keys updating, after 30 seconds to settle (so start-up work, such as .NET compiling hot code again, isn't counted). |
-| **Idle, in the tray** | One minute after starting the way it does at sign-in with *Start minimized*: no window, only the tray icon and the device. This is how DeckHost spends most of its day. |
+| **Idle, window open** | One minute with DeckHost's window open and the live keys updating, after a minute to settle (so start-up work isn't counted: DeckHost runs all day, and these numbers are how it spends it). |
+| **Idle, in the tray** | One minute (again after a minute to settle) after starting the way it does at sign-in with *Start minimized*: no window, only the tray icon and the device. This is how DeckHost spends most of its day. |
 | **Busy** | One minute of ten inputs a second: key presses, knob turns and a page flip every five seconds. |
 | **Press → new key image** | For each press in the busy minute: the time until the device receives the key's new picture. |
 | **Memory growth** | How much the memory grew from the start to the end of the busy minute, to catch leaks. |

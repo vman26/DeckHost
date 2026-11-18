@@ -104,6 +104,11 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Changed
 
+- DeckHost uses much less CPU while it waits: lights and live keys only wake it when something has to change
+  (before, it woke up about 40 times a second all day), and the app is precompiled, so it starts faster and doesn't
+  spend its first minutes compiling. Every pull request and release is now measured on Windows, Linux and macOS
+  ([Performance](https://vman26.github.io/DeckHost/performance/)).
+
 - Backgrounds: the default background has its own section in the Profile Manager, and a profile only shows its background
   settings after you tick **Use a background of its own**; backups moved to their own section too.
 

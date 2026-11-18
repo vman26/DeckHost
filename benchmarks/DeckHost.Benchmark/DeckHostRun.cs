@@ -65,12 +65,12 @@ internal sealed class DeckHostRun : IAsyncDisposable
             {
                 if (process.HasExited)
                 {
-                    throw new InvalidOperationException($"DeckHost ended with code {process.ExitCode} before the simulator endpoint was up.{Diagnose(sandbox, output)}");
+                    throw new InvalidOperationException($"DeckHost ended with code {process.ExitCode} before the simulator endpoint was up.{Diagnose(sandbox, output, process)}");
                 }
 
                 if (clock.Elapsed > StartTimeout)
                 {
-                    throw new TimeoutException($"No simulator endpoint in {endpointFile} after {StartTimeout.TotalSeconds:0} s.{Diagnose(sandbox, output)}");
+                    throw new TimeoutException($"No simulator endpoint in {endpointFile} after {StartTimeout.TotalSeconds:0} s.{Diagnose(sandbox, output, process)}");
                 }
 
                 await Task.Delay(50, cancellationToken);
@@ -116,9 +116,29 @@ internal sealed class DeckHostRun : IAsyncDisposable
     }
 
     /// <summary>What to look at when DeckHost didn't come up: its output, the files in the sandbox and the end of its log.</summary>
-    private static string Diagnose(Sandbox sandbox, IEnumerable<string> output)
+    private static string Diagnose(Sandbox sandbox, IEnumerable<string> output, Process process)
     {
         var text = new System.Text.StringBuilder();
+        if (OperatingSystem.IsMacOS() && !process.HasExited)
+        {
+            // Where the stuck program waits: macOS's sampler, two seconds of stacks.
+            var report = Path.Combine(sandbox.Root, "sample.txt");
+            using var sample = Process.Start(new ProcessStartInfo("/usr/bin/sample")
+            {
+                UseShellExecute = false,
+                ArgumentList = { process.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), "2", "-file", report },
+            });
+            sample?.WaitForExit(15_000);
+            if (File.Exists(report))
+            {
+                text.AppendLine().AppendLine("Stack sample (start):");
+                foreach (var line in File.ReadLines(report).Take(120))
+                {
+                    text.AppendLine("  " + line);
+                }
+            }
+        }
+
         text.AppendLine().AppendLine("DeckHost's output (last lines):");
         foreach (var line in output)
         {
