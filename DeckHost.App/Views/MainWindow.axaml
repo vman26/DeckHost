@@ -209,7 +209,7 @@
 							<StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
 								<TextBlock Text="{Binding AvailableTitle}" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
 								<TextBlock Text="{Binding AvailableSummary}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" IsVisible="{Binding !IsInstalling}" />
-								<!-- While the update downloads and installs (from the Update page or here). -->
+								<!-- While the update downloads (from the update page or Settings). -->
 								<StackPanel Spacing="2" IsVisible="{Binding IsInstalling}">
 									<ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" IsIndeterminate="{Binding IsProgressIndeterminate}" MinWidth="220" />
 									<TextBlock Text="{Binding ProgressText}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" TextTrimming="CharacterEllipsis" MaxWidth="320" />

@@ -24,12 +24,11 @@ sealed class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        // "DeckHost --apply-update <new> <install> <log> <version>": the new version, started with administrator
-        // rights by the running DeckHost, puts itself in place of DeckHost's folder and ends.
-        if (args.Length > 0 && string.Equals(args[0], Platform.UpdateInstaller.ApplyUpdateArgument, StringComparison.OrdinalIgnoreCase))
-        {
-            return Platform.UpdateInstaller.RunApplyUpdate(args[1..]);
-        }
+        // Velopack first: during install, update and uninstall it starts DeckHost with its own arguments,
+        // runs the hook and ends the process here. Uninstalling removes the start-at-sign-in entry.
+        Velopack.VelopackApp.Build()
+            .OnBeforeUninstallFastCallback(_ => Platform.AppSettings.SetStartAtLogin(false))
+            .Run();
 
         // "DeckHost --check-native": is the device support installed correctly? No window, no device changes.
         if (Array.Exists(args, static arg => string.Equals(arg, "--check-native", StringComparison.OrdinalIgnoreCase)))
@@ -100,8 +99,9 @@ sealed class Program
             return 0;
         }
 
-        // After an update: the files it replaced (in use until the previous DeckHost ended) and its download.
-        Platform.UpdateInstaller.CleanUpAfterUpdate();
+        // After the move from the older Windows setup (whose uninstaller removed it), or when the
+        // install moved: start at sign-in points at this DeckHost again.
+        Platform.AppSettings.RepairStartAtLogin(Platform.MigrationNote.Take());
 
         // A crash leaves a report that the next start offers to send (nothing is sent by itself).
         Platform.CrashReporter.Install();

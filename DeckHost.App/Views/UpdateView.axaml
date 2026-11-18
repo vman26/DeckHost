@@ -28,6 +28,7 @@
 				<ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" IsIndeterminate="{Binding IsProgressIndeterminate}" />
 				<TextBlock Text="{Binding ProgressText}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" />
 			</StackPanel>
+			<TextBlock Text="{Binding InstallHint}" IsVisible="{Binding IsUpdateAvailable}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
 			<TextBlock Text="{Binding Status}" IsVisible="{Binding IsUpdateAvailable}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
 			<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
 				<StackPanel Orientation="Horizontal" Spacing="8">

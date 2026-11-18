@@ -22,7 +22,7 @@
         }
 
         var files = {
-          win: asset("-win-x64-setup.exe") !== release.html_url ? asset("-win-x64-setup.exe") : asset("-win-x64.zip"),
+          win: [asset("-win-x64-install.exe"), asset("-win-x64-setup.exe"), asset("-win-x64.zip")].find(function (url) { return url !== release.html_url; }) || release.html_url,
           linux: asset("-linux-x64.tar.gz"),
           appimage: asset("-linux-x86_64.appimage"),
           mac: asset("-osx-arm64.zip"),

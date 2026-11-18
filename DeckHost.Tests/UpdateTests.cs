@@ -281,19 +281,6 @@ public sealed class UpdateCheckerTests : IDisposable
     }
 
     [Test]
-    public void SelectAsset_WindowsForInstall_PicksTheZipDeckHostInstallsItself()
-    {
-        // Arrange
-        var release = UpdateChecker.ParseReleases(Releases).Single(release => release.Tag == "v1.4.0");
-
-        // Act
-        var asset = UpdateChecker.SelectAsset(release, "win-x64", forInstall: true);
-
-        // Assert
-        Assert.That(asset?.Name, Is.EqualTo("DeckHost-1.4.0-win-x64.zip"));
-    }
-
-    [Test]
     public void SelectAsset_AnAppImageRunningOnAReleaseWithOne_PicksTheAppImage()
     {
         // Arrange
@@ -675,227 +662,196 @@ public sealed class UpdateViewModelTests
         Assert.That(updates.Status, Does.Contain("Couldn't reach GitHub"));
     }
 
-    private UpdateViewModel Create(string version) => new(
+    private UpdateViewModel Create(string version, IAppUpdater? updater = null) => new(
         new UpdateChecker(new HttpClient(new UpdateCheckerTests.FakeHandler(_ => Encoding.UTF8.GetBytes(Releases)))),
         version,
         () => _settings,
-        settings => _settings = settings);
-}
-
-public sealed class InPlaceUpdateTests : IDisposable
-{
-    private const string OldVersion = "1.3.0";
-    private const string NewVersion = "1.4.0";
-    private const string VersionFile = "version.txt";
-    private const string Uninstaller = "unins000.exe";
-    private const string NestedFile = "plugins/device/bridge.so";
-
-    private readonly string _root = Directory.CreateTempSubdirectory("deckhost-update").FullName;
-    private readonly string _install;
-    private readonly string _staged;
-
-    public InPlaceUpdateTests()
-    {
-        _install = Path.Combine(_root, "DeckHost");
-        _staged = Path.Combine(_root, "new", "DeckHost");
-        Write(_install, VersionFile, OldVersion);
-        Write(_install, NestedFile, OldVersion);
-        Write(_install, Uninstaller, OldVersion);
-        Write(_staged, VersionFile, NewVersion);
-        Write(_staged, NestedFile, NewVersion);
-        Write(_staged, "added.dll", NewVersion);
-    }
-
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+        settings => _settings = settings,
+        updater);
 
     [Test]
-    public void Apply_AnInstall_HasTheNewVersionsFiles()
-    {
-        // Act
-        InPlaceUpdate.Apply(_staged, _install);
-
-        // Assert
-        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
-        Assert.That(Read(_install, NestedFile), Is.EqualTo(NewVersion));
-        Assert.That(Read(_install, "added.dll"), Is.EqualTo(NewVersion));
-    }
-
-    [Test]
-    public void Apply_FilesTheNewVersionDoesNotHave_AreKept()
-    {
-        // Act
-        InPlaceUpdate.Apply(_staged, _install);
-
-        // Assert
-        Assert.That(Read(_install, Uninstaller), Is.EqualTo(OldVersion));
-    }
-
-    [Test]
-    public void Apply_AReplacedFile_IsKeptAsideUntilCleanUp()
-    {
-        // Act
-        InPlaceUpdate.Apply(_staged, _install);
-
-        // Assert
-        Assert.That(Read(_install, VersionFile + InPlaceUpdate.OldSuffix), Is.EqualTo(OldVersion));
-    }
-
-    [Test]
-    public void Apply_AFileThatIsOpen_IsReplaced()
-    {
-        // Arrange: open the way Windows maps a running program (renaming allowed, writing not).
-        using var running = new FileStream(Path.Combine(_install, VersionFile), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-
-        // Act
-        InPlaceUpdate.Apply(_staged, _install);
-
-        // Assert
-        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
-    }
-
-    [Test]
-    public void Apply_ACopyFailsPartWay_LeavesTheInstallAsItWas()
+    public async Task Install_AVelopackInstall_DownloadsThenAsksToRestartIntoIt()
     {
         // Arrange
-        var before = Snapshot(_install);
-        var copies = 0;
-        void FailOnSecond(string source, string target)
+        UpdateViewModel.RestartNoticeDelay = TimeSpan.Zero;
+        var updater = new FakeUpdater();
+        var updates = Create(RunningVersion, updater);
+        var restartRequested = false;
+        updates.RestartRequested += () => restartRequested = true;
+        await updates.CheckAsync(manual: false);
+
+        // Act
+        await updates.InstallCommand.ExecuteAsync(null);
+
+        // Assert
+        Assert.That(updater.Downloads, Is.EqualTo(1));
+        Assert.That(updater.AppliedWithRestart, Is.True);
+        Assert.That(restartRequested, Is.True);
+    }
+
+    [Test]
+    public async Task Install_CancelledWhileDownloading_AppliesNothing()
+    {
+        // Arrange
+        var updater = new FakeUpdater { WaitForCancel = true };
+        var updates = Create(RunningVersion, updater);
+        await updates.CheckAsync(manual: false);
+
+        // Act
+        var install = updates.InstallCommand.ExecuteAsync(null);
+        await updater.Started.Task;
+        updates.CancelCommand.Execute(null);
+        await install;
+
+        // Assert
+        Assert.That(updater.AppliedWithRestart, Is.Null);
+        Assert.That(updates.Status, Is.EqualTo("Update cancelled."));
+        Assert.That(updates.IsInstalling, Is.False);
+    }
+
+    [Test]
+    public void InstallLabel_AVelopackInstall_InstallsAndRestarts()
+    {
+        // Act
+        var updates = Create(RunningVersion, new FakeUpdater());
+
+        // Assert
+        Assert.That(updates.InstallLabel, Is.EqualTo("Install and restart"));
+        Assert.That(updates.CanInstallAutomatically, Is.True);
+    }
+
+    private sealed class FakeUpdater : IAppUpdater
+    {
+        public UpdateMode Mode => UpdateMode.Velopack;
+
+        public bool WaitForCancel { get; init; }
+
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Downloads { get; private set; }
+
+        public bool? AppliedWithRestart { get; private set; }
+
+        public bool HasDownloaded => Downloads > 0;
+
+        public async Task<string?> DownloadAsync(bool includePrereleases, IProgress<int> progress, CancellationToken cancellationToken)
         {
-            if (++copies == 2)
+            Started.TrySetResult();
+            if (WaitForCancel)
             {
-                throw new IOException("disk full");
+                await Task.Delay(Timeout.Infinite, cancellationToken);
             }
 
-            File.Copy(source, target);
+            progress.Report(100);
+            Downloads++;
+            return LatestVersion;
         }
 
-        // Act
-        var failure = Assert.Throws<UpdateException>(() => InPlaceUpdate.Apply(_staged, _install, null, CancellationToken.None, FailOnSecond));
-
-        // Assert
-        Assert.That(failure!.Message, Does.Contain("unchanged"));
-        Assert.That(Snapshot(_install), Is.EqualTo(before));
-    }
-
-    [Test]
-    public void Apply_AnInstall_ReportsEveryFile()
-    {
-        // Arrange
-        var steps = new List<UpdateStep>();
-        var progress = new SynchronousProgress(steps.Add);
-
-        // Act
-        InPlaceUpdate.Apply(_staged, _install, progress);
-
-        // Assert
-        Assert.That(steps.Where(step => step.Phase == UpdatePhase.Installing).Select(step => step.Done), Is.EqualTo(new[] { 0, 1, 2, 3 }));
-        Assert.That(steps[^1].Phase, Is.EqualTo(UpdatePhase.Done));
-    }
-
-    [Test]
-    public void CleanUp_AfterAnUpdate_DeletesTheReplacedFilesOnly()
-    {
-        // Arrange
-        InPlaceUpdate.Apply(_staged, _install);
-
-        // Act
-        var deleted = InPlaceUpdate.CleanUp(_install);
-
-        // Assert
-        Assert.That(deleted, Is.EqualTo(2));
-        Assert.That(Directory.EnumerateFiles(_install, "*" + InPlaceUpdate.OldSuffix, SearchOption.AllDirectories), Is.Empty);
-        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
-    }
-
-    [Test]
-    public void Swap_AnInstall_IsReplacedAsAWhole()
-    {
-        // Act
-        InPlaceUpdate.Swap(_staged, _install);
-
-        // Assert
-        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
-        Assert.That(File.Exists(Path.Combine(_install, Uninstaller)), Is.False);
-        Assert.That(Read(_install + InPlaceUpdate.OldSuffix, VersionFile), Is.EqualTo(OldVersion));
-    }
-
-    [Test]
-    public void CleanUp_AfterASwap_DeletesTheOldFolder()
-    {
-        // Arrange
-        InPlaceUpdate.Swap(_staged, _install);
-
-        // Act
-        InPlaceUpdate.CleanUp(_install);
-
-        // Assert
-        Assert.That(Directory.Exists(_install + InPlaceUpdate.OldSuffix), Is.False);
-        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
-    }
-
-    [Test]
-    public void Swap_ALinkInTheNewVersion_IsCopiedAsALink()
-    {
-        // Arrange
-        Assume.That(!OperatingSystem.IsWindows(), "creating links needs extra rights on Windows");
-        const string LinkName = "libbridge.dylib";
-        File.CreateSymbolicLink(Path.Combine(_staged, LinkName), "added.dll");
-
-        // Act
-        InPlaceUpdate.Swap(_staged, _install);
-
-        // Assert
-        Assert.That(new FileInfo(Path.Combine(_install, LinkName)).LinkTarget, Is.EqualTo("added.dll"));
-    }
-
-    private static void Write(string folder, string relative, string text)
-    {
-        var path = Path.Combine(folder, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
-    }
-
-    private static string Read(string folder, string relative) => File.ReadAllText(Path.Combine(folder, relative));
-
-    private static Dictionary<string, string> Snapshot(string folder) =>
-        Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
-            .ToDictionary(path => Path.GetRelativePath(folder, path), File.ReadAllText);
-
-    /// <summary><see cref="Progress{T}"/> posts to the thread pool; the tests need the steps right away.</summary>
-    private sealed class SynchronousProgress(Action<UpdateStep> report) : IProgress<UpdateStep>
-    {
-        public void Report(UpdateStep value) => report(value);
+        public void ApplyAfterExit(bool restart) => AppliedWithRestart = restart;
     }
 }
 
-public sealed class UpdateInstallerTests
+public sealed class UpdateInstallerTests : IDisposable
 {
-    [Test]
-    public void ElevatedHelper_AnInstall_PassesEveryPathAsItsOwnArgument()
-    {
-        // Arrange
-        const string Staged = "/tmp/new folder/DeckHost";
-        const string Target = "/opt/Deck Host";
-        const string Log = "/tmp/apply-update.log";
-        const string Version = "1.4.0";
+    private const string RuntimeIdentifier = "win-x64";
+    private const string InstallerName = "DeckHost-1.5.0-win-x64-install.exe";
+    private const string MsiName = "DeckHost-1.5.0-win-x64.msi";
 
+    private readonly string _directory = Directory.CreateTempSubdirectory("deckhost-migration").FullName;
+
+    public void Dispose() => Directory.Delete(_directory, recursive: true);
+
+    [Test]
+    public void Quote_APathWithAnApostrophe_IsEscapedForPowerShell()
+    {
         // Act
-        var helper = UpdateInstaller.ElevatedHelper(Staged, Target, Log, Version);
+        var quoted = UpdateInstaller.Quote("C:\\Users\\O'Brien\\setup.exe");
 
         // Assert
-        Assert.That(helper.ArgumentList.TakeLast(5), Is.EqualTo(new[] { UpdateInstaller.ApplyUpdateArgument, Staged, Target, Log, Version }));
+        Assert.That(quoted, Is.EqualTo("'C:\\Users\\O''Brien\\setup.exe'"));
+    }
+
+    [TestCase(false, InstallerName)]
+    [TestCase(true, MsiName)]
+    public void SelectMigrationAsset_AnInstall_PicksTheInstallerForItsScope(bool forAllUsers, string expected)
+    {
+        // Arrange
+        var release = WindowsRelease(InstallerName, MsiName, "DeckHost-1.5.0-win-x64-setup.exe");
+
+        // Act
+        var asset = UpdateInstaller.SelectMigrationAsset(release, RuntimeIdentifier, forAllUsers);
+
+        // Assert
+        Assert.That(asset?.Name, Is.EqualTo(expected));
     }
 
     [Test]
-    public void RunApplyUpdate_TooFewArguments_ReturnsUsageError()
+    public void SelectMigrationAsset_AReleaseWithOnlyTheOldSetup_FindsNothing()
     {
         // Arrange
-        const int UsageError = 2;
+        var release = WindowsRelease("DeckHost-1.4.0-win-x64-setup.exe");
 
         // Act
-        var exitCode = UpdateInstaller.RunApplyUpdate(["only-one"]);
+        var asset = UpdateInstaller.SelectMigrationAsset(release, RuntimeIdentifier, forAllUsers: false);
 
         // Assert
-        Assert.That(exitCode, Is.EqualTo(UsageError));
+        Assert.That(asset, Is.Null);
+    }
+
+    [Test]
+    public void Take_AWrittenNote_ReturnsItOnce()
+    {
+        // Arrange
+        var path = Path.Combine(_directory, "migration.json");
+        MigrationNote.Write(new MigrationNote(StartAtLogin: true), path);
+
+        // Act
+        var first = MigrationNote.Take(path);
+        var second = MigrationNote.Take(path);
+
+        // Assert
+        Assert.That(first, Is.EqualTo(new MigrationNote(StartAtLogin: true)));
+        Assert.That(second, Is.Null);
+    }
+
+    [Test]
+    public void Take_ABrokenNote_ReturnsNothing()
+    {
+        // Arrange
+        var path = Path.Combine(_directory, "migration.json");
+        File.WriteAllText(path, "{ not json");
+
+        // Act
+        var note = MigrationNote.Take(path);
+
+        // Assert
+        Assert.That(note, Is.Null);
+    }
+
+    private static ReleaseInfo WindowsRelease(params string[] names) => new(
+        Tag: "v1.5.0",
+        Version: SemanticVersion.Parse("1.5.0"),
+        Name: "DeckHost 1.5.0",
+        Notes: string.Empty,
+        PageUrl: string.Empty,
+        IsPrerelease: false,
+        PublishedAt: null,
+        Assets: names.Select(name => new ReleaseAsset(name, "https://example.com/" + name, 1)).ToList());
+}
+
+public sealed class AppUpdaterTests
+{
+    [TestCase(true, true, true, UpdateMode.Velopack)]
+    [TestCase(true, false, false, UpdateMode.Velopack)]
+    [TestCase(false, true, true, UpdateMode.MigrateWindows)]
+    [TestCase(false, true, false, UpdateMode.ManualDownload)]
+    [TestCase(false, false, true, UpdateMode.ManualDownload)]
+    public void Decide_AnInstall_PicksHowItUpdates(bool velopackInstall, bool windows, bool innoUninstaller, UpdateMode expected)
+    {
+        // Act
+        var mode = AppUpdater.Decide(velopackInstall, windows, innoUninstaller);
+
+        // Assert
+        Assert.That(mode, Is.EqualTo(expected));
     }
 }

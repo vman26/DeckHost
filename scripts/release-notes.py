@@ -95,26 +95,32 @@ def package_names(version, files=()):
     def find(suffix):
         return next((name for name in sorted(files) if name.startswith("DeckHost-") and name.endswith(suffix)), f"DeckHost-{version}{suffix}")
     return {
-        "setup": find("-win-x64-setup.exe"),
+        "install": find("-win-x64-install.exe"),
+        "msi": find("-win-x64.msi"),
         "windows": find("-win-x64.zip"),
         "linux": find("-linux-x64.tar.gz"),
         "appimage": find("-linux-x86_64.AppImage"),
         "macos": find("-osx-arm64.zip"),
+        "pkg": find("-osx-arm64.pkg"),
     }
 
 
 def compose(text, tag, pull_requests="", files=()):
     version = tag[1:] if tag.startswith("v") else tag
     names = package_names(version, files)
+    # The pkg needs a Developer ID Installer certificate; without one the release has only the zip.
+    mac_installer = f" or `{names['pkg']}` (installer)" if names["pkg"] in set(files) else ""
     parts = [
         section_for(text, tag),
         "## Downloads\n\n"
         "| System | File |\n"
         "|---|---|\n"
-        f"| Windows | `{names['setup']}` (installer) or `{names['windows']}` |\n"
-        f"| Linux | `{names['linux']}` (run `install.sh` inside) or `{names['appimage']}` (no install; `chmod +x` and run) |\n"
-        f"| macOS (Apple silicon) | `{names['macos']}` |\n\n"
-        "DeckHost already installed? It offers this update by itself.",
+        f"| Windows | `{names['install']}` (installs for you, no administrator rights), `{names['msi']}` (for all users) or `{names['windows']}` (no install) |\n"
+        f"| Linux | `{names['appimage']}` (no install, updates itself; `chmod +x` and run) or `{names['linux']}` (run `install.sh` inside; updated by hand) |\n"
+        f"| macOS (Apple silicon) | `{names['macos']}` (the app){mac_installer} |\n\n"
+        "DeckHost already installed? It offers this update by itself. The other files (`releases.*.json`, "
+        "`*.nupkg`, `RELEASES*`) are what its updater downloads; `*-win-x64-setup.exe` only takes older "
+        "DeckHost versions to this one.",
         END_MARKER,
         "### Checking the files\n\n"
         "- Checksums: `sha256sum -c SHA256SUMS.txt --ignore-missing`\n"

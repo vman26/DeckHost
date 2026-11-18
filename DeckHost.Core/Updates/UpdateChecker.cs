@@ -182,10 +182,8 @@ public sealed class UpdateChecker
     /// The package for a platform (<c>win-x64</c>, <c>linux-x64</c>, <c>osx-arm64</c>, ...):
     /// Windows' setup program, else its zip; the Linux tar.gz (the AppImage, when
     /// <paramref name="appImage"/> says DeckHost runs from one and the release has it); the macOS zip.
-    /// <paramref name="forInstall"/>: DeckHost installs it itself (<see cref="InPlaceUpdate"/>), so on
-    /// Windows the zip comes first (the setup program is only for installing by hand).
     /// </summary>
-    public static ReleaseAsset? SelectAsset(ReleaseInfo release, string runtimeIdentifier, bool appImage = false, bool forInstall = false)
+    public static ReleaseAsset? SelectAsset(ReleaseInfo release, string runtimeIdentifier, bool appImage = false)
     {
         ArgumentNullException.ThrowIfNull(release);
         if (appImage && runtimeIdentifier == "linux-x64" &&
@@ -195,9 +193,7 @@ public sealed class UpdateChecker
         }
 
         var suffixes = runtimeIdentifier.StartsWith("win", StringComparison.Ordinal)
-            ? forInstall
-                ? new[] { $"-{runtimeIdentifier}.zip", $"-{runtimeIdentifier}-setup.exe" }
-                : [$"-{runtimeIdentifier}-setup.exe", $"-{runtimeIdentifier}.zip"]
+            ? new[] { $"-{runtimeIdentifier}-setup.exe", $"-{runtimeIdentifier}.zip" }
             : runtimeIdentifier.StartsWith("osx", StringComparison.Ordinal)
                 ? [$"-{runtimeIdentifier}.zip"]
                 : [$"-{runtimeIdentifier}.tar.gz"];

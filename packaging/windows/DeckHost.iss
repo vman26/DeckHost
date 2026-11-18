@@ -1,3 +1,6 @@
+; The older Inno setup, kept only for the move to Velopack: DeckHost versions from before it update
+; by running *-win-x64-setup.exe, which brings them to a version that offers "Switch to the new
+; installer" (Platform/UpdateInstaller). New installs use Velopack's installer (scripts/package-velopack.sh).
 ; Inno Setup script for the Windows installer. Built by .github/workflows/release.yml:
 ;   iscc /DAppVersion=1.2.0 /DFileVersion=1.2.0 /DNumericVersion=1.2.0 /DSourceDir=<publish folder> /DOutputDir=<dir> DeckHost.iss
 ; A pre-release: AppVersion 1.3.0-alpha.3+4b09090 (shown), FileVersion 1.3.0-alpha.3-4b09090 (file name).
@@ -58,12 +61,8 @@ Name: "{autodesktop}\DeckHost"; Filename: "{app}\DeckHost.App.exe"; Tasks: deskt
 
 [Run]
 Filename: "{app}\DeckHost.App.exe"; Description: "{cm:LaunchProgram,DeckHost}"; Flags: nowait postinstall skipifsilent
-; An update started by DeckHost before it installed updates itself (silent, /relaunch=1) starts it again.
+; An update started from DeckHost (silent, /relaunch=1) starts it again.
 Filename: "{app}\DeckHost.App.exe"; Flags: nowait; Check: RelaunchAfterUpdate
-
-[UninstallDelete]
-; DeckHost updates itself in place (InPlaceUpdate): files a newer version added aren't in setup's log.
-Type: filesandordirs; Name: "{app}"
 
 [UninstallRun]
 ; Removes the start-with-Windows entry DeckHost may have added (HKCU\...\Run\DeckHost).

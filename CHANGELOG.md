@@ -12,9 +12,11 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Added
 
-- Updates install inside DeckHost: **Install and restart** shows the download, the install (asking for administrator
-  rights when DeckHost was installed for all users) and then restarts DeckHost into the new version. The Windows
-  setup no longer opens after DeckHost closes, and the Windows zip is updated too.
+- Updates install through a new installer (Velopack): **Install and restart** shows the download from 0 to 100 %,
+  then DeckHost restarts into the new version, which is put in place as a whole, never file by file. Updates are
+  small (only what changed), the AppImage and the Windows zip update themselves too, and DeckHost installed for all
+  users asks for administrator rights when it updates. Windows now has a per-user installer (`-install.exe`) and an
+  MSI for all users; a DeckHost from the older setup offers **Switch to the new installer** once.
 
 - Backgrounds: gradients can have more than two colors (add, reorder, set where each starts) and there are radial
   gradients; the CPU glow preset is visible at ordinary load (full at 60 %) and the CPU value is read right away.

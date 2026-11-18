@@ -6,6 +6,20 @@ Push a tag; the tag is the version (`v1.4.0`, or `v1.4.0-rc.1` for a pre-release
 
 Versions come from git (GitVersion, git-flow): `develop` builds alpha versions of the next minor, `release/x.y.z` builds release candidates, `hotfix/*` betas of the next patch.
 
+## Packages and updates (Velopack)
+
+DeckHost installs and updates through [Velopack](https://velopack.io) (the `Velopack` package in `DeckHost.App.csproj` and the `vpk` tool in the workflow, the same version; update both together). `scripts/package-velopack.sh` makes, per system, the installer, a self-updating portable package and the **update feed**: `releases.<channel>.json`, `assets.<channel>.json`, `RELEASES*` and `DeckHost-<version>-<channel>-full.nupkg` / `-delta.nupkg` (channels `win`, `linux`, `osx`). The feed files keep vpk's names, because the index names the packages; the installers get DeckHost's names:
+
+| System | Files |
+|---|---|
+| Windows | `DeckHost-<v>-win-x64-install.exe` (per user, no administrator rights), `DeckHost-<v>-win-x64.msi` (per user or all users, `--instLocation Either`), `DeckHost-<v>-win-x64.zip` (portable) |
+| Linux | `DeckHost-<v>-linux-x86_64.AppImage` (updates itself, pkexec when it sits in a protected folder) and `DeckHost-<v>-linux-x64.tar.gz` (`scripts/package.sh`, install.sh; updated by hand) |
+| macOS | `DeckHost-<v>-osx-arm64.zip` (DeckHost.app), and `DeckHost-<v>-osx-arm64.pkg` when the `.p12` also holds a Developer ID Installer identity |
+
+Before packing, the script downloads the channel's previous release (`vpk download github`), so every release after the first also has a small delta package. The app reads the feed from the GitHub releases of the repository the build names (`GithubSource`, pre-releases when the user includes them); `DECKHOST_UPDATE_FEED=<folder or URL>` points a DeckHost at a local feed for testing (`vpk pack -o <folder>` twice, start the older one, Install and restart). The runner needs `squashfs-tools` and `zstd` for the AppImage and the deltas.
+
+**The older Windows setup** (`packaging/windows/DeckHost.iss`, `*-win-x64-setup.exe`) is still built so that DeckHost versions from before Velopack, whose updater runs that file, reach the first Velopack version. That version then offers **Switch to the new installer** (`UpdateMode.MigrateWindows`): it installs the Velopack setup (or the MSI for an install in Program Files), removes the old install with its uninstaller after exiting and starts the new one, carrying start at sign-in over through `%AppData%\DeckHost\migration.json`. Stop building the Inno setup (and remove the step from `release.yml`) a few releases later, once nobody runs a pre-Velopack DeckHost. macOS and AppImage users move by themselves: the old updater swaps in the zip's app, which is now Velopack's, and AppImage users replace the file as before.
+
 ## Release notes
 
 The notes come from [`CHANGELOG.md`](https://github.com/vman26/DeckHost/blob/develop/CHANGELOG.md),
@@ -105,7 +119,7 @@ The release workflow then signs DeckHost's programs, libraries and the setup wit
 | `WINDOWS_CERTIFICATE_PASSWORD` (secret) | Its password |
 | `WINDOWS_TIMESTAMP_URL` (variable, optional) | Your CA's timestamp server (default DigiCert's) |
 
-`scripts/sign-windows.ps1` signs `DeckHost.App.exe`, DeckHost's libraries and the native bridge before packaging, and the setup afterwards. Certificates issued since mid-2023 live on hardware tokens or in the CA's cloud; those need the CA's signing tool instead of a `.pfx` (adapt `sign-windows.ps1`). SmartScreen trusts a new certificate after it has seen enough downloads.
+`scripts/sign-windows.ps1` signs `DeckHost.App.exe`, DeckHost's libraries and the native bridge before packaging, the older setup afterwards, and (as vpk's `--signTemplate`) Velopack's `Setup.exe`, `Update.exe` and the MSI. With Azure Artifact Signing vpk signs those itself (`--azureTrustedSignFile`, the same variables and secrets). Certificates issued since mid-2023 live on hardware tokens or in the CA's cloud; those need the CA's signing tool instead of a `.pfx` (adapt `sign-windows.ps1`). SmartScreen trusts a new certificate after it has seen enough downloads.
 
 ### macOS
 
@@ -117,10 +131,10 @@ The release workflow then signs DeckHost's programs, libraries and the setup wit
 | `MACOS_NOTARY_TEAM_ID` | The team id |
 | `MACOS_NOTARY_PASSWORD` | An app-specific password for that Apple ID |
 
-With the certificate, `scripts/package.sh` signs every file for the hardened runtime (`packaging/macos/DeckHost.entitlements`: JIT, and loading device and plugin libraries). With the notary secrets too, it notarizes the app and staples the ticket, so it opens without any warning. A Developer ID needs the Apple Developer Program.
+With the certificate, vpk signs the app for the hardened runtime (`packaging/macos/DeckHost.entitlements`: JIT, and loading device and plugin libraries) after adding Velopack's updater to it; `scripts/package.sh` only assembles the bundle. With the notary secrets too, the workflow stores a `notarytool` profile in the signing keychain and vpk notarizes and staples, so the app opens without any warning. A **Developer ID Installer** identity in the same `.p12` also signs the `.pkg`; without one only the zip is made. A Developer ID needs the Apple Developer Program.
 
 ### Linux
 
 Linux packages aren't signed; `SHA256SUMS.txt` lets users check a download.
 
-The AppImage is built on the same job from the published folder (`scripts/package-appimage.sh`), with `appimagetool` downloaded by `scripts/get-appimagetool.sh`: a pinned version whose SHA-256 is recorded in the script (change both together after reading the release page). The job runs `--check-native` from the finished file, so a bridge that doesn't load inside the image fails the release. The glibc floor is the Ubuntu 22.04 runner's. The tar.gz stays the package of the in-app updater (`UpdateChecker.SelectAsset` offers the AppImage only to an AppImage, detected through `APPIMAGE`). Flatpak isn't built (it needs offline NuGet sources, OpenCV as its own module and holes in the sandbox for the host tools).
+The AppImage is Velopack's (vpk builds it from the published folder). The job runs `--check-native` from the finished file, so a bridge that doesn't load inside the image fails the release. The glibc floor is the Ubuntu 22.04 runner's. The tar.gz is installed and updated by hand (`install.sh`); DeckHost downloads the new one for the user. Flatpak isn't built (it needs offline NuGet sources, OpenCV as its own module and holes in the sandbox for the host tools).

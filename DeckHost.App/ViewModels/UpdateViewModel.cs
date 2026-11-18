@@ -13,8 +13,10 @@ namespace DeckHost.App.ViewModels;
 /// <summary>
 /// DeckHost's updates: checks GitHub for a newer release (automatically, a little after start and
 /// then every few hours, or on request), announces it in the main window with the changelog of
-/// every release since the running one, and downloads it, installs it while DeckHost runs (asking
-/// for administrator rights when DeckHost's folder needs them) and restarts DeckHost. The user can skip a
+/// every release since the running one, and installs it through Velopack (<see cref="IAppUpdater"/>):
+/// the download with its percentage here, then DeckHost exits normally and Velopack swaps in the new
+/// version and starts it. A DeckHost from the older Windows setup moves to the Velopack install once;
+/// anything else (the Linux tar.gz) gets the package to install by hand. The user can skip a
 /// release; a newer one is announced again. One instance (a service) serves the main window's
 /// banner, Settings and the update window.
 /// </summary>
@@ -24,6 +26,7 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
     public static readonly TimeSpan FirstCheckDelay = TimeSpan.FromSeconds(15);
 
     private readonly UpdateChecker _checker;
+    private readonly IAppUpdater _updater;
     private readonly Func<AppSettingsData> _loadSettings;
     private readonly Action<AppSettingsData> _saveSettings;
     private readonly SemanticVersion? _current;
@@ -32,8 +35,6 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
     private UpdateCheckResult? _result;
     private bool _checkAutomatically;
     private bool _installAutomatically;
-    /// <summary>A downloaded and unpacked update (Install updates automatically): installed when DeckHost closes, or at once by Install.</summary>
-    private string? _pendingStaged;
     private string? _pendingVersion;
     private bool _canCancel;
     private bool _isProgressIndeterminate;
@@ -46,9 +47,10 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
     private double _progress;
     private string _progressText = string.Empty;
 
-    public UpdateViewModel(UpdateChecker checker, string currentVersion, Func<AppSettingsData> loadSettings, Action<AppSettingsData> saveSettings)
+    public UpdateViewModel(UpdateChecker checker, string currentVersion, Func<AppSettingsData> loadSettings, Action<AppSettingsData> saveSettings, IAppUpdater? updater = null)
     {
         _checker = checker;
+        _updater = updater ?? ManualUpdater.Instance;
         _loadSettings = loadSettings;
         _saveSettings = saveSettings;
         CurrentVersion = currentVersion;
@@ -63,7 +65,7 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
         _status = settings.LastUpdateCheck is { } last ? $"Last checked {last.ToLocalTime():g}." : "Not checked yet.";
     }
 
-    /// <summary>The update is installed and the new version started (it waits for this one): DeckHost should exit now.</summary>
+    /// <summary>DeckHost should exit now: Velopack (or the move to it) waits for that, installs and starts the new version.</summary>
     public event Action? RestartRequested;
 
     /// <summary>The update window should open (the banner's "What's new").</summary>
@@ -91,7 +93,7 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
 
     /// <summary>
     /// Download a new release in the background and install it when DeckHost closes (not started
-    /// again then). Only where the install needs no administrator rights (<see cref="UpdateInstaller.CanInstallSilently"/>).
+    /// again then). Only for a Velopack install.
     /// </summary>
     public bool InstallAutomatically
     {
@@ -109,54 +111,43 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public bool CanInstallAutomatically => UpdateInstaller.CanInstallSilently;
+    public bool CanInstallAutomatically => _updater.Mode == UpdateMode.Velopack;
 
     /// <summary>A downloaded update waits for DeckHost to close.</summary>
-    public bool IsReadyToInstallOnExit => _pendingStaged is not null;
+    public bool IsReadyToInstallOnExit => _pendingVersion is not null && _updater.HasDownloaded;
 
     public string ReadyText => _pendingVersion is { } version ? $"DeckHost {version} is downloaded and installs when you close DeckHost." : string.Empty;
 
-    /// <summary>Called as DeckHost exits: installs the downloaded update (DeckHost isn't started again).</summary>
+    /// <summary>Called as DeckHost exits: Velopack applies the downloaded update once DeckHost has ended (it isn't started again).</summary>
     public void InstallPendingOnExit()
     {
-        if (_pendingStaged is { } staged && _pendingVersion is { } version)
+        if (IsReadyToInstallOnExit)
         {
-            _pendingStaged = null;
-            try
-            {
-                UpdateInstaller.InstallOnExit(staged, version);
-            }
-            catch (UpdateException)
-            {
-                // Unchanged; the next check offers it again.
-            }
+            _pendingVersion = null;
+            _updater.ApplyAfterExit(restart: false);
         }
     }
 
-    /// <summary>The automatic install: download and unpack quietly; it's installed on exit (or by Install).</summary>
+    /// <summary>The automatic install: download quietly; Velopack applies it when DeckHost closes (or at once by Install).</summary>
     private async Task PrepareInBackgroundAsync()
     {
-        if (!InstallAutomatically || !CanInstallAutomatically || IsInstalling || _pendingStaged is not null || Latest is not { } release ||
-            SelectPackage(release) is not { } asset)
+        if (!InstallAutomatically || !CanInstallAutomatically || IsInstalling || IsReadyToInstallOnExit || !IsUpdateAvailable)
         {
             return;
         }
 
         try
         {
-            var directory = DownloadFolder(release);
-            var package = await Task.Run(() => _checker.DownloadAsync(release, asset, directory, null, CancellationToken.None));
-            var staged = await UpdateInstaller.StageAsync(package, null, CancellationToken.None);
-            if (staged is not null)
+            var version = await _updater.DownloadAsync(IncludePrereleases, new Progress<int>(), CancellationToken.None);
+            if (version is not null)
             {
-                _pendingStaged = staged;
-                _pendingVersion = release.Version.ToString();
+                _pendingVersion = version;
                 Status = ReadyText;
                 OnPropertyChanged(nameof(IsReadyToInstallOnExit));
                 OnPropertyChanged(nameof(ReadyText));
             }
         }
-        catch (Exception ex) when (ex is UpdateException or IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException or System.Net.Http.HttpRequestException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Status = $"The update couldn't be downloaded: {ex.Message}";
         }
@@ -211,7 +202,7 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
     public string Changelog => _result?.Changelog ?? string.Empty;
 
     /// <summary>The main window's notice: an update the user hasn't skipped or put off this session.</summary>
-    /// <summary>Also while an update installs, so its progress is in view.</summary>
+    /// <summary>Also while an update downloads, so its progress is in view.</summary>
     public bool ShowBanner => (IsUpdateAvailable && !_dismissed && !IsSkipped) || IsInstalling;
 
     public bool IsSkipped => Latest is { } latest && string.Equals(_skippedVersion, latest.Version.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -229,21 +220,21 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>The download and unpacking can be cancelled; the install itself can't (it finishes or puts everything back).</summary>
+    /// <summary>The download can be cancelled; the install that follows can't.</summary>
     public bool CanCancel
     {
         get => _canCancel;
         private set => SetProperty(ref _canCancel, value);
     }
 
-    /// <summary>The amount isn't known (waiting for the administrator prompt, unpacking a tar.gz).</summary>
+    /// <summary>The amount isn't known (the installer of the move runs).</summary>
     public bool IsProgressIndeterminate
     {
         get => _isProgressIndeterminate;
         private set => SetProperty(ref _isProgressIndeterminate, value);
     }
 
-    /// <summary>The current step, 0 to 1.</summary>
+    /// <summary>The download, 0 to 1.</summary>
     public double Progress
     {
         get => _progress;
@@ -256,7 +247,20 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
         private set => SetProperty(ref _progressText, value);
     }
 
-    public string InstallLabel => UpdateInstaller.InstallLabel;
+    public string InstallLabel => _updater.Mode switch
+    {
+        UpdateMode.Velopack => "Install and restart",
+        UpdateMode.MigrateWindows => "Switch to the new installer",
+        _ => "Download",
+    };
+
+    /// <summary>Shown under the button: what it does here.</summary>
+    public string InstallHint => _updater.Mode switch
+    {
+        UpdateMode.MigrateWindows => "DeckHost now updates itself with a new installer. This moves DeckHost to it once (your profiles and settings stay); after that, updates download and install in DeckHost.",
+        UpdateMode.ManualDownload => "This copy of DeckHost can't update itself: the new version is downloaded for you to install.",
+        _ => string.Empty,
+    };
 
     /// <summary>Checks once a little after start, then every <see cref="CheckInterval"/> (when switched on).</summary>
     public void StartAutomaticChecks()
@@ -347,10 +351,9 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
 
     private bool CanCheck() => !IsChecking;
 
-    /// <summary>How long "Installed, restarting" stays in view before DeckHost restarts.</summary>
-    internal static readonly TimeSpan RestartNoticeDelay = TimeSpan.FromSeconds(1);
+    /// <summary>How long "Restarting…" stays in view before DeckHost exits.</summary>
+    internal static TimeSpan RestartNoticeDelay { get; set; } = TimeSpan.FromSeconds(1);
 
-    /// <summary>Download (or reuse the one downloaded in the background), install while DeckHost runs, restart.</summary>
     [RelayCommand(CanExecute = nameof(CanInstall))]
     private async Task Install()
     {
@@ -359,69 +362,35 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        var version = release.Version.ToString();
-        if (SelectPackage(release) is not { } asset)
-        {
-            Status = $"This release has no package for {UpdateChecker.CurrentRuntimeIdentifier}; the release page opens instead.";
-            OpenReleasePage();
-            return;
-        }
-
         IsInstalling = true;
         CanCancel = true;
         _install = new CancellationTokenSource();
-        SetProgress(0, $"Downloading {asset.Name}…");
-        var downloadProgress = new Progress<double>(fraction =>
-            SetProgress(fraction, fraction < 0 ? $"Downloading {asset.Name}…" : $"Downloading {asset.Name}: {fraction:P0}"));
-        var installProgress = new Progress<UpdateStep>(ShowStep);
         try
         {
-            var staged = _pendingVersion == version ? _pendingStaged : null;
-            if (staged is null)
+            switch (_updater.Mode)
             {
-                var package = await Task.Run(() => _checker.DownloadAsync(release, asset, DownloadFolder(release), downloadProgress, _install.Token));
-                staged = await UpdateInstaller.StageAsync(package, installProgress, _install.Token);
-                if (staged is null)
-                {
-                    Status = $"Downloaded {asset.Name}. Install it the same way as DeckHost itself; the folder is open.";
-                    UpdateInstaller.Reveal(package);
-                    return;
-                }
+                case UpdateMode.Velopack:
+                    await InstallWithVelopackAsync(release, _install.Token);
+                    break;
+                case UpdateMode.MigrateWindows:
+                    await MigrateAsync(release, _install.Token);
+                    break;
+                default:
+                    await DownloadForHandInstallAsync(release, _install.Token);
+                    break;
             }
-
-            // From here on it either finishes or puts everything back.
-            CanCancel = false;
-            _pendingStaged = null;
-            OnPropertyChanged(nameof(IsReadyToInstallOnExit));
-            SetProgress(0, "Installing…");
-            await UpdateInstaller.InstallAsync(staged, version, installProgress, elevating: () => Dispatcher.UIThread.Post(() =>
-            {
-                IsProgressIndeterminate = true;
-                ProgressText = "Installing… allow DeckHost to make changes when your system asks.";
-            }));
-
-            IsProgressIndeterminate = false;
-            SetProgress(1, $"Installed DeckHost {version}. Restarting…");
-            Status = $"DeckHost {version} is installed.";
-            await Task.Delay(RestartNoticeDelay);
-            try
-            {
-                UpdateInstaller.Restart();
-            }
-            catch (Exception ex) when (ex is UpdateException or System.ComponentModel.Win32Exception or InvalidOperationException)
-            {
-                Status = $"DeckHost {version} is installed, but it couldn't restart ({ex.Message}). Close DeckHost and start it again.";
-                return;
-            }
-
-            RestartRequested?.Invoke();
         }
         catch (OperationCanceledException)
         {
-            Status = CanCancel ? "Update cancelled." : "The update wasn't installed: administrator rights were declined.";
+            Status = CanCancel ? "Update cancelled." : "The update wasn't installed: it was cancelled or administrator rights were declined.";
         }
-        catch (Exception ex) when (ex is UpdateException or IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is UpdateException or IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException or System.ComponentModel.Win32Exception or System.Net.Http.HttpRequestException)
         {
+            Status = $"The update failed: {ex.Message}";
+        }
+        catch (Exception ex) when (_updater.Mode == UpdateMode.Velopack)
+        {
+            // Velopack's own errors (the feed, a package that doesn't verify).
             Status = $"The update failed: {ex.Message}";
         }
         finally
@@ -435,39 +404,94 @@ public sealed partial class UpdateViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>The package to download: the archive DeckHost installs itself, where it can; else the one to install by hand.</summary>
-    private static ReleaseAsset? SelectPackage(ReleaseInfo release) =>
-        UpdateChecker.SelectAsset(release, UpdateChecker.CurrentRuntimeIdentifier, Platform.AppImage.IsActive, forInstall: UpdateInstaller.CanInstallInPlace);
+    /// <summary>Download (0–100 %), then exit: Velopack swaps in the new version and starts it.</summary>
+    private async Task InstallWithVelopackAsync(ReleaseInfo release, CancellationToken cancellationToken)
+    {
+        var version = IsReadyToInstallOnExit ? _pendingVersion : null;
+        if (version is null)
+        {
+            SetProgress(0, $"Downloading DeckHost {release.Version}: 0 %");
+            version = await _updater.DownloadAsync(IncludePrereleases, new Progress<int>(percent =>
+                SetProgress(percent / 100.0, $"Downloading DeckHost {release.Version}: {percent} %")), cancellationToken);
+            if (version is null)
+            {
+                Status = $"DeckHost {release.Version} isn't ready to install yet (its update packages aren't published). Try again in a few minutes.";
+                return;
+            }
+        }
 
-    private static string DownloadFolder(ReleaseInfo release) => Path.Combine(Path.GetTempPath(), "DeckHost", "updates", release.Version.ToString());
+        CanCancel = false;
+        _pendingVersion = null;
+        OnPropertyChanged(nameof(IsReadyToInstallOnExit));
+        SetProgress(1, $"Downloaded DeckHost {version}. Restarting to finish the update…");
+        await Task.Delay(RestartNoticeDelay, CancellationToken.None);
+        _updater.ApplyAfterExit(restart: true);
+        RestartRequested?.Invoke();
+    }
+
+    /// <summary>The once-only move from the older Windows setup: the new installer, then the old one is removed after DeckHost exits.</summary>
+    private async Task MigrateAsync(ReleaseInfo release, CancellationToken cancellationToken)
+    {
+        var forAllUsers = UpdateInstaller.IsInstalledForAllUsers;
+        if (UpdateInstaller.SelectMigrationAsset(release, UpdateChecker.CurrentRuntimeIdentifier, forAllUsers) is not { } asset)
+        {
+            // A release from before the new installer: the older setup still updates this copy.
+            await DownloadForHandInstallAsync(release, cancellationToken);
+            return;
+        }
+
+        var package = await DownloadAsync(release, asset, cancellationToken);
+        CanCancel = false;
+        IsProgressIndeterminate = true;
+        ProgressText = forAllUsers ? "Installing… allow the installer to make changes when Windows asks." : "Installing…";
+        await UpdateInstaller.RunNewInstallerAsync(package);
+        IsProgressIndeterminate = false;
+        SetProgress(1, $"DeckHost {release.Version} is installed. Restarting…");
+        await Task.Delay(RestartNoticeDelay, CancellationToken.None);
+        UpdateInstaller.FinishMigrationAfterExit(AppSettings.IsStartAtLoginEnabled());
+        RestartRequested?.Invoke();
+    }
+
+    /// <summary>A copy DeckHost can't update (the Linux tar.gz, a development build): download the package and show it.</summary>
+    private async Task DownloadForHandInstallAsync(ReleaseInfo release, CancellationToken cancellationToken)
+    {
+        if (UpdateChecker.SelectAsset(release, UpdateChecker.CurrentRuntimeIdentifier, Platform.AppImage.IsActive) is not { } asset)
+        {
+            Status = $"This release has no package for {UpdateChecker.CurrentRuntimeIdentifier}; the release page opens instead.";
+            OpenReleasePage();
+            return;
+        }
+
+        var package = await DownloadAsync(release, asset, cancellationToken);
+        Status = $"Downloaded {asset.Name}. Install it the same way as DeckHost itself; the folder is open.";
+        UpdateInstaller.Reveal(package);
+    }
+
+    /// <summary>Downloads a release file (checked against the release's checksums) with its percentage.</summary>
+    private Task<string> DownloadAsync(ReleaseInfo release, ReleaseAsset asset, CancellationToken cancellationToken)
+    {
+        SetProgress(0, $"Downloading {asset.Name}: 0 %");
+        var directory = Path.Combine(Path.GetTempPath(), "DeckHost", "updates", release.Version.ToString());
+        var progress = new Progress<double>(fraction =>
+        {
+            if (fraction < 0)
+            {
+                IsProgressIndeterminate = true;
+                ProgressText = $"Downloading {asset.Name}…";
+            }
+            else
+            {
+                SetProgress(fraction, $"Downloading {asset.Name}: {fraction * 100:0} %");
+            }
+        });
+        return Task.Run(() => _checker.DownloadAsync(release, asset, directory, progress, cancellationToken), cancellationToken);
+    }
 
     private void SetProgress(double fraction, string text)
     {
         IsProgressIndeterminate = false;
-        Progress = Math.Max(0, fraction);
+        Progress = Math.Clamp(fraction, 0, 1);
         ProgressText = text;
-    }
-
-    private void ShowStep(UpdateStep step)
-    {
-        if (step.Phase == UpdatePhase.Done)
-        {
-            return;
-        }
-
-        var verb = step.Phase == UpdatePhase.Unpacking ? "Unpacking" : "Installing";
-        if (step.Total == 0)
-        {
-            IsProgressIndeterminate = true;
-            if (!ProgressText.StartsWith(verb, StringComparison.Ordinal))
-            {
-                ProgressText = $"{verb}…";
-            }
-
-            return;
-        }
-
-        SetProgress(step.Fraction, $"{verb}… {step.Done} of {step.Total} files");
     }
 
     private bool CanInstall() => IsUpdateAvailable && !IsInstalling;

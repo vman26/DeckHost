@@ -128,7 +128,7 @@ public partial class App : Application
             var updates = services.GetRequiredService<UpdateViewModel>();
             updates.RestartRequested += () =>
             {
-                logger.LogInformation("Update installed; restarting into the new version.");
+                logger.LogInformation("Exiting to install an update; it restarts DeckHost.");
                 ExitApplication();
             };
 
@@ -187,8 +187,8 @@ public partial class App : Application
                 deviceHostService.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(osShutdown ? 2 : 5));
                 pluginCatalog.Dispose();
 
-                // A downloaded update (Install updates automatically) installs now, in place; DeckHost
-                // isn't started again (the new version runs the next time it is started).
+                // A downloaded update (Install updates automatically): Velopack applies it once this
+                // process has ended, without starting DeckHost again.
                 updates.InstallPendingOnExit();
                 logger.LogInformation("DeckHost stopped.");
                 services.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(osShutdown ? 2 : 5));
@@ -425,7 +425,8 @@ public partial class App : Application
             new Core.Updates.UpdateChecker(Core.Updates.UpdateChecker.CreateHttpClient(), AppInfo.UpdateRepository),
             AppInfo.Version,
             Platform.AppSettings.Load,
-            Platform.AppSettings.Save));
+            Platform.AppSettings.Save,
+            new Platform.AppUpdater()));
 
         return services.BuildServiceProvider();
     }

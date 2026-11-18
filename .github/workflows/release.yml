@@ -12,8 +12,7 @@ on:
       - ".github/workflows/release.yml"
       - "packaging/**"
       - "scripts/package.sh"
-      - "scripts/package-appimage.sh"
-      - "scripts/get-appimagetool.sh"
+      - "scripts/package-velopack.sh"
       - "scripts/build-opencv-static.sh"
       - "Directory.Build.props"
       - "GitVersion.yml"
@@ -78,6 +77,15 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # Velopack's packager (installers, self-updating packages and the update feed DeckHost reads),
+      # the same version as the Velopack package in DeckHost.App.csproj.
+      - name: Velopack
+        run: |
+          dotnet tool install -g vpk --version 1.2.161
+          tools="$HOME/.dotnet/tools"
+          if command -v cygpath >/dev/null; then tools="$(cygpath -w "$tools")"; fi
+          echo "$tools" >> "$GITHUB_PATH"
+
       - name: Version
         id: version
         env:
@@ -93,7 +101,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libudev-dev libgif-dev libusb-1.0-0-dev imagemagick
+          # squashfs-tools and zstd: vpk builds the AppImage and the delta packages with them.
+          sudo apt-get install -y --no-install-recommends libudev-dev libgif-dev libusb-1.0-0-dev imagemagick squashfs-tools zstd
 
       - name: Cache static OpenCV
         if: runner.os == 'Linux'
@@ -136,11 +145,16 @@ jobs:
             publish/DeckHost/DeckHost.App --check-native
           fi
 
+      # The Developer ID identities for vpk (an installer identity in the same .p12 also signs the
+      # pkg), and with the notary secrets a notarytool profile in the same keychain.
       - name: Signing certificate (macOS)
         if: runner.os == 'macOS' && env.HAS_MACOS_CERTIFICATE == 'true'
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: |
           keychain="$RUNNER_TEMP/signing.keychain-db"
           password="$(openssl rand -hex 16)"
@@ -155,31 +169,23 @@ jobs:
           identity="$(security find-identity -v -p codesigning "$keychain" | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/')"
           if [[ -z "$identity" ]]; then echo "No Developer ID Application identity in the certificate." >&2; exit 1; fi
           echo "MACOS_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "MACOS_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          installer="$(security find-identity -v "$keychain" | grep 'Developer ID Installer' | head -1 | sed -E 's/.*"(.*)"/\1/' || true)"
+          if [[ -n "$installer" ]]; then echo "MACOS_INSTALLER_IDENTITY=$installer" >> "$GITHUB_ENV"; fi
+          if [[ -n "$MACOS_NOTARY_APPLE_ID" && -n "$MACOS_NOTARY_TEAM_ID" && -n "$MACOS_NOTARY_PASSWORD" ]]; then
+            xcrun notarytool store-credentials deckhost-notary --apple-id "$MACOS_NOTARY_APPLE_ID" \
+              --team-id "$MACOS_NOTARY_TEAM_ID" --password "$MACOS_NOTARY_PASSWORD" --keychain "$keychain"
+            echo "MACOS_NOTARY_PROFILE=deckhost-notary" >> "$GITHUB_ENV"
+          fi
 
+      # Linux: the tar.gz (install.sh, updated by hand). macOS: the DeckHost.app bundle, which the
+      # Velopack step below signs, notarizes and packages.
       - name: Package (Linux, macOS)
         if: runner.os != 'Windows'
-        env:
-          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
-          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-        run: scripts/package.sh ${{ matrix.rid }} "${{ steps.version.outputs.file }}" publish/DeckHost artifacts/release "${{ steps.version.outputs.display }}"
-
-      # The AppImage: the same published app in one file that runs on most distributions without
-      # installing (built on the oldest runner for its glibc floor). appimagetool is a pinned,
-      # checksum-verified download; desktop-file-utils is what it validates the menu entry with.
-      - name: AppImage (Linux)
-        if: runner.os == 'Linux'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq desktop-file-utils
-          scripts/get-appimagetool.sh "$RUNNER_TEMP/appimagetool"
-          APPIMAGETOOL="$RUNNER_TEMP/appimagetool" scripts/package-appimage.sh "${{ steps.version.outputs.file }}" publish/DeckHost artifacts/release
-
-      # Run from the finished file, not from the publish folder: the bridge must load inside the image.
-      - name: Check the AppImage (Linux)
-        if: runner.os == 'Linux'
-        timeout-minutes: 2
-        run: APPIMAGE_EXTRACT_AND_RUN=1 artifacts/release/*.AppImage --check-native
+          output=artifacts/release
+          if [[ "$RUNNER_OS" == "macOS" ]]; then output=bundle; fi
+          scripts/package.sh ${{ matrix.rid }} "${{ steps.version.outputs.file }}" publish/DeckHost "$output" "${{ steps.version.outputs.display }}"
 
       # Windows signing, either way (no-op without the secrets):
       #  - a certificate file: the WINDOWS_CERTIFICATE secret (.pfx), signed by scripts/sign-windows.ps1;
@@ -230,6 +236,36 @@ jobs:
           exclude-azure-developer-cli-credential: true
           exclude-interactive-browser-credential: true
 
+      # Velopack (scripts/package-velopack.sh): the installers DeckHost now ships, the self-updating
+      # portable packages (Windows and macOS zip, the AppImage) and the update feed with a delta from
+      # the channel's previous release. It signs Setup.exe, Update.exe and the MSI on Windows, and
+      # signs and notarizes the app on macOS, with the same secrets as above.
+      - name: Velopack packages
+        env:
+          VELOPACK_REPOSITORY: ${{ github.repository }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          pack=publish/DeckHost
+          if [[ "$RUNNER_OS" == "macOS" ]]; then pack=bundle/DeckHost.app; fi
+          scripts/package-velopack.sh ${{ matrix.rid }} "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.file }}" "$pack" artifacts/release
+
+      # Run from the finished file, not from the publish folder: the bridge must load inside the image.
+      - name: Check the AppImage (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 2
+        run: APPIMAGE_EXTRACT_AND_RUN=1 artifacts/release/*.AppImage --check-native
+
+      # The older Inno setup, only so DeckHost versions from before Velopack (their updater runs
+      # *-win-x64-setup.exe) reach this one; it then moves itself to the Velopack install
+      # (Platform/UpdateInstaller). Drop it once those versions are gone (docs/maintainers/releasing.md).
       - name: Package (Windows)
         if: runner.os == 'Windows'
         id: windows-package
@@ -237,14 +273,13 @@ jobs:
         run: |
           $file = "${{ steps.version.outputs.file }}"
           New-Item -ItemType Directory -Force artifacts/release | Out-Null
-          Compress-Archive -Path publish/DeckHost -DestinationPath "artifacts/release/DeckHost-$file-win-x64.zip"
           if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
             choco install innosetup -y --no-progress | Out-Null
             $env:Path += ";${env:ProgramFiles(x86)}\Inno Setup 6"
           }
           iscc /Qp "/DAppVersion=${{ steps.version.outputs.display }}" "/DFileVersion=$file" "/DNumericVersion=${{ steps.version.outputs.numeric }}" `
             "/DSourceDir=$PWD\publish\DeckHost" "/DOutputDir=$PWD\artifacts\release" packaging/windows/DeckHost.iss
-          $setup = (Get-ChildItem artifacts/release -Filter '*.exe' | ForEach-Object FullName) -join ','
+          $setup = (Get-ChildItem artifacts/release -Filter '*-setup.exe' | ForEach-Object FullName) -join ','
           "setup=$setup" >> $env:GITHUB_OUTPUT
 
       - name: Sign the setup with the certificate file (Windows)
@@ -362,6 +397,7 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.nuget.outputs.NUGET_API_KEY }}
         run: |
-          for package in artifacts/*.nupkg; do
+          # Only the plugin API and the template: the Velopack packages (DeckHost-<version>-<channel>-*.nupkg) are update packages, not NuGet packages.
+          for package in artifacts/DeckHost.Contracts.*.nupkg artifacts/DeckHost.Templates.*.nupkg; do
             dotnet nuget push "$package" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
           done
