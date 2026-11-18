@@ -130,6 +130,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- macOS and Linux: DeckHost no longer closes at start when its temporary folder has a long path (the single-instance
+  pipe's path was too long for the system).
 - macOS: DeckHost no longer closes at random a few minutes after it starts. The StreamDock device support set up
   macOS's USB device watcher on a thread that could end, and the next device check then crashed.
 - macOS: DeckHost keeps App Nap from slowing it down while it runs in the background or in the menu bar, so keys and
