@@ -28,6 +28,9 @@ internal sealed class DeckHostRun : IAsyncDisposable
 
     public DateTime Started { get; }
 
+    /// <summary>The DeckHost process (not its plugin hosts).</summary>
+    public int ProcessId => _process.Id;
+
     public ProcessSampler Sampler { get; }
 
     /// <summary>Seconds from starting the program to the first key image on the simulated device.</summary>

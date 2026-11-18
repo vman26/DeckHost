@@ -104,15 +104,19 @@ namespace DeckHost.Benchmark
                 run.EnsureRunning("the warm-up");
 
                 Log($"Idle, window open: {options.Phase.TotalSeconds:0} s.");
+                var threadsBefore = ThreadUsage.Snapshot(run.ProcessId);
                 var idle = await run.Sampler.SampleAsync(options.Phase, cancellationToken);
                 run.EnsureRunning("the idle minute with the window");
+                LogThreads(threadsBefore, run.ProcessId, options.Phase);
                 metrics[Metrics.IdleWindowCpu] = Stats.Average(Cpu(idle));
                 metrics[Metrics.IdleWindowCpuP95] = Stats.Percentile(Cpu(idle), 95);
                 metrics[Metrics.IdleWindowMemory] = Stats.Average(Memory(idle));
 
                 Log($"Busy, {InputsPerSecond} inputs a second: {options.Phase.TotalSeconds:0} s.");
+                threadsBefore = ThreadUsage.Snapshot(run.ProcessId);
                 var (busy, latencies, frames) = await BusyAsync(run, options.Phase, cancellationToken);
                 run.EnsureRunning("the busy minute");
+                LogThreads(threadsBefore, run.ProcessId, options.Phase);
                 metrics[Metrics.BusyCpu] = Stats.Average(Cpu(busy));
                 metrics[Metrics.BusyCpuP95] = Stats.Percentile(Cpu(busy), 95);
                 metrics[Metrics.BusyMemoryMax] = Stats.Max(Memory(busy));
@@ -131,8 +135,10 @@ namespace DeckHost.Benchmark
             {
                 Log($"In the tray: warming up for {options.Warmup.TotalSeconds:0} s, then {options.Phase.TotalSeconds:0} s idle.");
                 await Task.Delay(options.Warmup, cancellationToken);
+                var threadsBefore = ThreadUsage.Snapshot(tray.ProcessId);
                 var idle = await tray.Sampler.SampleAsync(options.Phase, cancellationToken);
                 tray.EnsureRunning("the idle minute in the tray");
+                LogThreads(threadsBefore, tray.ProcessId, options.Phase);
                 metrics[Metrics.IdleTrayCpu] = Stats.Average(Cpu(idle));
                 metrics[Metrics.IdleTrayMemory] = Stats.Average(Memory(idle));
             }
@@ -191,6 +197,16 @@ namespace DeckHost.Benchmark
 
             var samples = await sampling;
             return (samples, latencies, run.ImageCount - framesBefore);
+        }
+
+        /// <summary>Where the phase's CPU went, per thread (Linux; nothing elsewhere).</summary>
+        private static void LogThreads(Dictionary<int, (string Name, long Ticks)> before, int processId, TimeSpan phase)
+        {
+            var busiest = ThreadUsage.Busiest(before, ThreadUsage.Snapshot(processId), phase.TotalSeconds);
+            if (busiest.Length > 0)
+            {
+                Log($"  Busiest threads: {busiest}.");
+            }
         }
 
         /// <summary>The program inside a macOS bundle; otherwise the path given.</summary>

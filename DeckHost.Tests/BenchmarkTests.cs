@@ -159,6 +159,20 @@ public sealed class BenchmarkTests
         Assert.That(checkedMetrics, Is.All.Matches<string>(metric => limits.ContainsKey(metric)));
     }
 
+    [Test]
+    public void ParseStat_AThreadWhoseNameHasSpacesAndParentheses_ReadsTheNameAndItsTicks()
+    {
+        // Arrange
+        const string Line = "1234 (.NET TP (Worker)) S 1 1234 1234 0 -1 4194368 120 0 0 0 250 75 0 0 20 0 31 0 9000 1000 50";
+        const long ExpectedTicks = 250 + 75;
+
+        // Act
+        var stat = ThreadUsage.ParseStat(Line);
+
+        // Assert
+        Assert.That(stat, Is.EqualTo((".NET TP (Worker)", ExpectedTicks)));
+    }
+
     private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
         Path.GetDirectoryName(Path.GetDirectoryName(path))!;
 }
