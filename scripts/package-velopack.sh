@@ -102,13 +102,30 @@ case "$channel" in
         ;;
 esac
 
+# What the download above left: the previous release's packages, already published with it.
+previous="$(cd "$feed" && ls -1 *.nupkg 2>/dev/null || true)"
+
 vpk "${args[@]}"
 
-# The feed as vpk wrote it; the previous release's packages downloaded above are already published.
+# The feed as vpk wrote it.
 for item in "$feed"/releases."$channel".json "$feed"/assets."$channel".json "$feed"/RELEASES*; do
     [[ -e "$item" ]] && cp "$item" "$output/"
 done
-cp "$feed"/DeckHost-"$version"-"$channel"-*.nupkg "$output/"
+# This release's packages, whatever vpk named them (the win channel has no channel in the name:
+# DeckHost-<version>-full.nupkg).
+made=0
+for package in "$feed"/*.nupkg; do
+    [[ -e "$package" ]] || continue
+    if ! grep -qxF "$(basename "$package")" <<<"$previous"; then
+        cp "$package" "$output/"
+        made=$((made + 1))
+    fi
+done
+if [[ "$made" -eq 0 ]]; then
+    echo "vpk made no update package in $feed:" >&2
+    ls -la "$feed" >&2
+    exit 1
+fi
 
 # The downloads, named like every other DeckHost package (matched by kind: vpk's own names carry the
 # pack id and channel, e.g. DeckHost-win-Setup.exe, DeckHost-win-Portable.zip).
