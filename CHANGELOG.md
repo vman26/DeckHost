@@ -124,8 +124,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
-- macOS: keys and knobs answer right away while DeckHost runs in the background. macOS's App Nap used to slow it
-  down when no DeckHost window was in front, and a press could take seconds to show.
+- macOS: DeckHost keeps App Nap from slowing it down while it runs in the background or in the menu bar, so keys and
+  knobs keep answering at once.
 - DeckHost no longer closes when the built-in browser (the plugin settings page) can't start, for example without
   the Microsoft Edge WebView2 runtime: unexpected errors in the window are recovered from with a crash report and a
   notice, and the browser stays off on that computer until the runtime is updated.

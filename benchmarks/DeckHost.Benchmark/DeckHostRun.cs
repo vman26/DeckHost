@@ -11,13 +11,17 @@ internal sealed class DeckHostRun : IAsyncDisposable
     private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
 
     private readonly Process _process;
+    private readonly Sandbox _sandbox;
+    private readonly ConcurrentQueue<string> _output;
     private readonly ConcurrentQueue<(string Control, long Ticks)> _images = new();
     private SimulatorClient? _client;
     private int _imageCount;
 
-    private DeckHostRun(Process process, DateTime started, string processName)
+    private DeckHostRun(Process process, Sandbox sandbox, ConcurrentQueue<string> output, DateTime started, string processName)
     {
         _process = process;
+        _sandbox = sandbox;
+        _output = output;
         Started = started;
         Sampler = new ProcessSampler(processName, started);
     }
@@ -56,7 +60,7 @@ internal sealed class DeckHostRun : IAsyncDisposable
         process.ErrorDataReceived += (_, line) => Keep(output, line.Data);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        var run = new DeckHostRun(process, started, ProcessName(program));
+        var run = new DeckHostRun(process, sandbox, output, started, ProcessName(program));
         try
         {
             SimulatorEndpoint? endpoint;
@@ -158,6 +162,31 @@ internal sealed class DeckHostRun : IAsyncDisposable
             }
         }
 
+        // DeckHost's own crash report (Platform/CrashReporter), and on macOS the system's report of a native crash.
+        var reports = new List<string>();
+        var crashes = Path.Combine(sandbox.DataDirectory, "crashes");
+        if (Directory.Exists(crashes))
+        {
+            reports.AddRange(Directory.EnumerateFiles(crashes).OrderByDescending(File.GetLastWriteTimeUtc).Take(1));
+        }
+
+        var systemReports = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), "Library", "Logs", "DiagnosticReports");
+        if (OperatingSystem.IsMacOS() && Directory.Exists(systemReports))
+        {
+            reports.AddRange(Directory.EnumerateFiles(systemReports, "DeckHost*")
+                .Where(static file => File.GetLastWriteTimeUtc(file) > DateTime.UtcNow.AddMinutes(-15))
+                .OrderByDescending(File.GetLastWriteTimeUtc).Take(1));
+        }
+
+        foreach (var report in reports)
+        {
+            text.AppendLine($"Crash report {report}:");
+            foreach (var line in File.ReadLines(report).Take(120))
+            {
+                text.AppendLine("  " + line);
+            }
+        }
+
         var log = folders.SelectMany(folder => Directory.EnumerateFiles(folder, "deckhost-*.log", everywhere)).FirstOrDefault();
         if (log is not null)
         {
@@ -192,6 +221,15 @@ internal sealed class DeckHostRun : IAsyncDisposable
             {
                 await Task.Delay(100, cancellationToken);
             }
+        }
+    }
+
+    /// <exception cref="InvalidOperationException">DeckHost has ended (crashed): with what explains it.</exception>
+    public void EnsureRunning(string phase)
+    {
+        if (_process.HasExited)
+        {
+            throw new InvalidOperationException($"DeckHost ended with code {_process.ExitCode} during {phase}.{Diagnose(_sandbox, _output, _process)}");
         }
     }
 

@@ -101,15 +101,18 @@ namespace DeckHost.Benchmark
                 metrics[Metrics.StartupFirstFrame] = run.FirstFrameSeconds;
                 Log($"First key image after {run.FirstFrameSeconds:0.00} s; warming up for {options.Warmup.TotalSeconds:0} s.");
                 await Task.Delay(options.Warmup, cancellationToken);
+                run.EnsureRunning("the warm-up");
 
                 Log($"Idle, window open: {options.Phase.TotalSeconds:0} s.");
                 var idle = await run.Sampler.SampleAsync(options.Phase, cancellationToken);
+                run.EnsureRunning("the idle minute with the window");
                 metrics[Metrics.IdleWindowCpu] = Stats.Average(Cpu(idle));
                 metrics[Metrics.IdleWindowCpuP95] = Stats.Percentile(Cpu(idle), 95);
                 metrics[Metrics.IdleWindowMemory] = Stats.Average(Memory(idle));
 
                 Log($"Busy, {InputsPerSecond} inputs a second: {options.Phase.TotalSeconds:0} s.");
                 var (busy, latencies, frames) = await BusyAsync(run, options.Phase, cancellationToken);
+                run.EnsureRunning("the busy minute");
                 metrics[Metrics.BusyCpu] = Stats.Average(Cpu(busy));
                 metrics[Metrics.BusyCpuP95] = Stats.Percentile(Cpu(busy), 95);
                 metrics[Metrics.BusyMemoryMax] = Stats.Max(Memory(busy));
@@ -129,6 +132,7 @@ namespace DeckHost.Benchmark
                 Log($"In the tray: warming up for {options.Warmup.TotalSeconds:0} s, then {options.Phase.TotalSeconds:0} s idle.");
                 await Task.Delay(options.Warmup, cancellationToken);
                 var idle = await tray.Sampler.SampleAsync(options.Phase, cancellationToken);
+                tray.EnsureRunning("the idle minute in the tray");
                 metrics[Metrics.IdleTrayCpu] = Stats.Average(Cpu(idle));
                 metrics[Metrics.IdleTrayMemory] = Stats.Average(Memory(idle));
             }
@@ -172,6 +176,8 @@ namespace DeckHost.Benchmark
                     }
                     else
                     {
+                        // No picture: is DeckHost still there? (A crash would otherwise be measured as idle.)
+                        run.EnsureRunning("the busy minute");
                         latencies.Add(ImageTimeout.TotalMilliseconds);
                     }
                 }
