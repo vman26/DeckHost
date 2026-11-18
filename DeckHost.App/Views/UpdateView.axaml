@@ -25,7 +25,7 @@
 
 		<StackPanel Grid.Row="2" Spacing="10">
 			<StackPanel Spacing="4" IsVisible="{Binding IsInstalling}">
-				<ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" />
+				<ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" IsIndeterminate="{Binding IsProgressIndeterminate}" />
 				<TextBlock Text="{Binding ProgressText}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" />
 			</StackPanel>
 			<TextBlock Text="{Binding Status}" IsVisible="{Binding IsUpdateAvailable}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
@@ -35,7 +35,7 @@
 					<Button Content="Skip this version" Command="{Binding SkipCommand}" IsVisible="{Binding IsUpdateAvailable}" IsEnabled="{Binding !IsInstalling}" />
 				</StackPanel>
 				<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-					<Button Content="Cancel download" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" />
+					<Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" />
 					<Button Content="Later" Click="Later_OnClick" IsVisible="{Binding !IsInstalling}" />
 					<Button Content="{Binding InstallLabel}" Classes="accent" Command="{Binding InstallCommand}" IsVisible="{Binding IsUpdateAvailable}" />
 				</StackPanel>

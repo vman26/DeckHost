@@ -281,6 +281,19 @@ public sealed class UpdateCheckerTests : IDisposable
     }
 
     [Test]
+    public void SelectAsset_WindowsForInstall_PicksTheZipDeckHostInstallsItself()
+    {
+        // Arrange
+        var release = UpdateChecker.ParseReleases(Releases).Single(release => release.Tag == "v1.4.0");
+
+        // Act
+        var asset = UpdateChecker.SelectAsset(release, "win-x64", forInstall: true);
+
+        // Assert
+        Assert.That(asset?.Name, Is.EqualTo("DeckHost-1.4.0-win-x64.zip"));
+    }
+
+    [Test]
     public void SelectAsset_AnAppImageRunningOnAReleaseWithOne_PicksTheAppImage()
     {
         // Arrange
@@ -669,108 +682,220 @@ public sealed class UpdateViewModelTests
         settings => _settings = settings);
 }
 
+public sealed class InPlaceUpdateTests : IDisposable
+{
+    private const string OldVersion = "1.3.0";
+    private const string NewVersion = "1.4.0";
+    private const string VersionFile = "version.txt";
+    private const string Uninstaller = "unins000.exe";
+    private const string NestedFile = "plugins/device/bridge.so";
+
+    private readonly string _root = Directory.CreateTempSubdirectory("deckhost-update").FullName;
+    private readonly string _install;
+    private readonly string _staged;
+
+    public InPlaceUpdateTests()
+    {
+        _install = Path.Combine(_root, "DeckHost");
+        _staged = Path.Combine(_root, "new", "DeckHost");
+        Write(_install, VersionFile, OldVersion);
+        Write(_install, NestedFile, OldVersion);
+        Write(_install, Uninstaller, OldVersion);
+        Write(_staged, VersionFile, NewVersion);
+        Write(_staged, NestedFile, NewVersion);
+        Write(_staged, "added.dll", NewVersion);
+    }
+
+    public void Dispose() => Directory.Delete(_root, recursive: true);
+
+    [Test]
+    public void Apply_AnInstall_HasTheNewVersionsFiles()
+    {
+        // Act
+        InPlaceUpdate.Apply(_staged, _install);
+
+        // Assert
+        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
+        Assert.That(Read(_install, NestedFile), Is.EqualTo(NewVersion));
+        Assert.That(Read(_install, "added.dll"), Is.EqualTo(NewVersion));
+    }
+
+    [Test]
+    public void Apply_FilesTheNewVersionDoesNotHave_AreKept()
+    {
+        // Act
+        InPlaceUpdate.Apply(_staged, _install);
+
+        // Assert
+        Assert.That(Read(_install, Uninstaller), Is.EqualTo(OldVersion));
+    }
+
+    [Test]
+    public void Apply_AReplacedFile_IsKeptAsideUntilCleanUp()
+    {
+        // Act
+        InPlaceUpdate.Apply(_staged, _install);
+
+        // Assert
+        Assert.That(Read(_install, VersionFile + InPlaceUpdate.OldSuffix), Is.EqualTo(OldVersion));
+    }
+
+    [Test]
+    public void Apply_AFileThatIsOpen_IsReplaced()
+    {
+        // Arrange: open the way Windows maps a running program (renaming allowed, writing not).
+        using var running = new FileStream(Path.Combine(_install, VersionFile), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+
+        // Act
+        InPlaceUpdate.Apply(_staged, _install);
+
+        // Assert
+        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
+    }
+
+    [Test]
+    public void Apply_ACopyFailsPartWay_LeavesTheInstallAsItWas()
+    {
+        // Arrange
+        var before = Snapshot(_install);
+        var copies = 0;
+        void FailOnSecond(string source, string target)
+        {
+            if (++copies == 2)
+            {
+                throw new IOException("disk full");
+            }
+
+            File.Copy(source, target);
+        }
+
+        // Act
+        var failure = Assert.Throws<UpdateException>(() => InPlaceUpdate.Apply(_staged, _install, null, CancellationToken.None, FailOnSecond));
+
+        // Assert
+        Assert.That(failure!.Message, Does.Contain("unchanged"));
+        Assert.That(Snapshot(_install), Is.EqualTo(before));
+    }
+
+    [Test]
+    public void Apply_AnInstall_ReportsEveryFile()
+    {
+        // Arrange
+        var steps = new List<UpdateStep>();
+        var progress = new SynchronousProgress(steps.Add);
+
+        // Act
+        InPlaceUpdate.Apply(_staged, _install, progress);
+
+        // Assert
+        Assert.That(steps.Where(step => step.Phase == UpdatePhase.Installing).Select(step => step.Done), Is.EqualTo(new[] { 0, 1, 2, 3 }));
+        Assert.That(steps[^1].Phase, Is.EqualTo(UpdatePhase.Done));
+    }
+
+    [Test]
+    public void CleanUp_AfterAnUpdate_DeletesTheReplacedFilesOnly()
+    {
+        // Arrange
+        InPlaceUpdate.Apply(_staged, _install);
+
+        // Act
+        var deleted = InPlaceUpdate.CleanUp(_install);
+
+        // Assert
+        Assert.That(deleted, Is.EqualTo(2));
+        Assert.That(Directory.EnumerateFiles(_install, "*" + InPlaceUpdate.OldSuffix, SearchOption.AllDirectories), Is.Empty);
+        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
+    }
+
+    [Test]
+    public void Swap_AnInstall_IsReplacedAsAWhole()
+    {
+        // Act
+        InPlaceUpdate.Swap(_staged, _install);
+
+        // Assert
+        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
+        Assert.That(File.Exists(Path.Combine(_install, Uninstaller)), Is.False);
+        Assert.That(Read(_install + InPlaceUpdate.OldSuffix, VersionFile), Is.EqualTo(OldVersion));
+    }
+
+    [Test]
+    public void CleanUp_AfterASwap_DeletesTheOldFolder()
+    {
+        // Arrange
+        InPlaceUpdate.Swap(_staged, _install);
+
+        // Act
+        InPlaceUpdate.CleanUp(_install);
+
+        // Assert
+        Assert.That(Directory.Exists(_install + InPlaceUpdate.OldSuffix), Is.False);
+        Assert.That(Read(_install, VersionFile), Is.EqualTo(NewVersion));
+    }
+
+    [Test]
+    public void Swap_ALinkInTheNewVersion_IsCopiedAsALink()
+    {
+        // Arrange
+        Assume.That(!OperatingSystem.IsWindows(), "creating links needs extra rights on Windows");
+        const string LinkName = "libbridge.dylib";
+        File.CreateSymbolicLink(Path.Combine(_staged, LinkName), "added.dll");
+
+        // Act
+        InPlaceUpdate.Swap(_staged, _install);
+
+        // Assert
+        Assert.That(new FileInfo(Path.Combine(_install, LinkName)).LinkTarget, Is.EqualTo("added.dll"));
+    }
+
+    private static void Write(string folder, string relative, string text)
+    {
+        var path = Path.Combine(folder, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, text);
+    }
+
+    private static string Read(string folder, string relative) => File.ReadAllText(Path.Combine(folder, relative));
+
+    private static Dictionary<string, string> Snapshot(string folder) =>
+        Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+            .ToDictionary(path => Path.GetRelativePath(folder, path), File.ReadAllText);
+
+    /// <summary><see cref="Progress{T}"/> posts to the thread pool; the tests need the steps right away.</summary>
+    private sealed class SynchronousProgress(Action<UpdateStep> report) : IProgress<UpdateStep>
+    {
+        public void Report(UpdateStep value) => report(value);
+    }
+}
+
 public sealed class UpdateInstallerTests
 {
     [Test]
-    public void Quote_APathWithAnApostrophe_IsEscapedForPowerShell()
+    public void ElevatedHelper_AnInstall_PassesEveryPathAsItsOwnArgument()
     {
+        // Arrange
+        const string Staged = "/tmp/new folder/DeckHost";
+        const string Target = "/opt/Deck Host";
+        const string Log = "/tmp/apply-update.log";
+        const string Version = "1.4.0";
+
         // Act
-        var quoted = UpdateInstaller.Quote("C:\\Users\\O'Brien\\setup.exe");
+        var helper = UpdateInstaller.ElevatedHelper(Staged, Target, Log, Version);
 
         // Assert
-        Assert.That(quoted, Is.EqualTo("'C:\\Users\\O''Brien\\setup.exe'"));
-    }
-
-    private const string ExecutableName = "DeckHost.App";
-    private const string NoLaunch = "none";
-    private const int SwapWaitMilliseconds = 10_000;
-
-    /// <summary>Runs the swap script on a fake install; returns where things ended up.</summary>
-    private static (string Root, string Target, string Started) RunSwapScript(string launch)
-    {
-        var root = Directory.CreateTempSubdirectory("deckhost-swap").FullName;
-        var target = Path.Combine(root, "deckhost");
-        var source = Path.Combine(root, "new", "DeckHost");
-        Directory.CreateDirectory(target);
-        Directory.CreateDirectory(source);
-        File.WriteAllText(Path.Combine(target, "old-only.dll"), "old");
-        File.WriteAllText(Path.Combine(target, "version.txt"), "1.3.0");
-        File.WriteAllText(Path.Combine(source, "version.txt"), "1.4.0");
-        var started = Path.Combine(root, "started.txt");
-        File.WriteAllText(Path.Combine(source, ExecutableName), $"#!/bin/sh\necho started > '{started}'\n");
-        File.SetUnixFileMode(Path.Combine(source, ExecutableName), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        var script = Path.Combine(root, "update.sh");
-        File.WriteAllText(script, UpdateInstaller.SwapScriptText.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n");
-
-        // A process id that has exited: the script doesn't wait.
-        // (/bin/sh is everywhere; /bin/true isn't on macOS.)
-        using var exited = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", "exit 0" } })!;
-        exited.WaitForExit();
-        using var helper = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { script, exited.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), source, target, launch } })!;
-        Assert.That(helper.WaitForExit(SwapWaitMilliseconds), Is.True);
-        return (root, target, started);
+        Assert.That(helper.ArgumentList.TakeLast(5), Is.EqualTo(new[] { UpdateInstaller.ApplyUpdateArgument, Staged, Target, Log, Version }));
     }
 
     [Test]
-    public void SwapScript_AnInstall_IsReplacedByTheNewFilesAndTheBackupRemoved()
+    public void RunApplyUpdate_TooFewArguments_ReturnsUsageError()
     {
         // Arrange
-        Assume.That(!OperatingSystem.IsWindows(), "the swap script is for Linux and macOS");
-        var (root, target, _) = RunSwapScript(NoLaunch);
-        try
-        {
-            // Assert
-            Assert.That(File.ReadAllText(Path.Combine(target, "version.txt")), Is.EqualTo("1.4.0"));
-            Assert.That(File.Exists(Path.Combine(target, "old-only.dll")), Is.False);
-            Assert.That(Directory.Exists(target + ".update-backup"), Is.False);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
+        const int UsageError = 2;
 
-    [Test]
-    public void SwapScript_LaunchTheProgram_StartsTheNewVersion()
-    {
-        // Arrange
-        Assume.That(!OperatingSystem.IsWindows(), "the swap script is for Linux and macOS");
-        var (root, _, started) = RunSwapScript(ExecutableName);
-        try
-        {
-            // Act
-            var end = DateTime.UtcNow.AddSeconds(10);
-            while (!File.Exists(started) && DateTime.UtcNow < end)
-            {
-                Thread.Sleep(50);
-            }
+        // Act
+        var exitCode = UpdateInstaller.RunApplyUpdate(["only-one"]);
 
-            // Assert
-            Assert.That(File.Exists(started), Is.True);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
-
-    [Test]
-    public void SwapScript_LaunchNone_DoesNotStartTheProgram()
-    {
-        // Arrange
-        Assume.That(!OperatingSystem.IsWindows(), "the swap script is for Linux and macOS");
-        var (root, _, started) = RunSwapScript(NoLaunch);
-        try
-        {
-            // Act
-            Thread.Sleep(1000);
-
-            // Assert
-            Assert.That(File.Exists(started), Is.False);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        // Assert
+        Assert.That(exitCode, Is.EqualTo(UsageError));
     }
 }

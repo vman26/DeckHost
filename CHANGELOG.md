@@ -12,6 +12,10 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Added
 
+- Updates install inside DeckHost: **Install and restart** shows the download, the install (asking for administrator
+  rights when DeckHost was installed for all users) and then restarts DeckHost into the new version. The Windows
+  setup no longer opens after DeckHost closes, and the Windows zip is updated too.
+
 - Backgrounds: gradients can have more than two colors (add, reorder, set where each starts) and there are radial
   gradients; the CPU glow preset is visible at ordinary load (full at 60 %) and the CPU value is read right away.
 

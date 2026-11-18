@@ -159,7 +159,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | Windows installer and zip; macOS app; Linux tarball | ✅ | |
 | AppImage | ✅ | Built by `release.yml` with `--check-native` run from the file; the in-app updater leaves it to the user (download, replace) |
 | Flatpak | ⬜ | Needs offline NuGet sources, OpenCV as a module, sandbox holes for the host tools |
-| Update integrity and rollback | ✅ | SHA256SUMS, provenance, swap with rollback |
+| Update integrity and rollback | ✅ | SHA256SUMS, provenance; installed in place while running (`InPlaceUpdate`), undone on failure, elevation when needed |
 
 ## 15. Testing
 

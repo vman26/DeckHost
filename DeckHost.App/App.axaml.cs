@@ -128,7 +128,7 @@ public partial class App : Application
             var updates = services.GetRequiredService<UpdateViewModel>();
             updates.RestartRequested += () =>
             {
-                logger.LogInformation("Exiting to install an update.");
+                logger.LogInformation("Update installed; restarting into the new version.");
                 ExitApplication();
             };
 
@@ -187,8 +187,8 @@ public partial class App : Application
                 deviceHostService.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(osShutdown ? 2 : 5));
                 pluginCatalog.Dispose();
 
-                // A downloaded update (Install updates automatically) installs now; its installer
-                // waits for this process to end and doesn't start DeckHost again.
+                // A downloaded update (Install updates automatically) installs now, in place; DeckHost
+                // isn't started again (the new version runs the next time it is started).
                 updates.InstallPendingOnExit();
                 logger.LogInformation("DeckHost stopped.");
                 services.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(osShutdown ? 2 : 5));

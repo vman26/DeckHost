@@ -208,11 +208,17 @@
 							<TextBlock Text="⬆" FontSize="16" Foreground="{DynamicResource C.93C5FD}" VerticalAlignment="Center" />
 							<StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
 								<TextBlock Text="{Binding AvailableTitle}" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
-								<TextBlock Text="{Binding AvailableSummary}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" />
+								<TextBlock Text="{Binding AvailableSummary}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" IsVisible="{Binding !IsInstalling}" />
+								<!-- While the update downloads and installs (from the Update page or here). -->
+								<StackPanel Spacing="2" IsVisible="{Binding IsInstalling}">
+									<ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" IsIndeterminate="{Binding IsProgressIndeterminate}" MinWidth="220" />
+									<TextBlock Text="{Binding ProgressText}" FontSize="11" Foreground="{DynamicResource C.93C5FD}" TextTrimming="CharacterEllipsis" MaxWidth="320" />
+								</StackPanel>
 							</StackPanel>
 							<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-								<Button Content="What's new" Classes="accent" Command="{Binding ShowDetailsCommand}" />
-								<Button Content="✕" ToolTip.Tip="Remind me next time DeckHost starts" Command="{Binding LaterCommand}" />
+								<Button Content="What's new" Classes="accent" Command="{Binding ShowDetailsCommand}" IsVisible="{Binding !IsInstalling}" />
+								<Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" />
+								<Button Content="✕" ToolTip.Tip="Remind me next time DeckHost starts" Command="{Binding LaterCommand}" IsVisible="{Binding !IsInstalling}" />
 							</StackPanel>
 						</Grid>
 					</Border>

@@ -58,8 +58,12 @@ Name: "{autodesktop}\DeckHost"; Filename: "{app}\DeckHost.App.exe"; Tasks: deskt
 
 [Run]
 Filename: "{app}\DeckHost.App.exe"; Description: "{cm:LaunchProgram,DeckHost}"; Flags: nowait postinstall skipifsilent
-; An update started from DeckHost (silent, /relaunch=1) starts it again.
+; An update started by DeckHost before it installed updates itself (silent, /relaunch=1) starts it again.
 Filename: "{app}\DeckHost.App.exe"; Flags: nowait; Check: RelaunchAfterUpdate
+
+[UninstallDelete]
+; DeckHost updates itself in place (InPlaceUpdate): files a newer version added aren't in setup's log.
+Type: filesandordirs; Name: "{app}"
 
 [UninstallRun]
 ; Removes the start-with-Windows entry DeckHost may have added (HKCU\...\Run\DeckHost).
