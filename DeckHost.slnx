@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/DeckHost.Benchmark/DeckHost.Benchmark.csproj" />
+  </Folder>
   <Folder Name="/plugins/">
     <Project Path="plugins/DeckHost.Plugin.Obs/DeckHost.Plugin.Obs.csproj" />
   </Folder>
