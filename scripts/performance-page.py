@@ -161,7 +161,14 @@ def compare(budgets, results, previous_dir=None):
             cells += [fmt(limit, key) if limit is not None else "", verdict]
             lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
-    lines.append(("**Over budget:** " + "; ".join(over) + ".") if over else "Every number is within its budget.")
+    if not by_system:
+        lines.append("**No system was measured**: every job failed before writing a result (see the checks).")
+    elif over:
+        lines.append("**Over budget:** " + "; ".join(over) + ".")
+    elif len(by_system) < len(SYSTEMS):
+        lines.append("Every number measured is within its budget, but not every system was measured.")
+    else:
+        lines.append("Every number is within its budget.")
     lines.append("")
     lines.append("Measured by `benchmarks/DeckHost.Benchmark` on GitHub's hosted runners, which vary a little from run to run. "
                  "Budgets: `benchmarks/budgets.json`. What the numbers mean: [Performance](https://vman26.github.io/DeckHost/performance/).")

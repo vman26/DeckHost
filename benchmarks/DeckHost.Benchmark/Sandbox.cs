@@ -7,7 +7,7 @@ namespace DeckHost.Benchmark;
 
 /// <summary>
 /// DeckHost's data folder for a run, so the measurement doesn't depend on (or change) anyone's own
-/// setup. On Linux and macOS a fresh HOME and XDG_CONFIG_HOME; on Windows, where the known folders
+/// setup. On Linux and macOS a fresh HOME (and XDG_CONFIG_HOME); on Windows, where the known folders
 /// ignore the environment, the real %APPDATA%\DeckHost, moved aside first and put back afterwards.
 /// </summary>
 internal sealed class Sandbox : IDisposable
@@ -73,7 +73,12 @@ internal sealed class Sandbox : IDisposable
         var home = Path.Combine(root, "home");
         var config = Path.Combine(home, ".config");
         Directory.CreateDirectory(config);
-        return new Sandbox(root, Path.Combine(config, "DeckHost"), new Dictionary<string, string>
+
+        // .NET's ApplicationData: ~/Library/Application Support on macOS, XDG_CONFIG_HOME on Linux.
+        var dataDirectory = OperatingSystem.IsMacOS()
+            ? Path.Combine(home, "Library", "Application Support", "DeckHost")
+            : Path.Combine(config, "DeckHost");
+        return new Sandbox(root, dataDirectory, new Dictionary<string, string>
         {
             ["HOME"] = home,
             ["XDG_CONFIG_HOME"] = config,

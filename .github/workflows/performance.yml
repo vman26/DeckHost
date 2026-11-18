@@ -136,7 +136,7 @@ jobs:
   # One comment on the pull request with every system next to the last release and the budgets.
   report:
     needs: measure
-    if: always() && github.event_name == 'pull_request'
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
