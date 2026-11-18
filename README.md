@@ -72,6 +72,21 @@ I'm saying this up front because you should know how the software you run is mad
 | Stream Deck plugin settings pages inside DeckHost | ✓ (WebView2) | ✓ (WebKitGTK, `libwebkit2gtk-4.1`; else in your browser) | ✓ (WKWebView) |
 | Stream Deck HTML plugins (plugins that run in a web page) | ✓ (WebView2) | don't run | don't run |
 
+### Light on your computer
+
+DeckHost runs all day, so every pull request and release is measured on Windows, Linux and macOS
+(GitHub's runners, a simulated N4 Pro with a clock and live CPU and memory keys), and a change that
+goes over its budget doesn't get in:
+
+| CPU, % of one core | Windows | Linux | macOS |
+|---|---:|---:|---:|
+| In the tray (how it spends most of the day) | 0.6–0.9 | 0.5–0.6 | 1.1–1.2 |
+| Window open, nothing pressed | 2.5–3.1 | 1.6–1.9 | 2.1 |
+| Press → new key image (95th percentile) | 2 ms | 2–7 ms | 11 ms |
+
+Memory is about 150–250 MB. The numbers for each release are on the
+[Performance](https://vman26.github.io/DeckHost/performance/) page.
+
 ### Elgato Stream Deck and the Web Deck
 
 DeckHost talks to Elgato Stream Decks directly over USB, without Elgato's software. Close the Stream Deck app first: it keeps the device to itself. Each deck you plug in appears in the device picker in the header (with its own profiles) and stays listed while unplugged. The models of the current generation are supported (Stream Deck MK.2 and Original v2, XL, Neo, Stream Deck + with its dials and touch strip, Pedal) and the older ones (first-edition Stream Deck, Stream Deck Mini). This support is new and was written from the protocol, not yet tested on every model: please report what works.

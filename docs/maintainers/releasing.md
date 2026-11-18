@@ -20,6 +20,12 @@ Before packing, the script downloads the channel's previous release (`vpk downlo
 
 **The older Windows setup** (`packaging/windows/DeckHost.iss`, `*-win-x64-setup.exe`) is still built so that DeckHost versions from before Velopack, whose updater runs that file, reach the first Velopack version. That version then offers **Switch to the new installer** (`UpdateMode.MigrateWindows`): it installs the Velopack setup (or the MSI for an install in Program Files), removes the old install with its uninstaller after exiting and starts the new one, carrying start at sign-in over through `%AppData%\DeckHost\migration.json`. Stop building the Inno setup (and remove the step from `release.yml`) a few releases later, once nobody runs a pre-Velopack DeckHost. macOS and AppImage users move by themselves: the old updater swaps in the zip's app, which is now Velopack's, and AppImage users replace the file as before.
 
+## Performance
+
+The **performance** workflow (`.github/workflows/performance.yml`) measures every pull request and every tag on Windows, Linux and macOS with `benchmarks/DeckHost.Benchmark` (what it measures: [Performance](../performance.md)). A pull request gets a check per system, which fails when a number is over `benchmarks/budgets.json`, and one comment with every number next to the last release's. A tag's results go to the **`perf-data`** branch (`releases/<tag>/<system>.json` and `index.json`, written by `scripts/performance-page.py index`); the workflow then starts the docs workflow, which turns them into the numbers on the Performance page (`scripts/performance-page.py page` → `benchmarks/performance-data.md`, included by `docs/performance.md`).
+
+Raising a budget is a change to `benchmarks/budgets.json` in its own reviewed pull request that says why. A number that is over budget on one system only can get its own limit there (`"windows": {…}`) instead of loosening it everywhere.
+
 ## Release notes
 
 The notes come from [`CHANGELOG.md`](https://github.com/vman26/DeckHost/blob/develop/CHANGELOG.md),

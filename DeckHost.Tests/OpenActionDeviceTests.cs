@@ -545,7 +545,8 @@ public sealed class OpenActionDeviceTests : IDisposable
 
         runtime.Start(StreamDeckManifest.Load(directory));
 
-        await Until(() => plugin.Devices.Count == 1, logs);
+        // The first wait includes starting Node.js, which on a busy Windows runner has taken longer than 15 s.
+        await Until(() => plugin.Devices.Count == 1, logs, PluginStartTimeout);
         var device = Expect.Single(plugin.Devices);
         Assert.That((device.Id, device.Controls.Count), Is.EqualTo(("openaction.fake-1", 7)));
         await Until(() => _context.Inputs.Any(static input => input.ControlId == "encoder.0"), logs); // setBrightness arrived
@@ -558,9 +559,12 @@ public sealed class OpenActionDeviceTests : IDisposable
         plugin.Dispose();
     }
 
-    private static async Task Until(Func<bool> condition, List<string> logs)
+    private static readonly TimeSpan PluginStartTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan MessageTimeout = TimeSpan.FromSeconds(15);
+
+    private static async Task Until(Func<bool> condition, List<string> logs, TimeSpan? timeout = null)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(15);
+        var deadline = DateTime.UtcNow + (timeout ?? MessageTimeout);
         while (!condition())
         {
             Assert.That(DateTime.UtcNow, Is.LessThan(deadline), "timed out: " + string.Join(" | ", logs));

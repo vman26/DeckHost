@@ -33,6 +33,7 @@
     <ProjectReference Include="..\DeckHost.Device.Web\DeckHost.Device.Web.csproj" />
     <!-- For the platform code's pure parts (tool output parsing, key tables, sign-in entries). -->
     <ProjectReference Include="..\DeckHost.App\DeckHost.App.csproj" />
+    <ProjectReference Include="..\benchmarks\DeckHost.Benchmark\DeckHost.Benchmark.csproj" />
     <!-- Only built so the plugin catalog tests can install its package. -->
     <ProjectReference Include="..\plugins\DeckHost.Plugin.Obs\DeckHost.Plugin.Obs.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>

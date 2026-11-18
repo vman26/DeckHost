@@ -15,11 +15,16 @@
 #include <chrono>
 #include <thread>
 #include <cstdio>
+#include <future>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
+
+#ifdef __APPLE__
+extern "C" int hid_init(void);
+#endif
 
 namespace {
     std::atomic<MiraBoxCallback> g_CSharpCallback = nullptr;
@@ -155,6 +160,30 @@ namespace {
     }
 #endif
 
+#ifdef __APPLE__
+    // hidapi on macOS schedules its one IOHIDManager on the run loop of the thread that first calls
+    // hid_init (any first hid_enumerate does). That was whichever .NET thread-pool thread started the
+    // plugin; when the pool retired that thread its run loop was freed, and the SDK's hot-plug thread
+    // crashed (SIGTRAP in CFRunLoopAddSource) on its next enumeration, at a random moment minutes later.
+    // A thread that lives as long as the process initializes hidapi instead.
+    void InitializeHidOnLastingThread()
+    {
+        static std::once_flag once;
+        std::call_once(once, [] {
+            std::promise<void> ready;
+            auto initialized = ready.get_future();
+            std::thread([&ready] {
+                hid_init();
+                ready.set_value();
+                for (;;) {
+                    std::this_thread::sleep_for(std::chrono::hours(24));
+                }
+            }).detach();
+            initialized.wait();
+        });
+    }
+#endif
+
     std::shared_ptr<StreamDock> GetDevice(const char* deviceKey)
     {
         if (deviceKey == nullptr) {
@@ -254,6 +283,9 @@ namespace {
 extern "C" {
     EXPORT int32_t MIRABOX_CALL MiraBox_Initialize() {
         try {
+#ifdef __APPLE__
+            InitializeHidOnLastingThread();
+#endif
             auto& deviceManager = DeviceManager::instance();
             deviceManager.enumerator();
 

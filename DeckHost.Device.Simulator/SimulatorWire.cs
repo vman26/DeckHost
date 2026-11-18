@@ -66,7 +66,7 @@ public sealed class SimulatorMessage
 
     public int Height { get; set; }
 
-    public string? Rgba { get; set; }
+    public byte[]? Rgba { get; set; }
 
     public List<SimulatorLight>? Lights { get; set; }
 
@@ -98,6 +98,12 @@ public static class SimulatorWire
     public static string DefaultDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost");
 
     public static string Serialize(SimulatorMessage message) => JsonSerializer.Serialize(message, Options);
+
+    /// <summary>
+    /// One message as UTF-8 JSON. Images go straight from bytes to base64 UTF-8, never through a string:
+    /// a key's picture as base64 text would be a large-object allocation (twice), for every frame.
+    /// </summary>
+    public static byte[] SerializeToUtf8(SimulatorMessage message) => JsonSerializer.SerializeToUtf8Bytes(message, Options);
 
     public static SimulatorMessage? Deserialize(string line)
     {
@@ -142,8 +148,9 @@ public sealed record SimulatorEndpoint(int Port, string Token);
 public sealed class SimulatorConnection : IAsyncDisposable
 {
     private readonly Stream _stream;
+    private readonly BufferedStream _output;
     private readonly StreamReader _reader;
-    private readonly StreamWriter _writer;
+    private static readonly ReadOnlyMemory<byte> NewLine = "\n"u8.ToArray();
     private readonly Lock _sync = new();
     private readonly Queue<SimulatorMessage> _queue = new();
     private readonly Dictionary<string, SimulatorMessage> _images = new(StringComparer.Ordinal);
@@ -156,8 +163,8 @@ public sealed class SimulatorConnection : IAsyncDisposable
     public SimulatorConnection(Stream stream)
     {
         _stream = stream;
+        _output = new BufferedStream(stream, 64 * 1024);
         _reader = new StreamReader(stream, System.Text.Encoding.UTF8, false, 64 * 1024, leaveOpen: true);
-        _writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false), 64 * 1024, leaveOpen: true) { NewLine = "\n" };
         _writing = Task.Run(WriteLoopAsync);
     }
 
@@ -216,10 +223,11 @@ public sealed class SimulatorConnection : IAsyncDisposable
                 await _signal.WaitAsync(_stop.Token).ConfigureAwait(false);
                 while (Next() is { } message)
                 {
-                    await _writer.WriteLineAsync(SimulatorWire.Serialize(message).AsMemory(), _stop.Token).ConfigureAwait(false);
+                    await _output.WriteAsync(SimulatorWire.SerializeToUtf8(message), _stop.Token).ConfigureAwait(false);
+                    await _output.WriteAsync(NewLine, _stop.Token).ConfigureAwait(false);
                 }
 
-                await _writer.FlushAsync(_stop.Token).ConfigureAwait(false);
+                await _output.FlushAsync(_stop.Token).ConfigureAwait(false);
                 if (_closing)
                 {
                     return;

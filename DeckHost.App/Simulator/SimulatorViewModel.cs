@@ -177,16 +177,7 @@ public sealed partial class SimulatorViewModel : ObservableObject, IAsyncDisposa
                 break;
 
             case SimulatorMessage.Image when message is { Control: { } control, Rgba: { } data, Width: > 0, Height: > 0 }:
-                byte[] pixels;
-                try
-                {
-                    pixels = Convert.FromBase64String(data);
-                }
-                catch (FormatException)
-                {
-                    return;
-                }
-
+                var pixels = data;
                 if (pixels.Length < message.Width * message.Height * 4)
                 {
                     return;
