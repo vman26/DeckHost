@@ -30,10 +30,11 @@ internal sealed class Sandbox : IDisposable
     private readonly string _root;
     private readonly string? _backup;
 
-    private Sandbox(string root, string dataDirectory, IReadOnlyDictionary<string, string> environment, string? backup)
+    private Sandbox(string root, IReadOnlyList<string> dataDirectories, IReadOnlyDictionary<string, string> environment, string? backup)
     {
         _root = root;
-        DataDirectory = dataDirectory;
+        DataDirectories = dataDirectories;
+        DataDirectory = dataDirectories[0];
         Environment = environment;
         _backup = backup;
     }
@@ -41,8 +42,30 @@ internal sealed class Sandbox : IDisposable
     /// <summary>The sandbox's own folder (on Windows only temporary files; the data folder is the real one).</summary>
     public string Root => _root;
 
-    /// <summary>DeckHost's data folder (settings.json, profiles.json, simulator.json, logs).</summary>
-    public string DataDirectory { get; }
+    /// <summary>
+    /// DeckHost's data folder (settings.json, profiles.json, simulator.json, logs): the first candidate until
+    /// <see cref="FindUsedDataDirectory"/> has seen which one DeckHost uses.
+    /// </summary>
+    public string DataDirectory { get; private set; }
+
+    /// <summary>
+    /// Where DeckHost may keep its data (.NET's ApplicationData). On macOS that is either XDG_CONFIG_HOME or
+    /// ~/Library/Application Support depending on the .NET version, so the setup is written to both and the
+    /// benchmark follows the one DeckHost writes to.
+    /// </summary>
+    public IReadOnlyList<string> DataDirectories { get; }
+
+    /// <summary>The candidate DeckHost writes to (its start-up state is the first file it writes), or null before it has.</summary>
+    public string? FindUsedDataDirectory()
+    {
+        var used = DataDirectories.FirstOrDefault(static folder => File.Exists(Path.Combine(folder, "startup-state.json")));
+        if (used is not null)
+        {
+            DataDirectory = used;
+        }
+
+        return used;
+    }
 
     /// <summary>Variables for DeckHost's process.</summary>
     public IReadOnlyDictionary<string, string> Environment { get; }
@@ -70,18 +93,18 @@ internal sealed class Sandbox : IDisposable
                 Directory.Move(data, backup);
             }
 
-            return new Sandbox(root, data, new Dictionary<string, string>(), backup);
+            return new Sandbox(root, [data], new Dictionary<string, string>(), backup);
         }
 
         var home = Path.Combine(root, "home");
         var config = Path.Combine(home, ".config");
         Directory.CreateDirectory(config);
 
-        // .NET's ApplicationData: ~/Library/Application Support on macOS, XDG_CONFIG_HOME on Linux.
-        var dataDirectory = OperatingSystem.IsMacOS()
-            ? Path.Combine(home, "Library", "Application Support", "DeckHost")
-            : Path.Combine(config, "DeckHost");
-        return new Sandbox(root, dataDirectory, new Dictionary<string, string>
+        // .NET's ApplicationData: XDG_CONFIG_HOME on Linux; on macOS that or ~/Library/Application Support.
+        string[] dataDirectories = OperatingSystem.IsMacOS()
+            ? [Path.Combine(config, "DeckHost"), Path.Combine(home, "Library", "Application Support", "DeckHost")]
+            : [Path.Combine(config, "DeckHost")];
+        return new Sandbox(root, dataDirectories, new Dictionary<string, string>
         {
             ["HOME"] = home,
             ["XDG_CONFIG_HOME"] = config,
@@ -97,7 +120,6 @@ internal sealed class Sandbox : IDisposable
     /// </summary>
     public void WriteSettings(bool startInTray)
     {
-        Directory.CreateDirectory(DataDirectory);
         if (Environment.TryGetValue("TMPDIR", out var temp))
         {
             Directory.CreateDirectory(temp);
@@ -112,7 +134,11 @@ internal sealed class Sandbox : IDisposable
             ["WelcomeShown"] = true,
             ["StartMinimized"] = startInTray,
         };
-        File.WriteAllText(Path.Combine(DataDirectory, "settings.json"), JsonSerializer.Serialize(settings));
+        foreach (var folder in DataDirectories)
+        {
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "settings.json"), JsonSerializer.Serialize(settings));
+        }
     }
 
     /// <summary>
@@ -128,8 +154,12 @@ internal sealed class Sandbox : IDisposable
             ParentId = ProfileId,
             Kind = ProfileKinds.Page,
         };
-        new ProfileStore(Path.Combine(DataDirectory, "profiles.json"))
-            .Save(new ProfileDocument(ProfileDocument.CurrentVersion, ProfileId, [page1, page2]));
+        foreach (var folder in DataDirectories)
+        {
+            Directory.CreateDirectory(folder);
+            new ProfileStore(Path.Combine(folder, "profiles.json"))
+                .Save(new ProfileDocument(ProfileDocument.CurrentVersion, ProfileId, [page1, page2]));
+        }
     }
 
     public void Dispose()

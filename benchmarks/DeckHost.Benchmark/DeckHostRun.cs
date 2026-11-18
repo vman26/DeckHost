@@ -35,8 +35,11 @@ internal sealed class DeckHostRun : IAsyncDisposable
     /// <summary>Starts DeckHost and attaches the simulator once its endpoint is up; returns after the first key image.</summary>
     public static async Task<DeckHostRun> StartAsync(string program, Sandbox sandbox, bool inTray, CancellationToken cancellationToken)
     {
-        var endpointFile = Path.Combine(sandbox.DataDirectory, SimulatorWire.EndpointFileName);
-        File.Delete(endpointFile);
+        foreach (var folder in sandbox.DataDirectories)
+        {
+            File.Delete(Path.Combine(folder, SimulatorWire.EndpointFileName));
+        }
+
         var start = new ProcessStartInfo(program) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var (name, value) in sandbox.Environment)
         {
@@ -61,7 +64,7 @@ internal sealed class DeckHostRun : IAsyncDisposable
         try
         {
             SimulatorEndpoint? endpoint;
-            while ((endpoint = SimulatorWire.ReadEndpoint(sandbox.DataDirectory)) is null)
+            while ((endpoint = sandbox.FindUsedDataDirectory() is { } data ? SimulatorWire.ReadEndpoint(data) : null) is null)
             {
                 if (process.HasExited)
                 {
@@ -70,7 +73,7 @@ internal sealed class DeckHostRun : IAsyncDisposable
 
                 if (clock.Elapsed > StartTimeout)
                 {
-                    throw new TimeoutException($"No simulator endpoint in {endpointFile} after {StartTimeout.TotalSeconds:0} s.{Diagnose(sandbox, output, process)}");
+                    throw new TimeoutException($"No simulator endpoint in {Path.Combine(sandbox.DataDirectory, SimulatorWire.EndpointFileName)} after {StartTimeout.TotalSeconds:0} s.{Diagnose(sandbox, output, process)}");
                 }
 
                 await Task.Delay(50, cancellationToken);
@@ -145,8 +148,11 @@ internal sealed class DeckHostRun : IAsyncDisposable
             text.AppendLine("  " + line);
         }
 
-        var everywhere = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
-        var folders = new[] { sandbox.Root, sandbox.DataDirectory }.Where(Directory.Exists).Distinct().ToList();
+        // AttributesToSkip none: on Linux and macOS a dot folder (.config) counts as hidden.
+        var everywhere = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
+        var folders = new[] { sandbox.Root }
+            .Concat(sandbox.DataDirectories.Where(folder => !folder.StartsWith(sandbox.Root + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
+            .Where(Directory.Exists).ToList();
         foreach (var folder in folders)
         {
             text.AppendLine($"Files under {folder}:");
