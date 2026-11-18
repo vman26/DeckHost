@@ -105,10 +105,13 @@ jobs:
             if [[ -n "$latest" ]]; then echo "PREVIOUS=perf-data/$latest" >> "$GITHUB_ENV"; fi
           fi
 
-      # On macOS DeckHost is measured the way people run it: the signed DeckHost.app.
+      # On macOS DeckHost is measured the way people run it: as DeckHost.app. package.sh assembles it
+      # (package-velopack.sh signs releases); Apple Silicon runs only signed code, so sign it ad hoc.
       - name: App bundle (macOS)
         if: runner.os == 'macOS'
-        run: DECKHOST_BUNDLE_ONLY=1 scripts/package.sh ${{ matrix.rid }} benchmark publish/DeckHost bundle
+        run: |
+          scripts/package.sh ${{ matrix.rid }} benchmark publish/DeckHost bundle
+          codesign --force --deep --sign - bundle/DeckHost.app
 
       - name: Measure
         id: measure

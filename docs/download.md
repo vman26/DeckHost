@@ -12,9 +12,9 @@ DeckHost is free and open source (GPL-3.0). It runs on Windows, Linux and macOS.
 
 | System | Package | |
 |---|---|---|
-| **Windows** 10 and 11 (x64) | Setup program, or a zip to run without installing | <a id="deckhost-win" href="https://github.com/vman26/DeckHost/releases">Download</a> |
-| **Linux** (x64) | `.tar.gz`; unpack and run `DeckHost` ([device rule](devices.md#linux-the-device-rule)) | <a id="deckhost-linux" href="https://github.com/vman26/DeckHost/releases">Download</a> |
-| **Linux** (x64), no install | `.AppImage`; make it executable and run it ([notes](devices.md#linux-appimage)) | <a id="deckhost-appimage" href="https://github.com/vman26/DeckHost/releases">Download</a> |
+| **Windows** 10 and 11 (x64) | Installer (`-install.exe`, for you, no administrator rights); for all users the `.msi`; or a zip to run without installing | <a id="deckhost-win" href="https://github.com/vman26/DeckHost/releases">Download</a> |
+| **Linux** (x64), no install | `.AppImage`; make it executable and run it; it updates itself ([notes](devices.md#linux-appimage)) | <a id="deckhost-appimage" href="https://github.com/vman26/DeckHost/releases">Download</a> |
+| **Linux** (x64) | `.tar.gz`; unpack and run `install.sh` ([device rule](devices.md#linux-the-device-rule)); updated by hand | <a id="deckhost-linux" href="https://github.com/vman26/DeckHost/releases">Download</a> |
 | **macOS** (Apple Silicon) | App in a zip | <a id="deckhost-mac" href="https://github.com/vman26/DeckHost/releases">Download</a> |
 
 All releases, release notes and pre-releases are on the
@@ -26,7 +26,7 @@ All releases, release notes and pre-releases are on the
 
 **Windows:** Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
 [SignPath Foundation](https://signpath.org). DeckHost uses the SignPath Foundation for code signing:
-the Windows program and setup are signed by SignPath from the builds GitHub Actions makes of this
+the Windows program and installers are signed by SignPath from the builds GitHub Actions makes of this
 repository. Releases made before the signing was set up are unsigned; Windows then shows
 *More info → Run anyway*.
 
@@ -39,7 +39,7 @@ the app → **Open** the first time.
   (`sha256sum -c SHA256SUMS.txt --ignore-missing`, or `Get-FileHash` on Windows).
 - Every file has a build provenance attestation from GitHub Actions:
   `gh attestation verify <file> --repo vman26/DeckHost`.
-- DeckHost's own updater checks both the checksum and the source before installing.
+- DeckHost's own updater (Velopack) checks each update package against the checksum in the release's update index before installing it.
 
 ## Build it yourself
 

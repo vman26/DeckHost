@@ -122,8 +122,9 @@ public static class AppSettings
     /// <summary>Adds or removes DeckHost's sign-in entry for the current user (no admin rights needed).</summary>
     public static void SetStartAtLogin(bool enabled)
     {
-        // From an AppImage the process lives in a temporary mount: start the file the user has.
-        var exe = AppImage.Path ?? Environment.ProcessPath;
+        // From an AppImage the process lives in a temporary mount: start the file the user has. A
+        // Velopack install on Windows: its launcher, whose path survives updates (current\ is replaced).
+        var exe = AppImage.Path ?? AppUpdater.StableLauncher ?? Environment.ProcessPath;
         if (OperatingSystem.IsWindows())
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);
@@ -144,6 +145,43 @@ public static class AppSettings
         {
             WriteOrDelete(MacLaunchAgentPath, enabled && exe is not null ? MacLaunchAgent(exe) : null);
         }
+    }
+
+    /// <summary>
+    /// Points start at sign-in at this DeckHost again: turned on by <paramref name="migration"/> (the old
+    /// setup's uninstaller removed it), or rewritten when it names another program (the install moved).
+    /// </summary>
+    internal static void RepairStartAtLogin(MigrationNote? migration)
+    {
+        try
+        {
+            if (migration?.StartAtLogin == true || (IsStartAtLoginEnabled() && !StartAtLoginPointsHere()))
+            {
+                SetStartAtLogin(true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // Left as it is; the setting can be turned on again by hand.
+        }
+    }
+
+    private static bool StartAtLoginPointsHere()
+    {
+        var exe = AppImage.Path ?? AppUpdater.StableLauncher ?? Environment.ProcessPath;
+        if (exe is null)
+        {
+            return true;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath);
+            return key?.GetValue(RunValueName) is string command && command.Contains(exe, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var entry = OperatingSystem.IsLinux() ? LinuxAutostartPath : MacLaunchAgentPath;
+        return !File.Exists(entry) || File.ReadAllText(entry).Contains(exe, StringComparison.Ordinal);
     }
 
     /// <summary>An XDG autostart entry (freedesktop.org Desktop Entry).</summary>

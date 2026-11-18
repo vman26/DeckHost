@@ -51,6 +51,7 @@
     <!-- PrivateAssets: the tests reference this project; WebView2 (and its WPF wrapper) stays here. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" PrivateAssets="all" />
     <PackageReference Include="NLog" Version="6.2.2" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
     <!-- Avalonia brings an older native Skia for Linux; DeckHost.Core uses SkiaSharp 4.151, which needs
          its own. (Windows and macOS get it from SkiaSharp itself.) -->
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.1" />

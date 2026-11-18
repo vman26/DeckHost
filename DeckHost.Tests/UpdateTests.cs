@@ -662,15 +662,105 @@ public sealed class UpdateViewModelTests
         Assert.That(updates.Status, Does.Contain("Couldn't reach GitHub"));
     }
 
-    private UpdateViewModel Create(string version) => new(
+    private UpdateViewModel Create(string version, IAppUpdater? updater = null) => new(
         new UpdateChecker(new HttpClient(new UpdateCheckerTests.FakeHandler(_ => Encoding.UTF8.GetBytes(Releases)))),
         version,
         () => _settings,
-        settings => _settings = settings);
+        settings => _settings = settings,
+        updater);
+
+    [Test]
+    public async Task Install_AVelopackInstall_DownloadsThenAsksToRestartIntoIt()
+    {
+        // Arrange
+        UpdateViewModel.RestartNoticeDelay = TimeSpan.Zero;
+        var updater = new FakeUpdater();
+        var updates = Create(RunningVersion, updater);
+        var restartRequested = false;
+        updates.RestartRequested += () => restartRequested = true;
+        await updates.CheckAsync(manual: false);
+
+        // Act
+        await updates.InstallCommand.ExecuteAsync(null);
+
+        // Assert
+        Assert.That(updater.Downloads, Is.EqualTo(1));
+        Assert.That(updater.AppliedWithRestart, Is.True);
+        Assert.That(restartRequested, Is.True);
+    }
+
+    [Test]
+    public async Task Install_CancelledWhileDownloading_AppliesNothing()
+    {
+        // Arrange
+        var updater = new FakeUpdater { WaitForCancel = true };
+        var updates = Create(RunningVersion, updater);
+        await updates.CheckAsync(manual: false);
+
+        // Act
+        var install = updates.InstallCommand.ExecuteAsync(null);
+        await updater.Started.Task;
+        updates.CancelCommand.Execute(null);
+        await install;
+
+        // Assert
+        Assert.That(updater.AppliedWithRestart, Is.Null);
+        Assert.That(updates.Status, Is.EqualTo("Update cancelled."));
+        Assert.That(updates.IsInstalling, Is.False);
+    }
+
+    [Test]
+    public void InstallLabel_AVelopackInstall_InstallsAndRestarts()
+    {
+        // Act
+        var updates = Create(RunningVersion, new FakeUpdater());
+
+        // Assert
+        Assert.That(updates.InstallLabel, Is.EqualTo("Install and restart"));
+        Assert.That(updates.CanInstallAutomatically, Is.True);
+    }
+
+    private sealed class FakeUpdater : IAppUpdater
+    {
+        public UpdateMode Mode => UpdateMode.Velopack;
+
+        public bool WaitForCancel { get; init; }
+
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Downloads { get; private set; }
+
+        public bool? AppliedWithRestart { get; private set; }
+
+        public bool HasDownloaded => Downloads > 0;
+
+        public async Task<string?> DownloadAsync(bool includePrereleases, IProgress<int> progress, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            if (WaitForCancel)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            progress.Report(100);
+            Downloads++;
+            return LatestVersion;
+        }
+
+        public void ApplyAfterExit(bool restart) => AppliedWithRestart = restart;
+    }
 }
 
-public sealed class UpdateInstallerTests
+public sealed class UpdateInstallerTests : IDisposable
 {
+    private const string RuntimeIdentifier = "win-x64";
+    private const string InstallerName = "DeckHost-1.5.0-win-x64-install.exe";
+    private const string MsiName = "DeckHost-1.5.0-win-x64.msi";
+
+    private readonly string _directory = Directory.CreateTempSubdirectory("deckhost-migration").FullName;
+
+    public void Dispose() => Directory.Delete(_directory, recursive: true);
+
     [Test]
     public void Quote_APathWithAnApostrophe_IsEscapedForPowerShell()
     {
@@ -681,96 +771,87 @@ public sealed class UpdateInstallerTests
         Assert.That(quoted, Is.EqualTo("'C:\\Users\\O''Brien\\setup.exe'"));
     }
 
-    private const string ExecutableName = "DeckHost.App";
-    private const string NoLaunch = "none";
-    private const int SwapWaitMilliseconds = 10_000;
-
-    /// <summary>Runs the swap script on a fake install; returns where things ended up.</summary>
-    private static (string Root, string Target, string Started) RunSwapScript(string launch)
+    [TestCase(false, InstallerName)]
+    [TestCase(true, MsiName)]
+    public void SelectMigrationAsset_AnInstall_PicksTheInstallerForItsScope(bool forAllUsers, string expected)
     {
-        var root = Directory.CreateTempSubdirectory("deckhost-swap").FullName;
-        var target = Path.Combine(root, "deckhost");
-        var source = Path.Combine(root, "new", "DeckHost");
-        Directory.CreateDirectory(target);
-        Directory.CreateDirectory(source);
-        File.WriteAllText(Path.Combine(target, "old-only.dll"), "old");
-        File.WriteAllText(Path.Combine(target, "version.txt"), "1.3.0");
-        File.WriteAllText(Path.Combine(source, "version.txt"), "1.4.0");
-        var started = Path.Combine(root, "started.txt");
-        File.WriteAllText(Path.Combine(source, ExecutableName), $"#!/bin/sh\necho started > '{started}'\n");
-        File.SetUnixFileMode(Path.Combine(source, ExecutableName), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        var script = Path.Combine(root, "update.sh");
-        File.WriteAllText(script, UpdateInstaller.SwapScriptText.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n");
+        // Arrange
+        var release = WindowsRelease(InstallerName, MsiName, "DeckHost-1.5.0-win-x64-setup.exe");
 
-        // A process id that has exited: the script doesn't wait.
-        // (/bin/sh is everywhere; /bin/true isn't on macOS.)
-        using var exited = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", "exit 0" } })!;
-        exited.WaitForExit();
-        using var helper = Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { script, exited.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), source, target, launch } })!;
-        Assert.That(helper.WaitForExit(SwapWaitMilliseconds), Is.True);
-        return (root, target, started);
+        // Act
+        var asset = UpdateInstaller.SelectMigrationAsset(release, RuntimeIdentifier, forAllUsers);
+
+        // Assert
+        Assert.That(asset?.Name, Is.EqualTo(expected));
     }
 
     [Test]
-    public void SwapScript_AnInstall_IsReplacedByTheNewFilesAndTheBackupRemoved()
+    public void SelectMigrationAsset_AReleaseWithOnlyTheOldSetup_FindsNothing()
     {
         // Arrange
-        Assume.That(!OperatingSystem.IsWindows(), "the swap script is for Linux and macOS");
-        var (root, target, _) = RunSwapScript(NoLaunch);
-        try
-        {
-            // Assert
-            Assert.That(File.ReadAllText(Path.Combine(target, "version.txt")), Is.EqualTo("1.4.0"));
-            Assert.That(File.Exists(Path.Combine(target, "old-only.dll")), Is.False);
-            Assert.That(Directory.Exists(target + ".update-backup"), Is.False);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        var release = WindowsRelease("DeckHost-1.4.0-win-x64-setup.exe");
+
+        // Act
+        var asset = UpdateInstaller.SelectMigrationAsset(release, RuntimeIdentifier, forAllUsers: false);
+
+        // Assert
+        Assert.That(asset, Is.Null);
     }
 
     [Test]
-    public void SwapScript_LaunchTheProgram_StartsTheNewVersion()
+    public void Take_AWrittenNote_ReturnsItOnce()
     {
         // Arrange
-        Assume.That(!OperatingSystem.IsWindows(), "the swap script is for Linux and macOS");
-        var (root, _, started) = RunSwapScript(ExecutableName);
-        try
-        {
-            // Act
-            var end = DateTime.UtcNow.AddSeconds(10);
-            while (!File.Exists(started) && DateTime.UtcNow < end)
-            {
-                Thread.Sleep(50);
-            }
+        var path = Path.Combine(_directory, "migration.json");
+        MigrationNote.Write(new MigrationNote(StartAtLogin: true), path);
 
-            // Assert
-            Assert.That(File.Exists(started), Is.True);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        // Act
+        var first = MigrationNote.Take(path);
+        var second = MigrationNote.Take(path);
+
+        // Assert
+        Assert.That(first, Is.EqualTo(new MigrationNote(StartAtLogin: true)));
+        Assert.That(second, Is.Null);
     }
 
     [Test]
-    public void SwapScript_LaunchNone_DoesNotStartTheProgram()
+    public void Take_ABrokenNote_ReturnsNothing()
     {
         // Arrange
-        Assume.That(!OperatingSystem.IsWindows(), "the swap script is for Linux and macOS");
-        var (root, _, started) = RunSwapScript(NoLaunch);
-        try
-        {
-            // Act
-            Thread.Sleep(1000);
+        var path = Path.Combine(_directory, "migration.json");
+        File.WriteAllText(path, "{ not json");
 
-            // Assert
-            Assert.That(File.Exists(started), Is.False);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        // Act
+        var note = MigrationNote.Take(path);
+
+        // Assert
+        Assert.That(note, Is.Null);
+    }
+
+    private static ReleaseInfo WindowsRelease(params string[] names) => new(
+        Tag: "v1.5.0",
+        Version: SemanticVersion.Parse("1.5.0"),
+        Name: "DeckHost 1.5.0",
+        Notes: string.Empty,
+        PageUrl: string.Empty,
+        IsPrerelease: false,
+        PublishedAt: null,
+        Assets: names.Select(name => new ReleaseAsset(name, "https://example.com/" + name, 1)).ToList());
+}
+
+public sealed class AppUpdaterTests
+{
+    [TestCase(true, true, true, UpdateMode.Velopack)]
+    [TestCase(true, false, false, UpdateMode.Velopack)]
+    [TestCase(false, true, true, UpdateMode.MigrateWindows)]
+    [TestCase(false, true, false, UpdateMode.ManualDownload)]
+    [TestCase(false, false, true, UpdateMode.ManualDownload)]
+    public void Decide_AnInstall_PicksHowItUpdates(bool velopackInstall, bool windows, bool innoUninstaller, UpdateMode expected)
+    {
+        // Act
+        var mode = AppUpdater.Decide(velopackInstall, windows, innoUninstaller);
+
+        // Assert
+        Assert.That(mode, Is.EqualTo(expected));
     }
 }

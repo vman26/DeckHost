@@ -136,11 +136,11 @@ Linux only lets programs open USB devices they're allowed to. `install.sh` insta
 The `.AppImage` is the same DeckHost in one file: `chmod +x DeckHost-*.AppImage`, then run it. It needs FUSE 2 (`libfuse2`; on a system without it, run it as `APPIMAGE_EXTRACT_AND_RUN=1 ./DeckHost-*.AppImage`). It can't install the device rule itself, which needs root, so take the rule out of the file once:
 
 ```bash
-./DeckHost-*.AppImage --appimage-extract usr/share/doc/deckhost/70-deckhost-mirabox.rules
-sudo install -m 0644 squashfs-root/usr/share/doc/deckhost/70-deckhost-mirabox.rules /etc/udev/rules.d/
+./DeckHost-*.AppImage --appimage-extract usr/bin/70-deckhost-mirabox.rules
+sudo install -m 0644 squashfs-root/usr/bin/70-deckhost-mirabox.rules /etc/udev/rules.d/
 ```
 
-then unplug the device and plug it in again. DeckHost doesn't update an AppImage by itself (the file is a read-only image): the update screen offers the new `.AppImage` to download, and you replace the old file. **Start with the system** writes an entry that starts the file you ran.
+then unplug the device and plug it in again. The AppImage updates itself: **Install and restart** replaces the file with the new version (asking for your password when the file sits in a folder you can't write) and starts it. **Start with the system** writes an entry that starts the file you ran. (AppImages from before DeckHost's new installer kept the rule under `usr/share/doc/deckhost/`, and were replaced by hand.)
 
 ## Checking the device support
 
