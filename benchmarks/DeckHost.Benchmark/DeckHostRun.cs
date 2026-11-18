@@ -37,7 +37,7 @@ internal sealed class DeckHostRun : IAsyncDisposable
     {
         var endpointFile = Path.Combine(sandbox.DataDirectory, SimulatorWire.EndpointFileName);
         File.Delete(endpointFile);
-        var start = new ProcessStartInfo(program) { UseShellExecute = false };
+        var start = new ProcessStartInfo(program) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var (name, value) in sandbox.Environment)
         {
             start.Environment[name] = value;
@@ -52,6 +52,11 @@ internal sealed class DeckHostRun : IAsyncDisposable
         var started = DateTime.UtcNow;
         var clock = Stopwatch.StartNew();
         var process = Process.Start(start) ?? throw new InvalidOperationException($"{program} didn't start.");
+        var output = new ConcurrentQueue<string>();
+        process.OutputDataReceived += (_, line) => Keep(output, line.Data);
+        process.ErrorDataReceived += (_, line) => Keep(output, line.Data);
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
         var run = new DeckHostRun(process, started, ProcessName(program));
         try
         {
@@ -60,12 +65,12 @@ internal sealed class DeckHostRun : IAsyncDisposable
             {
                 if (process.HasExited)
                 {
-                    throw new InvalidOperationException($"DeckHost ended with code {process.ExitCode} before the simulator endpoint was up.");
+                    throw new InvalidOperationException($"DeckHost ended with code {process.ExitCode} before the simulator endpoint was up.{Diagnose(sandbox, output)}");
                 }
 
                 if (clock.Elapsed > StartTimeout)
                 {
-                    throw new TimeoutException($"No simulator endpoint in {endpointFile} after {StartTimeout.TotalSeconds:0} s.");
+                    throw new TimeoutException($"No simulator endpoint in {endpointFile} after {StartTimeout.TotalSeconds:0} s.{Diagnose(sandbox, output)}");
                 }
 
                 await Task.Delay(50, cancellationToken);
@@ -93,6 +98,56 @@ internal sealed class DeckHostRun : IAsyncDisposable
             await run.DisposeAsync();
             throw;
         }
+    }
+
+    private const int OutputLinesKept = 40;
+
+    private static void Keep(ConcurrentQueue<string> output, string? line)
+    {
+        if (line is null)
+        {
+            return;
+        }
+
+        output.Enqueue(line);
+        while (output.Count > OutputLinesKept && output.TryDequeue(out _))
+        {
+        }
+    }
+
+    /// <summary>What to look at when DeckHost didn't come up: its output, the files in the sandbox and the end of its log.</summary>
+    private static string Diagnose(Sandbox sandbox, IEnumerable<string> output)
+    {
+        var text = new System.Text.StringBuilder();
+        text.AppendLine().AppendLine("DeckHost's output (last lines):");
+        foreach (var line in output)
+        {
+            text.AppendLine("  " + line);
+        }
+
+        var everywhere = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        var folders = new[] { sandbox.Root, sandbox.DataDirectory }.Where(Directory.Exists).Distinct().ToList();
+        foreach (var folder in folders)
+        {
+            text.AppendLine($"Files under {folder}:");
+            foreach (var file in Directory.EnumerateFiles(folder, "*", everywhere).Take(60))
+            {
+                text.AppendLine("  " + Path.GetRelativePath(folder, file));
+            }
+        }
+
+        var log = folders.SelectMany(folder => Directory.EnumerateFiles(folder, "deckhost-*.log", everywhere)).FirstOrDefault();
+        if (log is not null)
+        {
+            text.AppendLine($"End of {Path.GetFileName(log)}:");
+            using var reader = new StreamReader(new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+            foreach (var line in reader.ReadToEnd().Split('\n').TakeLast(OutputLinesKept))
+            {
+                text.AppendLine("  " + line.TrimEnd());
+            }
+        }
+
+        return text.ToString();
     }
 
     /// <summary>The name the system lists the program under: "DeckHost.App" (not a file extension to drop), without ".exe" on Windows.</summary>
