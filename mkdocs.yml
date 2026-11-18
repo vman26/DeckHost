@@ -50,7 +50,6 @@ nav:
       - Built-in actions: reference/actions.md
       - Plugin API: reference/api.md
   - Updates: updates.md
-  - Performance: performance.md
   - Changelog: changelog.md
   - Troubleshooting: troubleshooting.md
   - Privacy: privacy.md
