@@ -1,13 +1,13 @@
 name: docs
 
 # Builds the documentation (MkDocs, docs/ and mkdocs.yml). On develop and main it publishes it to
-# this repository's GitHub Pages.
+# this repository's GitHub Pages. The performance workflow also starts it after measuring a release.
 on:
   push:
     branches: [develop, main]
-    paths: ["docs/**", "mkdocs.yml", "CHANGELOG.md", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "mkdocs.yml", "CHANGELOG.md", ".github/workflows/docs.yml", "benchmarks/budgets.json", "benchmarks/performance-data.md", "scripts/performance-page.py"]
   pull_request:
-    paths: ["docs/**", "mkdocs.yml", "CHANGELOG.md", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "mkdocs.yml", "CHANGELOG.md", ".github/workflows/docs.yml", "benchmarks/budgets.json", "benchmarks/performance-data.md", "scripts/performance-page.py"]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +22,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install mkdocs-material==9.5.49
+      # The performance page's numbers: every measured release on the perf-data branch (performance.yml).
+      - name: Performance numbers
+        run: |
+          if git ls-remote --exit-code --heads origin perf-data >/dev/null; then
+            git fetch --depth 1 origin perf-data
+            git worktree add perf-data FETCH_HEAD
+            python3 scripts/performance-page.py page perf-data benchmarks/budgets.json benchmarks/performance-data.md
+          fi
       - run: mkdocs build --strict
       - uses: actions/upload-artifact@v4
         with:

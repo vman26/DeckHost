@@ -6,6 +6,12 @@ Push a tag; the tag is the version (`v1.4.0`, or `v1.4.0-rc.1` for a pre-release
 
 Versions come from git (GitVersion, git-flow): `develop` builds alpha versions of the next minor, `release/x.y.z` builds release candidates, `hotfix/*` betas of the next patch.
 
+## Performance
+
+The **performance** workflow (`.github/workflows/performance.yml`) measures every pull request and every tag on Windows, Linux and macOS with `benchmarks/DeckHost.Benchmark` (what it measures: [Performance](../performance.md)). A pull request gets a check per system, which fails when a number is over `benchmarks/budgets.json`, and one comment with every number next to the last release's. A tag's results go to the **`perf-data`** branch (`releases/<tag>/<system>.json` and `index.json`, written by `scripts/performance-page.py index`); the workflow then starts the docs workflow, which turns them into the numbers on the Performance page (`scripts/performance-page.py page` → `benchmarks/performance-data.md`, included by `docs/performance.md`).
+
+Raising a budget is a change to `benchmarks/budgets.json` in its own reviewed pull request that says why. A number that is over budget on one system only can get its own limit there (`"windows": {…}`) instead of loosening it everywhere.
+
 ## Packages and updates (Velopack)
 
 DeckHost installs and updates through [Velopack](https://velopack.io) (the `Velopack` package in `DeckHost.App.csproj` and the `vpk` tool in the workflow, the same version; update both together). `scripts/package-velopack.sh` makes, per system, the installer, a self-updating portable package and the **update feed**: `releases.<channel>.json`, `assets.<channel>.json`, `RELEASES*` and `DeckHost-<version>-<channel>-full.nupkg` / `-delta.nupkg` (channels `win`, `linux`, `osx`). The feed files keep vpk's names, because the index names the packages; the installers get DeckHost's names:
