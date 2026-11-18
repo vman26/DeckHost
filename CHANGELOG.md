@@ -124,6 +124,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- macOS: DeckHost no longer closes at random a few minutes after it starts. The StreamDock device support set up
+  macOS's USB device watcher on a thread that could end, and the next device check then crashed.
 - macOS: DeckHost keeps App Nap from slowing it down while it runs in the background or in the menu bar, so keys and
   knobs keep answering at once.
 - DeckHost no longer closes when the built-in browser (the plugin settings page) can't start, for example without
