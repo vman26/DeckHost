@@ -25,10 +25,15 @@ sealed class Program
     public static int Main(string[] args)
     {
         // Velopack first: during install, update and uninstall it starts DeckHost with its own arguments,
-        // runs the hook and ends the process here. Uninstalling removes the start-at-sign-in entry.
-        Velopack.VelopackApp.Build()
-            .OnBeforeUninstallFastCallback(_ => Platform.AppSettings.SetStartAtLogin(false))
-            .Run();
+        // runs the hook and ends the process here. Uninstalling removes the start-at-sign-in entry; only
+        // Windows has an uninstaller that runs hooks (elsewhere the app is just removed).
+        var velopack = Velopack.VelopackApp.Build();
+        if (OperatingSystem.IsWindows())
+        {
+            velopack = velopack.OnBeforeUninstallFastCallback(_ => Platform.AppSettings.SetStartAtLogin(false));
+        }
+
+        velopack.Run();
 
         // "DeckHost --check-native": is the device support installed correctly? No window, no device changes.
         if (Array.Exists(args, static arg => string.Equals(arg, "--check-native", StringComparison.OrdinalIgnoreCase)))
