@@ -130,6 +130,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- Switching controls while a plugin's settings page was still loading no longer shows an "unexpected error" notice or
+  writes a crash report (Windows: the web view was closed while it started, `E_ABORT`).
 - macOS and Linux: DeckHost no longer closes at start when its temporary folder has a long path (the single-instance
   pipe's path was too long for the system).
 - macOS: DeckHost no longer closes at random a few minutes after it starts. The StreamDock device support set up
