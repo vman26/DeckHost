@@ -99,6 +99,7 @@ internal static class WebViewSupport
     private const int ClassNotRegistered = unchecked((int)0x80040154);
     private const int FileNotFound = unchecked((int)0x80070002);
     private const int ModuleNotFound = unchecked((int)0x8007007E);
+    private const int Aborted = unchecked((int)0x80004004);
 
     private static void Remember(Exception exception)
     {
@@ -118,6 +119,13 @@ internal static class WebViewSupport
     public static bool IsWebViewFailure(Exception exception) =>
         exception.StackTrace?.Contains("WebView", StringComparison.Ordinal) == true &&
         (exception is System.Runtime.InteropServices.COMException || exception.GetType().Name.Contains("WebView2", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Whether a web view was only torn down while it started (<c>E_ABORT</c> from the adapter, e.g. the editor was rebuilt
+    /// while a plugin's settings page loaded). That is expected, not a fault: nothing to report.
+    /// </summary>
+    internal static bool IsStartAborted(Exception exception) =>
+        exception is System.Runtime.InteropServices.COMException { HResult: Aborted } && IsWebViewFailure(exception);
 
     private static bool Probe()
     {

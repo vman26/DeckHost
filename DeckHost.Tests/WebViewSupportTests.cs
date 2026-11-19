@@ -56,6 +56,21 @@ public sealed class WebViewSupportTests : IDisposable
 
     private static void InitializeWebViewAdapter() => throw new COMException("Class not registered", ClassNotRegistered);
 
+    internal static Exception AbortedStartFromTheWebViewAdapter()
+    {
+        try
+        {
+            InitializeAbortedWebViewAdapter();
+            return new InvalidOperationException();
+        }
+        catch (COMException exception)
+        {
+            return exception;
+        }
+    }
+
+    private static void InitializeAbortedWebViewAdapter() => throw new COMException("Operation aborted", Aborted);
+
     [Test]
     public void IsAvailable_RuntimeFound_IsTrue()
     {
@@ -274,5 +289,44 @@ public sealed class WebViewSupportTests : IDisposable
 
         // Assert
         Assert.That(isFailure, Is.False);
+    }
+
+    [Test]
+    public void IsStartAborted_AbortedComExceptionFromTheWebViewAdapter_IsTrue()
+    {
+        // Arrange
+        var exception = AbortedStartFromTheWebViewAdapter();
+
+        // Act
+        var aborted = WebViewSupport.IsStartAborted(exception);
+
+        // Assert
+        Assert.That(aborted, Is.True);
+    }
+
+    [Test]
+    public void IsStartAborted_OtherWebViewFailure_IsFalse()
+    {
+        // Arrange
+        var exception = ExceptionFromTheWebViewAdapter();
+
+        // Act
+        var aborted = WebViewSupport.IsStartAborted(exception);
+
+        // Assert
+        Assert.That(aborted, Is.False);
+    }
+
+    [Test]
+    public void IsStartAborted_AbortedOutsideAWebView_IsFalse()
+    {
+        // Arrange
+        var exception = new COMException("Operation aborted", Aborted);
+
+        // Act
+        var aborted = WebViewSupport.IsStartAborted(exception);
+
+        // Assert
+        Assert.That(aborted, Is.False);
     }
 }
