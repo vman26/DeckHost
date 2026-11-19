@@ -1,0 +1,29 @@
+{
+  "version": "0.1.0-rc.4+d7ebede",
+  "measured": "2026-11-19T00:20:19.0269882+00:00",
+  "machine": {
+    "system": "windows",
+    "description": "Microsoft Windows 10.0.26100",
+    "architecture": "x64",
+    "processors": 4,
+    "memoryGb": 16
+  },
+  "metrics": {
+    "startup.firstFrameSeconds": 1.794696,
+    "idleWindow.cpuPercent": 2.2527225736678584,
+    "idleWindow.cpuPercentP95": 7.714145417343414,
+    "idleWindow.memoryMb": 220.39147135416667,
+    "busy.cpuPercent": 25.513616816953878,
+    "busy.cpuPercentP95": 42.02920959083898,
+    "busy.memoryMaxMb": 227.81640625,
+    "busy.memoryGrowthMb": -1.7718749999999943,
+    "busy.framesPerSecond": 10.416666666666666,
+    "latency.p50Ms": 0.8691,
+    "latency.p95Ms": 1.4315,
+    "latency.maxMs": 13.739,
+    "process.threads": 32,
+    "process.count": 1,
+    "idleTray.cpuPercent": 0.6235110409456511,
+    "idleTray.memoryMb": 148.04479166666667
+  }
+}

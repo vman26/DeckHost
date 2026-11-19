@@ -1,0 +1,29 @@
+{
+  "version": "0.1.0-rc.4+d7ebede",
+  "measured": "2026-11-19T00:18:48.6324258+00:00",
+  "machine": {
+    "system": "linux",
+    "description": "Ubuntu 22.04.5 LTS",
+    "architecture": "x64",
+    "processors": 4,
+    "memoryGb": 15.6
+  },
+  "metrics": {
+    "startup.firstFrameSeconds": 1.1123312,
+    "idleWindow.cpuPercent": 1.7943740090869456,
+    "idleWindow.cpuPercentP95": 3.985849834502533,
+    "idleWindow.memoryMb": 254.0115234375,
+    "busy.cpuPercent": 17.336180574970193,
+    "busy.cpuPercentP95": 24.92217800695548,
+    "busy.memoryMaxMb": 282.234375,
+    "busy.memoryGrowthMb": 12.629687499999989,
+    "busy.framesPerSecond": 10.8,
+    "latency.p50Ms": 0.752343,
+    "latency.p95Ms": 1.278513,
+    "latency.maxMs": 5.814666,
+    "process.threads": 31,
+    "process.count": 1,
+    "idleTray.cpuPercent": 0.749017168911383,
+    "idleTray.memoryMb": 249.40970052083333
+  }
+}
