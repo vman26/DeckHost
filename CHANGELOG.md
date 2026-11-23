@@ -110,6 +110,10 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Changed
 
+- The download page explains how to install DeckHost in a folder of your choice: the MSI's window only asks
+  "for me or for everyone", so the folder is given on the command line (`VELOPACK_INSTALLDIR=` for the MSI,
+  `--installto` for the installer).
+
 - The download page no longer says the Windows packages are signed: they aren't yet. The download page, Getting
   started and the release notes now explain what Windows and macOS (including macOS 15's **Open Anyway**) show the
   first time, and how to check a download. Troubleshooting has a new section for when an antivirus program blocks
