@@ -151,7 +151,9 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
         var logPath = Path.Combine(_logDirectory, manifest.Uuid + ".log");
         Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+        KeepPreviousLog(logPath);
         var logWriter = new StreamWriter(logPath, append: false) { AutoFlush = true };
+        WriteProcessLog(logWriter, $"--- {manifest.Name} {manifest.Version} started {DateTime.Now:yyyy-MM-dd HH:mm:ss} (pid {process.Id}{(running.Restarts > 0 ? $", restart {running.Restarts}" : string.Empty)})");
         process.OutputDataReceived += (_, e) => WriteProcessLog(logWriter, e.Data);
         process.ErrorDataReceived += (_, e) => WriteProcessLog(logWriter, e.Data);
         process.EnableRaisingEvents = true;
@@ -956,6 +958,28 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
         }
     }
+
+    /// <summary>
+    /// Keeps the log of the plugin's previous run as <c>&lt;uuid&gt;.previous.log</c> before a new run starts
+    /// its log: after a crash and restart, what the plugin printed before it ended is still there.
+    /// </summary>
+    internal static void KeepPreviousLog(string logPath)
+    {
+        try
+        {
+            if (File.Exists(logPath))
+            {
+                File.Move(logPath, PreviousLogPath(logPath), overwrite: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Still open somewhere (an editor): the new run writes over it, as before.
+        }
+    }
+
+    /// <summary>Where <see cref="KeepPreviousLog"/> puts the previous run's log.</summary>
+    internal static string PreviousLogPath(string logPath) => Path.ChangeExtension(logPath, ".previous.log");
 
     private static void WriteProcessLog(StreamWriter writer, string? line)
     {

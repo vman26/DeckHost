@@ -44,6 +44,50 @@ public sealed class StreamDeckTests : IDisposable
     private const string KeyId = "key.0";
 
     [Test]
+    public void KeepPreviousLog_ALogFromTheLastRun_IsKeptAsThePreviousLog()
+    {
+        // Arrange
+        Directory.CreateDirectory(_root);
+        var logPath = Path.Combine(_root, PluginUuid + ".log");
+        const string LastRun = "panicked at src/client.rs";
+        File.WriteAllText(logPath, LastRun);
+
+        // Act
+        StreamDeckRuntime.KeepPreviousLog(logPath);
+
+        // Assert
+        Assert.That(File.Exists(logPath), Is.False);
+        Assert.That(File.ReadAllText(StreamDeckRuntime.PreviousLogPath(logPath)), Is.EqualTo(LastRun));
+    }
+
+    [Test]
+    public void KeepPreviousLog_NoLogYet_DoesNothing()
+    {
+        // Arrange
+        Directory.CreateDirectory(_root);
+        var logPath = Path.Combine(_root, PluginUuid + ".log");
+
+        // Act
+        StreamDeckRuntime.KeepPreviousLog(logPath);
+
+        // Assert
+        Assert.That(File.Exists(StreamDeckRuntime.PreviousLogPath(logPath)), Is.False);
+    }
+
+    [Test]
+    public void PreviousLogPath_APluginLog_IsNextToIt()
+    {
+        // Arrange
+        var logPath = Path.Combine(_root, "me.amankhanna.oadiscord.log");
+
+        // Act
+        var previous = StreamDeckRuntime.PreviousLogPath(logPath);
+
+        // Assert
+        Assert.That(previous, Is.EqualTo(Path.Combine(_root, "me.amankhanna.oadiscord.previous.log")));
+    }
+
+    [Test]
     public void ParseOpenActionCatalog_AnEntry_ReadsItsFieldsAndDownload()
     {
         // Act

@@ -110,6 +110,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Changed
 
+- A Stream Deck plugin's log no longer starts empty when DeckHost restarts the plugin after a crash: the run
+  before is kept as `<plugin id>.previous.log`, and each run starts with a line saying when it started.
+
 - The download page explains how to install DeckHost in a folder of your choice: the MSI's window only asks
   "for me or for everyone", so the folder is given on the command line (`VELOPACK_INSTALLDIR=` for the MSI,
   `--installto` for the installer).
