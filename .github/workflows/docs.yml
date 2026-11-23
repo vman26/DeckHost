@@ -31,9 +31,12 @@ jobs:
             python3 scripts/performance-page.py page perf-data benchmarks/budgets.json benchmarks/performance-data.md
           fi
       - run: mkdocs build --strict
-      - uses: actions/upload-artifact@v4
+      # The Pages artifact is made here and deployed by the next job, as in GitHub's Pages template.
+      # Uploaded and deployed in the same job, deploy-pages's artifact list didn't show it yet
+      # ("No artifacts named github-pages", actions/deploy-pages#305).
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
         with:
-          name: site
           path: site
 
   publish-to-pages:
@@ -47,12 +50,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: site
-          path: site
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
