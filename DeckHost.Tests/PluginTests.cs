@@ -351,6 +351,101 @@ public sealed class PluginCatalogTests : IDisposable
         Assert.That(found, Is.True);
     }
 
+    private const string StreamDeckFolder = "com.example.sample.sdPlugin";
+    private const string StreamDeckAction = """{"UUID":"com.example.sample.action","Name":"Sample"}""";
+
+    private IReadOnlyList<PluginProblem> CheckStreamDeckPackage(string manifest, out StreamDeckPackageInfo? streamDeck, bool withProgram = true)
+    {
+        var entries = new List<(string Name, string Content)> { ($"{StreamDeckFolder}/manifest.json", manifest) };
+        if (withProgram)
+        {
+            entries.Add(($"{StreamDeckFolder}/bin/plugin.js", "// program"));
+        }
+
+        return PluginDiagnostics.Check(CreatePackage([.. entries]), out streamDeck);
+    }
+
+    [Test]
+    public void Check_StreamDeckPackage_FindsNoProblem()
+    {
+        // Arrange
+        var manifest = $$"""{"Name":"Sample","Author":"Someone","Version":"1.2.0.0","CodePath":"bin/plugin.js","Actions":[{{StreamDeckAction}}]}""";
+
+        // Act
+        var problems = CheckStreamDeckPackage(manifest, out _);
+
+        // Assert
+        Assert.That(problems, Is.Empty);
+    }
+
+    [Test]
+    public void Check_StreamDeckPackage_ReportsItsManifest()
+    {
+        // Arrange
+        var manifest = $$"""{"Name":"Sample","Author":"Someone","Version":"1.2.0.0","CodePath":"bin/plugin.js","Actions":[{{StreamDeckAction}}]}""";
+
+        // Act
+        CheckStreamDeckPackage(manifest, out var streamDeck);
+
+        // Assert
+        Assert.That(
+            (streamDeck?.Uuid, streamDeck?.Name, streamDeck?.Version, streamDeck?.Actions.Count),
+            Is.EqualTo(("com.example.sample", "Sample", "1.2.0.0", 1)));
+    }
+
+    [Test]
+    public void Check_StreamDeckPackageWithoutActions_IsAnError()
+    {
+        // Arrange
+        const string manifest = """{"Name":"Sample","Author":"Someone","CodePath":"bin/plugin.js","Actions":[]}""";
+
+        // Act
+        var problems = CheckStreamDeckPackage(manifest, out _);
+
+        // Assert
+        Assert.That(problems.Any(static problem => problem.IsError && problem.Message.Contains("no actions", StringComparison.Ordinal)), Is.True);
+    }
+
+    [Test]
+    public void Check_StreamDeckPackageWithoutItsProgram_IsAnError()
+    {
+        // Arrange
+        var manifest = $$"""{"Name":"Sample","Author":"Someone","CodePath":"bin/plugin.js","Actions":[{{StreamDeckAction}}]}""";
+
+        // Act
+        var problems = CheckStreamDeckPackage(manifest, out _, withProgram: false);
+
+        // Assert
+        Assert.That(problems.Any(static problem => problem.IsError && problem.Message.Contains("bin/plugin.js", StringComparison.Ordinal)), Is.True);
+    }
+
+    [Test]
+    public void Check_StreamDeckPackageForAnotherSystem_IsOnlyAWarning()
+    {
+        // Arrange
+        var manifest = $$"""{"Name":"Sample","Author":"Someone","CodePath":"bin/plugin.js","OS":[{"Platform":"amiga"}],"Actions":[{{StreamDeckAction}}]}""";
+
+        // Act
+        var problems = CheckStreamDeckPackage(manifest, out _);
+
+        // Assert
+        Assert.That(problems.Select(static problem => problem.IsError), Is.EqualTo(new[] { false }));
+    }
+
+    [Test]
+    public void Check_PackageWithNeitherManifest_IsAnError()
+    {
+        // Arrange
+        var package = CreatePackage(("readme.txt", "nothing here"));
+
+        // Act
+        var problems = PluginDiagnostics.Check(package);
+
+        // Assert
+        Assert.That(problems.Any(static problem => problem.IsError && problem.Message.Contains(".sdPlugin", StringComparison.Ordinal)), Is.True);
+    }
+
+
     [Test]
     public void Load_AfterInstallingAndRestarting_LoadsThePluginAgain()
     {

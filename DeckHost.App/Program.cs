@@ -69,7 +69,7 @@ sealed class Program
         }
 
         // "DeckHost --check-plugin <package.zip|folder>": checks a DeckHost plugin for its author and
-        // loads it in a scratch folder (nothing is installed). Exit code 1 on errors.
+        // loads it in a scratch folder (nothing is installed), or reads a Stream Deck plugin's manifest. Exit code 1 on errors.
         var check = Array.FindIndex(args, static arg => string.Equals(arg, "--check-plugin", StringComparison.OrdinalIgnoreCase));
         if (check >= 0)
         {
@@ -177,7 +177,7 @@ sealed class Program
     /// <summary>Checks a plugin package and trial-loads it into a scratch catalog; prints the result.</summary>
     private static int CheckPlugin(string package)
     {
-        var problems = Core.Plugins.PluginDiagnostics.Check(Path.GetFullPath(package));
+        var problems = Core.Plugins.PluginDiagnostics.Check(Path.GetFullPath(package), out var streamDeck);
         foreach (var problem in problems)
         {
             Console.WriteLine(problem);
@@ -186,6 +186,19 @@ sealed class Program
         if (problems.Any(static problem => problem.IsError))
         {
             return 1;
+        }
+
+        // A Stream Deck plugin is a program of its own (often Node.js or for another system): the check reads its
+        // manifest and files but doesn't start it.
+        if (streamDeck is not null)
+        {
+            Console.WriteLine($"ok: {streamDeck.Name} {streamDeck.Version} is a Stream Deck plugin with {streamDeck.Actions.Count} action(s) (not started by the check).");
+            foreach (var action in streamDeck.Actions)
+            {
+                Console.WriteLine($"  {action.Uuid}: {action.Name}");
+            }
+
+            return 0;
         }
 
         var root = Path.Combine(Path.GetTempPath(), "deckhost-check-plugin-" + Guid.NewGuid().ToString("N"));
