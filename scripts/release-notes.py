@@ -154,7 +154,7 @@ def compose(text, tag, pull_requests="", files=(), unsigned=(), virustotal=()):
         "## Downloads\n\n"
         "| System | File |\n"
         "|---|---|\n"
-        f"| Windows | `{names['install']}` (installs for you, no administrator rights), `{names['msi']}` (for all users) or `{names['windows']}` (no install) |\n"
+        f"| Windows | `{names['install']}` (installs for you, no administrator rights), `{names['msi']}` (for all users) or `{names['windows']}` (no install); [install in another folder]({DOCS}download/#install-in-another-folder) |\n"
         f"| Linux | `{names['appimage']}` (no install, updates itself; `chmod +x` and run) or `{names['linux']}` (run `install.sh` inside; updated by hand) |\n"
         f"| macOS (Apple silicon) | `{names['macos']}` (the app){mac_installer} |\n\n"
         "DeckHost already installed? It offers this update by itself. The other files (`releases.*.json`, "

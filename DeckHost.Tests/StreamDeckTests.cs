@@ -8,6 +8,7 @@ using DeckHost.Core.State;
 using DeckHost.Core.StreamDeck;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Text.Json.Nodes;
 
 namespace DeckHost.Tests;
 
@@ -42,6 +43,115 @@ public sealed class StreamDeckTests : IDisposable
     private const string PluginScriptName = "plugin.js";
     private const string HtmlPage = "index.html";
     private const string KeyId = "key.0";
+
+    [Test]
+    public void LoadGlobalSettings_WhileThePluginSavesThem_NeverComesBackEmpty()
+    {
+        // Arrange
+        const string Key = "clientId";
+        const string Value = "1234";
+        const int Rounds = 400;
+        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), static (_, _) => { });
+        runtime.SaveGlobalSettings(PluginUuid, new JsonObject { [Key] = Value });
+        var lost = 0;
+
+        // Act: the plugin's connection saves while the settings page's connection reads, as in DeckHost.
+        var writer = Task.Run(() =>
+        {
+            for (var round = 0; round < Rounds; round++)
+            {
+                runtime.SaveGlobalSettings(PluginUuid, new JsonObject { [Key] = Value, ["round"] = round });
+            }
+        });
+        var reader = Task.Run(() =>
+        {
+            for (var round = 0; round < Rounds; round++)
+            {
+                if (runtime.LoadGlobalSettings(PluginUuid)[Key]?.GetValue<string>() != Value)
+                {
+                    Interlocked.Increment(ref lost);
+                }
+            }
+        });
+        Task.WaitAll(writer, reader);
+
+        // Assert
+        Assert.That(lost, Is.Zero);
+    }
+
+    [Test]
+    public void LoadGlobalSettings_NothingSavedYet_IsEmpty()
+    {
+        // Arrange
+        using var runtime = new StreamDeckRuntime(Path.Combine(_root, "data"), Path.Combine(_root, "logs"), static (_, _) => { });
+
+        // Act
+        var settings = runtime.LoadGlobalSettings(PluginUuid);
+
+        // Assert
+        Assert.That(settings.AsObject(), Is.Empty);
+    }
+
+    [Test]
+    public void WriteJson_ASettingsFile_IsWrittenWholeWithoutATemporaryFile()
+    {
+        // Arrange
+        Directory.CreateDirectory(_root);
+        var path = Path.Combine(_root, PluginUuid + ".global.json");
+        const string Key = "clientSecret";
+        const string Value = "secret";
+
+        // Act
+        StreamDeckRuntime.WriteJson(path, new JsonObject { [Key] = Value });
+
+        // Assert
+        Assert.That(JsonNode.Parse(File.ReadAllText(path))?[Key]?.GetValue<string>(), Is.EqualTo(Value));
+        Assert.That(File.Exists(path + ".tmp"), Is.False);
+    }
+
+    [Test]
+    public void KeepPreviousLog_ALogFromTheLastRun_IsKeptAsThePreviousLog()
+    {
+        // Arrange
+        Directory.CreateDirectory(_root);
+        var logPath = Path.Combine(_root, PluginUuid + ".log");
+        const string LastRun = "panicked at src/client.rs";
+        File.WriteAllText(logPath, LastRun);
+
+        // Act
+        StreamDeckRuntime.KeepPreviousLog(logPath);
+
+        // Assert
+        Assert.That(File.Exists(logPath), Is.False);
+        Assert.That(File.ReadAllText(StreamDeckRuntime.PreviousLogPath(logPath)), Is.EqualTo(LastRun));
+    }
+
+    [Test]
+    public void KeepPreviousLog_NoLogYet_DoesNothing()
+    {
+        // Arrange
+        Directory.CreateDirectory(_root);
+        var logPath = Path.Combine(_root, PluginUuid + ".log");
+
+        // Act
+        StreamDeckRuntime.KeepPreviousLog(logPath);
+
+        // Assert
+        Assert.That(File.Exists(StreamDeckRuntime.PreviousLogPath(logPath)), Is.False);
+    }
+
+    [Test]
+    public void PreviousLogPath_APluginLog_IsNextToIt()
+    {
+        // Arrange
+        var logPath = Path.Combine(_root, "me.amankhanna.oadiscord.log");
+
+        // Act
+        var previous = StreamDeckRuntime.PreviousLogPath(logPath);
+
+        // Assert
+        Assert.That(previous, Is.EqualTo(Path.Combine(_root, "me.amankhanna.oadiscord.previous.log")));
+    }
 
     [Test]
     public void ParseOpenActionCatalog_AnEntry_ReadsItsFieldsAndDownload()

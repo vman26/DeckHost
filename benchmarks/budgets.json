@@ -28,6 +28,13 @@
     "busy.cpuPercent": 50,
     "busy.memoryGrowthMb": 50
   },
+  // With the window open the runners measured 1.3 to 4.2 % for code that is equally fast: an A/B on a
+  // matching 4-core machine (v0.1.0-rc.5 against the commit before vman26/DeckHost#13, two rounds each)
+  // measured 1.9-2.1 % against 2.4-2.9 %, while CI showed 3.0 and 4.2 % for the same code. Most of it is
+  // the window drawn in software (Xvfb); the tray number, DeckHost's own work, stays under 1 %.
+  "linux": {
+    "idleWindow.cpuPercent": 4.5
+  },
   // Measured 1.1 and 1.2 % in the tray. Busy memory growth measured 15.7 and 30.6 MB for the same code
   // (vman26/DeckHost#11 and its merge, tagged v0.1.0-rc.4): the garbage collector's timing, as on Windows.
   "macos": {

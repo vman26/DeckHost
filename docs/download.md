@@ -22,6 +22,18 @@ All releases, release notes and pre-releases are on the
 [Getting started](getting-started.md). DeckHost tells you when an update is available
 ([Updates](updates.md)).
 
+## Install in another folder
+
+Neither installer asks for a folder. The installer puts DeckHost in `%LocalAppData%\DeckHost`. The MSI's
+window only asks whether DeckHost is for you or for everyone, then uses `%LocalAppData%\DeckHost` or
+`Program Files`. To choose the folder yourself, start them from a command prompt or PowerShell in your
+Downloads folder:
+
+- Just for you: `.\DeckHost-<version>-win-x64-install.exe --installto "D:\Apps\DeckHost"`
+- For everyone (asks for administrator rights): `msiexec /i DeckHost-<version>-win-x64.msi VELOPACK_INSTALLDIR="D:\Apps\DeckHost"`
+
+Updates go to the same folder.
+
 ## First start and signing
 
 DeckHost's packages aren't code-signed yet. A code-signing certificate has to be bought or sponsored,

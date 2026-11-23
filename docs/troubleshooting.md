@@ -23,7 +23,8 @@ every second or so.
 - **Plugins page:** is the plugin running? Its status says so, or why not (Node.js missing, made for
   another system, stopped after crashing).
 - **Its log:** `logs/plugins/<plugin id>.log` (Help and support → Open logs) shows what the plugin
-  printed. HTML plugins (whose program is a web page) run in DeckHost's built-in browser on Windows;
+  printed since it last started; `<plugin id>.previous.log` is the run before (after a crash, what it
+  printed before it ended). HTML plugins (whose program is a web page) run in DeckHost's built-in browser on Windows;
   they need the Microsoft Edge WebView2 runtime, which Windows 10 and 11 normally have.
 - **Linux and macOS:** HTML plugins don't run there yet; the Plugins page says so.
 

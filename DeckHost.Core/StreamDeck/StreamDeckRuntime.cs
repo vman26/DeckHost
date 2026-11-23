@@ -151,7 +151,9 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
         var logPath = Path.Combine(_logDirectory, manifest.Uuid + ".log");
         Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+        KeepPreviousLog(logPath);
         var logWriter = new StreamWriter(logPath, append: false) { AutoFlush = true };
+        WriteProcessLog(logWriter, $"--- {manifest.Name} {manifest.Version} started {DateTime.Now:yyyy-MM-dd HH:mm:ss} (pid {process.Id}{(running.Restarts > 0 ? $", restart {running.Restarts}" : string.Empty)})");
         process.OutputDataReceived += (_, e) => WriteProcessLog(logWriter, e.Data);
         process.ErrorDataReceived += (_, e) => WriteProcessLog(logWriter, e.Data);
         process.EnableRaisingEvents = true;
@@ -855,8 +857,34 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
     private JsonObject GlobalSettingsMessage(string pluginUuid) => new()
     {
         ["event"] = "didReceiveGlobalSettings",
-        ["payload"] = new JsonObject { ["settings"] = ReadJson(GlobalSettingsPath(pluginUuid)) ?? new JsonObject() },
+        ["payload"] = new JsonObject { ["settings"] = LoadGlobalSettings(pluginUuid) },
     };
+
+    /// <summary>
+    /// The plugin's global settings as saved. Read under the same lock as <see cref="SaveGlobalSettings"/>:
+    /// the plugin's and its settings page's connections run in parallel, and a read during a write used to
+    /// get an empty file, so the plugin was sent <c>{}</c> and lost its settings (the Discord plugin its
+    /// Client ID and Secret).
+    /// </summary>
+    internal JsonNode LoadGlobalSettings(string pluginUuid)
+    {
+        var path = GlobalSettingsPath(pluginUuid);
+        lock (_settingsLock)
+        {
+            if (!File.Exists(path))
+            {
+                return new JsonObject();
+            }
+
+            if (ReadJson(path) is { } settings)
+            {
+                return settings;
+            }
+        }
+
+        _log("Warning", $"The saved settings of Stream Deck plugin {pluginUuid} can't be read ({path}); it gets empty settings.");
+        return new JsonObject();
+    }
 
     private string GlobalSettingsPath(string pluginUuid) => Path.Combine(_dataDirectory, "settings", pluginUuid + ".global.json");
 
@@ -877,7 +905,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
     }
 
-    private void SaveGlobalSettings(string pluginUuid, JsonObject settings)
+    internal void SaveGlobalSettings(string pluginUuid, JsonObject settings)
     {
         lock (_settingsLock)
         {
@@ -897,14 +925,27 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
     }
 
-    private static void WriteJson(string path, JsonNode node)
+    /// <summary>
+    /// Writes the file whole or not at all: into <c>&lt;path&gt;.tmp</c> first, then over the old one, so a
+    /// reader or a crash never sees it half written.
+    /// </summary>
+    internal static void WriteJson(string path, JsonNode node)
     {
+        var temporary = path + ".tmp";
         try
         {
-            File.WriteAllText(path, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(temporary, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(temporary, path, overwrite: true);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 
@@ -956,6 +997,28 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
             Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true })?.Dispose();
         }
     }
+
+    /// <summary>
+    /// Keeps the log of the plugin's previous run as <c>&lt;uuid&gt;.previous.log</c> before a new run starts
+    /// its log: after a crash and restart, what the plugin printed before it ended is still there.
+    /// </summary>
+    internal static void KeepPreviousLog(string logPath)
+    {
+        try
+        {
+            if (File.Exists(logPath))
+            {
+                File.Move(logPath, PreviousLogPath(logPath), overwrite: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Still open somewhere (an editor): the new run writes over it, as before.
+        }
+    }
+
+    /// <summary>Where <see cref="KeepPreviousLog"/> puts the previous run's log.</summary>
+    internal static string PreviousLogPath(string logPath) => Path.ChangeExtension(logPath, ".previous.log");
 
     private static void WriteProcessLog(StreamWriter writer, string? line)
     {

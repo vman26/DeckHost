@@ -110,6 +110,13 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Changed
 
+- A Stream Deck plugin's log no longer starts empty when DeckHost restarts the plugin after a crash: the run
+  before is kept as `<plugin id>.previous.log`, and each run starts with a line saying when it started.
+
+- The download page explains how to install DeckHost in a folder of your choice: the MSI's window only asks
+  "for me or for everyone", so the folder is given on the command line (`VELOPACK_INSTALLDIR=` for the MSI,
+  `--installto` for the installer).
+
 - The download page no longer says the Windows packages are signed: they aren't yet. The download page, Getting
   started and the release notes now explain what Windows and macOS (including macOS 15's **Open Anyway**) show the
   first time, and how to check a download. Troubleshooting has a new section for when an antivirus program blocks
@@ -138,6 +145,11 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
   for supporting more hardware.
 
 ### Fixed
+
+- Stream Deck and OpenAction plugins no longer lose their saved settings when the plugin saves them while its
+  settings page reads them: DeckHost could hand the plugin empty settings, so the Discord plugin forgot its Client ID
+  and Secret right after Discord asked for access and asked again on every press. Settings files are now written
+  whole, so a crash can't leave one half written either.
 
 - `DeckHost --check-plugin` checks Stream Deck plugins too (their `manifest.json`, actions and program) instead of
   failing with "No plugin.json at the root of the package"; it reads them but doesn't start them.
