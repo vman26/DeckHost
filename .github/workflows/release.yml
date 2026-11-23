@@ -242,7 +242,10 @@ jobs:
       # signs and notarizes the app on macOS, with the same secrets as above.
       - name: Velopack packages
         env:
-          VELOPACK_REPOSITORY: ${{ github.repository }}
+          # The previous release (for a delta package) only on tag builds: a pull request's version
+          # can sort below the last published pre-release (0.1.0-alpha.N after v0.1.0-rc.4 on
+          # develop), and vpk refuses to pack a version below one in its feed.
+          VELOPACK_REPOSITORY: ${{ github.ref_type == 'tag' && github.repository || '' }}
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
