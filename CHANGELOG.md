@@ -146,6 +146,11 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- Stream Deck and OpenAction plugins no longer lose their saved settings when the plugin saves them while its
+  settings page reads them: DeckHost could hand the plugin empty settings, so the Discord plugin forgot its Client ID
+  and Secret right after Discord asked for access and asked again on every press. Settings files are now written
+  whole, so a crash can't leave one half written either.
+
 - `DeckHost --check-plugin` checks Stream Deck plugins too (their `manifest.json`, actions and program) instead of
   failing with "No plugin.json at the root of the package"; it reads them but doesn't start them.
 

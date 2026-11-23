@@ -857,8 +857,34 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
     private JsonObject GlobalSettingsMessage(string pluginUuid) => new()
     {
         ["event"] = "didReceiveGlobalSettings",
-        ["payload"] = new JsonObject { ["settings"] = ReadJson(GlobalSettingsPath(pluginUuid)) ?? new JsonObject() },
+        ["payload"] = new JsonObject { ["settings"] = LoadGlobalSettings(pluginUuid) },
     };
+
+    /// <summary>
+    /// The plugin's global settings as saved. Read under the same lock as <see cref="SaveGlobalSettings"/>:
+    /// the plugin's and its settings page's connections run in parallel, and a read during a write used to
+    /// get an empty file, so the plugin was sent <c>{}</c> and lost its settings (the Discord plugin its
+    /// Client ID and Secret).
+    /// </summary>
+    internal JsonNode LoadGlobalSettings(string pluginUuid)
+    {
+        var path = GlobalSettingsPath(pluginUuid);
+        lock (_settingsLock)
+        {
+            if (!File.Exists(path))
+            {
+                return new JsonObject();
+            }
+
+            if (ReadJson(path) is { } settings)
+            {
+                return settings;
+            }
+        }
+
+        _log("Warning", $"The saved settings of Stream Deck plugin {pluginUuid} can't be read ({path}); it gets empty settings.");
+        return new JsonObject();
+    }
 
     private string GlobalSettingsPath(string pluginUuid) => Path.Combine(_dataDirectory, "settings", pluginUuid + ".global.json");
 
@@ -879,7 +905,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
     }
 
-    private void SaveGlobalSettings(string pluginUuid, JsonObject settings)
+    internal void SaveGlobalSettings(string pluginUuid, JsonObject settings)
     {
         lock (_settingsLock)
         {
@@ -899,14 +925,27 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
     }
 
-    private static void WriteJson(string path, JsonNode node)
+    /// <summary>
+    /// Writes the file whole or not at all: into <c>&lt;path&gt;.tmp</c> first, then over the old one, so a
+    /// reader or a crash never sees it half written.
+    /// </summary>
+    internal static void WriteJson(string path, JsonNode node)
     {
+        var temporary = path + ".tmp";
         try
         {
-            File.WriteAllText(path, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(temporary, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(temporary, path, overwrite: true);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 
