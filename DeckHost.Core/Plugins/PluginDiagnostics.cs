@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Text.Json;
+using DeckHost.Core.StreamDeck;
 using DeckHost.Core.Updates;
 
 namespace DeckHost.Core.Plugins;
@@ -48,22 +50,30 @@ public sealed record PluginProblem(bool IsError, string Message)
     public override string ToString() => (IsError ? "error: " : "warning: ") + Message;
 }
 
+/// <summary>What <see cref="PluginDiagnostics"/> read from a Stream Deck package's manifest.json.</summary>
+public sealed record StreamDeckPackageInfo(string Uuid, string Name, string Version, IReadOnlyList<StreamDeckActionManifest> Actions);
+
 /// <summary>
-/// Checks a DeckHost plugin package (a folder or a .zip) the way the catalog would load it, without
-/// loading code: the manifest, the files it names, the version, permissions and files that don't
-/// belong. Used for installed plugins (warnings in the Plugins page) and by
-/// <c>DeckHost --check-plugin &lt;package&gt;</c> for plugin authors.
+/// Checks a plugin package (a folder or a .zip) the way the catalog would load it, without
+/// loading code. A DeckHost package: the manifest, the files it names, the version, permissions
+/// and files that don't belong. A Stream Deck package (a &lt;uuid&gt;.sdPlugin folder): its
+/// manifest.json, its actions and its program for this system. Used for installed plugins
+/// (warnings in the Plugins page) and by <c>DeckHost --check-plugin &lt;package&gt;</c>.
 /// </summary>
 public static class PluginDiagnostics
 {
     /// <summary>Contracts always comes from the host; a copy in the package is ignored.</summary>
     private static readonly string[] HostAssemblies = ["DeckHost.Contracts.dll"];
 
-    public static IReadOnlyList<PluginProblem> Check(string packageOrFolder)
+    public static IReadOnlyList<PluginProblem> Check(string packageOrFolder) => Check(packageOrFolder, out _);
+
+    /// <param name="streamDeck">For a Stream Deck package, what its manifest says; otherwise null.</param>
+    public static IReadOnlyList<PluginProblem> Check(string packageOrFolder, out StreamDeckPackageInfo? streamDeck)
     {
+        streamDeck = null;
         if (Directory.Exists(packageOrFolder))
         {
-            return CheckFolder(packageOrFolder);
+            return CheckFolder(packageOrFolder, out streamDeck);
         }
 
         if (!File.Exists(packageOrFolder))
@@ -75,7 +85,7 @@ public static class PluginDiagnostics
         try
         {
             ZipFile.ExtractToDirectory(packageOrFolder, folder);
-            return CheckFolder(folder);
+            return CheckFolder(folder, out streamDeck);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -93,13 +103,24 @@ public static class PluginDiagnostics
         }
     }
 
-    public static IReadOnlyList<PluginProblem> CheckFolder(string folder)
+    public static IReadOnlyList<PluginProblem> CheckFolder(string folder) => CheckFolder(folder, out _);
+
+    public static IReadOnlyList<PluginProblem> CheckFolder(string folder, out StreamDeckPackageInfo? streamDeck)
     {
+        streamDeck = null;
         var problems = new List<PluginProblem>();
         var manifestPath = Path.Combine(folder, PluginManifest.FileName);
         if (!File.Exists(manifestPath))
         {
-            problems.Add(new(true, $"No {PluginManifest.FileName} at the root of the package."));
+            // Found the way PluginCatalog installs one: the first .sdPlugin folder with a manifest.json.
+            var sdPlugin = Directory.EnumerateDirectories(folder, "*.sdPlugin", SearchOption.AllDirectories)
+                .FirstOrDefault(static directory => File.Exists(Path.Combine(directory, "manifest.json")));
+            if (sdPlugin is not null)
+            {
+                return CheckStreamDeckFolder(sdPlugin, out streamDeck);
+            }
+
+            problems.Add(new(true, $"No {PluginManifest.FileName} at the root of the package and no .sdPlugin folder with a manifest.json."));
             return problems;
         }
 
@@ -143,6 +164,45 @@ public static class PluginDiagnostics
             {
                 problems.Add(new(false, $"{host} is in the package but DeckHost always uses its own: reference it with Private=false."));
             }
+        }
+
+        if (string.IsNullOrWhiteSpace(manifest.Author))
+        {
+            problems.Add(new(false, "No author: the Plugins page and the store show who made a plugin."));
+        }
+
+        return problems;
+    }
+
+    private static IReadOnlyList<PluginProblem> CheckStreamDeckFolder(string sdPlugin, out StreamDeckPackageInfo? streamDeck)
+    {
+        streamDeck = null;
+        var problems = new List<PluginProblem>();
+        StreamDeckManifest manifest;
+        try
+        {
+            manifest = StreamDeckManifest.Load(sdPlugin);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or JsonException or IOException)
+        {
+            problems.Add(new(true, $"The Stream Deck plugin's manifest.json can't be read: {ex.Message}"));
+            return problems;
+        }
+
+        streamDeck = new StreamDeckPackageInfo(manifest.Uuid, manifest.Name, manifest.Version, manifest.Actions);
+        if (manifest.Actions.Count == 0 && !manifest.IsDevicePlugin)
+        {
+            problems.Add(new(true, "The manifest.json lists no actions (each needs a UUID)."));
+        }
+
+        if (manifest.UnsupportedReason is { } reason)
+        {
+            // Most Stream Deck plugins are made for Windows and macOS: that's for the store to show, not an error.
+            problems.Add(new(false, $"It can't run on this system: {reason}"));
+        }
+        else if (manifest.CodePath is { } codePath && !File.Exists(Path.Combine(sdPlugin, codePath.Replace('/', Path.DirectorySeparatorChar))))
+        {
+            problems.Add(new(true, $"'{codePath}' (the manifest's CodePath for this system) is not in the package."));
         }
 
         if (string.IsNullOrWhiteSpace(manifest.Author))
