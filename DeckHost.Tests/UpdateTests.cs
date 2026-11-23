@@ -762,13 +762,117 @@ public sealed class UpdateInstallerTests : IDisposable
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
     [Test]
-    public void Quote_APathWithAnApostrophe_IsEscapedForPowerShell()
+    public void IsOldUninstaller_TheUninstallerNextToAnOldDeckHost_IsAccepted()
     {
+        // Arrange
+        var oldInstall = OldInstall("old");
+
         // Act
-        var quoted = UpdateInstaller.Quote("C:\\Users\\O'Brien\\setup.exe");
+        var accepted = UpdateInstaller.IsOldUninstaller(oldInstall, NewInstallFolder(), File.Exists);
 
         // Assert
-        Assert.That(quoted, Is.EqualTo("'C:\\Users\\O''Brien\\setup.exe'"));
+        Assert.That(accepted, Is.True);
+    }
+
+    [Test]
+    public void IsOldUninstaller_AnotherProgram_IsRefused()
+    {
+        // Arrange
+        var folder = Path.GetDirectoryName(OldInstall("old"))!;
+        var other = Path.Combine(folder, "DeckHost.App.exe");
+
+        // Act
+        var accepted = UpdateInstaller.IsOldUninstaller(other, NewInstallFolder(), File.Exists);
+
+        // Assert
+        Assert.That(accepted, Is.False);
+    }
+
+    [Test]
+    public void IsOldUninstaller_AFolderWithoutDeckHost_IsRefused()
+    {
+        // Arrange
+        var folder = Directory.CreateDirectory(Path.Combine(_directory, "elsewhere")).FullName;
+        var uninstaller = Path.Combine(folder, UpdateInstaller.OldUninstallerName);
+        File.WriteAllText(uninstaller, string.Empty);
+
+        // Act
+        var accepted = UpdateInstaller.IsOldUninstaller(uninstaller, NewInstallFolder(), File.Exists);
+
+        // Assert
+        Assert.That(accepted, Is.False);
+    }
+
+    [Test]
+    public void IsOldUninstaller_TheFolderThisDeckHostRunsFrom_IsRefused()
+    {
+        // Arrange
+        var uninstaller = OldInstall("shared");
+        var runningFrom = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(uninstaller)!, "current")).FullName;
+
+        // Act
+        var accepted = UpdateInstaller.IsOldUninstaller(uninstaller, runningFrom, File.Exists);
+
+        // Assert
+        Assert.That(accepted, Is.False);
+    }
+
+    [Test]
+    public void IsOldUninstaller_ARelativePath_IsRefused()
+    {
+        // Arrange
+        var relative = Path.Combine("old", UpdateInstaller.OldUninstallerName);
+
+        // Act
+        var accepted = UpdateInstaller.IsOldUninstaller(relative, NewInstallFolder(), static _ => true);
+
+        // Assert
+        Assert.That(accepted, Is.False);
+    }
+
+    [Test]
+    public void Take_ANoteWithTheOldUninstaller_KeepsIt()
+    {
+        // Arrange
+        var path = Path.Combine(_directory, "migration.json");
+        var written = new MigrationNote(StartAtLogin: false) { OldUninstaller = OldInstall("old") };
+        MigrationNote.Write(written, path);
+
+        // Act
+        var note = MigrationNote.Take(path);
+
+        // Assert
+        Assert.That(note, Is.EqualTo(written));
+    }
+
+    [Test]
+    public void Take_ANoteFromBeforeTheUninstallerWasRecorded_HasNone()
+    {
+        // Arrange
+        var path = Path.Combine(_directory, "migration.json");
+        File.WriteAllText(path, """{"StartAtLogin":true}""");
+
+        // Act
+        var note = MigrationNote.Take(path);
+
+        // Assert
+        Assert.That(note?.OldUninstaller, Is.Null);
+    }
+
+    [Test]
+    public void Peek_AWrittenNote_LeavesItForTake()
+    {
+        // Arrange
+        var path = Path.Combine(_directory, "migration.json");
+        MigrationNote.Write(new MigrationNote(StartAtLogin: true), path);
+
+        // Act
+        var peeked = MigrationNote.Peek(path);
+        var taken = MigrationNote.Take(path);
+
+        // Assert
+        Assert.That(peeked, Is.EqualTo(taken));
+        Assert.That(File.Exists(path), Is.False);
     }
 
     [TestCase(false, InstallerName)]
@@ -827,6 +931,18 @@ public sealed class UpdateInstallerTests : IDisposable
         // Assert
         Assert.That(note, Is.Null);
     }
+
+    /// <summary>An older setup's install folder under the test folder; returns its uninstaller.</summary>
+    private string OldInstall(string name)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_directory, name)).FullName;
+        File.WriteAllText(Path.Combine(folder, "DeckHost.App.exe"), string.Empty);
+        var uninstaller = Path.Combine(folder, UpdateInstaller.OldUninstallerName);
+        File.WriteAllText(uninstaller, string.Empty);
+        return uninstaller;
+    }
+
+    private string NewInstallFolder() => Directory.CreateDirectory(Path.Combine(_directory, "new", "current")).FullName;
 
     private static ReleaseInfo WindowsRelease(params string[] names) => new(
         Tag: "v1.5.0",

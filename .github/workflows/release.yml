@@ -242,7 +242,10 @@ jobs:
       # signs and notarizes the app on macOS, with the same secrets as above.
       - name: Velopack packages
         env:
-          VELOPACK_REPOSITORY: ${{ github.repository }}
+          # The previous release (for a delta package) only on tag builds: a pull request's version
+          # can sort below the last published pre-release (0.1.0-alpha.N after v0.1.0-rc.4 on
+          # develop), and vpk refuses to pack a version below one in its feed.
+          VELOPACK_REPOSITORY: ${{ github.ref_type == 'tag' && github.repository || '' }}
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
@@ -345,6 +348,8 @@ jobs:
       # Build provenance (public source repositories; a private one needs GitHub Enterprise Cloud).
       id-token: write
       attestations: write
+    env:
+      HAS_VT_API_KEY: ${{ secrets.VT_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -369,7 +374,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          # The same conditions the package job signs under; the notes say what to do the first
+          # time on systems whose packages aren't signed.
+          WINDOWS_SIGNED: ${{ secrets.WINDOWS_CERTIFICATE != '' || (vars.AZURE_SIGNING_ACCOUNT != '' && secrets.AZURE_CLIENT_SECRET != '') }}
+          MACOS_NOTARIZED: ${{ secrets.MACOS_CERTIFICATE != '' && secrets.MACOS_NOTARY_APPLE_ID != '' && secrets.MACOS_NOTARY_TEAM_ID != '' && secrets.MACOS_NOTARY_PASSWORD != '' }}
         run: |
+          unsigned=()
+          [[ "$WINDOWS_SIGNED" == "true" ]] || unsigned+=(windows)
+          [[ "$MACOS_NOTARIZED" == "true" ]] || unsigned+=(macos)
+          unsigned="$(IFS=,; echo "${unsigned[*]}")"
+          echo "UNSIGNED=$unsigned" >> "$GITHUB_ENV"
           prerelease=()
           if [[ "$TAG" == *-* ]]; then
             prerelease=(--prerelease)
@@ -378,8 +392,27 @@ jobs:
           # checks, then the pull requests merged since the previous release (grouped by label,
           # .github/release.yml), folded. DeckHost's update screen shows the part before the marker.
           gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body > pull-requests.md
-          python3 scripts/release-notes.py compose "$TAG" --pull-requests pull-requests.md --files artifacts > notes.md
+          python3 scripts/release-notes.py compose "$TAG" --pull-requests pull-requests.md --files artifacts --unsigned "$unsigned" > notes.md
           gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --title "DeckHost ${TAG#v}" --notes-file notes.md "${prerelease[@]}"
+
+      # VirusTotal (70+ virus scanners) checks the Windows downloads, so a false positive shows up
+      # here and not first on a user's computer: a warning names the engines (what to do:
+      # docs/maintainers/releasing.md#false-positives), and the notes get each file's verdict and
+      # report link. Needs the VT_API_KEY secret (a free VirusTotal account's API key); skipped
+      # without it. After the release exists, and never fails it: VirusTotal can be slow or down.
+      - name: VirusTotal
+        if: env.HAS_VT_API_KEY == 'true'
+        continue-on-error: true
+        timeout-minutes: 50
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 scripts/virustotal.py scan artifacts --output virustotal.json
+          python3 scripts/virustotal.py summary virustotal.json >> "$GITHUB_STEP_SUMMARY"
+          python3 scripts/release-notes.py compose "$TAG" --pull-requests pull-requests.md --files artifacts --unsigned "$UNSIGNED" --virustotal virustotal.json > notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
 
       # NuGet Trusted Publishing: no stored key. With the NUGET_USER variable (your nuget.org
       # username) and a trusted publishing policy on nuget.org for this repository and release.yml,

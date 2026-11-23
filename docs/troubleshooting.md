@@ -29,11 +29,54 @@ every second or so.
 
 ## Windows says "Windows protected your PC"
 
-The installer isn't signed yet. Choose **More info → Run anyway**.
+DeckHost's packages aren't code-signed yet ([why](download.md#first-start-and-signing)). Choose **More info → Run anyway**. Windows only asks the first time; updates DeckHost installs itself don't ask again.
 
 ## macOS says DeckHost can't be opened
 
-Right-click DeckHost.app → **Open**, or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`. Hotkeys, typing text and locking need **System Settings → Privacy & Security → Accessibility** for DeckHost.
+macOS 14 and older: right-click DeckHost.app → **Open**. macOS 15 and newer: open it once, then **System Settings → Privacy & Security → Open Anyway**. On any version you can also run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`. Hotkeys, typing text and locking need **System Settings → Privacy & Security → Accessibility** for DeckHost.
+
+## If your antivirus blocks DeckHost
+
+Some antivirus programs quarantine or delete DeckHost, its installer or files in its folders. This is
+almost always a *false positive*. DeckHost isn't code-signed yet, so every release is a file the
+scanner hasn't seen before. It also does things that malware does too, but in the open and because
+you set it up: it presses keys for your actions, starts at sign-in if you ask, and runs plugins.
+
+**1. Check that your file is DeckHost's.** Compare it with the release
+([Check a download](download.md#check-a-download)): the checksum in `SHA256SUMS.txt`, the build
+provenance, and the VirusTotal report linked in the release notes. If the file you have doesn't
+match, delete it and download it again from the [releases page](https://github.com/vman26/DeckHost/releases).
+
+**2. Restore it and let DeckHost run.** Restore the files from the antivirus program's quarantine,
+then add these folders as exceptions:
+
+- the install folder: `%LocalAppData%\DeckHost` (the installer), the folder you picked for the `.msi`,
+  or wherever you unpacked the zip
+- `%AppData%\DeckHost`: your profiles, settings and installed plugins (Stream Deck plugins bring
+  programs of their own)
+
+In **Bitdefender**: **Protection → Antivirus → Open → Settings → Manage quarantine** to restore
+([Bitdefender's steps](https://www.bitdefender.com/consumer/support/answer/2092/)), and
+**Protection → Antivirus → Open → Settings → Manage exceptions → Add an exception** for each folder
+([steps](https://www.bitdefender.com/consumer/support/answer/13427/)). In **Microsoft Defender**:
+**Windows Security → Virus & threat protection → Protection history**, open the entry and choose
+**Allow on device** or **Restore**. Then reinstall DeckHost if files are missing: your profiles and
+settings in `%AppData%\DeckHost` stay.
+
+**3. Report the false positive**, so the next release isn't flagged for everyone. Send the file the
+program flagged and its detection name (shown in the alert or the quarantine list):
+
+| Antivirus | Where to report |
+|---|---|
+| Microsoft Defender | [Submit a file](https://www.microsoft.com/en-us/wdsi/filesubmission), "Incorrectly detected as malware" |
+| Bitdefender | [Report a false positive](https://www.bitdefender.com/site/Main/automaticSampleUploader) (files up to 25 MB: send DeckHost's program, `DeckHost.App.exe`, rather than the installer) |
+| Avast | [Submit a sample](https://www.avast.com/submit-a-sample) → False positive |
+| Kaspersky | [OpenTip](https://opentip.kaspersky.com/): check the file, then **Submit to reanalyze** |
+| ESET | [How to submit a false positive](https://support.eset.com/en/kb141-submit-a-virus-website-or-potential-false-positive-sample-to-the-eset-lab) |
+| Norton | [submit.norton.com](https://submit.norton.com/) → False positive |
+
+Please also [open an issue](https://github.com/vman26/DeckHost/issues) with the antivirus program, the
+detection name and the file, so DeckHost's maintainer can report it as the author.
 
 ## Reporting a problem
 

@@ -81,27 +81,87 @@ internal static class UpdateInstaller
         }
     }
 
+    /// <summary>The older setup's uninstaller, in its install folder.</summary>
+    internal const string OldUninstallerName = "unins000.exe";
+
+    /// <summary>How long the new DeckHost waits for the old uninstaller before it starts anyway.</summary>
+    private static readonly TimeSpan OldUninstallTimeout = TimeSpan.FromMinutes(2);
+
     /// <summary>
-    /// After the new DeckHost is installed: notes what to carry over, and starts a hidden helper that
-    /// waits for this DeckHost to exit, removes the old install with its uninstaller and starts the new
-    /// one. DeckHost must exit right after.
+    /// After the new DeckHost is installed: notes what to carry over and which uninstaller removes the old
+    /// install, and starts the new DeckHost with <c>--after-exit</c>. That one waits for this DeckHost to
+    /// exit, runs the uninstaller (<see cref="RemoveOldInstall"/>) and starts. DeckHost must exit right after.
+    /// (No script helper: an unsigned program starting a hidden PowerShell is what virus scanners look for.)
     /// </summary>
+    /// <exception cref="UpdateException">The new DeckHost wasn't found or didn't start.</exception>
     public static void FinishMigrationAfterExit(bool startAtLogin)
     {
-        MigrationNote.Write(new MigrationNote(startAtLogin));
-        var uninstaller = Path.Combine(InstallLocation, "unins000.exe");
-        var launchers = string.Join(',', NewLauncherCandidates().Select(Quote));
-        var command =
-            $"Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue; " +
-            $"if (Test-Path -LiteralPath {Quote(uninstaller)}) {{ Start-Process -Wait -FilePath {Quote(uninstaller)} -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' }}; " +
-            $"foreach ($launcher in @({launchers})) {{ if (Test-Path -LiteralPath $launcher) {{ Start-Process -FilePath $launcher; break }} }}";
-        var helper = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
-        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", command })
+        var launcher = NewLauncherCandidates().FirstOrDefault(File.Exists)
+            ?? throw new UpdateException("The new DeckHost is installed, but it wasn't found. Start it from the Start menu.");
+        MigrationNote.Write(new MigrationNote(startAtLogin) { OldUninstaller = Path.Combine(InstallLocation, OldUninstallerName) });
+        var start = new ProcessStartInfo(launcher)
         {
-            helper.ArgumentList.Add(argument);
+            UseShellExecute = false,
+            // Not the old install folder: a process working in it would keep the uninstaller from removing it.
+            WorkingDirectory = Path.GetDirectoryName(launcher)!,
+            ArgumentList = { "--after-exit", Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+        };
+        (Process.Start(start) ?? throw new UpdateException("The new DeckHost didn't start. Start it from the Start menu.")).Dispose();
+    }
+
+    /// <summary>
+    /// In the new DeckHost, before it takes the single-instance mutex (the old uninstaller refuses while
+    /// that is held): runs the uninstaller the move noted, silently, and waits until it has removed itself.
+    /// Does nothing without a note, outside Windows or for a path that isn't an old DeckHost's uninstaller.
+    /// </summary>
+    public static void RemoveOldInstall(MigrationNote? note)
+    {
+        if (!OperatingSystem.IsWindows() || note?.OldUninstaller is not { } uninstaller
+            || !IsOldUninstaller(uninstaller, AppContext.BaseDirectory, File.Exists))
+        {
+            return;
         }
 
-        (Process.Start(helper) ?? throw new UpdateException("The update helper didn't start.")).Dispose();
+        try
+        {
+            // Shell execute: an install in Program Files asks for administrator rights.
+            var start = new ProcessStartInfo(uninstaller) { UseShellExecute = true, ArgumentList = { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" } };
+            using (var process = Process.Start(start))
+            {
+                process?.WaitForExit(OldUninstallTimeout);
+            }
+
+            // The uninstaller hands over to a copy of itself in the temp folder and exits; that copy
+            // deletes unins000.exe last.
+            var deadline = DateTime.UtcNow + OldUninstallTimeout;
+            while (File.Exists(uninstaller) && DateTime.UtcNow < deadline)
+            {
+                System.Threading.Thread.Sleep(250);
+            }
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // Declined or failed: the old DeckHost stays installed and can be removed in Windows' settings.
+        }
+    }
+
+    /// <summary>
+    /// True for an older setup's uninstaller: named <see cref="OldUninstallerName"/>, next to a DeckHost
+    /// program, and not in (or above) the folder this DeckHost runs from.
+    /// </summary>
+    internal static bool IsOldUninstaller(string path, string runningFrom, Func<string, bool> fileExists)
+    {
+        if (!Path.IsPathFullyQualified(path) || !string.Equals(Path.GetFileName(path), OldUninstallerName, StringComparison.OrdinalIgnoreCase)
+            || Path.GetDirectoryName(path) is not { Length: > 0 } folder)
+        {
+            return false;
+        }
+
+        var ownFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(runningFrom));
+        folder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        var inside = ownFolder.Equals(folder, StringComparison.OrdinalIgnoreCase)
+            || ownFolder.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return !inside && fileExists(path) && fileExists(Path.Combine(folder, "DeckHost.App.exe"));
     }
 
     /// <summary>Where the Velopack install puts its launcher: per user, or in Program Files from the MSI.</summary>
@@ -140,9 +200,6 @@ internal static class UpdateInstaller
         {
         }
     }
-
-    /// <summary>A PowerShell single-quoted string (a quote inside is doubled).</summary>
-    internal static string Quote(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
 }
 
 /// <summary>
@@ -160,10 +217,17 @@ internal sealed record MigrationNote(bool StartAtLogin)
         File.WriteAllText(path, JsonSerializer.Serialize(note));
     }
 
+    /// <summary>The older setup's uninstaller, which the new DeckHost runs (<see cref="UpdateInstaller.RemoveOldInstall"/>). Null in notes from before it was recorded.</summary>
+    public string? OldUninstaller { get; init; }
+
+    /// <summary>The note, left in place. Null when there is none (or it can't be read).</summary>
+    public static MigrationNote? Peek(string? path = null) => Read(path ?? FilePath, delete: false);
+
     /// <summary>The note, once: it is deleted. Null when there is none (or it can't be read).</summary>
-    public static MigrationNote? Take(string? path = null)
+    public static MigrationNote? Take(string? path = null) => Read(path ?? FilePath, delete: true);
+
+    private static MigrationNote? Read(string path, bool delete)
     {
-        path ??= FilePath;
         try
         {
             if (!File.Exists(path))
@@ -172,7 +236,11 @@ internal sealed record MigrationNote(bool StartAtLogin)
             }
 
             var note = JsonSerializer.Deserialize<MigrationNote>(File.ReadAllText(path));
-            File.Delete(path);
+            if (delete)
+            {
+                File.Delete(path);
+            }
+
             return note;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
