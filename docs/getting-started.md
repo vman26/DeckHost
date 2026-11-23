@@ -11,8 +11,13 @@ Download the package for your system from the [Download](download.md) page (the 
 | Linux (x64), no install | `DeckHost-<version>-linux-x86_64.AppImage` | `chmod +x` it and run it; it updates itself. The device rule has to be installed once by hand: see [the AppImage notes](devices.md#linux-appimage). |
 | macOS 12+ (Apple Silicon) | `DeckHost-<version>-osx-arm64.zip` | Unzip and move **DeckHost.app** to Applications. |
 
-!!! warning "First start of an unsigned build"
-    Until DeckHost's packages are signed, Windows SmartScreen says "Windows protected your PC": choose **More info → Run anyway**. On macOS, right-click DeckHost.app → **Open** the first time, or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`.
+!!! warning "The first start: DeckHost isn't code-signed yet"
+    Your system asks once before it opens DeckHost ([why, and how to check the file](download.md#first-start-and-signing)):
+
+    - **Windows** says "Windows protected your PC": choose **More info → Run anyway**.
+    - **macOS 14 and older:** right-click DeckHost.app → **Open**. **macOS 15 and newer:** open it once, then **System Settings → Privacy & Security → Open Anyway**. Or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`.
+
+    Your antivirus program blocks it? See [If your antivirus blocks DeckHost](troubleshooting.md#if-your-antivirus-blocks-deckhost).
 
 ## The welcome tour
 

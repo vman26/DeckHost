@@ -95,6 +95,10 @@ sealed class Program
             WaitForExit(previousProcess);
         }
 
+        // After the move from the older Windows setup: remove the old install, before the mutex below
+        // (its uninstaller won't run while a DeckHost holds it).
+        Platform.UpdateInstaller.RemoveOldInstall(Platform.MigrationNote.Peek());
+
         // Only one DeckHost may own the device: a second instance would run every action twice
         // (both read the same key presses, and each starts its own plugin processes).
         using var mutex = new Mutex(initiallyOwned: true, InstanceMutexName, out var isFirstInstance);

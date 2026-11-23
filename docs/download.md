@@ -22,23 +22,46 @@ All releases, release notes and pre-releases are on the
 [Getting started](getting-started.md). DeckHost tells you when an update is available
 ([Updates](updates.md)).
 
-## Code signing
+## First start and signing
 
-**Windows:** Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
-[SignPath Foundation](https://signpath.org). DeckHost uses the SignPath Foundation for code signing:
-the Windows program and installers are signed by SignPath from the builds GitHub Actions makes of this
-repository. Releases made before the signing was set up are unsigned; Windows then shows
-*More info → Run anyway*.
+DeckHost's packages aren't code-signed yet. A code-signing certificate has to be bought or sponsored,
+and DeckHost doesn't have one for now. Because of that your system asks once before it opens
+DeckHost. That is all it means: every package is built by GitHub Actions from the public source, and
+you can check that the file you have is the one that was built (see [Check a download](#check-a-download)).
+Updates that DeckHost installs itself don't ask again.
 
-**macOS:** signed and notarized with an Apple Developer ID when available; otherwise right-click
-the app → **Open** the first time.
+**Windows**
+
+1. Run the installer. Windows says **"Windows protected your PC"**.
+2. Choose **More info**, check that the file name starts with `DeckHost-`, and choose **Run anyway**.
+
+Using the zip? Before you unpack it, right-click it → **Properties** → tick **Unblock** → **OK**.
+Otherwise Windows asks for every program inside it.
+
+**macOS**
+
+- macOS 14 and older: right-click (or Control-click) DeckHost.app → **Open**, then **Open** again.
+- macOS 15 and newer: open DeckHost.app once and close the message. Then go to **System Settings →
+  Privacy & Security**, scroll down to *"DeckHost" was blocked…* and choose **Open Anyway**.
+- Or in Terminal, on any version: `xattr -dr com.apple.quarantine /Applications/DeckHost.app`
+
+**Linux:** nothing to allow. Make the AppImage executable (`chmod +x`) and run it.
+
+Your antivirus program blocks or removes DeckHost? See
+[If your antivirus blocks DeckHost](troubleshooting.md#if-your-antivirus-blocks-deckhost).
 
 ## Check a download
 
-- Every release has `SHA256SUMS.txt` with the checksum of each file
-  (`sha256sum -c SHA256SUMS.txt --ignore-missing`, or `Get-FileHash` on Windows).
-- Every file has a build provenance attestation from GitHub Actions:
-  `gh attestation verify <file> --repo vman26/DeckHost`.
+- **Checksum:** every release has `SHA256SUMS.txt` with the checksum of each file. On Linux and
+  macOS: `sha256sum -c SHA256SUMS.txt --ignore-missing`. On Windows, in PowerShell:
+  `Get-FileHash .\DeckHost-<version>-win-x64-install.exe`, then compare the hash with the file's line
+  in `SHA256SUMS.txt`.
+- **Build provenance:** every file has an attestation from GitHub Actions. It proves the file was
+  built by this repository's release workflow from the tagged commit and hasn't changed since. With
+  the [GitHub CLI](https://cli.github.com): `gh attestation verify <file> --repo vman26/DeckHost`.
+  (It isn't a code signature, so Windows and macOS still ask once.)
+- **VirusTotal:** the release notes link a VirusTotal report for each Windows download, made when the
+  release was built.
 - DeckHost's own updater (Velopack) checks each update package against the checksum in the release's update index before installing it.
 
 ## Build it yourself

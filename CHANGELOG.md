@@ -110,6 +110,15 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Changed
 
+- The download page no longer says the Windows packages are signed: they aren't yet. The download page, Getting
+  started and the release notes now explain what Windows and macOS (including macOS 15's **Open Anyway**) show the
+  first time, and how to check a download. Troubleshooting has a new section for when an antivirus program blocks
+  DeckHost: how to check the file, restore it, allow DeckHost's folders and report the false positive. Each release's
+  notes link a VirusTotal report for every Windows download.
+
+- Moving from the older Windows setup no longer starts a hidden PowerShell window to remove the old install (a
+  pattern antivirus programs distrust): the new DeckHost removes it itself before it starts.
+
 - DeckHost uses much less CPU while it waits: lights and live keys only wake it when something has to change
   (before, it woke up about 40 times a second all day), and the app is precompiled, so it starts faster and doesn't
   spend its first minutes compiling. Every pull request and release is now measured on Windows, Linux and macOS

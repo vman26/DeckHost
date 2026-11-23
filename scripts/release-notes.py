@@ -3,9 +3,12 @@
 
   release-notes.py check                       the changelog's format (CI runs this on every PR)
   release-notes.py section <tag>               the changelog section for a tag
-  release-notes.py compose <tag> [--pull-requests FILE] [--files DIR]
-                                               the full release notes: the section, downloads and
-                                               checks, then the pull request list (folded)
+  release-notes.py compose <tag> [--pull-requests FILE] [--files DIR] [--unsigned windows,macos]
+                           [--virustotal results.json]
+                                               the full release notes: the section, downloads, what
+                                               to do the first time on systems whose packages aren't
+                                               signed, checks (with VirusTotal's verdicts from
+                                               virustotal.py), then the pull request list (folded)
 
 Which section a tag uses: the one for its exact version (`## [1.2.0-rc.1]`), else the one for the
 version without its pre-release label (`## [1.2.0]`, prepared on the release branch), else, for a
@@ -16,12 +19,15 @@ Everything after END_MARKER is for the release page only; DeckHost's update scre
 """
 
 import argparse
+import json
 import os
 import re
 import sys
 from pathlib import Path
 
 END_MARKER = "<!-- deckhost:end-of-notes -->"
+DOCS = "https://vman26.github.io/DeckHost/"
+SYSTEMS = ("windows", "macos")
 GROUPS = ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security")
 VERSION = r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?"
 HEADING = re.compile(rf"^## \[(Unreleased|{VERSION})\](?: - (\d{{4}}-\d{{2}}-\d{{2}}))?\s*$")
@@ -105,7 +111,40 @@ def package_names(version, files=()):
     }
 
 
-def compose(text, tag, pull_requests="", files=()):
+def first_start(unsigned):
+    """What to do the first time an unsigned package is opened, for the systems in `unsigned`."""
+    steps = []
+    if "windows" in unsigned:
+        steps.append("- **Windows** says \"Windows protected your PC\": choose **More info → Run anyway**. "
+                     "Unpacking the zip? Right-click it → Properties → **Unblock** first.")
+    if "macos" in unsigned:
+        steps.append("- **macOS** won't open it the first time: right-click DeckHost.app → **Open** (macOS 14 and "
+                     "older), or open it once and then **System Settings → Privacy & Security → Open Anyway** "
+                     "(macOS 15 and newer).")
+    if not steps:
+        return ""
+    return ("### First start\n\n"
+            "These packages aren't code-signed yet, so the system asks once before it opens DeckHost. "
+            "Updates DeckHost installs itself don't ask again.\n\n"
+            + "\n".join(steps) + "\n\n"
+            f"An antivirus program blocks it? See [If your antivirus blocks DeckHost]"
+            f"({DOCS}troubleshooting/#if-your-antivirus-blocks-deckhost); "
+            f"more on the [download page]({DOCS}download/#first-start-and-signing).")
+
+
+def virustotal_lines(results):
+    """One line per scanned file: VirusTotal's verdict and the report link."""
+    lines = []
+    for item in results:
+        if item.get("status") == "completed":
+            lines.append(f"  - `{item['file']}`: {item['flagged']}/{item['engines']} engines flag it "
+                         f"([report]({item['link']}))")
+    if not lines:
+        return ""
+    return "- VirusTotal, scanned when the release was made:\n" + "\n".join(lines) + "\n"
+
+
+def compose(text, tag, pull_requests="", files=(), unsigned=(), virustotal=()):
     version = tag[1:] if tag.startswith("v") else tag
     names = package_names(version, files)
     # The pkg needs a Developer ID Installer certificate; without one the release has only the zip.
@@ -122,11 +161,16 @@ def compose(text, tag, pull_requests="", files=()):
         "`*.nupkg`, `RELEASES*`) are what its updater downloads; `*-win-x64-setup.exe` only takes older "
         "DeckHost versions to this one.",
         END_MARKER,
-        "### Checking the files\n\n"
-        "- Checksums: `sha256sum -c SHA256SUMS.txt --ignore-missing`\n"
-        f"- Build provenance: `gh attestation verify <file> --repo {os.environ.get('GITHUB_REPOSITORY', 'vman26/DeckHost')}`\n"
-        "- For plugin authors: `DeckHost.Contracts` and `DeckHost.Templates` are on NuGet and attached here.",
     ]
+    if notes := first_start(unsigned):
+        parts.append(notes)
+    parts.append(
+        "### Checking the files\n\n"
+        "- Checksums: `sha256sum -c SHA256SUMS.txt --ignore-missing` (Windows: `Get-FileHash <file>`)\n"
+        f"- Build provenance: `gh attestation verify <file> --repo {os.environ.get('GITHUB_REPOSITORY', 'vman26/DeckHost')}` "
+        "(built by this repository's release workflow from the tagged commit, and unchanged since)\n"
+        + virustotal_lines(virustotal)
+        + "- For plugin authors: `DeckHost.Contracts` and `DeckHost.Templates` are on NuGet and attached here.")
     if pull_requests.strip():
         parts.append("<details>\n<summary>Every pull request in this release</summary>\n\n"
                      + pull_requests.strip() + "\n\n</details>")
@@ -144,6 +188,8 @@ def main():
     full.add_argument("tag")
     full.add_argument("--pull-requests", help="a file with the generated pull request list")
     full.add_argument("--files", help="the folder with the release files, for their real names")
+    full.add_argument("--unsigned", default="", help="systems whose packages aren't signed: windows,macos")
+    full.add_argument("--virustotal", help="the results of virustotal.py scan")
     args = parser.parse_args()
 
     text = Path(args.changelog).read_text(encoding="utf-8")
@@ -158,7 +204,11 @@ def main():
             return 0
         pull_requests = Path(args.pull_requests).read_text(encoding="utf-8") if args.pull_requests else ""
         files = [path.name for path in Path(args.files).iterdir()] if args.files else []
-        sys.stdout.write(compose(text, args.tag, pull_requests, files))
+        unsigned = [system.strip() for system in args.unsigned.split(",") if system.strip()]
+        if unknown := [system for system in unsigned if system not in SYSTEMS]:
+            parser.error(f"--unsigned: unknown system {', '.join(unknown)} (use {', '.join(SYSTEMS)})")
+        virustotal = json.loads(Path(args.virustotal).read_text(encoding="utf-8")) if args.virustotal else []
+        sys.stdout.write(compose(text, args.tag, pull_requests, files, unsigned, virustotal))
         return 0
     except ChangelogError as error:
         print(f"CHANGELOG.md: {error}", file=sys.stderr)
