@@ -874,6 +874,72 @@ public sealed class PluginCatalog : IDisposable
         }
     }
 
+    /// <summary>
+    /// <c>DeckHost --check-native</c>: loads each device plugin package in <paramref name="directory"/> (the bundled ones) and runs
+    /// its self-check, a <c>public static (bool Ok, string Report) CheckRuntime()</c> on the plugin class, when it has one
+    /// (MiraBox loads its native bridge and lists the devices). Nothing is started and no device changes.
+    /// </summary>
+    public static (bool Ok, string Report) CheckDevicePlugins(string directory)
+    {
+        var lines = new List<string>();
+        var ok = true;
+        if (!Directory.Exists(directory))
+        {
+            return (false, $"The bundled plugins folder is missing: {directory}");
+        }
+
+        foreach (var folder in Directory.EnumerateDirectories(directory).Order(StringComparer.OrdinalIgnoreCase))
+        {
+            var manifestPath = Path.Combine(folder, PluginManifest.FileName);
+            if (!File.Exists(manifestPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var manifest = PluginManifest.Parse(File.ReadAllText(manifestPath));
+                if (!manifest.IsDevice)
+                {
+                    continue;
+                }
+
+                var (instance, _) = LoadDeviceInProcess(folder, manifest);
+                try
+                {
+                    var check = instance.GetType().GetMethod("CheckRuntime", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static, Type.EmptyTypes);
+                    if (check?.Invoke(null, null) is ValueTuple<bool, string> result)
+                    {
+                        var (pluginOk, report) = result;
+                        ok &= pluginOk;
+                        lines.Add($"{manifest.Name}: {(pluginOk ? "OK" : "FAILED")}");
+                        lines.Add(report);
+                    }
+                    else
+                    {
+                        lines.Add($"{manifest.Name}: loaded.");
+                    }
+                }
+                finally
+                {
+                    instance.Dispose();
+                }
+            }
+            catch (Exception ex) when (ex is PluginException or IOException or UnauthorizedAccessException or System.Reflection.TargetInvocationException)
+            {
+                ok = false;
+                lines.Add($"{Path.GetFileName(folder)}: FAILED: {ex.InnerException?.Message ?? ex.Message}");
+            }
+        }
+
+        if (lines.Count == 0)
+        {
+            return (false, $"No device plugins in {directory}.");
+        }
+
+        return (ok, string.Join(Environment.NewLine, lines));
+    }
+
     /// <summary>A public constructor DeckHost can call without arguments: none, or only optional ones (a plugin may take a data folder for its tests).</summary>
     private static System.Reflection.ConstructorInfo? FindDeviceConstructor(Type type) =>
         type.GetConstructors().FirstOrDefault(static constructor => constructor.GetParameters().All(static parameter => parameter.IsOptional && parameter.HasDefaultValue));
@@ -881,7 +947,7 @@ public sealed class PluginCatalog : IDisposable
     /// <summary>Loads a device plugin package into this process (its own collectible context).</summary>
     internal static (IDevicePlugin Instance, PluginLoadContext Context) LoadDeviceInProcess(string directory, PluginManifest manifest)
     {
-        var context = new PluginLoadContext(directory, manifest.Id);
+        var context = new PluginLoadContext(directory, manifest.Id, collectible: false);
         try
         {
             var assemblyPath = Path.Combine(directory, manifest.Assembly);
@@ -909,12 +975,12 @@ public sealed class PluginCatalog : IDisposable
         }
         catch (Exception ex) when (ex is not PluginException)
         {
-            context.Unload();
+            context.TryUnload();
             throw new PluginException($"The plugin could not be loaded: {ex.Message}", ex);
         }
         catch
         {
-            context.Unload();
+            context.TryUnload();
             throw;
         }
     }
@@ -1005,7 +1071,7 @@ public sealed class PluginCatalog : IDisposable
                 // A plugin failing to clean up must not block uninstalling it.
             }
 
-            slot.Context?.Unload();
+            slot.Context?.TryUnload();
             slot.Context = null;
             return;
         }

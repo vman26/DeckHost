@@ -1,3 +1,4 @@
+using DeckHost.Contracts.Interfaces;
 using DeckHost.Core.Devices;
 using DeckHost.Core.Plugins;
 using DeckHost.Core.State;
@@ -189,4 +190,34 @@ public class DevicePluginPackageTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    /// <summary>Every device plugin DeckHost ships, constructed the way the catalog does it (no arguments).</summary>
+    public static IEnumerable<Type> BundledPluginTypes() =>
+    [
+        typeof(DeckHost.Device.MiraBox.MiraBoxDevicePlugin),
+        typeof(DeckHost.Device.Elgato.ElgatoDevicePlugin),
+        typeof(DeckHost.Device.Web.WebDeckPlugin),
+        typeof(DeckHost.Device.Hid.HidDevicePlugin),
+        typeof(DeckHost.Device.Simulator.SimulatorDevicePlugin),
+    ];
+
+    [TestCaseSource(nameof(BundledPluginTypes))]
+    public void PluginJson_OfABundledDevicePlugin_MatchesThePluginClass(Type pluginType)
+    {
+        // Arrange
+        var assemblyName = pluginType.Assembly.GetName().Name!;
+        var manifestPath = Path.Combine(RepositoryRoot(), assemblyName, PluginManifest.FileName);
+
+        // Act
+        var manifest = PluginManifest.Parse(File.ReadAllText(manifestPath));
+        var id = ((IDevicePlugin)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(pluginType)).Id;
+
+        // Assert
+        Assert.That(manifest.IsDevice, Is.True);
+        Assert.That(manifest.Assembly, Is.EqualTo(assemblyName + ".dll"));
+        Assert.That(manifest.Id, Is.EqualTo(id));
+    }
+
+    private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
+        Path.GetDirectoryName(Path.GetDirectoryName(path)!)!;
 }

@@ -258,6 +258,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 
 | Member | |
 |---|---|
+| `IReadOnlyList<IDevicePlugin> GetDevicePlugins()` | The device plugins DeckHost runs now, for a plugin that offers other plugins' models (the device simulator). |
 | `void Log(string level, string message)` |  |
 | `void ReportConnectionStatus(string deviceId, string state, string message)` |  |
 | `void ReportInputEvent(string deviceId, string controlId, InputCapabilities eventType, int value)` |  |

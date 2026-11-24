@@ -1,0 +1,10 @@
+{
+  "id": "deckhost.device.mirabox",
+  "name": "MiraBox StreamDock",
+  "version": "1.0.0",
+  "author": "DeckHost",
+  "description": "MiraBox / StreamDock decks (N4 Pro and the other StreamDock models) through the vendor SDK.",
+  "assembly": "DeckHost.Device.MiraBox.dll",
+  "hostApiVersion": 1,
+  "kind": "device"
+}

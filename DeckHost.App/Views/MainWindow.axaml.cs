@@ -114,7 +114,11 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
             vm.ShowDeviceSimulator = settings.DeviceSimulator;
         }
 
-        TryResolve<DeckHost.Device.Simulator.SimulatorDevicePlugin>()?.SetEnabled(settings.DeviceSimulator);
+        if (TryResolve<DeckHost.Core.Plugins.PluginCatalog>() is { } catalog)
+        {
+            var enabled = settings.DeviceSimulator;
+            _ = System.Threading.Tasks.Task.Run(() => global::DeckHost.App.App.ApplyDeviceSimulator(catalog, enabled));
+        }
     }
 
     /// <summary>A service from the app's container, or null when there is none (tests, previews).</summary>
@@ -340,7 +344,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     {
         if (TryResolve<DeckHost.Device.Hid.IHidDeviceSource>() is { } source)
         {
-            OpenSingle("Add a USB device", () => new DeviceCreatorView { DataContext = new DeviceCreatorViewModel(TryResolve<DeckHost.Device.Hid.HidDevicePlugin>(), source) });
+            OpenSingle("Add a USB device", () => new DeviceCreatorView { DataContext = new DeviceCreatorViewModel(TryResolve<DeckHost.Device.Hid.IHidDescriptionStore>(), source) });
         }
     }
 

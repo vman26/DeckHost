@@ -127,6 +127,9 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         return problems;
     }
 
+    /// <summary>The self-check <c>DeckHost --check-native</c> runs for every bundled device plugin that has one.</summary>
+    public static (bool Ok, string Report) CheckRuntime() => CheckNativeBridge();
+
     /// <summary>
     /// Loads the native bridge, lists the connected StreamDock devices and unloads it again: checks
     /// an installation without opening the app (<c>DeckHost --check-native</c>). Not while the
@@ -260,7 +263,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
         catch (DllNotFoundException ex)
         {
             Interlocked.CompareExchange(ref s_active, null, this);
-            throw new InvalidOperationException("MiraBoxBridge native library not found. Build with CMake available so it is copied to plugins/device/deckhost-device-mirabox.", ex);
+            throw new InvalidOperationException("MiraBoxBridge native library not found. Build with CMake available so it is copied into the plugin's folder (plugins/bundled/deckhost.device.mirabox).", ex);
         }
         catch
         {

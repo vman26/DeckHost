@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Ships as a plugin package under plugins/bundled, with its native bridge (build/BundledDevicePlugin.targets). -->
+    <BundledPluginId>deckhost.device.mirabox</BundledPluginId>
     <EnableMiraBoxNativeBuild Condition="'$(EnableMiraBoxNativeBuild)' == ''">true</EnableMiraBoxNativeBuild>
     <IsWindows>$([MSBuild]::IsOsPlatform('Windows'))</IsWindows>
     <IsLinux>$([MSBuild]::IsOsPlatform('Linux'))</IsLinux>
@@ -111,5 +113,14 @@
           SkipUnchangedFiles="true"
           />
   </Target>
+
+  <!-- The bundled package carries the native bridge (and on Linux/macOS its transport and OpenCV libraries). -->
+  <Target Name="CollectMiraBoxBundleFiles" AfterTargets="CopyMiraBoxBridgeArtifacts" BeforeTargets="BundleDevicePlugin">
+    <ItemGroup>
+      <BundledPluginExtraFile Include="@(NativeBridgeArtifacts)" />
+    </ItemGroup>
+  </Target>
+
+  <Import Project="..\build\BundledDevicePlugin.targets" />
 
 </Project>

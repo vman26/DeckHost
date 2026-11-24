@@ -439,4 +439,33 @@ public class HidDeviceTests : IDisposable
         // Assert
         Assert.That(changes, Is.EqualTo(2));
     }
+
+    [Test]
+    public void Save_WithTheFileStore_IsListedByAPluginReadingTheFolder()
+    {
+        // Arrange
+        var files = new HidDescriptionFiles(_folder);
+
+        // Act
+        files.Save(Pedal());
+
+        // Assert
+        using var plugin = new HidDevicePlugin(_folder);
+        Assert.That(plugin.Devices.Select(static device => device.Id), Is.EqualTo(new[] { "hid." + PedalId }));
+        Assert.That(files.Descriptions.Select(static description => description.Id), Is.EqualTo(new[] { PedalId }));
+    }
+
+    [Test]
+    public void Delete_WithTheFileStore_RemovesTheDescription()
+    {
+        // Arrange
+        var files = new HidDescriptionFiles(_folder);
+        files.Save(Pedal());
+
+        // Act
+        files.Delete(PedalId);
+
+        // Assert
+        Assert.That(files.Descriptions, Is.Empty);
+    }
 }

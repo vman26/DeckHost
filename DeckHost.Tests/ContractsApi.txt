@@ -107,6 +107,7 @@
   DeckHost.Contracts.Interfaces.IDevicePlugin.InitializeAsync(DeckHost.Contracts.Interfaces.IDevicePluginContext context, System.Threading.CancellationToken cancellationToken) : System.Threading.Tasks.Task abstract
   DeckHost.Contracts.Interfaces.IDevicePlugin.Name : System.String abstract
   DeckHost.Contracts.Interfaces.IDevicePlugin.Output : DeckHost.Contracts.Interfaces.IDeviceOutput abstract
+  DeckHost.Contracts.Interfaces.IDevicePluginContext.GetDevicePlugins() : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Interfaces.IDevicePlugin>
   DeckHost.Contracts.Interfaces.IDevicePluginContext.Log(System.String level, System.String message) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDevicePluginContext.ReportConnectionStatus(System.String deviceId, System.String state, System.String message) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDevicePluginContext.ReportInputEvent(System.String deviceId, System.String controlId, DeckHost.Contracts.Enums.InputCapabilities eventType, System.Int32 value) : System.Void abstract

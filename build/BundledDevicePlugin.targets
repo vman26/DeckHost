@@ -2,6 +2,8 @@
   <!--
     Imported by a DeckHost.Device.* project that ships with DeckHost as a plugin package (docs/maintainers/device-plugins.md).
     The project sets BundledPluginId (its plugin.json id, also the folder name) and has a plugin.json next to it.
+    Other files the plugin needs next to it (native libraries) go in BundledPluginExtraFile items, added by a target
+    that runs before BundleDevicePlugin (DeckHost.Device.MiraBox.csproj adds its native bridge).
     After each build the plugin's folder (plugin.json, the assembly and its managed dependencies) is staged in
     artifacts/bundled/<id>; DeckHost.App copies artifacts/bundled to plugins/bundled next to the app.
     DeckHost.Contracts and SkiaSharp are left out: they come from the host.
@@ -22,5 +24,6 @@
     <Copy SourceFiles="$(TargetPath);$(MSBuildProjectDirectory)\plugin.json" DestinationFolder="$(BundledPluginFolder)" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(BundledPluginFolder)" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
     <Copy SourceFiles="@(BundledDependency)" DestinationFolder="$(BundledPluginFolder)" />
+    <Copy SourceFiles="@(BundledPluginExtraFile)" DestinationFolder="$(BundledPluginFolder)" />
   </Target>
 </Project>

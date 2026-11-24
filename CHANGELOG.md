@@ -12,8 +12,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Added
 
-- Device support is now plugins like the others: the Web Deck and Elgato Stream Deck support ship as bundled plugins in the Plugin Manager
-  (you can turn them off there) and device plugins from other developers can be installed as packages (`"kind": "device"` in plugin.json).
+- Device support is now plugins like the others: MiraBox, Elgato Stream Deck, Web Deck, generic USB devices and the device simulator
+  ship as bundled plugins in the Plugin Manager (you can turn each off there), and device plugins from other developers can be
+  installed as packages (`"kind": "device"` in plugin.json).
 
 - Updates install through a new installer (Velopack): **Install and restart** shows the download from 0 to 100 %,
   then DeckHost restarts into the new version, which is put in place as a whole, never file by file. Updates are

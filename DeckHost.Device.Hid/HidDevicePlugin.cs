@@ -12,7 +12,7 @@ namespace DeckHost.Device.Hid;
 /// when its hardware is plugged in it is opened and its reports become key presses and knob turns.
 /// These devices only send input: they have no screens or lights DeckHost could drive.
 /// </summary>
-public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmware, IDeviceModelCatalog
+public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmware, IDeviceModelCatalog, IHidDescriptionStore
 {
     /// <summary>Every device described in the device creator (for the device simulator).</summary>
     public IReadOnlyList<DeviceDefinition> DescribeModels() => [.. Devices.Select(static device => device with { IsConnected = false })];
@@ -30,16 +30,21 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmw
 
     private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>How long the folder stays quiet before changed description files are read (a save writes in steps).</summary>
+    private static readonly TimeSpan ReloadDelay = TimeSpan.FromMilliseconds(300);
+
     private readonly Lock _sync = new();
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<(string DeviceId, string ControlId), Timer> _longPressTimers = new();
     private IReadOnlyCollection<DeviceDefinition> _devices = [];
     private IDevicePluginContext? _context;
+    private FileSystemWatcher? _watcher;
+    private Timer? _reloadTimer;
     private bool _disposed;
 
     public HidDevicePlugin(string? directory = null)
     {
-        Directory = directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost", "devices", "hid");
+        Directory = directory ?? HidDescriptionFiles.DefaultDirectory;
         LoadDescriptions();
     }
 
@@ -73,27 +78,53 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmw
         ObjectDisposedException.ThrowIf(_disposed, this);
         _context = context;
         DeviceList.Local.Changed += OnDeviceListChanged;
+        WatchDescriptions();
         Refresh();
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// The device creator writes the description files (it doesn't hold this plugin, which DeckHost loads as a package):
+    /// reload when they change.
+    /// </summary>
+    private void WatchDescriptions()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Directory);
+            _reloadTimer = new Timer(_ =>
+            {
+                if (!_disposed)
+                {
+                    Reload();
+                }
+            });
+            _watcher = new FileSystemWatcher(Directory, "*.json") { NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size };
+            _watcher.Changed += OnDescriptionFileChanged;
+            _watcher.Created += OnDescriptionFileChanged;
+            _watcher.Deleted += OnDescriptionFileChanged;
+            _watcher.Renamed += OnDescriptionFileChanged;
+            _watcher.EnableRaisingEvents = true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or PlatformNotSupportedException)
+        {
+            _context?.Log("Warning", $"Changes to the USB device descriptions are read at the next start: {ex.Message}");
+        }
+    }
+
+    private void OnDescriptionFileChanged(object sender, FileSystemEventArgs e) => _reloadTimer?.Change(ReloadDelay, Timeout.InfiniteTimeSpan);
+
     /// <summary>Saves a description (new or changed) and opens its device when it's plugged in.</summary>
     public void Save(HidDeviceDescription description)
     {
-        System.IO.Directory.CreateDirectory(Directory);
-        File.WriteAllText(PathOf(description.Id), description.ToJson());
+        new HidDescriptionFiles(Directory).Save(description);
         Reload();
     }
 
     /// <summary>Removes a description; its device is no longer listed.</summary>
     public void Delete(string id)
     {
-        var path = PathOf(id);
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-        }
-
+        new HidDescriptionFiles(Directory).Delete(id);
         Reload();
     }
 
@@ -130,6 +161,8 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmw
 
         _disposed = true;
         DeviceList.Local.Changed -= OnDeviceListChanged;
+        _watcher?.Dispose();
+        _reloadTimer?.Dispose();
         lock (_sync)
         {
             foreach (var session in _sessions.Values)
@@ -143,8 +176,6 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmw
             timer.Dispose();
         }
     }
-
-    private string PathOf(string id) => Path.Combine(Directory, HidDeviceDescription.MakeId(id) + ".json");
 
     private void LoadDescriptions()
     {

@@ -1,0 +1,10 @@
+{
+  "id": "deckhost.device.hid",
+  "name": "USB devices (generic HID)",
+  "version": "1.0.0",
+  "author": "DeckHost",
+  "description": "Button boxes, foot pedals, jog wheels and other USB devices you teach DeckHost in the device creator.",
+  "assembly": "DeckHost.Device.Hid.dll",
+  "hostApiVersion": 1,
+  "kind": "device"
+}

@@ -21,12 +21,20 @@ accepts device plugins while it runs.
   disabled, not uninstalled; an installed version of the same id wins). They load in safe mode too.
 - Device plugins run in the DeckHost process: their live output and input callbacks would need a wire protocol
   that [decision 0007](0007-in-process-plugins.md) doesn't have. SkiaSharp is shared with the host like Contracts.
-- Web Deck and Elgato are converted first. MiraBox needs its native library resolved from the plugin's folder
-  (a memory-loaded assembly has no location), and the HID and simulator plugins are used directly by the app
-  (device creator, simulator window); each needs a Contracts hook first.
+  Their load context is not collectible: MiraBox's native callbacks (`[UnmanagedCallersOnly]`) can't live in one.
+- Native libraries: the load context resolves a plugin's imports from its folder and publishes the folder as the
+  AppContext value `DeckHost.PluginDirectory.<assembly>` (a memory-loaded assembly has no location); MiraBox reads it
+  to preload its native dependencies. `--check-native` loads the bundled device plugins and runs their
+  `CheckRuntime()`.
+- All of DeckHost's device plugins are bundled: MiraBox, Elgato, Web Deck, generic USB (HID) and the simulator.
+  The app still references the HID and simulator projects for the device creator and the simulator window, but those
+  copies never run the plugin: the creator writes description files the HID plugin watches, and the simulator finds
+  the other plugins' models through `IDevicePluginContext.GetDevicePlugins()` (a default member). DeckHost settings →
+  Developer → Device simulator turns the simulator plugin on and off in the catalog.
 
 ## Consequences
 - New hardware support can ship, update and be turned off like any plugin, without a DeckHost release.
 - A device plugin has the same trust as DeckHost itself (it runs in the process); the manifest's permissions
   are declarations, as for other plugins.
 - Turning a device plugin off removes its devices from the editor's list until it is turned on again.
+- Updating a device plugin with native files (MiraBox) may need a restart on Windows, where loaded libraries are locked.

@@ -39,7 +39,8 @@ sealed class Program
                 AttachConsole(-1);
             }
 
-            var (ok, report) = Device.MiraBox.MiraBoxDevicePlugin.CheckNativeBridge();
+            // The device plugins ship as packages next to the program; each one's self-check runs (MiraBox loads its bridge).
+            var (ok, report) = Core.Plugins.PluginCatalog.CheckDevicePlugins(Path.Combine(AppContext.BaseDirectory, "plugins", "bundled"));
             Console.WriteLine(report);
             return ok ? 0 : 1;
         }

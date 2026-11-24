@@ -647,7 +647,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             ForgetFrames(deviceId);
             _dirty.MarkDevice(deviceId);
             ApplyIdleLights(deviceId);
-        }));
+        }),
+        () => _devicePlugins);
         try
         {
             await plugin.InitializeAsync(context, cancellationToken).ConfigureAwait(false);
@@ -682,7 +683,9 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 return;
             }
 
-            _devicePlugins = [.. _devicePlugins, plugin];
+            // Package plugins (the hardware: MiraBox, Elgato, ...) go before the ones built in (OpenAction), in the order they
+            // load: the first listed device is what the editor shows when nothing else is known.
+            _devicePlugins = [.. _devicePlugins.Where(other => !_ownedDevicePlugins.Contains(other)), plugin, .. _ownedDevicePlugins];
             plugin.DevicesChanged += OnPluginDevicesChanged;
             if (!_pluginsInitialized)
             {
