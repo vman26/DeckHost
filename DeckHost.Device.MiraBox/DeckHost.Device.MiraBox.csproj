@@ -114,10 +114,14 @@
           />
   </Target>
 
-  <!-- The bundled package carries the native bridge (and on Linux/macOS its transport and OpenCV libraries). -->
-  <Target Name="CollectMiraBoxBundleFiles" AfterTargets="CopyMiraBoxBridgeArtifacts" BeforeTargets="BundleDevicePlugin">
+  <!-- The bundled package carries the native bridge (and on Linux/macOS its transport and OpenCV libraries).
+       Read from the native output after Build (the bridge is built just before Build, after the copy to OutDir). -->
+  <Target Name="CollectMiraBoxBundleFiles" BeforeTargets="BundleDevicePlugin" Condition="Exists('$(NativeBridgeRuntimeDir)')">
     <ItemGroup>
-      <BundledPluginExtraFile Include="@(NativeBridgeArtifacts)" />
+      <BundledPluginExtraFile Include="$(NativeBridgeRuntimeDir)/*.dll" Condition="'$(IsWindows)' == 'true'" />
+      <BundledPluginExtraFile Include="$(NativeBridgeRuntimeDir)/*.pdb" Condition="'$(IsWindows)' == 'true' and '$(Configuration)' == 'Debug'" />
+      <BundledPluginExtraFile Include="$(NativeBridgeRuntimeDir)/*.so" Condition="'$(IsLinux)' == 'true'" />
+      <BundledPluginExtraFile Include="$(NativeBridgeRuntimeDir)/*.dylib" Condition="'$(IsMacOS)' == 'true'" />
     </ItemGroup>
   </Target>
 

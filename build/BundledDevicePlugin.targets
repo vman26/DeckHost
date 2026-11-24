@@ -9,6 +9,8 @@
     DeckHost.Contracts and SkiaSharp are left out: they come from the host.
   -->
   <PropertyGroup>
+    <!-- A class library doesn't copy its NuGet dependencies (HidSharp) to its output; a plugin package needs them. -->
+    <CopyLocalLockFileAssemblies Condition="'$(BundledPluginId)' != ''">true</CopyLocalLockFileAssemblies>
     <BundledPluginsDirectory Condition="'$(BundledPluginsDirectory)' == ''">$(MSBuildThisFileDirectory)..\artifacts\bundled\</BundledPluginsDirectory>
   </PropertyGroup>
 
