@@ -16,6 +16,8 @@ namespace DeckHost.Core.Plugins;
 /// <c>permissions</c> (optional) says what the plugin does beyond drawing and reacting to input
 /// (<see cref="PluginPermissions"/>); shown to the user. <c>url</c> (its website or documentation)
 /// and <c>repository</c> (its source; a GitHub repository's README is shown in DeckHost) are optional.
+/// <c>kind</c> (optional) is <c>"application"</c> (the default: actions and features, an <c>IApplicationPlugin</c>)
+/// or <c>"device"</c> (hardware support, an <c>IDevicePlugin</c>; loaded inside DeckHost).
 /// </summary>
 public sealed partial record PluginManifest(
     string Id,
@@ -28,9 +30,18 @@ public sealed partial record PluginManifest(
     string? Icon = null,
     IReadOnlyList<string>? Permissions = null,
     string? Url = null,
-    string? Repository = null)
+    string? Repository = null,
+    string? Kind = null)
 {
     public const string FileName = "plugin.json";
+
+    public const string ApplicationKind = "application";
+
+    public const string DeviceKind = "device";
+
+    /// <summary>True for a plugin that adds hardware support (an <c>IDevicePlugin</c>).</summary>
+    [JsonIgnore]
+    public bool IsDevice => string.Equals(Kind, DeviceKind, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Bumped when IApplicationPlugin / IDeckAction change incompatibly.</summary>
     public const int CurrentHostApiVersion = 1;
@@ -83,6 +94,13 @@ public sealed partial record PluginManifest(
             !Assembly.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
         {
             throw new PluginException("'assembly' must be the file name of a .dll in the package root.");
+        }
+
+        if (Kind is not null &&
+            !string.Equals(Kind, ApplicationKind, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(Kind, DeviceKind, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new PluginException($"'kind' must be \"{ApplicationKind}\" or \"{DeviceKind}\", not \"{Kind}\".");
         }
 
         if (HostApiVersion != CurrentHostApiVersion)

@@ -1,0 +1,10 @@
+{
+  "id": "deckhost.device.elgato",
+  "name": "Elgato Stream Deck",
+  "version": "1.0.0",
+  "author": "DeckHost",
+  "description": "Elgato Stream Decks over USB, without Elgato's software.",
+  "assembly": "DeckHost.Device.Elgato.dll",
+  "hostApiVersion": 1,
+  "kind": "device"
+}

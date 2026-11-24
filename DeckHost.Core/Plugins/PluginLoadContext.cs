@@ -14,6 +14,9 @@ internal sealed class PluginLoadContext(string pluginDirectory, string name) : A
     private static readonly HashSet<string> SharedAssemblies = new(StringComparer.OrdinalIgnoreCase)
     {
         typeof(Contracts.Interfaces.IApplicationPlugin).Assembly.GetName().Name!,
+
+        // Device plugins draw with the host's SkiaSharp (managed and native), so a second copy never loads.
+        typeof(SkiaSharp.SKBitmap).Assembly.GetName().Name!,
     };
 
     public Assembly LoadPluginAssembly(string fileName) => LoadFromFile(Path.Combine(pluginDirectory, fileName));

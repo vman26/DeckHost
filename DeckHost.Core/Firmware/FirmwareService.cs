@@ -14,7 +14,7 @@ namespace DeckHost.Core.Firmware;
 /// </summary>
 public sealed class FirmwareService(IEnumerable<IDevicePlugin> plugins, IDeviceHostService host, HttpClient? http = null, string? downloadDirectory = null)
 {
-    private readonly IReadOnlyList<IDevicePlugin> _plugins = plugins.ToList();
+    private readonly IEnumerable<IDevicePlugin> _plugins = plugins; // not copied: packaged plugins come and go
     private readonly SemaphoreSlim _oneAtATime = new(1, 1);
     private readonly string _downloads = downloadDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeckHost", "cache", "firmware");
 

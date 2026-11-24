@@ -11,7 +11,7 @@ namespace DeckHost.App.ViewModels;
 /// <summary>Finds the device plugin that owns a device and offers its settings (vibration, brightness, idle screen, ...).</summary>
 public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins, Func<IDeviceLightSettings>? lights = null, Core.Firmware.FirmwareService? firmware = null)
 {
-    private readonly IReadOnlyList<IDevicePlugin> _plugins = plugins.ToList();
+    private readonly IEnumerable<IDevicePlugin> _plugins = plugins; // not copied: packaged plugins come and go
 
     /// <summary>Whether the device has a settings page: settings of its own, or firmware to show.</summary>
     public bool HasSettings(string deviceId) => FindPlugin(deviceId) is not null || firmware?.Supports(deviceId) == true;

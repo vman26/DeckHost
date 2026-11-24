@@ -109,6 +109,24 @@ public sealed class PluginCatalog : IDisposable
     public event EventHandler? Changed;
 
     /// <summary>
+    /// A device plugin (a package with <c>"kind": "device"</c>) was loaded and should be handed to the device host.
+    /// Raised on the thread that loads it, with the catalog's lock held: handlers must not block on the catalog.
+    /// </summary>
+    public event Action<IDevicePlugin>? DevicePluginLoaded;
+
+    /// <summary>
+    /// A device plugin is about to be disposed (disabled, replaced, uninstalled or the catalog is disposed): the device host
+    /// must stop using it before this returns.
+    /// </summary>
+    public event Action<IDevicePlugin>? DevicePluginUnloading;
+
+    /// <summary>
+    /// Where the plugin packages that ship with DeckHost are (one folder per plugin, each with its plugin.json), read-only.
+    /// An installed version of the same id wins. Set before <see cref="Load"/>.
+    /// </summary>
+    public string? BundledDirectory { get; init; }
+
+    /// <summary>
     /// Starts plugin processes. With one, DeckHost plugins run in their own process unless the user
     /// chose otherwise (docs ADR 0007); without one (tests, tools), every plugin loads in this process.
     /// Set before <see cref="Load"/>.
@@ -171,6 +189,18 @@ public sealed class PluginCatalog : IDisposable
             lock (_sync)
             {
                 return EnabledApplicationPluginsCore;
+            }
+        }
+    }
+
+    /// <summary>The device plugins loaded from packages (bundled or installed) that are enabled.</summary>
+    public IReadOnlyList<IDevicePlugin> EnabledDevicePlugins
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return [.. _slots.Where(slot => slot.DeviceInstance is not null && !_disabled.Contains(slot.Id)).Select(slot => slot.DeviceInstance!)];
             }
         }
     }
@@ -379,6 +409,45 @@ public sealed class PluginCatalog : IDisposable
             }
         }
 
+        // The plugins that ship with DeckHost: loaded like installed ones, but read-only and shadowed by an installed version.
+        // They aren't "extra": safe mode still loads them, because the devices need them.
+        if (BundledDirectory is { } bundled && Directory.Exists(bundled))
+        {
+            foreach (var directory in Directory.EnumerateDirectories(bundled).Order(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(Path.Combine(directory, PluginManifest.FileName)))
+                {
+                    continue;
+                }
+
+                var id = Path.GetFileName(directory);
+                if (IsInstalled(id))
+                {
+                    continue;
+                }
+
+                var slot = new Slot(id, SlotKind.Package, IsRequired: false, directory) { IsBundled = true };
+                _slots.Add(slot);
+                try
+                {
+                    slot.Manifest = PluginManifest.Parse(File.ReadAllText(Path.Combine(directory, PluginManifest.FileName)));
+                    if (!string.Equals(slot.Manifest.Id, id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new PluginException($"The folder is named '{id}' but plugin.json says '{slot.Manifest.Id}'.");
+                    }
+
+                    if (!_disabled.Contains(id))
+                    {
+                        LoadInstance(slot);
+                    }
+                }
+                catch (Exception ex) when (ex is PluginException or IOException or UnauthorizedAccessException)
+                {
+                    slot.Error = ex.Message;
+                }
+            }
+        }
+
         if (LoadsExtraPlugins && _streamDeck is not null && Directory.Exists(StreamDeckDirectory))
         {
             foreach (var directory in Directory.EnumerateDirectories(StreamDeckDirectory, "*.sdPlugin").Order(StringComparer.OrdinalIgnoreCase))
@@ -457,6 +526,11 @@ public sealed class PluginCatalog : IDisposable
         if (slot.Kind == SlotKind.System)
         {
             throw new PluginException($"{slot.DisplayName} is a system plugin and can't be uninstalled. You can disable it instead.");
+        }
+
+        if (slot.IsBundled)
+        {
+            throw new PluginException($"{slot.DisplayName} ships with DeckHost and can't be uninstalled. You can disable it instead.");
         }
 
         Unload(slot);
@@ -575,7 +649,7 @@ public sealed class PluginCatalog : IDisposable
         EnsureNotSystem(manifest.Id);
 
         // Trial load: proves the package contains a working plugin before anything is replaced.
-        var trial = new Slot(manifest.Id, SlotKind.Package, IsRequired: false, stagingDirectory) { Manifest = manifest };
+        var trial = new Slot(manifest.Id, SlotKind.Package, IsRequired: false, stagingDirectory) { Manifest = manifest, IsTrial = true };
         LoadInstance(trial);
         Unload(trial);
 
@@ -729,12 +803,18 @@ public sealed class PluginCatalog : IDisposable
 
     private void LoadInstance(Slot slot)
     {
-        if (slot.Instance is not null || slot.Directory is null || slot.Manifest is null)
+        if (slot.Instance is not null || slot.DeviceInstance is not null || slot.Directory is null || slot.Manifest is null)
         {
             return;
         }
 
         slot.Error = null;
+        if (slot.Manifest.IsDevice)
+        {
+            LoadDevicePlugin(slot);
+            return;
+        }
+
         if (ProcessLauncher is { } launcher && !_inProcess.Contains(slot.Id))
         {
             // Its own process: a crash or a hang there can't take DeckHost down.
@@ -765,6 +845,76 @@ public sealed class PluginCatalog : IDisposable
         catch (PluginException ex)
         {
             slot.Error = ex.Message;
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Loads a device plugin package inside DeckHost: devices need the live output and input callbacks, which don't
+    /// cross a process boundary yet. A trial slot (an install being checked) is created but not announced.
+    /// </summary>
+    private void LoadDevicePlugin(Slot slot)
+    {
+        try
+        {
+            Report($"Starting {slot.Manifest!.Name}…");
+            var (instance, context) = LoadDeviceInProcess(slot.Directory!, slot.Manifest);
+            slot.DeviceInstance = instance;
+            slot.Context = context;
+        }
+        catch (PluginException ex)
+        {
+            slot.Error = ex.Message;
+            throw;
+        }
+
+        if (!slot.IsTrial && !_disabled.Contains(slot.Id))
+        {
+            DevicePluginLoaded?.Invoke(slot.DeviceInstance!);
+        }
+    }
+
+    /// <summary>A public constructor DeckHost can call without arguments: none, or only optional ones (a plugin may take a data folder for its tests).</summary>
+    private static System.Reflection.ConstructorInfo? FindDeviceConstructor(Type type) =>
+        type.GetConstructors().FirstOrDefault(static constructor => constructor.GetParameters().All(static parameter => parameter.IsOptional && parameter.HasDefaultValue));
+
+    /// <summary>Loads a device plugin package into this process (its own collectible context).</summary>
+    internal static (IDevicePlugin Instance, PluginLoadContext Context) LoadDeviceInProcess(string directory, PluginManifest manifest)
+    {
+        var context = new PluginLoadContext(directory, manifest.Id);
+        try
+        {
+            var assemblyPath = Path.Combine(directory, manifest.Assembly);
+            if (!File.Exists(assemblyPath))
+            {
+                throw new PluginException($"The package does not contain {manifest.Assembly}.");
+            }
+
+            var assembly = context.LoadPluginAssembly(manifest.Assembly);
+            var pluginType = GetLoadableTypes(assembly)
+                .FirstOrDefault(type => type is { IsAbstract: false, IsInterface: false } &&
+                                        typeof(IDevicePlugin).IsAssignableFrom(type) &&
+                                        FindDeviceConstructor(type) is not null)
+                ?? throw new PluginException($"{manifest.Assembly} contains no public IDevicePlugin with a parameterless constructor (built against this DeckHost.Contracts?).");
+
+            var constructor = FindDeviceConstructor(pluginType)!;
+            var instance = (IDevicePlugin)constructor.Invoke([.. constructor.GetParameters().Select(static parameter => parameter.DefaultValue)]);
+            if (!string.Equals(instance.Id, manifest.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                instance.Dispose();
+                throw new PluginException($"The plugin reports id '{instance.Id}' but its manifest says '{manifest.Id}'.");
+            }
+
+            return (instance, context);
+        }
+        catch (Exception ex) when (ex is not PluginException)
+        {
+            context.Unload();
+            throw new PluginException($"The plugin could not be loaded: {ex.Message}", ex);
+        }
+        catch
+        {
+            context.Unload();
             throw;
         }
     }
@@ -830,6 +980,36 @@ public sealed class PluginCatalog : IDisposable
                 return;
         }
 
+        if (slot.DeviceInstance is { } device)
+        {
+            Report($"Stopping {slot.DisplayName}…");
+            slot.DeviceInstance = null;
+            if (!slot.IsTrial)
+            {
+                try
+                {
+                    DevicePluginUnloading?.Invoke(device);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    PluginLog("Warning", $"The device host failed to let go of {slot.DisplayName}: {ex.Message}");
+                }
+            }
+
+            try
+            {
+                device.Dispose();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // A plugin failing to clean up must not block uninstalling it.
+            }
+
+            slot.Context?.Unload();
+            slot.Context = null;
+            return;
+        }
+
         if (slot.Process is { } process)
         {
             Report($"Stopping {slot.DisplayName}…");
@@ -864,21 +1044,22 @@ public sealed class PluginCatalog : IDisposable
     {
         var instance = slot.Instance;
         var sd = slot.StreamDeckManifest;
+        var isDevicePackage = slot.Manifest?.IsDevice == true;
         return new PluginEntry(
             slot.Id,
-            instance?.Name ?? slot.Manifest?.Name ?? sd?.Name ?? slot.Id,
+            instance?.Name ?? slot.DeviceInstance?.Name ?? slot.Manifest?.Name ?? sd?.Name ?? slot.Id,
             slot.Manifest?.Version ?? sd?.Version ?? instance?.Version ?? "?",
             slot.Manifest?.Author ?? sd?.Author ?? instance?.Author,
             slot.Manifest?.Description ?? sd?.Description ?? instance?.Description,
-            sd is { IsDevicePlugin: true } ? PluginKind.Device : PluginKind.Application,
+            sd is { IsDevicePlugin: true } || isDevicePackage ? PluginKind.Device : PluginKind.Application,
             slot.Kind == SlotKind.System,
             IsEnabled: !_disabled.Contains(slot.Id) && (slot.Error is null || slot.Kind == SlotKind.StreamDeck),
             CanDisable: !slot.IsRequired,
-            CanUninstall: slot.Kind != SlotKind.System,
+            CanUninstall: slot.Kind != SlotKind.System && !slot.IsBundled,
             instance?.Actions.Count,
             slot.Error,
             slot.Kind == SlotKind.StreamDeck ? StreamDeckSource : DeckHostSource,
-            slot.Kind == SlotKind.System ? "Built into DeckHost" : _origins.GetValueOrDefault(slot.Id, "File"),
+            slot.Kind == SlotKind.System ? "Built into DeckHost" : slot.IsBundled ? "Bundled with DeckHost" : _origins.GetValueOrDefault(slot.Id, "File"),
             slot.StreamDeckManifest?.Category,
             slot.Directory,
             IconPathOf(slot),
@@ -887,10 +1068,11 @@ public sealed class PluginCatalog : IDisposable
             slot.Kind == SlotKind.Package && slot.Directory is { } directory && slot.Error is null
                 ? [.. PluginDiagnostics.CheckFolder(directory).Select(static problem => problem.Message)]
                 : null,
-            slot.Kind == SlotKind.Package && ProcessLauncher is not null ? !_inProcess.Contains(slot.Id) : null,
+            slot.Kind == SlotKind.Package && ProcessLauncher is not null && !isDevicePackage ? !_inProcess.Contains(slot.Id) : null,
             slot.Process is { } process ? process.Problem ?? process.Status
                 : slot.Kind == SlotKind.StreamDeck && _streamDeck is not null && !_disabled.Contains(slot.Id) ? _streamDeck.ProblemOf(slot.Id) ?? _streamDeck.StatusOf(slot.Id)
-                : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost" : null,
+                : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost"
+                : isDevicePackage && slot.DeviceInstance is not null ? "Runs inside DeckHost" : null,
             slot.Manifest?.Url ?? slot.StreamDeckManifest?.Url,
             slot.Manifest?.Repository);
     }
@@ -1015,6 +1197,15 @@ public sealed class PluginCatalog : IDisposable
 
         public IApplicationPlugin? Instance { get; set; }
 
+        /// <summary>The loaded plugin when the package is a device plugin (<see cref="PluginManifest.IsDevice"/>).</summary>
+        public IDevicePlugin? DeviceInstance { get; set; }
+
+        /// <summary>Ships with DeckHost (read-only): can be disabled, not uninstalled.</summary>
+        public bool IsBundled { get; init; }
+
+        /// <summary>An install being checked in its staging folder: loaded to prove it works, never announced.</summary>
+        public bool IsTrial { get; init; }
+
         public PluginLoadContext? Context { get; set; }
 
         /// <summary>The process the plugin runs in, when it runs in its own.</summary>
@@ -1022,6 +1213,6 @@ public sealed class PluginCatalog : IDisposable
 
         public string? Error { get; set; }
 
-        public string DisplayName => Instance?.Name ?? Manifest?.Name ?? StreamDeckManifest?.Name ?? Id;
+        public string DisplayName => Instance?.Name ?? DeviceInstance?.Name ?? Manifest?.Name ?? StreamDeckManifest?.Name ?? Id;
     }
 }

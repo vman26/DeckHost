@@ -47,7 +47,14 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private long _lastSteadyLightRefresh;
 
     private readonly IVariableStore _variableStore;
-    private readonly IReadOnlyList<IDevicePlugin> _devicePlugins;
+    /// <summary>
+    /// Replaced (never mutated), and only on the worker once it runs: plugins from packages come and go
+    /// (<see cref="AddDevicePluginAsync"/>, <see cref="RemoveDevicePluginAsync"/>).
+    /// </summary>
+    private volatile IReadOnlyList<IDevicePlugin> _devicePlugins;
+
+    /// <summary>The plugins this host was given at construction: it disposes those. A plugin added later belongs to whoever loaded it.</summary>
+    private readonly IReadOnlyList<IDevicePlugin> _ownedDevicePlugins;
     private readonly IActionRouter _actionRouter;
     private readonly Channel<Func<ValueTask>> _work = Channel.CreateUnbounded<Func<ValueTask>>(new UnboundedChannelOptions { SingleReader = true });
     private readonly Task _worker;
@@ -134,6 +141,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
         _variableStore = variableStore;
         _devicePlugins = devicePlugins.ToList();
+        _ownedDevicePlugins = _devicePlugins;
         _actionRouter = actionRouter;
         if (_actionRouter is ActionRouter router)
         {
@@ -536,7 +544,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
         await Task.WhenAny(_worker, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
 
-        foreach (var plugin in _devicePlugins)
+        foreach (var plugin in _ownedDevicePlugins)
         {
             try
             {
@@ -615,33 +623,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         foreach (var plugin in _devicePlugins)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var context = new DevicePluginContext(this, Log, ReportConnectionStatus, deviceId => Enqueue(() =>
-            {
-                // The device's own screen (and with its configuration, its LEDs) was overwritten:
-                // push every image and light again. A steady light (or Off) would otherwise never
-                // be sent again and the device's own lighting stayed on.
-                ForgetFrames(deviceId);
-                _dirty.MarkDevice(deviceId);
-                ApplyIdleLights(deviceId);
-            }));
-            try
-            {
-                await plugin.InitializeAsync(context, cancellationToken).ConfigureAwait(false);
-                Log("Info", $"Initialized device plugin '{plugin.Name}'.");
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                foreach (var device in plugin.Devices)
-                {
-                    ReportConnectionStatus(new DeviceConnectionStatus(device.Id, "Failed", ex.Message));
-                }
-
-                Log("Error", $"Failed to initialize device plugin '{plugin.Name}': {ex.Message}");
-            }
+            await InitializePluginAsync(plugin, cancellationToken).ConfigureAwait(false);
         }
 
         _pluginsInitialized = true;
@@ -653,6 +635,132 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             ApplyIdleLights(deviceId);
         }
     }
+
+    /// <summary>Starts one device plugin (on the worker). A failure is logged and shown on its devices, never thrown.</summary>
+    private async Task InitializePluginAsync(IDevicePlugin plugin, CancellationToken cancellationToken)
+    {
+        var context = new DevicePluginContext(this, Log, ReportConnectionStatus, deviceId => Enqueue(() =>
+        {
+            // The device's own screen (and with its configuration, its LEDs) was overwritten:
+            // push every image and light again. A steady light (or Off) would otherwise never
+            // be sent again and the device's own lighting stayed on.
+            ForgetFrames(deviceId);
+            _dirty.MarkDevice(deviceId);
+            ApplyIdleLights(deviceId);
+        }));
+        try
+        {
+            await plugin.InitializeAsync(context, cancellationToken).ConfigureAwait(false);
+            Log("Info", $"Initialized device plugin '{plugin.Name}'.");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            foreach (var device in plugin.Devices)
+            {
+                ReportConnectionStatus(new DeviceConnectionStatus(device.Id, "Failed", ex.Message));
+            }
+
+            Log("Error", $"Failed to initialize device plugin '{plugin.Name}': {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Hands the host a device plugin that was loaded after it started (a package that was installed or enabled).
+    /// Completes once the plugin runs and its devices are listed. The host does not dispose it.
+    /// </summary>
+    public Task AddDevicePluginAsync(IDevicePlugin plugin)
+    {
+        ArgumentNullException.ThrowIfNull(plugin);
+        return RunOnWorkerAsync(async () =>
+        {
+            if (_devicePlugins.Contains(plugin))
+            {
+                return;
+            }
+
+            _devicePlugins = [.. _devicePlugins, plugin];
+            plugin.DevicesChanged += OnPluginDevicesChanged;
+            if (!_pluginsInitialized)
+            {
+                // StartAsync initializes every plugin in the list; what it reports now is listed already (as at construction).
+                RefreshDevices(raiseEvent: false);
+                return;
+            }
+
+            await InitializePluginAsync(plugin, CancellationToken.None).ConfigureAwait(false);
+            RefreshDevices(raiseEvent: true);
+            foreach (var deviceId in _devicesById.Where(pair => ReferenceEquals(pair.Value.Plugin, plugin)).Select(static pair => pair.Key).ToList())
+            {
+                _dirty.MarkDevice(deviceId);
+                ApplyIdleLights(deviceId);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Stops using a device plugin (it was disabled, replaced or uninstalled): blanks its devices, drops them from the list
+    /// and lets go of it. Completes before the caller may dispose the plugin.
+    /// </summary>
+    public Task RemoveDevicePluginAsync(IDevicePlugin plugin)
+    {
+        ArgumentNullException.ThrowIfNull(plugin);
+        return RunOnWorkerAsync(() =>
+        {
+            if (!_devicePlugins.Contains(plugin))
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            plugin.DevicesChanged -= OnPluginDevicesChanged;
+            if (_pluginsInitialized)
+            {
+                foreach (var deviceId in _devicesById.Where(pair => ReferenceEquals(pair.Value.Plugin, plugin) && pair.Value.Device.IsConnected).Select(static pair => pair.Key).ToList())
+                {
+                    try
+                    {
+                        plugin.Output.Clear(deviceId);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        Log("Warning", $"Blanking '{deviceId}' while removing '{plugin.Name}' failed: {ex.Message}");
+                    }
+                }
+            }
+
+            _devicePlugins = [.. _devicePlugins.Where(other => !ReferenceEquals(other, plugin))];
+            RefreshDevices(raiseEvent: true);
+            Log("Info", $"Device plugin '{plugin.Name}' removed.");
+            return ValueTask.CompletedTask;
+        });
+    }
+
+    private Task RunOnWorkerAsync(Func<ValueTask> work)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_work.Writer.TryWrite(async () =>
+            {
+                try
+                {
+                    await work().ConfigureAwait(false);
+                    completion.TrySetResult();
+                }
+                catch (Exception ex)
+                {
+                    completion.TrySetException(ex);
+                }
+            }))
+        {
+            // Disposed: nothing left to add to or remove from.
+            completion.TrySetResult();
+        }
+
+        return completion.Task;
+    }
+
 
     private void HandleInput(DeviceInputEvent inputEvent)
     {

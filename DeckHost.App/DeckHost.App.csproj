@@ -56,11 +56,12 @@
   <ItemGroup>
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
     <ProjectReference Include="..\DeckHost.Core\DeckHost.Core.csproj" />
-    <ProjectReference Include="..\DeckHost.Device.Elgato\DeckHost.Device.Elgato.csproj" />
+    <!-- Bundled device plugins: built first, shipped as packages under plugins/bundled (not referenced by the app). -->
+    <ProjectReference Include="..\DeckHost.Device.Elgato\DeckHost.Device.Elgato.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\DeckHost.Device.Hid\DeckHost.Device.Hid.csproj" />
     <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
     <ProjectReference Include="..\DeckHost.Device.Simulator\DeckHost.Device.Simulator.csproj" />
-    <ProjectReference Include="..\DeckHost.Device.Web\DeckHost.Device.Web.csproj" />
+    <ProjectReference Include="..\DeckHost.Device.Web\DeckHost.Device.Web.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <!-- Only WebView2's Core API is used (Views/WebView2Host); drop its WPF and WinForms wrappers. -->
@@ -72,6 +73,21 @@
 
   <Target Name="PreparePluginDirectories" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true'">
     <MakeDir Directories="$(OutDir)plugins\;$(OutDir)plugins\device\;$(OutDir)plugins\functional\;$(OutDir)plugins\device\deckhost-device-mirabox\" />
+  </Target>
+
+  <!-- The device plugins that ship with DeckHost: artifacts/bundled/<id> (staged by build/BundledDevicePlugin.targets) -> plugins/bundled/<id>. -->
+  <Target Name="CopyBundledPluginsToOutput" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <BundledPluginFile Include="$(MSBuildProjectDirectory)\..\artifacts\bundled\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(BundledPluginFile)" DestinationFiles="@(BundledPluginFile->'$(OutDir)plugins\bundled\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishBundledPlugins" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <ItemGroup>
+      <BundledPluginPublish Include="$(MSBuildProjectDirectory)\..\artifacts\bundled\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(BundledPluginPublish)" DestinationFiles="@(BundledPluginPublish->'$(PublishDir)plugins\bundled\%(RecursiveDir)%(Filename)%(Extension)')" />
   </Target>
 
   <!-- MiraBoxNative resolves MiraBoxBridge only from plugins/device/deckhost-device-mirabox. -->
