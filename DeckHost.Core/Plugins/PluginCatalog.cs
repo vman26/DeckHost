@@ -420,23 +420,29 @@ public sealed class PluginCatalog : IDisposable
                     continue;
                 }
 
-                var id = Path.GetFileName(directory);
-                if (IsInstalled(id))
+                // The id comes from plugin.json: the folder is named with dashes (deckhost-device-mirabox), because macOS
+                // codesign takes a folder with a dot in its name inside the app for a nested bundle and refuses to sign it.
+                PluginManifest manifest;
+                try
+                {
+                    manifest = PluginManifest.Parse(File.ReadAllText(Path.Combine(directory, PluginManifest.FileName)));
+                }
+                catch (Exception ex) when (ex is PluginException or IOException or UnauthorizedAccessException)
+                {
+                    _slots.Add(new Slot(Path.GetFileName(directory), SlotKind.Package, IsRequired: false, directory) { IsBundled = true, Error = ex.Message });
+                    continue;
+                }
+
+                if (IsInstalled(manifest.Id))
                 {
                     continue;
                 }
 
-                var slot = new Slot(id, SlotKind.Package, IsRequired: false, directory) { IsBundled = true };
+                var slot = new Slot(manifest.Id, SlotKind.Package, IsRequired: false, directory) { IsBundled = true, Manifest = manifest };
                 _slots.Add(slot);
                 try
                 {
-                    slot.Manifest = PluginManifest.Parse(File.ReadAllText(Path.Combine(directory, PluginManifest.FileName)));
-                    if (!string.Equals(slot.Manifest.Id, id, StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new PluginException($"The folder is named '{id}' but plugin.json says '{slot.Manifest.Id}'.");
-                    }
-
-                    if (!_disabled.Contains(id))
+                    if (!_disabled.Contains(slot.Id))
                     {
                         LoadInstance(slot);
                     }

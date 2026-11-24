@@ -79,7 +79,7 @@
     <MakeDir Directories="$(OutDir)plugins\;$(OutDir)plugins\bundled\;$(OutDir)plugins\functional\" />
   </Target>
 
-  <!-- The device plugins that ship with DeckHost: artifacts/bundled/<id> (staged by build/BundledDevicePlugin.targets) -> plugins/bundled/<id>. -->
+  <!-- The device plugins that ship with DeckHost: artifacts/bundled/<folder> (staged by build/BundledDevicePlugin.targets) -> plugins/bundled/<folder>. -->
   <Target Name="CopyBundledPluginsToOutput" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
       <BundledPluginFile Include="$(MSBuildProjectDirectory)\..\artifacts\bundled\**\*" />

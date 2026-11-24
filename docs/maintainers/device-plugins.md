@@ -28,7 +28,7 @@ All of them ship as bundled plugin packages (see below).
     A `public static (bool Ok, string Report) CheckRuntime()` on the plugin class is run by
     `DeckHost --check-native` (MiraBox loads its native bridge and lists the devices).
 
-    The plugins that ship with DeckHost are packages too, in `plugins/bundled/<id>` next to the app:
+    The plugins that ship with DeckHost are packages too, in `plugins/bundled/<id with dashes for dots>` next to the app (macOS codesign takes a folder with a dot in its name for a nested bundle):
     they can be disabled but not uninstalled, and an installed version of the same id replaces the
     bundled one. A project makes itself one by setting `<BundledPluginId>` and importing
     `build/BundledDevicePlugin.targets` (see `DeckHost.Device.Web.csproj`; files such as native

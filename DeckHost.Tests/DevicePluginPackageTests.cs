@@ -166,7 +166,7 @@ public class DevicePluginPackageTests
         var root = Directory.CreateTempSubdirectory("deckhost-bundled-test").FullName;
         try
         {
-            var bundled = Path.Combine(root, "bundled", "deckhost.device.test");
+            var bundled = Path.Combine(root, "bundled", "deckhost-device-test"); // dashes, as shipped: the id comes from plugin.json
             Directory.CreateDirectory(bundled);
             File.WriteAllText(
                 Path.Combine(bundled, PluginManifest.FileName),

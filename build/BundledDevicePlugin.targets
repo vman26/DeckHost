@@ -1,11 +1,12 @@
 <Project>
   <!--
     Imported by a DeckHost.Device.* project that ships with DeckHost as a plugin package (docs/maintainers/device-plugins.md).
-    The project sets BundledPluginId (its plugin.json id, also the folder name) and has a plugin.json next to it.
+    The project sets BundledPluginId (its plugin.json id) and has a plugin.json next to it. The folder is the id with
+    dashes for dots (deckhost-device-mirabox): macOS codesign takes a folder with a dot in its name for a nested bundle.
     Other files the plugin needs next to it (native libraries) go in BundledPluginExtraFile items, added by a target
     that runs before BundleDevicePlugin (DeckHost.Device.MiraBox.csproj adds its native bridge).
     After each build the plugin's folder (plugin.json, the assembly and its managed dependencies) is staged in
-    artifacts/bundled/<id>; DeckHost.App copies artifacts/bundled to plugins/bundled next to the app.
+    artifacts/bundled/<folder>; DeckHost.App copies artifacts/bundled to plugins/bundled next to the app.
     DeckHost.Contracts and SkiaSharp are left out: they come from the host.
   -->
   <PropertyGroup>
@@ -16,7 +17,7 @@
 
   <Target Name="BundleDevicePlugin" AfterTargets="Build" Condition="'$(BundledPluginId)' != '' and '$(DesignTimeBuild)' != 'true'">
     <PropertyGroup>
-      <BundledPluginFolder>$(BundledPluginsDirectory)$(BundledPluginId)\</BundledPluginFolder>
+      <BundledPluginFolder>$(BundledPluginsDirectory)$(BundledPluginId.Replace('.', '-'))\</BundledPluginFolder>
     </PropertyGroup>
     <ItemGroup>
       <BundledDependency Include="@(ReferenceCopyLocalPaths)" Condition="'%(Extension)' == '.dll'" />

@@ -113,7 +113,7 @@ dotnet run --project .\DeckHost.App
 dotnet test .\DeckHost.Tests
 ```
 
-`dotnet build` also configures and builds the native bridge (`native/MiraBoxBridge`) with CMake and copies it into the bundled MiraBox plugin (`plugins/bundled/deckhost.device.mirabox/` next to the app). To build only the C# code, add `-p:EnableMiraBoxNativeBuild=false`; the app then starts without device support.
+`dotnet build` also configures and builds the native bridge (`native/MiraBoxBridge`) with CMake and copies it into the bundled MiraBox plugin (`plugins/bundled/deckhost-device-mirabox/` next to the app). To build only the C# code, add `-p:EnableMiraBoxNativeBuild=false`; the app then starts without device support.
 
 The tests run on all three systems. On Linux, to build against the static OpenCV releases use:
 

@@ -17,7 +17,7 @@ accepts device plugins while it runs.
   worker like everything else); it disposes only the plugins it was constructed with. The catalog disposes a package
   plugin, after the host has blanked and let go of it. `LiveDevicePlugins` gives the services that look devices up
   (firmware, device settings, the simulator) a current list.
-- The plugins that ship with DeckHost are bundled packages in `plugins/bundled/<id>` (read-only: they can be
+- The plugins that ship with DeckHost are bundled packages in `plugins/bundled/<id with dashes>`, e.g. `deckhost-device-mirabox`: macOS codesign takes a folder with a dot in its name for a nested bundle (read-only: they can be
   disabled, not uninstalled; an installed version of the same id wins). They load in safe mode too.
 - Device plugins run in the DeckHost process: their live output and input callbacks would need a wire protocol
   that [decision 0007](0007-in-process-plugins.md) doesn't have. SkiaSharp is shared with the host like Contracts.
