@@ -22,6 +22,7 @@ DeckHost runs Stream Deck plugins in their own processes and speaks their protoc
   Space with **Install plugin…**. Their knob actions go on knobs; plugins made with MiraBox's older
   Node.js template are started the way they expect.
 - Settings pages need WebView2 (Windows, built in), WKWebView (macOS) or WebKitGTK (Linux, `libwebkit2gtk-4.1`; else they open in your browser).
+- A plugin that goes online is a program of its own: your firewall needs to allow it, not only DeckHost ([details](troubleshooting.md#a-stream-deck-plugins-picture-doesnt-change)). Setting up the Discord plugin: [The Discord plugin keeps asking for access](troubleshooting.md#the-discord-plugin-keeps-asking-for-access).
 
 ## Other stores
 
