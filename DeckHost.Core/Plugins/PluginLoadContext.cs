@@ -31,6 +31,19 @@ internal sealed class PluginLoadContext(string pluginDirectory, string name, boo
         typeof(SkiaSharp.SKBitmap).Assembly.GetName().Name!,
     };
 
+    /// <summary>
+    /// Libraries that keep process-wide state and so must exist once per process, shared by every plugin and the app:
+    /// HidSharp starts a device-watching thread that registers a fixed Windows window class, and a second copy (one per
+    /// device plugin, plus the app's device creator) fails with "HidSharp RegisterClass failed", closing DeckHost.
+    /// The host's copy is used when it has one, else the first plugin's copy is loaded into the default context.
+    /// </summary>
+    private static readonly HashSet<string> ProcessWideAssemblies = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "HidSharp",
+    };
+
+    private static readonly Lock ProcessWideSync = new();
+
     /// <summary>The <see cref="AppContext"/> key under which a plugin assembly finds its folder.</summary>
     public static string DirectoryKey(string assemblyName) => "DeckHost.PluginDirectory." + assemblyName;
 
@@ -56,8 +69,37 @@ internal sealed class PluginLoadContext(string pluginDirectory, string name, boo
             return null;
         }
 
+        if (ProcessWideAssemblies.Contains(assemblyName.Name))
+        {
+            return LoadProcessWide(assemblyName);
+        }
+
         var candidate = Path.Combine(pluginDirectory, assemblyName.Name + ".dll");
         return File.Exists(candidate) ? LoadFromFile(candidate) : null;
+    }
+
+    private Assembly? LoadProcessWide(AssemblyName assemblyName)
+    {
+        lock (ProcessWideSync)
+        {
+            var loaded = Default.Assemblies.FirstOrDefault(assembly => string.Equals(assembly.GetName().Name, assemblyName.Name, StringComparison.OrdinalIgnoreCase));
+            if (loaded is not null)
+            {
+                return loaded;
+            }
+
+            try
+            {
+                return Default.LoadFromAssemblyName(assemblyName);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or FileLoadException)
+            {
+                // The host doesn't ship it: the plugin's copy becomes the process's.
+            }
+
+            var candidate = Path.Combine(pluginDirectory, assemblyName.Name + ".dll");
+            return File.Exists(candidate) ? Default.LoadFromAssemblyPath(candidate) : null;
+        }
     }
 
     /// <summary>A <c>[DllImport]</c>/<c>[LibraryImport]</c> of the plugin: its own folder first, then the usual places.</summary>

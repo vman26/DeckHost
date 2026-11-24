@@ -220,4 +220,33 @@ public class DevicePluginPackageTests
 
     private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
         Path.GetDirectoryName(Path.GetDirectoryName(path)!)!;
+
+    [Test]
+    public void Load_HidSharpFromTwoPluginFolders_GivesOneSharedCopy()
+    {
+        // Arrange
+        var hidSharp = typeof(HidSharp.DeviceList).Assembly;
+        var root = Directory.CreateTempSubdirectory("deckhost-shared-test").FullName;
+        try
+        {
+            var first = Directory.CreateDirectory(Path.Combine(root, "first")).FullName;
+            var second = Directory.CreateDirectory(Path.Combine(root, "second")).FullName;
+            File.Copy(hidSharp.Location, Path.Combine(first, Path.GetFileName(hidSharp.Location)));
+            File.Copy(hidSharp.Location, Path.Combine(second, Path.GetFileName(hidSharp.Location)));
+            var firstContext = new PluginLoadContext(first, "first", collectible: false);
+            var secondContext = new PluginLoadContext(second, "second", collectible: false);
+
+            // Act
+            var fromFirst = firstContext.LoadFromAssemblyName(hidSharp.GetName());
+            var fromSecond = secondContext.LoadFromAssemblyName(hidSharp.GetName());
+
+            // Assert
+            Assert.That(fromFirst, Is.SameAs(fromSecond));
+            Assert.That(System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(fromFirst), Is.SameAs(System.Runtime.Loader.AssemblyLoadContext.Default));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }
