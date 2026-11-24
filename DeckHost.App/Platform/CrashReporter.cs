@@ -69,7 +69,8 @@ internal static class CrashReporter
     /// <summary>
     /// The safety net: an exception nobody caught on the UI thread (a web view that fails to start, a bug in a handler) is
     /// written to a crash report and DeckHost carries on, with a notice, instead of closing. A storm of them
-    /// (<see cref="RecoveryLimiter"/>) is not recovered from. Call once Avalonia's dispatcher exists.
+    /// (<see cref="RecoveryLimiter"/>) is not recovered from. A web view torn down while it started
+    /// (<see cref="WebViewSupport.IsStartAborted"/>) is only logged. Call once Avalonia's dispatcher exists.
     /// </summary>
     public static void InstallDispatcherSafetyNet()
     {
@@ -88,6 +89,20 @@ internal static class CrashReporter
         if (WebViewSupport.IsWebViewFailure(exception))
         {
             WebViewSupport.ReportFailure(exception);
+            if (WebViewSupport.IsStartAborted(exception))
+            {
+                // Expected when a view goes away mid-start: no report, no notice, and it doesn't count toward a storm.
+                try
+                {
+                    NLog.LogManager.GetLogger("WebView").Info("A web view was closed while it started ({0}).", exception.Message);
+                }
+                catch (Exception)
+                {
+                    // Logging is a bonus.
+                }
+
+                return true;
+            }
         }
 
         if (!Limiter.Allow(DateTimeOffset.UtcNow))

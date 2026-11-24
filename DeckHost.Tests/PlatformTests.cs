@@ -261,4 +261,32 @@ public class AppVersionTests
         // Assert
         Assert.That(shown, Is.EqualTo(expected));
     }
+
+    [Test]
+    public void ActivationPipeNameFor_AShortTempPath_IsThePlainName()
+    {
+        // Arrange
+        const string TempPath = "/tmp/";
+        const string User = "someone";
+
+        // Act
+        var name = DeckHost.App.Program.ActivationPipeNameFor(TempPath, User);
+
+        // Assert
+        Assert.That(name, Is.EqualTo($"DeckHost.Activate.{User}"));
+    }
+
+    [Test]
+    public void ActivationPipeNameFor_ALongTempPath_IsAShortAbsolutePath()
+    {
+        // Arrange
+        var tempPath = "/var/folders/" + new string('x', DeckHost.App.Program.MaxSocketPath) + "/T/";
+        const string User = "someone";
+
+        // Act
+        var name = DeckHost.App.Program.ActivationPipeNameFor(tempPath, User);
+
+        // Assert
+        Assert.That((Path.IsPathRooted(name), name.Length <= DeckHost.App.Program.MaxSocketPath), Is.EqualTo((true, true)));
+    }
 }

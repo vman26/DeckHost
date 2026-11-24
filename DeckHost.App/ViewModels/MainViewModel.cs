@@ -73,7 +73,13 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         _deviceHostService.RosterChanged += () => Dispatcher.UIThread.Post(RefreshDiscovered);
         RefreshDiscovered();
         _deviceHostService.ActiveProfileChanged += (deviceId, profileId) => Dispatcher.UIThread.Post(() => OnHostActiveProfileChanged(deviceId, profileId));
-        _deviceHostService.ControlFrameRendered += frame => Dispatcher.UIThread.Post(() => OnControlFrameRendered(frame));
+        _deviceHostService.ControlFrameRendered += frame =>
+        {
+            if (_previewShown)
+            {
+                Dispatcher.UIThread.Post(() => OnControlFrameRendered(frame));
+            }
+        };
         _deviceHostService.InputReceived += input => Dispatcher.UIThread.Post(() => OnInputReceived(input));
         _deviceHostService.LightChanged += light => Dispatcher.UIThread.Post(() => OnLightChanged(light));
         _pluginCatalog.Changed += (_, _) => Dispatcher.UIThread.Post(OnPluginsChanged);
@@ -1213,6 +1219,31 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         }
 
         _deviceHostService.SimulateInput(new DeviceInputEvent(SelectedDevice.Id, control.Id, inputEvent, value));
+    }
+
+    private volatile bool _previewShown = true;
+
+    /// <summary>
+    /// Whether a window shows the device's pictures. While none does (DeckHost in the tray, the window
+    /// minimized) the canvas skips the host's frames, so a hidden DeckHost doesn't redraw them; when it is
+    /// shown again the device is redrawn, which brings the canvas up to date.
+    /// </summary>
+    public bool PreviewShown
+    {
+        get => _previewShown;
+        set
+        {
+            if (_previewShown == value)
+            {
+                return;
+            }
+
+            _previewShown = value;
+            if (value && SelectedDevice is { } device)
+            {
+                _deviceHostService.Redraw(device.Id);
+            }
+        }
     }
 
     private void OnControlFrameRendered(ControlFrame frame)

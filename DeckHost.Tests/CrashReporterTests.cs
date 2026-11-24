@@ -3,6 +3,7 @@ using DeckHost.App.Platform;
 namespace DeckHost.Tests;
 
 /// <summary>The safety net: an unexpected exception is recovered from with a report, until it happens in a storm.</summary>
+[NonParallelizable] // goes through WebViewSupport's static state, which WebViewSupportTests check too
 public sealed class CrashReporterTests : IDisposable
 {
     private const int Limit = 2;
@@ -16,6 +17,9 @@ public sealed class CrashReporterTests : IDisposable
         CrashReporter.CrashDirectory = _folder;
         CrashReporter.Limiter = new RecoveryLimiter(Limit);
         CrashReporter.Recovered += _recovered.Add;
+        WebViewSupport.MarkerPath = Path.Combine(_folder, "webview-disabled.txt");
+        WebViewSupport.RuntimeVersion = () => "130.0.1";
+        WebViewSupport.Reset();
     }
 
     public void Dispose()
@@ -23,6 +27,7 @@ public sealed class CrashReporterTests : IDisposable
         CrashReporter.Recovered -= _recovered.Add;
         CrashReporter.CrashDirectory = _original;
         CrashReporter.Limiter = new RecoveryLimiter();
+        WebViewSupport.RestoreDefaults();
         if (Directory.Exists(_folder))
         {
             Directory.Delete(_folder, recursive: true);
@@ -83,5 +88,48 @@ public sealed class CrashReporterTests : IDisposable
 
         // Assert
         Assert.That(recovered, Is.False);
+    }
+
+    [Test]
+    public void Recover_WebViewStartAborted_ReturnsTrue()
+    {
+        // Arrange
+        var exception = WebViewSupportTests.AbortedStartFromTheWebViewAdapter();
+
+        // Act
+        var recovered = CrashReporter.Recover(exception);
+
+        // Assert
+        Assert.That(recovered, Is.True);
+    }
+
+    [Test]
+    public void Recover_WebViewStartAborted_WritesNoReportAndRaisesNothing()
+    {
+        // Arrange
+        var exception = WebViewSupportTests.AbortedStartFromTheWebViewAdapter();
+
+        // Act
+        CrashReporter.Recover(exception);
+
+        // Assert
+        Assert.That(Directory.Exists(_folder), Is.False, "no crash report");
+        Assert.That(_recovered, Is.Empty);
+    }
+
+    [Test]
+    public void Recover_WebViewStartAbortedRepeatedly_IsNotCountedAsAStorm()
+    {
+        // Arrange
+        for (var i = 0; i <= Limit; i++)
+        {
+            CrashReporter.Recover(WebViewSupportTests.AbortedStartFromTheWebViewAdapter());
+        }
+
+        // Act
+        var recovered = CrashReporter.Recover(Failure());
+
+        // Assert
+        Assert.That(recovered, Is.True);
     }
 }

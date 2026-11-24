@@ -20,6 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: python3 scripts/release-notes.py check
+      # The release's VirusTotal scan, the parts that need no network.
+      - run: python3 scripts/virustotal.py selftest
 
   build:
     name: build (${{ matrix.os }})

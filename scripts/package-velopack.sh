@@ -6,7 +6,7 @@
 #
 # <version> is the SemVer without the commit (1.3.0-alpha.3); <file-version> what file names carry
 # (1.3.0-alpha.3-4b09090). <pack-dir> is the published folder, or on macOS the DeckHost.app bundle
-# (scripts/package.sh, DECKHOST_BUNDLE_ONLY=1).
+# (scripts/package.sh).
 #
 # Into <output-dir>: the feed, never renamed because releases.<channel>.json names the packages
 # (releases.<channel>.json, assets.<channel>.json, RELEASES*, DeckHost-<version>-<channel>-full.nupkg

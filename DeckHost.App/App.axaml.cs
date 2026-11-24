@@ -54,6 +54,12 @@ public partial class App : Application
             // An exception nobody catches on the UI thread (a web view that can't start) is reported, not fatal.
             Platform.CrashReporter.InstallDispatcherSafetyNet();
 
+            // macOS: no App Nap. DeckHost mostly runs without a window in front, and macOS would slow it down.
+            if (OperatingSystem.IsMacOS())
+            {
+                Platform.MacNative.KeepResponsive();
+            }
+
             var services = ConfigureServices();
             Ioc.Default.ConfigureServices(services);
             ViewModels.VariableSuggestions.Source = services.GetRequiredService<IDeviceHostService>().Variables;

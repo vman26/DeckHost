@@ -25,10 +25,15 @@ sealed class Program
     public static int Main(string[] args)
     {
         // Velopack first: during install, update and uninstall it starts DeckHost with its own arguments,
-        // runs the hook and ends the process here. Uninstalling removes the start-at-sign-in entry.
-        Velopack.VelopackApp.Build()
-            .OnBeforeUninstallFastCallback(_ => Platform.AppSettings.SetStartAtLogin(false))
-            .Run();
+        // runs the hook and ends the process here. Uninstalling removes the start-at-sign-in entry; only
+        // Windows has an uninstaller that runs hooks (elsewhere the app is just removed).
+        var velopack = Velopack.VelopackApp.Build();
+        if (OperatingSystem.IsWindows())
+        {
+            velopack = velopack.OnBeforeUninstallFastCallback(_ => Platform.AppSettings.SetStartAtLogin(false));
+        }
+
+        velopack.Run();
 
         // "DeckHost --check-native": is the device support installed correctly? No window, no device changes.
         if (Array.Exists(args, static arg => string.Equals(arg, "--check-native", StringComparison.OrdinalIgnoreCase)))
@@ -65,7 +70,7 @@ sealed class Program
         }
 
         // "DeckHost --check-plugin <package.zip|folder>": checks a DeckHost plugin for its author and
-        // loads it in a scratch folder (nothing is installed). Exit code 1 on errors.
+        // loads it in a scratch folder (nothing is installed), or reads a Stream Deck plugin's manifest. Exit code 1 on errors.
         var check = Array.FindIndex(args, static arg => string.Equals(arg, "--check-plugin", StringComparison.OrdinalIgnoreCase));
         if (check >= 0)
         {
@@ -90,6 +95,10 @@ sealed class Program
         {
             WaitForExit(previousProcess);
         }
+
+        // After the move from the older Windows setup: remove the old install, before the mutex below
+        // (its uninstaller won't run while a DeckHost holds it).
+        Platform.UpdateInstaller.RemoveOldInstall(Platform.MigrationNote.Peek());
 
         // Only one DeckHost may own the device: a second instance would run every action twice
         // (both read the same key presses, and each starts its own plugin processes).
@@ -149,13 +158,27 @@ sealed class Program
     private static extern bool AttachConsole(int processId);
 
     /// <summary>Per user, so two people signed in at once each have their own DeckHost.</summary>
-    private static string ActivationPipeName => $"DeckHost.Activate.{Environment.UserName}";
+    private static string ActivationPipeName => ActivationPipeNameFor(Path.GetTempPath(), Environment.UserName);
+
+    /// <summary>The longest socket path used: macOS allows 103 characters, Linux 107.</summary>
+    internal const int MaxSocketPath = 100;
+
+    /// <summary>
+    /// The activation pipe's name. On Linux and macOS .NET makes a pipe a Unix socket at
+    /// <c>&lt;temp&gt;/CoreFxPipe_&lt;name&gt;</c>, and a socket path has a length limit: with a long temporary folder the
+    /// name is an absolute path in /tmp instead, which .NET uses as it is (both sides compute the same).
+    /// </summary>
+    internal static string ActivationPipeNameFor(string tempPath, string user)
+    {
+        var name = $"DeckHost.Activate.{user}";
+        return Path.Combine(tempPath, "CoreFxPipe_" + name).Length <= MaxSocketPath ? name : "/tmp/" + name;
+    }
 
     /// <summary>Asks the running DeckHost to show its window.</summary>
     /// <summary>Checks a plugin package and trial-loads it into a scratch catalog; prints the result.</summary>
     private static int CheckPlugin(string package)
     {
-        var problems = Core.Plugins.PluginDiagnostics.Check(Path.GetFullPath(package));
+        var problems = Core.Plugins.PluginDiagnostics.Check(Path.GetFullPath(package), out var streamDeck);
         foreach (var problem in problems)
         {
             Console.WriteLine(problem);
@@ -164,6 +187,19 @@ sealed class Program
         if (problems.Any(static problem => problem.IsError))
         {
             return 1;
+        }
+
+        // A Stream Deck plugin is a program of its own (often Node.js or for another system): the check reads its
+        // manifest and files but doesn't start it.
+        if (streamDeck is not null)
+        {
+            Console.WriteLine($"ok: {streamDeck.Name} {streamDeck.Version} is a Stream Deck plugin with {streamDeck.Actions.Count} action(s) (not started by the check).");
+            foreach (var action in streamDeck.Actions)
+            {
+                Console.WriteLine($"  {action.Uuid}: {action.Name}");
+            }
+
+            return 0;
         }
 
         var root = Path.Combine(Path.GetTempPath(), "deckhost-check-plugin-" + Guid.NewGuid().ToString("N"));
@@ -226,9 +262,10 @@ sealed class Program
             pipe.Connect(TimeSpan.FromSeconds(2));
             pipe.WriteByte(1);
         }
-        catch (Exception ex) when (ex is WaitHandleCannotBeOpenedException or TimeoutException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is WaitHandleCannotBeOpenedException or TimeoutException or IOException or UnauthorizedAccessException
+            or ArgumentException or PlatformNotSupportedException)
         {
-            // The other instance is starting or exiting; nothing to show.
+            // The other instance is starting or exiting, or has no pipe; nothing to show.
         }
     }
 
@@ -254,6 +291,13 @@ sealed class Program
                 catch (IOException)
                 {
                     Thread.Sleep(500);
+                }
+                catch (Exception ex) when (ex is ArgumentException or PlatformNotSupportedException or UnauthorizedAccessException)
+                {
+                    // No pipe here (a socket path the system refuses, say): DeckHost runs on, only a second
+                    // launch can't bring this window forward. An exception left to this thread ended DeckHost.
+                    System.Diagnostics.Trace.WriteLine($"DeckHost: no activation pipe ({ex.Message}).");
+                    return;
                 }
             }
         })

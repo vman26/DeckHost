@@ -15,6 +15,8 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Device support is now plugins like the others: MiraBox, Elgato Stream Deck, Web Deck, generic USB devices and the device simulator
   ship as bundled plugins in the Plugin Manager (you can turn each off there), and device plugins from other developers can be
   installed as packages (`"kind": "device"` in plugin.json).
+- Troubleshooting explains what the Discord plugin's messages mean and how to fix each, and that a Stream Deck
+  plugin that goes online needs its own firewall permission.
 
 - Updates install through a new installer (Velopack): **Install and restart** shows the download from 0 to 100 %,
   then DeckHost restarts into the new version, which is put in place as a whole, never file by file. Updates are
@@ -114,6 +116,27 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Changed
 
+- A Stream Deck plugin's log no longer starts empty when DeckHost restarts the plugin after a crash: the run
+  before is kept as `<plugin id>.previous.log`, and each run starts with a line saying when it started.
+
+- The download page explains how to install DeckHost in a folder of your choice: the MSI's window only asks
+  "for me or for everyone", so the folder is given on the command line (`VELOPACK_INSTALLDIR=` for the MSI,
+  `--installto` for the installer).
+
+- The download page no longer says the Windows packages are signed: they aren't yet. The download page, Getting
+  started and the release notes now explain what Windows and macOS (including macOS 15's **Open Anyway**) show the
+  first time, and how to check a download. Troubleshooting has a new section for when an antivirus program blocks
+  DeckHost: how to check the file, restore it, allow DeckHost's folders and report the false positive. Each release's
+  notes link a VirusTotal report for every Windows download.
+
+- Moving from the older Windows setup no longer starts a hidden PowerShell window to remove the old install (a
+  pattern antivirus programs distrust): the new DeckHost removes it itself before it starts.
+
+- DeckHost uses much less CPU while it waits: lights and live keys only wake it when something has to change
+  (before, it woke up about 40 times a second all day), and the app is precompiled, so it starts faster and doesn't
+  spend its first minutes compiling. Every pull request and release is now measured on Windows, Linux and macOS
+  ([Performance](https://vman26.github.io/DeckHost/performance/)).
+
 - Backgrounds: the default background has its own section in the Profile Manager, and a profile only shows its background
   settings after you tick **Use a background of its own**; backups moved to their own section too.
 
@@ -129,6 +152,22 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- Stream Deck and OpenAction plugins no longer lose their saved settings when the plugin saves them while its
+  settings page reads them: DeckHost could hand the plugin empty settings, so the Discord plugin forgot its Client ID
+  and Secret right after Discord asked for access and asked again on every press. Settings files are now written
+  whole, so a crash can't leave one half written either.
+
+- `DeckHost --check-plugin` checks Stream Deck plugins too (their `manifest.json`, actions and program) instead of
+  failing with "No plugin.json at the root of the package"; it reads them but doesn't start them.
+
+- Switching controls while a plugin's settings page was still loading no longer shows an "unexpected error" notice or
+  writes a crash report (Windows: the web view was closed while it started, `E_ABORT`).
+- macOS and Linux: DeckHost no longer closes at start when its temporary folder has a long path (the single-instance
+  pipe's path was too long for the system).
+- macOS: DeckHost no longer closes at random a few minutes after it starts. The StreamDock device support set up
+  macOS's USB device watcher on a thread that could end, and the next device check then crashed.
+- macOS: DeckHost keeps App Nap from slowing it down while it runs in the background or in the menu bar, so keys and
+  knobs keep answering at once.
 - DeckHost no longer closes when the built-in browser (the plugin settings page) can't start, for example without
   the Microsoft Edge WebView2 runtime: unexpected errors in the window are recovered from with a crash report and a
   notice, and the browser stays off on that computer until the runtime is updated.

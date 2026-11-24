@@ -2,7 +2,7 @@
 
 ## A release
 
-Push a tag; the tag is the version (`v1.4.0`, or `v1.4.0-rc.1` for a pre-release). The **release** workflow tests, publishes DeckHost for Windows (x64), Linux (x64) and macOS (Apple Silicon), checks the native bridge in each package, packages them and creates the GitHub release with notes and `SHA256SUMS.txt`. Run the workflow by hand to get the packages as build artifacts without releasing.
+Push a tag; the tag is the version (`v1.4.0`, or `v1.4.0-rc.1` for a pre-release). The **release** workflow tests, publishes DeckHost for Windows (x64), Linux (x64) and macOS (Apple Silicon), checks the native bridge in each package, packages them and creates the GitHub release with notes, `SHA256SUMS.txt` and build provenance, then (with `VT_API_KEY`) has VirusTotal scan the Windows downloads ([False positives](#false-positives)). Run the workflow by hand to get the packages as build artifacts without releasing.
 
 Versions come from git (GitVersion, git-flow): `develop` builds alpha versions of the next minor, `release/x.y.z` builds release candidates, `hotfix/*` betas of the next patch.
 
@@ -19,6 +19,12 @@ DeckHost installs and updates through [Velopack](https://velopack.io) (the `Velo
 Before packing, the script downloads the channel's previous release (`vpk download github`), so every release after the first also has a small delta package. The app reads the feed from the GitHub releases of the repository the build names (`GithubSource`, pre-releases when the user includes them); `DECKHOST_UPDATE_FEED=<folder or URL>` points a DeckHost at a local feed for testing (`vpk pack -o <folder>` twice, start the older one, Install and restart). The runner needs `squashfs-tools` and `zstd` for the AppImage and the deltas.
 
 **The older Windows setup** (`packaging/windows/DeckHost.iss`, `*-win-x64-setup.exe`) is still built so that DeckHost versions from before Velopack, whose updater runs that file, reach the first Velopack version. That version then offers **Switch to the new installer** (`UpdateMode.MigrateWindows`): it installs the Velopack setup (or the MSI for an install in Program Files), removes the old install with its uninstaller after exiting and starts the new one, carrying start at sign-in over through `%AppData%\DeckHost\migration.json`. Stop building the Inno setup (and remove the step from `release.yml`) a few releases later, once nobody runs a pre-Velopack DeckHost. macOS and AppImage users move by themselves: the old updater swaps in the zip's app, which is now Velopack's, and AppImage users replace the file as before.
+
+## Performance
+
+The **performance** workflow (`.github/workflows/performance.yml`) measures every pull request and every tag on Windows, Linux and macOS with `benchmarks/DeckHost.Benchmark` (what it measures: [Performance](../performance.md)). A pull request gets a check per system, which fails when a number is over `benchmarks/budgets.json`, and one comment with every number next to the last release's. A tag's results go to the **`perf-data`** branch (`releases/<tag>/<system>.json` and `index.json`, written by `scripts/performance-page.py index`); the workflow then starts the docs workflow, which turns them into the numbers on the Performance page (`scripts/performance-page.py page` → `benchmarks/performance-data.md`, included by `docs/performance.md`).
+
+Raising a budget is a change to `benchmarks/budgets.json` in its own reviewed pull request that says why. A number that is over budget on one system only can get its own limit there (`"windows": {…}`) instead of loosening it everywhere.
 
 ## Release notes
 
@@ -86,11 +92,47 @@ Without signing the packages still work: Windows SmartScreen warns, and macOS as
 |---|---|---|---|
 | **Azure Artifact Signing** (Windows) | about 10 USD/month | organizations in the US, Canada, EU, UK and several other countries; individual developers only in the US and Canada | `scripts/setup-azure-signing.sh` sets it up; Microsoft renews the certificates, nothing expires on you except the app secret (2 years) |
 | A **code-signing certificate** from a CA (Windows) | 150–400 USD/year | anyone, also individuals in Europe (Certum, Sectigo, SSL.com, …) | the `.pfx` secrets below; cloud-only certificates need the CA's tool |
-| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository, like DeckHost | their GitHub action, added to the release workflow after they approve the project ([checklist](going-public.md#release-and-announce)) |
+| **SignPath Foundation** (Windows) | free | open-source projects with a public source repository, like DeckHost; on hold for DeckHost for now | their GitHub action, added to the release workflow after they approve the project ([checklist](going-public.md#release-and-announce)) |
 | **Apple Developer ID** (macOS) | 99 USD/year | anyone with an Apple Developer account | the macOS secrets below; signing and notarizing are automatic |
 | **Build provenance** (all files) | free | public source repositories | on by itself: the release job attests every file (`gh attestation verify <file> --repo <owner/repo>`) |
 
-For DeckHost: SignPath Foundation for Windows (free for open source) and the Apple Developer Program for macOS.
+**Where DeckHost is now:** unsigned, with checksums, build provenance and a VirusTotal scan of the
+Windows downloads in every release. SignPath Foundation couldn't give DeckHost a certificate for now;
+apply again later (a record of attested releases built in public helps). Until then the download
+page, the getting-started page and the release notes tell users what Windows and macOS show the first
+time (the notes only on systems whose secrets are missing, see `--unsigned` in
+`scripts/release-notes.py`). Once a certificate is in place, update `docs/download.md#first-start-and-signing`.
+
+**Not recommended: a self-signed certificate.** Windows trusts only certificates from a CA it knows.
+A self-signed one still shows "Unknown publisher", builds no SmartScreen reputation, and only stops
+the warning if every user imports the certificate into their trusted roots. Asking people to do that
+is a bad security habit to teach. On macOS the binaries already carry ad-hoc signatures, and that is
+all signing without a Developer ID gives.
+
+**Later option: the Microsoft Store.** Publishing there is free for individual developers and the
+Store signs the package, so Store installs have no SmartScreen warning. It's a separate packaging path
+(MSIX, updates through the Store instead of Velopack) and isn't built today.
+
+### False positives
+
+Unsigned programs that press keys, start at sign-in and load plugins get flagged by antivirus
+heuristics now and then, and a new unsigned release is a file no scanner has seen. So:
+
+1. Add a free VirusTotal account's API key as the `VT_API_KEY` secret. The release job then uploads
+   the Windows downloads to VirusTotal after the release exists (`scripts/virustotal.py`), adds each
+   file's verdict and report link to the notes, and shows a warning with the engines that flag a file.
+   It never fails the release.
+2. After each release, look at that warning (or the job summary). For every engine that flags a file,
+   submit it as a false positive, as the author, with the detection name. The vendors' forms are
+   listed in [If your antivirus blocks DeckHost](../troubleshooting.md#if-your-antivirus-blocks-deckhost).
+   Bitdefender's takes files up to 25 MB, so send `DeckHost.App.exe` from the zip rather than the
+   installer. Mention that it's open source, built by GitHub Actions, with the attestation.
+3. Answer user reports the same way. Most vendors clear a confirmed false positive within a few days.
+   Without a signature this can come back with each release, until DeckHost is signed.
+
+DeckHost itself avoids what scanners look for where it can: no hidden script hosts (the move from the
+older Windows setup starts the new DeckHost, which runs the old uninstaller itself), arguments are
+passed as lists, never through a shell.
 
 ### Windows: Azure Artifact Signing
 

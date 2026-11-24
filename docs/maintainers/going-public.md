@@ -23,11 +23,16 @@ before announcing it:
 - [ ] **First release:** tag `v0.1.0` (or whatever you want the first public version to be) on `main`.
       The release workflow builds Windows, Linux and macOS, checks each, and publishes them with
       checksums, build provenance and the OBS plugin package.
-- [ ] **Windows signing:** apply to [SignPath Foundation](https://signpath.org) (free for open-source
-      projects). They need: the public repository, a release built by GitHub Actions, and a
-      description of the project. Once approved they give you an organization, project and signing
-      policy; the release workflow then gets a SignPath signing step (ask for it; it takes their
-      values). Until then, releases are unsigned (Windows shows *More info → Run anyway*).
+- [ ] **Windows signing:** [SignPath Foundation](https://signpath.org) (free for open-source
+      projects) couldn't give DeckHost a certificate for now. Apply again later; they need the public
+      repository, a release built by GitHub Actions and a description of the project. Once approved
+      they give you an organization, project and signing policy, and the release workflow gets a
+      SignPath signing step (ask for it; it takes their values). Until then releases are unsigned,
+      with checksums and build provenance, and the docs and release notes tell users what to do
+      (Windows: *More info → Run anyway*). See [Code signing](releasing.md#code-signing).
+- [ ] **VirusTotal:** add the `VT_API_KEY` secret (a free VirusTotal account's API key), so every
+      release is scanned and false positives show up before users hit them
+      ([False positives](releasing.md#false-positives)).
 - [ ] **macOS:** with the Apple Developer Program (99 USD/year) the existing `MACOS_*` secrets sign
       and notarize; without it, users right-click → Open the first time.
 - [ ] **Fill in the OBS entry** in the plugin catalog with the release's package and checksum.

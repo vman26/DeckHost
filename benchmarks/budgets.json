@@ -1,0 +1,44 @@
+{
+  // The most DeckHost may take, per run of benchmarks/DeckHost.Benchmark (docs/performance.md).
+  // "default" applies everywhere; "windows", "linux" and "macos" override single limits.
+  // CPU is % of one core, memory the working set in MB of every DeckHost process together.
+  // A pull request fails when a number goes over its limit; raising one is a reviewed change here.
+  //
+  // Set from the CI runs of the pull request that made DeckHost idle-light (vman26/DeckHost#10),
+  // about 1.5 times the worse of two runs per system: GitHub's runners vary from run to run.
+  // Busy is a stress test (ten inputs a second for a minute, far more than anyone presses), and on
+  // the runners the window is drawn in software, without a graphics card: most of its CPU is the
+  // preview of the device being redrawn, not DeckHost's own work (that is the tray number).
+  "default": {
+    "startup.firstFrameSeconds": 10,
+    "idleWindow.cpuPercent": 3,
+    "idleWindow.memoryMb": 300,
+    "idleTray.cpuPercent": 1,
+    "idleTray.memoryMb": 300,
+    "busy.cpuPercent": 40,
+    "busy.memoryMaxMb": 350,
+    "busy.memoryGrowthMb": 30,
+    "latency.p95Ms": 100
+  },
+  // Measured 2.5 and 3.1 % with the window open, 32.9 and 32.7 % busy. The working set's growth over
+  // the busy minute swings with the garbage collector's timing there (-6.8 to +35.2 MB over nine runs,
+  // as often down as up: not a leak, which busy.memoryMaxMb would still catch).
+  "windows": {
+    "idleWindow.cpuPercent": 4.5,
+    "busy.cpuPercent": 50,
+    "busy.memoryGrowthMb": 50
+  },
+  // With the window open the runners measured 1.3 to 4.2 % for code that is equally fast: an A/B on a
+  // matching 4-core machine (v0.1.0-rc.5 against the commit before vman26/DeckHost#13, two rounds each)
+  // measured 1.9-2.1 % against 2.4-2.9 %, while CI showed 3.0 and 4.2 % for the same code. Most of it is
+  // the window drawn in software (Xvfb); the tray number, DeckHost's own work, stays under 1 %.
+  "linux": {
+    "idleWindow.cpuPercent": 4.5
+  },
+  // Measured 1.1 and 1.2 % in the tray. Busy memory growth measured 15.7 and 30.6 MB for the same code
+  // (vman26/DeckHost#11 and its merge, tagged v0.1.0-rc.4): the garbage collector's timing, as on Windows.
+  "macos": {
+    "idleTray.cpuPercent": 2,
+    "busy.memoryGrowthMb": 50
+  }
+}

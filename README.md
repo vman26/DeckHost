@@ -47,12 +47,12 @@ I'm saying this up front because you should know how the software you run is mad
 
 | Platform | Package | Install |
 |---|---|---|
-| Windows 10/11 (x64) | `DeckHost-<version>-win-x64-setup.exe` | Run it. Installs for your user (no administrator rights), with a Start menu entry and uninstaller. A plain `.zip` is there too. |
+| Windows 10/11 (x64) | `DeckHost-<version>-win-x64-install.exe` | Run it. Installs for your user (no administrator rights), with a Start menu entry and uninstaller. For all users: the `.msi`; a plain `.zip` is there too. To pick the folder: `install.exe --installto <folder>` or `msiexec /i <msi> VELOPACK_INSTALLDIR=<folder>` ([details](https://vman26.github.io/DeckHost/download/#install-in-another-folder)). It isn't code-signed yet: when Windows says "Windows protected your PC", choose **More info → Run anyway**. |
 | Linux (x64) | `DeckHost-<version>-linux-x64.tar.gz` | Unpack and run `./install.sh`: installs to `~/.local/share/deckhost` with a menu entry, and (with sudo, once) the udev rule that lets you use the N4 Pro and Elgato Stream Decks without root. `./install.sh --uninstall` removes it. |
 | Linux (x64), no install | `DeckHost-<version>-linux-x86_64.AppImage` | `chmod +x` it and run it. The udev rule is installed once by hand ([notes](https://vman26.github.io/DeckHost/devices/#linux-appimage)). |
-| macOS 12+ (Apple Silicon) | `DeckHost-<version>-osx-arm64.zip` | Unzip and move **DeckHost.app** to Applications. It isn't notarized: the first time, right-click → **Open**, or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`. |
+| macOS 12+ (Apple Silicon) | `DeckHost-<version>-osx-arm64.zip` | Unzip and move **DeckHost.app** to Applications. It isn't notarized: the first time, right-click → **Open** (macOS 15 and newer: open it once, then **System Settings → Privacy & Security → Open Anyway**), or run `xattr -dr com.apple.quarantine /Applications/DeckHost.app`. |
 
-`SHA256SUMS.txt` lists the checksums. To check that the device support is installed without opening the window, run DeckHost with `--check-native`: it loads the native bridge and lists the StreamDock devices it finds.
+`SHA256SUMS.txt` lists the checksums, and every file has a build provenance attestation (`gh attestation verify <file> --repo vman26/DeckHost`). An antivirus program blocks DeckHost? See [what to do](https://vman26.github.io/DeckHost/troubleshooting/#if-your-antivirus-blocks-deckhost). To check that the device support is installed without opening the window, run DeckHost with `--check-native`: it loads the native bridge and lists the StreamDock devices it finds.
 
 ### What works where
 
@@ -71,6 +71,21 @@ I'm saying this up front because you should know how the software you run is mad
 | Stream Deck plugins (native and Node.js) | ✓ | ✓ when the plugin ships a Linux build | ✓ when the plugin ships a macOS build |
 | Stream Deck plugin settings pages inside DeckHost | ✓ (WebView2) | ✓ (WebKitGTK, `libwebkit2gtk-4.1`; else in your browser) | ✓ (WKWebView) |
 | Stream Deck HTML plugins (plugins that run in a web page) | ✓ (WebView2) | don't run | don't run |
+
+### Light on your computer
+
+DeckHost runs all day, so every pull request and release is measured on Windows, Linux and macOS
+(GitHub's runners, a simulated N4 Pro with a clock and live CPU and memory keys), and a change that
+goes over its budget doesn't get in:
+
+| CPU, % of one core | Windows | Linux | macOS |
+|---|---:|---:|---:|
+| In the tray (how it spends most of the day) | 0.6–0.9 | 0.5–0.6 | 1.1–1.2 |
+| Window open, nothing pressed | 2.5–3.1 | 1.6–1.9 | 2.1 |
+| Press → new key image (95th percentile) | 2 ms | 2–7 ms | 11 ms |
+
+Memory is about 150–250 MB. The numbers for each release are on the
+[Performance](https://vman26.github.io/DeckHost/performance/) page.
 
 ### Elgato Stream Deck and the Web Deck
 

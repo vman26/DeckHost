@@ -130,6 +130,46 @@ internal static partial class MacNative
         return names;
     }
 
+    // NSActivityUserInitiatedAllowingIdleSystemSleep: NSActivityUserInitiated (0x00FFFFFF) without
+    // NSActivityIdleSystemSleepDisabled (1 << 20).
+    private const ulong UserInitiatedAllowingIdleSystemSleep = 0x00FFFFFFUL & ~(1UL << 20);
+
+    private static IntPtr _activity;
+
+    /// <summary>
+    /// Keeps App Nap away for as long as DeckHost runs. Without a window in front, macOS otherwise slows
+    /// DeckHost's timers and threads down, and a key press can take seconds to answer. The Mac may still
+    /// go to sleep; only the throttling is off, as for any app that drives hardware.
+    /// </summary>
+    public static bool KeepResponsive()
+    {
+        if (_activity != IntPtr.Zero)
+        {
+            return true;
+        }
+
+        var pool = objc_autoreleasePoolPush();
+        try
+        {
+            var processInfo = Send(Class("NSProcessInfo"), Selector("processInfo"));
+            var reason = SendString(Class("NSString"), Selector("stringWithUTF8String:"), "DeckHost answers its devices' keys and knobs.");
+            if (processInfo == IntPtr.Zero || reason == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            var activity = SendActivity(processInfo, Selector("beginActivityWithOptions:reason:"), UserInitiatedAllowingIdleSystemSleep, reason);
+
+            // Kept (retained) until DeckHost exits: ending the activity would let App Nap back in.
+            _activity = activity == IntPtr.Zero ? IntPtr.Zero : Send(activity, Selector("retain"));
+            return _activity != IntPtr.Zero;
+        }
+        finally
+        {
+            objc_autoreleasePoolPop(pool);
+        }
+    }
+
     /// <summary>Ticks spent idle and in total by all CPUs since start-up.</summary>
     public static (ulong Idle, ulong Total)? CpuTicks()
     {
@@ -238,6 +278,13 @@ internal static partial class MacNative
 
     [LibraryImport(ObjC, EntryPoint = "objc_msgSend")]
     private static partial int SendInt(IntPtr receiver, IntPtr selector);
+
+    [LibraryImport(ObjC, EntryPoint = "objc_msgSend", StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr SendString(IntPtr receiver, IntPtr selector, string value);
+
+    // -[NSProcessInfo beginActivityWithOptions:reason:]
+    [LibraryImport(ObjC, EntryPoint = "objc_msgSend")]
+    private static partial IntPtr SendActivity(IntPtr receiver, IntPtr selector, ulong options, IntPtr reason);
 
     // +[NSEvent otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:]
     [LibraryImport(ObjC, EntryPoint = "objc_msgSend")]

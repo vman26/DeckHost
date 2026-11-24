@@ -230,7 +230,7 @@ public sealed class SimulatorTests : IAsyncDisposable
         // Assert
         var image = received[SimulatorMessage.Image];
         Assert.That((image.Control, image.Width, image.Height), Is.EqualTo(("key.0", KeySize, KeySize)));
-        Assert.That(Convert.FromBase64String(image.Rgba!), Is.EqualTo(pixels));
+        Assert.That(image.Rgba, Is.EqualTo(pixels));
     }
 
     [Test]

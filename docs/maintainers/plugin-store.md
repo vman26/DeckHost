@@ -94,8 +94,9 @@ Takedown: add the plugin id (or `owner/repository`) to `mirror/blocklist.json` i
 ## Reviewing a submission
 
 The **check** workflow does the mechanical part: the fields, the download, the checksum, the id and
-version against the package's `plugin.json`, and loading it with `DeckHost --check-plugin` (from
-DeckHost's latest release). Your part:
+version against the package's `plugin.json` (or a Stream Deck package's `manifest.json`), and
+`DeckHost --check-plugin` (from DeckHost's latest release): it loads a DeckHost package, and for a
+Stream Deck package reads its manifest, actions and program without starting it. Your part:
 
 - Does the description match what it does? Is the author the one submitting it (or allowed to)?
 - Do the `permissions` make sense? A "clock" plugin asking for `processes` deserves a question.

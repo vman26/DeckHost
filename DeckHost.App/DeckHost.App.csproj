@@ -13,6 +13,11 @@
     <!-- The GitHub repository (owner/name) the updater checks for releases. The release workflow
          sets it to the public releases repository when the source repository is private. -->
     <DeckHostUpdateRepository Condition="'$(DeckHostUpdateRepository)' == ''">vman26/DeckHost</DeckHostUpdateRepository>
+    <!-- DeckHost runs all day and is mostly idle: published builds are precompiled (ReadyToRun) and
+         skip .NET's profile-guided re-optimization, so it doesn't spend CPU compiling hot code again
+         in its first minutes; the peak speed that buys isn't needed here (docs/performance.md). -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <ItemGroup>

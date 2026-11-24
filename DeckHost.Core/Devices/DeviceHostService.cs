@@ -35,7 +35,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private const int MaxLogEntries = 500;
 
     /// <summary>Frame interval for animated GIFs (10 fps keeps USB traffic reasonable).</summary>
-    private static readonly TimeSpan AnimationInterval = TimeSpan.FromMilliseconds(100);
+    internal static readonly TimeSpan AnimationInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>Light effects run faster than images: about 30 frames a second.</summary>
     private static readonly TimeSpan LightFrameInterval = TimeSpan.FromMilliseconds(33);
@@ -43,8 +43,25 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     /// <summary>Steady lights are sent again this often, in case the device changed them itself (sleep, its own config).</summary>
     private const long SteadyLightRefreshMilliseconds = 5000;
 
+    /// <summary>With nothing live, the live refresh still looks again this often (a plugin's interval can change).</summary>
+    internal static readonly TimeSpan LiveRefreshIdleInterval = TimeSpan.FromSeconds(1);
+
     private int _lightFrameQueued;
     private long _lastSteadyLightRefresh;
+
+    /// <summary>
+    /// Whether some light runs an animated effect (set by <see cref="AnimateLights"/>): only then does the
+    /// light loop wake 30 times a second; otherwise it sleeps until the steady refresh or <see cref="WakeLights"/>.
+    /// </summary>
+    private volatile bool _lightsAnimating = true;
+
+    private readonly SemaphoreSlim _lightWake = new(0, 1);
+
+    /// <summary>Whether the light loop runs at full speed (some effect animates; tests).</summary>
+    internal bool LightsAnimating => _lightsAnimating;
+
+    /// <summary>When the next live control is due (UTC ticks, set by <see cref="MarkDueLiveControlsDirty"/>); the live refresh sleeps until then.</summary>
+    private long _nextLiveRenderTicks;
 
     private readonly IVariableStore _variableStore;
     /// <summary>
@@ -1968,6 +1985,21 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
 
         ShowLights(deviceId, lights);
+
+        // The lights changed (another profile, another effect): the light loop looks again now.
+        WakeLights();
+    }
+
+    private void WakeLights()
+    {
+        try
+        {
+            _lightWake.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // Already woken.
+        }
     }
 
     /// <summary>Moves animated idle lights (breathing, rainbow) on; called on the animation tick.</summary>
@@ -1985,18 +2017,26 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             _lastSteadyLightRefresh = now;
         }
 
+        var animating = false;
         foreach (var (deviceId, entry) in _devicesById)
         {
             List<(string, (byte, byte, byte))>? lights = null;
             foreach (var control in entry.Device.Controls)
             {
                 var key = (deviceId, control.Id);
-                if (!control.HasLight || _lightHeldUntil.GetValueOrDefault(key) > now)
+                if (!control.HasLight)
                 {
                     continue;
                 }
 
-                if (!LightEffects.IsAnimated(IdleLightStyle(deviceId, control.Id)?.Effect))
+                var animated = LightEffects.IsAnimated(IdleLightStyle(deviceId, control.Id)?.Effect);
+                animating |= animated;
+                if (_lightHeldUntil.GetValueOrDefault(key) > now)
+                {
+                    continue;
+                }
+
+                if (!animated)
                 {
                     if (!refreshSteady || !entry.Device.IsConnected)
                     {
@@ -2015,6 +2055,8 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 ShowLights(deviceId, lights);
             }
         }
+
+        _lightsAnimating = animating;
     }
 
     private LightStyle? IdleLightStyle(string deviceId, string controlId)
@@ -2181,11 +2223,11 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     /// <summary>Redraws controls whose action has a <see cref="IDeckAction.RefreshInterval"/> (clocks, system info).</summary>
     private async Task RunLiveRefreshAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(AnimationInterval);
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            while (!cancellationToken.IsCancellationRequested)
             {
+                await Task.Delay(LiveRefreshDelay(DateTimeOffset.UtcNow), cancellationToken).ConfigureAwait(false);
                 Enqueue(() => MarkDueLiveControlsDirty(DateTimeOffset.UtcNow));
             }
         }
@@ -2194,14 +2236,24 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
     }
 
-    /// <summary>Moves light effects on at about 30 frames a second, so fades look smooth.</summary>
+    /// <summary>Moves light effects on at about 30 frames a second while one runs, so fades look smooth.</summary>
     private async Task RunLightLoopAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(LightFrameInterval);
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            while (!cancellationToken.IsCancellationRequested)
             {
+                // About 30 frames a second while an effect moves; otherwise only the steady refresh
+                // (every few seconds) or a change (WakeLights) wakes it, so an idle DeckHost stays idle.
+                if (_lightsAnimating)
+                {
+                    await Task.Delay(LightFrameInterval, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _lightWake.WaitAsync(TimeSpan.FromMilliseconds(SteadyLightRefreshMilliseconds), cancellationToken).ConfigureAwait(false);
+                }
+
                 // Skip a frame while the previous one is still queued (a slow device), instead of piling up.
                 if (Interlocked.Exchange(ref _lightFrameQueued, 1) == 0)
                 {
@@ -2218,6 +2270,13 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         }
     }
 
+    /// <summary>Runs one light frame (<see cref="AnimateLights"/>) on the worker and waits for it (tests).</summary>
+    internal Task AnimateLightsAsync()
+    {
+        Enqueue(AnimateLights);
+        return WhenIdleAsync();
+    }
+
     /// <summary>Runs <see cref="MarkDueLiveControlsDirty"/> on the worker at a given time and waits for the redraw (tests).</summary>
     internal Task RefreshLiveControlsAsync(DateTimeOffset now)
     {
@@ -2225,8 +2284,24 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         return WhenIdleAsync();
     }
 
+    /// <summary>
+    /// How long the live refresh may sleep: until the next live control is due (a clock: a second, a GIF:
+    /// its frame), at least <see cref="AnimationInterval"/> apart, and with nothing live at most
+    /// <see cref="LiveRefreshIdleInterval"/>, so a new live control is picked up soon.
+    /// </summary>
+    internal TimeSpan LiveRefreshDelay(DateTimeOffset now)
+    {
+        var due = Volatile.Read(ref _nextLiveRenderTicks);
+        var delay = due == 0 ? LiveRefreshIdleInterval : new DateTimeOffset(due, TimeSpan.Zero) - now;
+        return delay < AnimationInterval ? AnimationInterval : delay > LiveRefreshIdleInterval ? LiveRefreshIdleInterval : delay;
+    }
+
+    /// <summary>Marks the live controls that are due and notes when the next one is (<see cref="LiveRefreshDelay"/>).</summary>
     private void MarkDueLiveControlsDirty(DateTimeOffset now)
     {
+        DateTimeOffset? next = null;
+        void Due(DateTimeOffset at) => next = next is { } earlier && earlier <= at ? earlier : at;
+
         foreach (var (deviceId, entry) in _devicesById)
         {
             if (GetActiveProfile(deviceId) is not { } profile)
@@ -2240,9 +2315,12 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 var backgroundKey = (deviceId, "*background*");
                 if (!_nextLiveRender.TryGetValue(backgroundKey, out var backgroundDue) || backgroundDue <= now)
                 {
-                    _nextLiveRender[backgroundKey] = now + AnimationInterval;
+                    backgroundDue = now + AnimationInterval;
+                    _nextLiveRender[backgroundKey] = backgroundDue;
                     _dirty.MarkDevice(deviceId);
                 }
+
+                Due(backgroundDue);
             }
 
             foreach (var binding in profile.Bindings)
@@ -2261,13 +2339,18 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 var key = (deviceId, binding.ControlId);
                 if (_nextLiveRender.TryGetValue(key, out var due) && due > now)
                 {
+                    Due(due);
                     continue;
                 }
 
-                _nextLiveRender[key] = now + (interval.Value < AnimationInterval ? AnimationInterval : interval.Value);
+                due = now + (interval.Value < AnimationInterval ? AnimationInterval : interval.Value);
+                _nextLiveRender[key] = due;
+                Due(due);
                 MarkControlDirty(deviceId, binding.ControlId);
             }
         }
+
+        Volatile.Write(ref _nextLiveRenderTicks, next?.UtcTicks ?? 0);
     }
 
     /// <summary>What actions may ask of the host. Everything is queued onto the worker.</summary>
