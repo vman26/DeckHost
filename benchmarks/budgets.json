@@ -17,16 +17,16 @@
     "idleTray.memoryMb": 300,
     "busy.cpuPercent": 40,
     "busy.memoryMaxMb": 350,
-    "busy.memoryGrowthMb": 30,
+    // 50 MB on every system: the growth over one busy minute swings with the garbage collector's timing
+    // (Windows -6.8 to +35.2 MB over nine runs, macOS 15.7 and 30.6 MB, Linux 5.1 to 29.2 MB for the same
+    // code in vman26/DeckHost#17), as often down as up. A leak still shows in busy.memoryMaxMb.
+    "busy.memoryGrowthMb": 50,
     "latency.p95Ms": 100
   },
-  // Measured 2.5 and 3.1 % with the window open, 32.9 and 32.7 % busy. The working set's growth over
-  // the busy minute swings with the garbage collector's timing there (-6.8 to +35.2 MB over nine runs,
-  // as often down as up: not a leak, which busy.memoryMaxMb would still catch).
+  // Measured 2.5 and 3.1 % with the window open, 32.9 and 32.7 % busy.
   "windows": {
     "idleWindow.cpuPercent": 4.5,
-    "busy.cpuPercent": 50,
-    "busy.memoryGrowthMb": 50
+    "busy.cpuPercent": 50
   },
   // With the window open the runners measured 1.3 to 4.2 % for code that is equally fast: an A/B on a
   // matching 4-core machine (v0.1.0-rc.5 against the commit before vman26/DeckHost#13, two rounds each)
@@ -35,10 +35,8 @@
   "linux": {
     "idleWindow.cpuPercent": 4.5
   },
-  // Measured 1.1 and 1.2 % in the tray. Busy memory growth measured 15.7 and 30.6 MB for the same code
-  // (vman26/DeckHost#11 and its merge, tagged v0.1.0-rc.4): the garbage collector's timing, as on Windows.
+  // Measured 1.1 and 1.2 % in the tray.
   "macos": {
-    "idleTray.cpuPercent": 2,
-    "busy.memoryGrowthMb": 50
+    "idleTray.cpuPercent": 2
   }
 }
