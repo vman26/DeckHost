@@ -27,8 +27,55 @@ every second or so.
   printed before it ended). HTML plugins (whose program is a web page) run in DeckHost's built-in browser on Windows;
   they need the Microsoft Edge WebView2 runtime, which Windows 10 and 11 normally have.
 - **Linux and macOS:** HTML plugins don't run there yet; the Plugins page says so.
+- **Internet access:** a Stream Deck plugin is a program of its own, so a firewall needs an allow rule
+  for it, not just for DeckHost. Its program is in
+  `%AppData%\DeckHost\plugins\streamdeck\<plugin id>.sdPlugin\`. A log line with `os error 10013`
+  ("access permissions") when it connects means a firewall blocked it. In Bitdefender: **Protection →
+  Firewall → Settings → Rules**. Antivirus and web-protection exceptions don't change firewall rules.
 
-## Windows says "Windows protected your PC"
+## The Discord plugin keeps asking for access
+
+The OpenAction **Discord** plugin (`me.amankhanna.oadiscord`) talks to the Discord app on your
+computer and needs a Discord application of your own:
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an
+   application. Under **OAuth2**, copy its **Client ID**, reset and copy the **Client Secret**, and add
+   **exactly one** redirect URL, for example `http://localhost`. Click **Save Changes**.
+2. In DeckHost, select a Discord key, enter the Client ID and Secret in its settings, and click **Save**.
+3. Press the key, then click **Authorize** when Discord asks. It should only ask once.
+
+When it asks again on every press, the key's settings panel or the plugin's log
+(`logs\plugins\me.amankhanna.oadiscord.log`, and `.previous.log` for the run before) says why:
+
+| Message | What it means | What to do |
+|---|---|---|
+| `Could not find the IPC pipe` | The plugin can't reach the Discord app. | Start the official Discord app and let it finish loading, then run the pipe check below. |
+| `Client ID or Client Secret not configured` | The plugin has no Client ID or Secret. | Enter both and click **Save**. DeckHost before 0.1.0-rc.6 could lose them right after you authorized; update DeckHost. |
+| `code 5000 … Missing "redirect_uri"` | Your Discord application has no redirect URL, or more than one. | Give it exactly one (e.g. `http://localhost`) and click **Save Changes** in the Developer Portal. |
+| `Failed to exchange code for token: HTTP request failed: …` | The plugin's program couldn't reach `discord.com` to finish signing in. With `os error 10013` a firewall blocked it. | Allow `oadiscord-x86_64-pc-windows-msvc.exe` (in `%AppData%\DeckHost\plugins\streamdeck\me.amankhanna.oadiscord.sdPlugin\`) in your firewall, then authorize again. To check that your network is fine, run the check below. |
+| `OAuth error: … invalid_client` | The Client Secret doesn't match the application. | Copy the current secret from the Developer Portal (resetting it makes the old one invalid) and click **Save**. |
+
+The pipe check, in PowerShell with Discord running; it should list `discord-ipc-0`:
+
+```powershell
+Get-ChildItem \\.\pipe\ | Where-Object Name -like 'discord-ipc*'
+```
+
+The network check, in PowerShell (type `curl.exe`, not `curl`):
+
+```powershell
+curl.exe -sS -X POST https://discord.com/api/v10/oauth2/token -d grant_type=authorization_code -d code=test -d client_id=123 -d client_secret=test
+```
+
+`{"error": "invalid_client"}` means your computer reaches Discord fine, so something is blocking the
+plugin's program in particular, usually a firewall rule for it. A `curl:` error means the network
+itself is blocked.
+
+The plugin keeps its Client ID, Secret and sign-in in
+`%AppData%\DeckHost\streamdeck\settings\me.amankhanna.oadiscord.global.json`. If you share it, replace
+`clientSecret` and `accessToken` first.
+
+## Windows says "Windows protected your PC\"
 
 DeckHost's packages aren't code-signed yet ([why](download.md#first-start-and-signing)). Choose **More info → Run anyway**. Windows only asks the first time; updates DeckHost installs itself don't ask again.
 
@@ -63,6 +110,9 @@ In **Bitdefender**: **Protection → Antivirus → Open → Settings → Manage 
 **Windows Security → Virus & threat protection → Protection history**, open the entry and choose
 **Allow on device** or **Restore**. Then reinstall DeckHost if files are missing: your profiles and
 settings in `%AppData%\DeckHost` stay.
+
+Firewall rules are separate from these exceptions. If a plugin can't go online, see
+[Internet access](#a-stream-deck-plugins-picture-doesnt-change) for plugins.
 
 **3. Report the false positive**, so the next release isn't flagged for everyone. Send the file the
 program flagged and its detection name (shown in the alert or the quarantine list):

@@ -12,6 +12,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Added
 
+- Troubleshooting explains what the Discord plugin's messages mean and how to fix each, and that a Stream Deck
+  plugin that goes online needs its own firewall permission.
+
 - Updates install through a new installer (Velopack): **Install and restart** shows the download from 0 to 100 %,
   then DeckHost restarts into the new version, which is put in place as a whole, never file by file. Updates are
   small (only what changed), the AppImage and the Windows zip update themselves too, and DeckHost installed for all
