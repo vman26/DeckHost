@@ -265,12 +265,14 @@
 			</TabItem>
 			<TabItem Header="Store">
 				<Grid RowDefinitions="Auto,Auto,*" RowSpacing="10" Margin="8,12,8,8" DataContext="{Binding Store}" x:DataType="vm:PluginStoreViewModel">
-					<Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+					<Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
 						<TextBox Text="{Binding SearchText, Mode=TwoWay}" PlaceholderText="Search by name, author or description" />
 						<ComboBox Grid.Column="1" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource, Mode=TwoWay}" MinWidth="170" />
 						<ComboBox Grid.Column="2" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory, Mode=TwoWay}" MinWidth="150" />
-						<ComboBox Grid.Column="3" ItemsSource="{Binding Statuses}" SelectedItem="{Binding SelectedStatus, Mode=TwoWay}" MinWidth="120" />
-						<Button Grid.Column="4" Content="↻" ToolTip.Tip="Reload the catalogs" Command="{Binding RefreshCommand}" />
+						<ComboBox Grid.Column="3" ItemsSource="{Binding Systems}" SelectedItem="{Binding SelectedSystem, Mode=TwoWay}" MinWidth="150"
+								  ToolTip.Tip="Works here: made for this system, or its systems aren't listed. Made for: only the ones known to run here." />
+						<ComboBox Grid.Column="4" ItemsSource="{Binding Statuses}" SelectedItem="{Binding SelectedStatus, Mode=TwoWay}" MinWidth="120" />
+						<Button Grid.Column="5" Content="↻" ToolTip.Tip="Reload the catalogs" Command="{Binding RefreshCommand}" />
 					</Grid>
 					<StackPanel Grid.Row="1" Spacing="6">
 						<TextBlock Text="{Binding Summary}" Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap" />
@@ -334,10 +336,21 @@
 													<Border Classes="badge" Background="{Binding SourceColor}">
 														<TextBlock Text="{Binding Source}" FontSize="11" Foreground="{DynamicResource C.E2E8F0}" />
 													</Border>
+													<!-- Which systems it is made for: green when this one, red when not, grey when nobody listed them. -->
+													<Border Classes="badge" Background="{DynamicResource C.14532D}" IsVisible="{Binding IsMadeForThisSystem}" ToolTip.Tip="{Binding SystemsToolTip}">
+														<TextBlock Text="{Binding SystemsText}" FontSize="11" Foreground="{DynamicResource C.BBF7D0}" />
+													</Border>
+													<Border Classes="badge" Background="{DynamicResource C.7F1D1D}" IsVisible="{Binding IsNotMadeForThisSystem}" ToolTip.Tip="{Binding SystemsToolTip}">
+														<TextBlock Text="{Binding SystemsText}" FontSize="11" Foreground="{DynamicResource C.FECACA}" />
+													</Border>
+													<Border Classes="badge" Background="{DynamicResource C.1E293B}" IsVisible="{Binding HasUnknownSystems}" ToolTip.Tip="{Binding SystemsToolTip}">
+														<TextBlock Text="{Binding SystemsText}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
+													</Border>
 												</StackPanel>
 												<TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource C.64748B}" TextTrimming="CharacterEllipsis" />
 												<TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" MaxLines="{Binding DescriptionLines}" />
 												<TextBlock Text="{Binding PermissionsText}" IsVisible="{Binding HasPermissions}" FontSize="11" Foreground="{DynamicResource C.FDE68A}" />
+												<TextBlock Text="{Binding NotForThisSystemText}" IsVisible="{Binding IsNotMadeForThisSystem}" FontSize="12" Foreground="{DynamicResource C.FCA5A5}" TextWrapping="Wrap" />
 												<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasProgress}">
 													<ProgressBar IsIndeterminate="{Binding IsInstalling}" Width="120" VerticalAlignment="Center" />
 													<TextBlock Text="{Binding Progress}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" />

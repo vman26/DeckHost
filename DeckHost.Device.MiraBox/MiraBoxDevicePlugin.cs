@@ -226,7 +226,7 @@ public sealed unsafe class MiraBoxDevicePlugin : IDevicePlugin, IDeviceOutput, I
 
     public string Id => "deckhost.device.mirabox";
 
-    public string Name => "MiraBox Device Plugin";
+    public string Name => "MiraBox StreamDock";
 
     public IReadOnlyCollection<DeviceDefinition> Devices => Volatile.Read(ref _devices);
 

@@ -142,7 +142,8 @@ public sealed class StreamDeckManifest
         var current = OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "mac" : "linux";
         if (platforms.Count > 0 && !platforms.Contains(current))
         {
-            unsupported = $"Made for {string.Join(", ", platforms)} only.";
+            var known = Plugins.PluginPlatforms.From(Find(json, "OS"));
+            unsupported = known is null ? $"Made for {string.Join(", ", platforms)} only." : $"Made for {Plugins.PluginPlatforms.List(known)} only.";
             return null;
         }
 

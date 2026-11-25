@@ -15,6 +15,10 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Device support is now plugins like the others: MiraBox, Elgato Stream Deck, Web Deck, generic USB devices and the device simulator
   ship as bundled plugins in the Plugin Manager (you can turn each off there), and device plugins from other developers can be
   installed as packages (`"kind": "device"` in plugin.json).
+- The store shows which systems each plugin is made for, filters on them (by default it hides plugins that can't run on
+  your system), and greys out **Install** for one that can't run here.
+- The Devices page shows each device with what it is and can do, its firmware and **Settings…**; the Plugins page links to
+  it instead of listing the devices too, and its sections fold up.
 - Troubleshooting explains what the Discord plugin's messages mean and how to fix each, and that a Stream Deck
   plugin that goes online needs its own firewall permission.
 

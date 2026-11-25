@@ -30,6 +30,15 @@ public partial class PluginStoreViewModel : ViewModelBase
     public const string NotInstalledStatus = "Not installed";
     public const string Uncategorized = "Uncategorized";
 
+    /// <summary>Every plugin, whatever systems it is made for.</summary>
+    public const string AnySystem = "Any system";
+
+    /// <summary>Plugins made for this system, and the ones whose systems nobody listed (the default).</summary>
+    public static string WorksHereSystem { get; } = $"Works on {PluginPlatforms.DisplayName(PluginPlatforms.Current)}";
+
+    /// <summary>Only the plugins known to be made for this system.</summary>
+    public static string ListedHereSystem { get; } = $"Made for {PluginPlatforms.DisplayName(PluginPlatforms.Current)}";
+
     private static readonly HttpClient Http = PluginStore.CreateHttpClient();
     private static readonly HttpClient MediaHttp = CreateMediaClient();
     private static readonly string SettingsPath = Path.Combine(
@@ -46,6 +55,7 @@ public partial class PluginStoreViewModel : ViewModelBase
     private string _selectedSource = AllSources;
     private string _selectedCategory = AllCategories;
     private string _selectedStatus = AllStatuses;
+    private string _selectedSystem = WorksHereSystem;
     private bool _isLoading;
     private bool _loaded;
     private string _summary = "Open this tab to load the catalogs.";
@@ -198,6 +208,21 @@ public partial class PluginStoreViewModel : ViewModelBase
     public ObservableCollection<string> Categories { get; } = [AllCategories];
 
     public IReadOnlyList<string> Statuses { get; } = [AllStatuses, InstalledStatus, NotInstalledStatus];
+
+    /// <summary>Which systems' plugins to show: those that work here (made for it, or not listed), only those made for it, or all.</summary>
+    public IReadOnlyList<string> Systems { get; } = [WorksHereSystem, ListedHereSystem, AnySystem];
+
+    public string SelectedSystem
+    {
+        get => _selectedSystem;
+        set
+        {
+            if (SetProperty(ref _selectedSystem, value ?? WorksHereSystem))
+            {
+                ApplyFilter();
+            }
+        }
+    }
 
     public string SearchText
     {
@@ -479,7 +504,7 @@ public partial class PluginStoreViewModel : ViewModelBase
             _limit = PageSize;
         }
 
-        var matches = Filter(_all, SearchText, SelectedSource, SelectedCategory, SelectedStatus);
+        var matches = Filter(_all, SearchText, SelectedSource, SelectedCategory, SelectedStatus, SelectedSystem);
         MatchCount = matches.Count;
         Items.ReplaceAll(matches.Take(_limit));
         OnPropertyChanged(nameof(HasMore));
@@ -487,10 +512,11 @@ public partial class PluginStoreViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// The plugins matching the source, category, status and search: every word of the search must
+    /// The plugins matching the source, category, status, systems and search: every word of the search must
     /// be in the name, author, description or id (ordinal, ignoring case, on a key built once per plugin).
+    /// An installed plugin is always shown under its status, so it can be found whatever it was made for.
     /// </summary>
-    internal static List<StoreItemViewModel> Filter(IEnumerable<StoreItemViewModel> items, string search, string source, string category, string status)
+    internal static List<StoreItemViewModel> Filter(IEnumerable<StoreItemViewModel> items, string search, string source, string category, string status, string system = AnySystem)
     {
         var terms = (search ?? string.Empty).Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(static term => term.ToLowerInvariant()).ToArray();
         var matches = new List<StoreItemViewModel>();
@@ -499,6 +525,7 @@ public partial class PluginStoreViewModel : ViewModelBase
             if ((source == AllSources || item.Entry.Source.StartsWith(source, StringComparison.Ordinal)) &&
                 (category == AllCategories || string.Equals(item.Category, category, StringComparison.CurrentCultureIgnoreCase)) &&
                 (status == AllStatuses || (status == InstalledStatus) == item.IsInstalled) &&
+                MatchesSystem(item, system) &&
                 terms.All(term => item.SearchKey.Contains(term, StringComparison.Ordinal)))
             {
                 matches.Add(item);
@@ -507,6 +534,9 @@ public partial class PluginStoreViewModel : ViewModelBase
 
         return matches;
     }
+
+    private static bool MatchesSystem(StoreItemViewModel item, string system) =>
+        system == AnySystem || item.IsInstalled || item.RunsHere is true || (system == WorksHereSystem && item.RunsHere is null);
 
     private static HttpClient CreateMediaClient()
     {
@@ -734,7 +764,29 @@ public partial class StoreItemViewModel : ViewModelBase
 
     public bool HasProgress => Progress.Length > 0;
 
-    public bool CanInstall => !IsInstalled && !IsInstalling && !IsPaid && (Entry.DownloadUrl is not null || Entry.RepositoryUrl is not null);
+    public bool CanInstall => !IsInstalled && !IsInstalling && !IsPaid && RunsHere is not false && (Entry.DownloadUrl is not null || Entry.RepositoryUrl is not null);
+
+    /// <summary>Made for this system (true), not (false), or nobody listed its systems (null).</summary>
+    public bool? RunsHere => PluginPlatforms.RunsOn(Entry.Platforms, PluginPlatforms.Current);
+
+    /// <summary>"Windows · macOS", or "Systems not listed".</summary>
+    public string SystemsText => Entry.Platforms is { } platforms ? PluginPlatforms.Describe(platforms) : "Systems not listed";
+
+    public string SystemsToolTip => RunsHere switch
+    {
+        true => $"Made for {PluginPlatforms.List(Entry.Platforms!)}, so it runs here.",
+        false => $"Made for {PluginPlatforms.List(Entry.Platforms!)} only: it can't run on {PluginPlatforms.DisplayName(PluginPlatforms.Current)}.",
+        null => "Its catalog doesn't say which systems it runs on: it may not run here. Stream Deck plugins are often made for Windows and macOS only.",
+    };
+
+    public bool IsMadeForThisSystem => RunsHere is true;
+
+    public bool IsNotMadeForThisSystem => RunsHere is false;
+
+    public bool HasUnknownSystems => RunsHere is null;
+
+    /// <summary>Shown instead of Install: "Made for Windows and macOS only: it can't run on Linux."</summary>
+    public string NotForThisSystemText => RunsHere is false ? SystemsToolTip : string.Empty;
 
     [RelayCommand]
     private Task Install() => _owner.InstallAsync(this);

@@ -18,6 +18,8 @@ namespace DeckHost.Core.Plugins;
 /// and <c>repository</c> (its source; a GitHub repository's README is shown in DeckHost) are optional.
 /// <c>kind</c> (optional) is <c>"application"</c> (the default: actions and features, an <c>IApplicationPlugin</c>)
 /// or <c>"device"</c> (hardware support, an <c>IDevicePlugin</c>; loaded inside DeckHost).
+/// <c>platforms</c> (optional) lists the systems it runs on (<c>"windows"</c>, <c>"macos"</c>, <c>"linux"</c>), for a plugin
+/// that doesn't run everywhere DeckHost does; without it, the store shows it for every system.
 /// </summary>
 public sealed partial record PluginManifest(
     string Id,
@@ -31,7 +33,8 @@ public sealed partial record PluginManifest(
     IReadOnlyList<string>? Permissions = null,
     string? Url = null,
     string? Repository = null,
-    string? Kind = null)
+    string? Kind = null,
+    IReadOnlyList<string>? Platforms = null)
 {
     public const string FileName = "plugin.json";
 

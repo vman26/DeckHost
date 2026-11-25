@@ -32,6 +32,12 @@ public sealed record StoreEntry(
 
     /// <summary>The price as the author writes it ("€5", "pay what you want"), for paid plugins.</summary>
     public string? Price { get; init; }
+
+    /// <summary>
+    /// The systems it runs on (<see cref="PluginPlatforms"/>): from the catalog's <c>platforms</c>, the package's manifest,
+    /// or the <c>deckhost-plugins</c> platforms index (<see cref="PluginStore.PlatformsIndexUrl"/>). Null when nobody knows.
+    /// </summary>
+    public IReadOnlyList<string>? Platforms { get; init; }
 }
 
 /// <summary>
@@ -85,6 +91,16 @@ public sealed class PluginStore(HttpClient http)
     /// </summary>
     public const string OfficialCatalogUrl = "https://vman26.github.io/deckhost-plugins/catalog.json";
 
+    /// <summary>
+    /// The systems of plugins whose catalogs don't say (OpenAction, the Elgato archive, Stream Deck packages in the DeckHost
+    /// catalog): <c>{"plugins": {"&lt;id&gt;": {"platforms": ["windows", "macos"], …}}}</c>, made by the <c>deckhost-plugins</c>
+    /// repository from each package's manifest (its tools/platforms.py). Missing or unreadable: the systems stay unknown.
+    /// </summary>
+    public const string PlatformsIndexUrl = "https://vman26.github.io/deckhost-plugins/platforms.json";
+
+    /// <summary>Whether to read <see cref="PlatformsIndexUrl"/> (tests turn it off).</summary>
+    public bool IncludePlatformsIndex { get; set; } = true;
+
     /// <summary>Whether to read <see cref="OfficialCatalogUrl"/> (tests turn it off).</summary>
     public bool IncludeOfficialCatalog { get; set; } = true;
 
@@ -131,8 +147,50 @@ public sealed class PluginStore(HttpClient http)
             }
         }
 
+        var platforms = IncludePlatformsIndex ? LoadPlatformsIndexAsync(cancellationToken) : Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(EmptyIndex);
         var results = await Task.WhenAll(sources).ConfigureAwait(false);
-        return ([.. results.SelectMany(static result => result.Entries)], [.. results.Select(static result => result.Error).OfType<string>()]);
+        var index = await platforms.ConfigureAwait(false);
+        return ([.. results.SelectMany(static result => result.Entries).Select(entry => WithPlatforms(entry, index))], [.. results.Select(static result => result.Error).OfType<string>()]);
+    }
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> EmptyIndex = new Dictionary<string, IReadOnlyList<string>>();
+
+    /// <summary>An entry with the index's systems when its own catalog didn't give any.</summary>
+    internal static StoreEntry WithPlatforms(StoreEntry entry, IReadOnlyDictionary<string, IReadOnlyList<string>> index) =>
+        entry.Platforms is null && index.TryGetValue(entry.Id, out var platforms) ? entry with { Platforms = platforms } : entry;
+
+    /// <summary>The platforms index; empty when it can't be read (the store works without it).</summary>
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> LoadPlatformsIndexAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await http.GetAsync(PlatformsIndexUrl, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? ParsePlatformsIndex(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false))
+                : EmptyIndex;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException)
+        {
+            return EmptyIndex;
+        }
+    }
+
+    /// <summary><c>{"plugins": {"&lt;id&gt;": {"platforms": [...]}}}</c>; an id without known systems is left out.</summary>
+    internal static IReadOnlyDictionary<string, IReadOnlyList<string>> ParsePlatformsIndex(string json)
+    {
+        var index = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        if (JsonNode.Parse(json) is JsonObject root && root["plugins"] is JsonObject plugins)
+        {
+            foreach (var (id, plugin) in plugins)
+            {
+                if (plugin is JsonObject entry && PluginPlatforms.From(entry["platforms"]) is { } platforms)
+                {
+                    index[id] = platforms;
+                }
+            }
+        }
+
+        return index;
     }
 
     /// <summary>Downloads the entry's package into <paramref name="directory"/> and returns its path.</summary>
@@ -298,6 +356,7 @@ public sealed class PluginStore(HttpClient http)
                 Text(plugin, "marketplace_url"))
             {
                 Sha256 = sha,
+                Platforms = PluginPlatforms.From(plugin["platforms"]),
             });
         }
 
@@ -368,6 +427,7 @@ public sealed class PluginStore(HttpClient http)
                 Permissions = plugin["permissions"] is JsonArray permissions ? [.. permissions.Select(static item => item?.GetValue<string>()).OfType<string>()] : null,
                 PurchaseUrl = Text(plugin, "purchase_url"),
                 Price = Text(plugin, "price"),
+                Platforms = PluginPlatforms.From(plugin["platforms"]),
             });
         }
 
@@ -658,7 +718,10 @@ public sealed class PluginStore(HttpClient http)
                 null,
                 json is null ? null : Text(json, "URL"),
                 file,
-                PluginCategories.Resolve(json is null ? null : Text(json, "Category"), name, description, id));
+                PluginCategories.Resolve(json is null ? null : Text(json, "Category"), name, description, id))
+            {
+                Platforms = PluginPlatforms.From(json?["OS"]),
+            };
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or PluginException or UnauthorizedAccessException)
         {
@@ -666,6 +729,7 @@ public sealed class PluginStore(HttpClient http)
         }
     }
 
+    // A DeckHost plugin is .NET, like DeckHost: it runs wherever DeckHost does unless its plugin.json says otherwise.
     private static StoreEntry LocalEntry(PluginManifest manifest, string location) => new(
         manifest.Id,
         manifest.Name,
@@ -676,7 +740,10 @@ public sealed class PluginStore(HttpClient http)
         null,
         null,
         location,
-        PluginCategories.Resolve(null, manifest.Name, manifest.Description, manifest.Id));
+        PluginCategories.Resolve(null, manifest.Name, manifest.Description, manifest.Id))
+    {
+        Platforms = manifest.Platforms is { Count: > 0 } own ? PluginPlatforms.From(new JsonArray([.. own.Select(static name => (JsonNode?)JsonValue.Create(name))])) : PluginPlatforms.All,
+    };
 
     private static string? Text(JsonObject json, string name) =>
         json[name] is JsonValue value && value.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text) ? text : null;
