@@ -16,6 +16,11 @@
 			<Setter Property="FontWeight" Value="SemiBold" />
 			<Setter Property="Foreground" Value="{DynamicResource C.94A3B8}" />
 		</Style>
+		<Style Selector="Border.badge">
+			<Setter Property="CornerRadius" Value="999" />
+			<Setter Property="Padding" Value="8,2" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
 		<Style Selector="Border.card">
 			<Setter Property="Background" Value="{DynamicResource C.0F172A}" />
 			<Setter Property="BorderBrush" Value="{DynamicResource C.1E293B}" />
@@ -29,7 +34,7 @@
 		<StackPanel Margin="20" Spacing="14">
 			<StackPanel Spacing="4">
 				<TextBlock Text="Devices" FontSize="24" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
-				<TextBlock Classes="hint" Text="The devices DeckHost lists in the header, plugged in or not. Remove one you no longer use; its profiles are kept for when you add it again." />
+				<TextBlock Classes="hint" Text="The devices DeckHost lists in the header, plugged in or not, with what they can do, their firmware and their settings. Remove one you no longer use; its profiles are kept for when you add it again." />
 				<ToggleSwitch IsChecked="{Binding AutoAdd}" OnContent="Add new devices by themselves when they are plugged in" OffContent="Add new devices by themselves when they are plugged in" Margin="0,6,0,0" />
 				<TextBlock Classes="hint" Text="When this is off, a new device waits under Found until you add it." />
 			</StackPanel>
@@ -54,31 +59,46 @@
 				</StackPanel>
 			</Border>
 
-			<Border Classes="card">
-				<StackPanel Spacing="8">
-					<TextBlock Classes="section" Text="YOUR DEVICES" />
-					<ItemsControl ItemsSource="{Binding Listed}">
-						<ItemsControl.ItemTemplate>
-							<DataTemplate x:DataType="vm:DeviceRowViewModel">
-								<Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,4">
-									<Ellipse Width="10" Height="10" VerticalAlignment="Center" Fill="{DynamicResource C.64748B}" Classes.on="{Binding IsConnected}">
-										<Ellipse.Styles>
-											<Style Selector="Ellipse.on">
-												<Setter Property="Fill" Value="#22C55E" />
-											</Style>
-										</Ellipse.Styles>
-									</Ellipse>
-									<StackPanel Grid.Column="1" VerticalAlignment="Center">
-										<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" />
-										<TextBlock Classes="hint" Text="{Binding Detail}" />
+			<TextBlock Classes="section" Text="YOUR DEVICES" />
+			<ItemsControl ItemsSource="{Binding Listed}">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<StackPanel Spacing="8" />
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+				<ItemsControl.ItemTemplate>
+					<DataTemplate x:DataType="vm:DeviceRowViewModel">
+						<Border Classes="card">
+							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+								<StackPanel Spacing="4">
+									<StackPanel Orientation="Horizontal" Spacing="8">
+										<TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
+										<Border Classes="badge" Background="{DynamicResource C.14532D}" IsVisible="{Binding IsConnected}">
+											<TextBlock Text="{Binding State}" FontSize="11" Foreground="{DynamicResource C.BBF7D0}" />
+										</Border>
+										<Border Classes="badge" Background="{DynamicResource C.1E293B}" IsVisible="{Binding !IsConnected}">
+											<TextBlock Text="{Binding State}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
+										</Border>
 									</StackPanel>
-									<Button Grid.Column="2" Content="Remove" Command="{Binding RemoveCommand}" IsEnabled="{Binding CanRemove}" ToolTip.Tip="{Binding RemoveTip}" />
-								</Grid>
-							</DataTemplate>
-						</ItemsControl.ItemTemplate>
-					</ItemsControl>
-				</StackPanel>
-			</Border>
+									<TextBlock Classes="hint" Text="{Binding PluginName, StringFormat='Connected through {0}'}" />
+									<TextBlock Text="{Binding Card.Detail}" IsVisible="{Binding HasCard}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
+									<TextBlock Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap"
+											   Text="{Binding Card.IdentityText}" IsVisible="{Binding Card.HasIdentityText, FallbackValue=False}" />
+									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
+											   Text="{Binding Card.CapabilitiesText}" IsVisible="{Binding Card.HasCapabilitiesText, FallbackValue=False}" />
+									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
+											   Text="{Binding Card.FirmwareText}" IsVisible="{Binding Card.HasFirmwareText, FallbackValue=False}" />
+								</StackPanel>
+								<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+									<Button Content="Settings…" IsVisible="{Binding HasSettings}" Click="DeviceSettings_OnClick" HorizontalAlignment="Stretch"
+											ToolTip.Tip="This device's settings (what it offers: brightness, lights, idle screen, pairing, firmware, …)" />
+									<Button Content="Remove" Command="{Binding RemoveCommand}" IsEnabled="{Binding CanRemove}" ToolTip.Tip="{Binding RemoveTip}" HorizontalAlignment="Stretch" />
+								</StackPanel>
+							</Grid>
+						</Border>
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
 
 			<Border Classes="card" IsVisible="{Binding HasIgnored}">
 				<StackPanel Spacing="8">

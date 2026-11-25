@@ -47,7 +47,10 @@ public class PluginActionGroupViewModel : ViewModelBase
     }
 }
 
-/// <summary>Plugin Manager: lists plugins and devices, installs, uninstalls, enables and disables.</summary>
+/// <summary>
+/// Plugin Manager: lists plugins in sections that fold up (remembered in <c>AppSettingsData.CollapsedPluginSections</c>),
+/// installs, uninstalls, enables and disables. The devices themselves are on the Devices page (<see cref="CreateDeviceManager"/>).
+/// </summary>
 public partial class PluginManagerViewModel : ViewModelBase
 {
     private readonly PluginCatalog _catalog;
@@ -91,7 +94,77 @@ public partial class PluginManagerViewModel : ViewModelBase
     /// <summary>Action plugins the user installed (DeckHost, Stream Deck and OpenAction plugins).</summary>
     public ObservableCollection<PluginEntryViewModel> InstalledPlugins { get; } = [];
 
-    public ObservableCollection<DeviceInfoViewModel> Devices { get; } = [];
+    /// <summary>The Devices page: the devices, their firmware and settings (they used to be listed here too).</summary>
+    public DeviceManagerViewModel CreateDeviceManager() => new(_host, _deviceSettings);
+
+    /// <summary>How many devices are listed, for the Devices… button.</summary>
+    public string DevicesButtonLabel => _host.Devices.Count switch
+    {
+        0 => "Devices…",
+        1 => "1 device…",
+        var count => $"{count} devices…",
+    };
+
+    // ---------------------------------------------------------------- sections that fold up
+
+    public const string DevicePluginsSection = "device-plugins";
+    public const string SystemPluginsSection = "builtin-plugins";
+    public const string InstalledPluginsSection = "installed-plugins";
+    public const string FoldersSection = "folders";
+
+    private readonly HashSet<string> _collapsed = new(Platform.AppSettings.Load().CollapsedPluginSections ?? [], StringComparer.Ordinal);
+
+    public bool DevicePluginsExpanded
+    {
+        get => IsExpanded(DevicePluginsSection);
+        set => SetExpanded(DevicePluginsSection, value);
+    }
+
+    public bool SystemPluginsExpanded
+    {
+        get => IsExpanded(SystemPluginsSection);
+        set => SetExpanded(SystemPluginsSection, value);
+    }
+
+    public bool InstalledPluginsExpanded
+    {
+        get => IsExpanded(InstalledPluginsSection);
+        set => SetExpanded(InstalledPluginsSection, value);
+    }
+
+    public bool FoldersExpanded
+    {
+        get => IsExpanded(FoldersSection);
+        set => SetExpanded(FoldersSection, value);
+    }
+
+    public string DevicePluginsHeader => Header("DEVICE PLUGINS", DevicePlugins.Count);
+
+    public string SystemPluginsHeader => Header("ACTION PLUGINS: BUILT IN", SystemPlugins.Count);
+
+    public string InstalledPluginsHeader => Header("ACTION PLUGINS: INSTALLED", InstalledPlugins.Count);
+
+    private static string Header(string title, int count) => $"{title} · {count}";
+
+    private bool IsExpanded(string section) => !_collapsed.Contains(section);
+
+    private void SetExpanded(string section, bool expanded, [System.Runtime.CompilerServices.CallerMemberName] string? property = null)
+    {
+        if (!(expanded ? _collapsed.Remove(section) : _collapsed.Add(section)))
+        {
+            return;
+        }
+
+        OnPropertyChanged(property);
+        try
+        {
+            Platform.AppSettings.Save(Platform.AppSettings.Load() with { CollapsedPluginSections = [.. _collapsed.Order(StringComparer.Ordinal)] });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Not remembered this time; the page still folds.
+        }
+    }
 
     public bool HasInstalledPlugins => InstalledPlugins.Count > 0;
 
@@ -122,8 +195,6 @@ public partial class PluginManagerViewModel : ViewModelBase
     public string StreamDeckDirectory => _catalog.StreamDeckDirectory;
 
     public string LogDirectory => Platform.Logging.LogDirectory;
-
-    public DeviceSettingsViewModel? CreateDeviceSettings(DeviceInfoViewModel device) => _deviceSettings?.Create(device.Device);
 
     public async Task InstallAsync(string packagePath)
     {
@@ -295,7 +366,7 @@ public partial class PluginManagerViewModel : ViewModelBase
         Store.RefreshInstalledState();
     });
 
-    private void OnDevicesChanged() => Dispatcher.UIThread.Post(RefreshDevices);
+    private void OnDevicesChanged() => Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(DevicesButtonLabel)));
 
     private void Refresh()
     {
@@ -304,26 +375,22 @@ public partial class PluginManagerViewModel : ViewModelBase
         InstalledPlugins.Clear();
         foreach (var entry in _catalog.Entries)
         {
+            if (entry.Kind == PluginKind.Device && entry.IsSystem)
+            {
+                // A part of DeckHost, not a plugin of its own: the OpenAction bridge (part of the Stream Deck plugin support)
+                // shows the devices of the OpenAction device plugins, which are listed here themselves.
+                continue;
+            }
+
             (entry.Kind == PluginKind.Device ? DevicePlugins : entry.IsSystem ? SystemPlugins : InstalledPlugins).Add(new PluginEntryViewModel(this, entry));
         }
 
         OnPropertyChanged(nameof(HasInstalledPlugins));
         OnPropertyChanged(nameof(HasNoInstalledPlugins));
-        RefreshDevices();
-    }
-
-    private void RefreshDevices()
-    {
-        Devices.Clear();
-        foreach (var device in _host.Devices)
-        {
-            Devices.Add(new DeviceInfoViewModel(
-                device,
-                _host.ConnectionStatuses.FirstOrDefault(status => status.DeviceId == device.Id)?.Message,
-                _deviceSettings?.HasSettings(device.Id) == true,
-                _deviceSettings?.HasFirmware(device.Id) == true,
-                _deviceSettings?.FirmwareInfo(device.Id)));
-        }
+        OnPropertyChanged(nameof(DevicePluginsHeader));
+        OnPropertyChanged(nameof(SystemPluginsHeader));
+        OnPropertyChanged(nameof(InstalledPluginsHeader));
+        OnPropertyChanged(nameof(DevicesButtonLabel));
     }
 }
 

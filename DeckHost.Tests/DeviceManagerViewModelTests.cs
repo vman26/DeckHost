@@ -125,4 +125,63 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
         Assert.That(page.Discovered, Is.Empty);
         Assert.That(page.Ignored.Select(static row => row.Id), Is.EqualTo(new[] { "new.device" }));
     }
+
+    [Test]
+    public void Constructor_ListedDevice_HasACardWithItsConnectionState()
+    {
+        // Act
+        using var page = new DeviceManagerViewModel(_host);
+
+        // Assert
+        var plugged = page.Listed.Single(static row => row.Id == Plugged);
+        var unplugged = page.Listed.Single(static row => row.Id == Unplugged);
+        Assert.That(plugged.Card?.Device.Id, Is.EqualTo(Plugged));
+        Assert.That((plugged.State, unplugged.State), Is.EqualTo(("Connected", "Not connected")));
+    }
+
+    [Test]
+    public void CreateDeviceSettings_WithoutASettingsService_IsNull()
+    {
+        // Arrange
+        using var page = new DeviceManagerViewModel(_host);
+        var row = page.Listed.Single(static row => row.Id == Plugged);
+
+        // Act
+        var settings = page.CreateDeviceSettings(row);
+
+        // Assert
+        Assert.That((row.HasSettings, settings), Is.EqualTo((false, (DeviceSettingsViewModel?)null)));
+    }
+
+    [Test]
+    public async Task Resume_AfterARemovalWhileThePageWasCovered_ShowsTheRemoval()
+    {
+        // Arrange
+        var page = new DeviceManagerViewModel(_host);
+        page.Dispose();
+        _host.RemoveDevice(Unplugged);
+        await _host.WhenIdleAsync();
+
+        // Act
+        page.Resume();
+
+        // Assert
+        Assert.That(page.Ignored.Select(static row => row.Id), Is.EqualTo(new[] { Unplugged }));
+        page.Dispose();
+    }
+
+    [Test]
+    public async Task Card_OfARemovedDevice_IsNull()
+    {
+        // Arrange
+        using var page = new DeviceManagerViewModel(_host);
+        _host.RemoveDevice(Unplugged);
+        await _host.WhenIdleAsync();
+
+        // Act
+        page.Refresh();
+
+        // Assert
+        Assert.That(page.Ignored.Single().Card, Is.Null);
+    }
 }

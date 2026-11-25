@@ -22,6 +22,7 @@ namespace DeckHost.App.Platform;
 /// <param name="InstallUpdatesAutomatically">Download a new DeckHost in the background and install it when DeckHost closes.</param>
 /// <param name="OnlyCompatibleActions">The action list shows only the actions that fit the selected control.</param>
 /// <param name="DeviceSimulator">Developer option: let device simulator windows connect (☰ → Device simulator).</param>
+/// <param name="CollapsedPluginSections">The sections of the Plugins page the user folded up (<c>PluginManagerViewModel</c> section ids).</param>
 public sealed record AppSettingsData(
     bool StartMinimized = true,
     bool? CloseToTray = null,
@@ -37,7 +38,8 @@ public sealed record AppSettingsData(
     bool AutoUpdatePlugins = false,
     bool InstallUpdatesAutomatically = false,
     bool DeviceSimulator = false,
-    bool OnlyCompatibleActions = false)
+    bool OnlyCompatibleActions = false,
+    string[]? CollapsedPluginSections = null)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
 }

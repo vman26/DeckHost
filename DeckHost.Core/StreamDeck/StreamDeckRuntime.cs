@@ -81,6 +81,9 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
     /// <summary>"Runs in its own process (pid 1234)", "Restarting…"; null for a plugin that isn't running.</summary>
     public string? StatusOf(string pluginUuid) => _plugins.TryGetValue(pluginUuid, out var running) ? running.Status : null;
 
+    /// <summary>The name in the plugin's manifest; null for a plugin that isn't started.</summary>
+    public string? NameOf(string pluginUuid) => _plugins.TryGetValue(pluginUuid, out var running) ? running.Manifest.Name : null;
+
     /// <summary>Why the plugin stopped for good; null while it runs (or is being restarted).</summary>
     public string? ProblemOf(string pluginUuid) => _plugins.TryGetValue(pluginUuid, out var running) ? running.Problem : null;
 

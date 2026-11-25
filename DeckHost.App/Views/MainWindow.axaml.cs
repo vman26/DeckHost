@@ -411,7 +411,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     {
         if (TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>() is { } host)
         {
-            OpenSingle("Devices", () => new DeviceManagerView { DataContext = new DeviceManagerViewModel(host) });
+            OpenSingle("Devices", () => new DeviceManagerView { DataContext = new DeviceManagerViewModel(host, TryResolve<DeviceSettingsService>()) });
         }
     }
 

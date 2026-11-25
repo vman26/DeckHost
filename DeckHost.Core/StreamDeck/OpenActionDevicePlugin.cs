@@ -268,10 +268,11 @@ public sealed class OpenActionDevicePlugin : IDevicePlugin, IDeviceOutput, IConf
     // ---------------------------------------------------------------- the descriptor
 
     private DeviceDefinition[] BuildDefinitions() =>
-        [.. _devices.Values.OrderBy(static device => device.DeviceId, StringComparer.Ordinal).Select(Describe)];
+        [.. _devices.Values.OrderBy(static device => device.DeviceId, StringComparer.Ordinal).Select(device => Describe(device, _runtime.NameOf(device.PluginUuid)))];
 
     /// <summary>The device as DeckHost shows it: keys in rows, knobs below.</summary>
-    internal static DeviceDefinition Describe(Registered device)
+    /// <param name="pluginName">The name of the OpenAction plugin that registered it, for the Devices page.</param>
+    internal static DeviceDefinition Describe(Registered device, string? pluginName = null)
     {
         var controls = new List<PhysicalControl>();
         for (var index = 0; index < device.Rows * device.Columns; index++)
@@ -309,7 +310,7 @@ public sealed class OpenActionDevicePlugin : IDevicePlugin, IDeviceOutput, IConf
         }
 
         var identity = new DeviceIdentity(null, device.Name, null, null, null, "OpenAction device plugin");
-        return new DeviceDefinition(device.DeviceId, device.Name, controls, device.Connected, $"Plugin {device.PluginUuid}")
+        return new DeviceDefinition(device.DeviceId, device.Name, controls, device.Connected, $"From the OpenAction plugin {pluginName ?? device.PluginUuid}")
         {
             Identity = identity,
             Displays = [new DeviceDisplay(KeysDisplayId, device.Columns * KeyImageSize, device.Rows * KeyImageSize) { ControlIds = [.. controls.Where(static control => control.DisplayId == KeysDisplayId).Select(static control => control.Id)] }],

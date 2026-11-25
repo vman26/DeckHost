@@ -38,13 +38,11 @@ public partial class PluginManagerView : UserControl
         }
     }
 
-    private void DeviceSettings_OnClick(object? sender, RoutedEventArgs e)
+    private void Devices_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is Control { DataContext: DeviceInfoViewModel device }
-            && DataContext is PluginManagerViewModel vm
-            && vm.CreateDeviceSettings(device) is { } settings)
+        if (DataContext is PluginManagerViewModel vm)
         {
-            Pages.Open(this, $"{device.Name} settings", new DeviceSettingsView { DataContext = settings });
+            Pages.Open(this, "Devices", new DeviceManagerView { DataContext = vm.CreateDeviceManager() });
         }
     }
 
