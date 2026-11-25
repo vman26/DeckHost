@@ -45,7 +45,7 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
         using var page = new DeviceManagerViewModel(_host);
 
         // Act
-        page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
+        page.Listed.Single(static row => row.Id == Unplugged).ConfirmRemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
         page.Refresh();
 
@@ -60,7 +60,7 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     {
         // Arrange
         using var page = new DeviceManagerViewModel(_host);
-        page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
+        page.Listed.Single(static row => row.Id == Unplugged).ConfirmRemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
         page.Refresh();
 
@@ -79,7 +79,7 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     {
         // Arrange
         using var page = new DeviceManagerViewModel(_host);
-        page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
+        page.Listed.Single(static row => row.Id == Unplugged).ConfirmRemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
 
         // Act
@@ -183,5 +183,36 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
 
         // Assert
         Assert.That(page.Ignored.Single().Card, Is.Null);
+    }
+
+    [Test]
+    public async Task Remove_WithoutConfirming_KeepsTheDeviceAndAsks()
+    {
+        // Arrange
+        using var page = new DeviceManagerViewModel(_host);
+        var row = page.Listed.Single(static row => row.Id == Unplugged);
+
+        // Act
+        row.RemoveCommand.Execute(null);
+        await _host.WhenIdleAsync();
+        page.Refresh();
+
+        // Assert
+        Assert.That((row.ConfirmingRemove, page.Listed.Count), Is.EqualTo((true, 2)));
+    }
+
+    [Test]
+    public void CancelRemove_AfterRemove_StopsAsking()
+    {
+        // Arrange
+        using var page = new DeviceManagerViewModel(_host);
+        var row = page.Listed.Single(static row => row.Id == Unplugged);
+        row.RemoveCommand.Execute(null);
+
+        // Act
+        row.CancelRemoveCommand.Execute(null);
+
+        // Assert
+        Assert.That(row.ConfirmingRemove, Is.False);
     }
 }

@@ -26,6 +26,7 @@ public sealed class StreamDeckManifest
         DeviceNamespace = Get(json, "DeviceNamespace");
         CodePath = SelectCodePath(json, out var unsupported);
         UnsupportedReason = unsupported;
+        Platforms = Plugins.PluginPlatforms.From(Find(json, "OS"));
 
         foreach (var node in GetArray(json, "Actions"))
         {
@@ -84,6 +85,9 @@ public sealed class StreamDeckManifest
 
     /// <summary>Why the plugin can't run here (wrong OS, HTML plugin, ...); null when it can.</summary>
     public string? UnsupportedReason { get; }
+
+    /// <summary>The systems its <c>OS</c> list names (<see cref="Plugins.PluginPlatforms"/>); null when it lists none.</summary>
+    public IReadOnlyList<string>? Platforms { get; }
 
     public List<StreamDeckActionManifest> Actions { get; } = [];
 

@@ -742,7 +742,7 @@ public sealed class PluginStore(HttpClient http)
         location,
         PluginCategories.Resolve(null, manifest.Name, manifest.Description, manifest.Id))
     {
-        Platforms = manifest.Platforms is { Count: > 0 } own ? PluginPlatforms.From(new JsonArray([.. own.Select(static name => (JsonNode?)JsonValue.Create(name))])) : PluginPlatforms.All,
+        Platforms = PluginPlatforms.OfDeckHostPlugin(manifest.Platforms),
     };
 
     private static string? Text(JsonObject json, string name) =>

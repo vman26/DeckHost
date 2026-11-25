@@ -43,6 +43,12 @@ public sealed record PluginEntry(
     string? Url = null,
     string? Repository = null)
 {
+    /// <summary>
+    /// The systems it runs on, from its manifest: a Stream Deck manifest's <c>OS</c> list (null when it has none), a DeckHost
+    /// plugin.json's <c>platforms</c> (every system when it has none, like the plugins that ship with DeckHost).
+    /// </summary>
+    public IReadOnlyList<string>? Platforms { get; init; }
+
     /// <summary>The plugin's README file in its folder (README.md, any case), or null.</summary>
     public string? ReadmePath => InstallDirectory is { } directory && Directory.Exists(directory)
         ? Directory.EnumerateFiles(directory).FirstOrDefault(static path =>
@@ -364,7 +370,10 @@ public sealed class PluginCatalog : IDisposable
             CanDisable: false,
             CanUninstall: false,
             ActionCount: null,
-            Error: null)),
+            Error: null)
+        {
+            Platforms = PluginPlatforms.All,
+        }),
         .. _slots.Select(ToEntry),
     ];
 
@@ -1146,7 +1155,10 @@ public sealed class PluginCatalog : IDisposable
                 : slot.Kind == SlotKind.Package && ProcessLauncher is not null && slot.Instance is not null && _inProcess.Contains(slot.Id) ? "Runs inside DeckHost"
                 : isDevicePackage && slot.DeviceInstance is not null ? "Runs inside DeckHost" : null,
             slot.Manifest?.Url ?? slot.StreamDeckManifest?.Url,
-            slot.Manifest?.Repository);
+            slot.Manifest?.Repository)
+        {
+            Platforms = sd is not null ? sd.Platforms : PluginPlatforms.OfDeckHostPlugin(slot.Manifest?.Platforms),
+        };
     }
 
     /// <summary>Where the version before the last update of a plugin is kept (for a roll back).</summary>

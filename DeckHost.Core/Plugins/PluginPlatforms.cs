@@ -56,6 +56,16 @@ public static class PluginPlatforms
         return found.Count == 0 ? null : [.. All.Where(found.Contains)];
     }
 
+    /// <summary>The systems among plain names (a plugin.json's <c>platforms</c>); null when there are none.</summary>
+    public static IReadOnlyList<string>? FromNames(IEnumerable<string?>? names)
+    {
+        var found = (names ?? []).Select(Normalize).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        return found.Count == 0 ? null : [.. All.Where(found.Contains)];
+    }
+
+    /// <summary>A DeckHost plugin's systems: its plugin.json's <c>platforms</c>, else every system (it's .NET, like DeckHost).</summary>
+    public static IReadOnlyList<string> OfDeckHostPlugin(IReadOnlyList<string>? declared) => FromNames(declared) ?? All;
+
     /// <summary>"Windows", "macOS", "Linux".</summary>
     public static string DisplayName(string platform) => platform switch
     {

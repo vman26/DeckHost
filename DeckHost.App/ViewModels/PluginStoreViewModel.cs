@@ -61,9 +61,13 @@ public partial class PluginStoreViewModel : ViewModelBase
     private string _summary = "Open this tab to load the catalogs.";
     private string _catalogUrlsText;
 
-    public PluginStoreViewModel(PluginCatalog catalog)
+    private readonly LearnedPlatforms _learned;
+
+    /// <param name="learned">What installed plugins' manifests said about their systems; DeckHost's file when null.</param>
+    public PluginStoreViewModel(PluginCatalog catalog, LearnedPlatforms? learned = null)
     {
         _catalog = catalog;
+        _learned = learned ?? new LearnedPlatforms(LearnedPlatforms.DefaultPath);
         _store.DeckHostCatalogUrls = LoadCatalogUrls();
         _catalogUrlsText = string.Join(Environment.NewLine, _store.DeckHostCatalogUrls);
     }
@@ -355,7 +359,7 @@ public partial class PluginStoreViewModel : ViewModelBase
             _all.Clear();
             foreach (var entry in entries.OrderBy(static entry => entry.Name, StringComparer.CurrentCultureIgnoreCase))
             {
-                _all.Add(new StoreItemViewModel(this, entry, _catalog.IsInstalled(entry.Id)));
+                _all.Add(new StoreItemViewModel(this, entry, _catalog.IsInstalled(entry.Id)) { LearnedPlatforms = _learned.For(entry.Id) });
             }
 
             // Plugins installed before DeckHost recorded where they came from get their store source.
@@ -395,6 +399,8 @@ public partial class PluginStoreViewModel : ViewModelBase
             package = await Task.Run(() => _store.DownloadAsync(item.Entry, downloadDirectory, downloadProgress, CancellationToken.None));
             var installed = await Task.Run(() => _catalog.Install(package, item.Entry.Id, stepProgress, item.Entry.Source));
             item.IsInstalled = true;
+            item.CanUninstall = installed.CanUninstall;
+            Learn(item, installed.Platforms);
             StatusReported?.Invoke(
                 installed.Error is null
                     ? $"Installed {installed.Name}. Its actions are in the action list now."
@@ -436,17 +442,32 @@ public partial class PluginStoreViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Installed plugins that no catalog lists (system plugins, DeckHost packages, files).</summary>
+    /// <summary>
+    /// Installed plugins that no catalog lists (system plugins, DeckHost packages, files) are added; for the ones a catalog
+    /// lists, what the installed manifest knows (category, icon, systems) and whether it can be uninstalled here.
+    /// </summary>
     private void MergeInstalledPlugins()
     {
-        foreach (var installed in _catalog.Entries.Where(static entry => entry.Kind == PluginKind.Application))
+        var entries = _catalog.Entries;
+        foreach (var item in _all)
+        {
+            item.CanUninstall = entries.Any(entry => entry.CanUninstall && string.Equals(entry.Id, item.Entry.Id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        foreach (var installed in entries)
         {
             var existing = _all.FirstOrDefault(item => string.Equals(item.Entry.Id, installed.Id, StringComparison.OrdinalIgnoreCase));
             if (existing is not null)
             {
-                // The installed manifest knows the category (and has the icon) even when the catalog doesn't.
+                // The installed manifest knows the category, the icon and the systems even when the catalog doesn't.
                 existing.InstalledCategory = installed.Category;
                 existing.InstalledIconPath = installed.IconPath;
+                Learn(existing, installed.Platforms);
+                continue;
+            }
+
+            if (installed.Kind != PluginKind.Application)
+            {
                 continue;
             }
 
@@ -454,8 +475,68 @@ public partial class PluginStoreViewModel : ViewModelBase
             _all.Add(new StoreItemViewModel(
                 this,
                 new StoreEntry(installed.Id, installed.Name, installed.Author, installed.Description, source, installed.Version, installed.IconPath, null, null,
-                    PluginCategories.Resolve(installed.Category, installed.Name, installed.Description, installed.Id)),
-                isInstalled: true));
+                    PluginCategories.Resolve(installed.Category, installed.Name, installed.Description, installed.Id))
+                {
+                    Platforms = installed.Platforms,
+                },
+                isInstalled: true)
+            {
+                CanUninstall = installed.CanUninstall,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Keeps what the installed plugins' manifests say about their systems (also for plugins installed from a file), so the
+    /// store shows them for entries whose catalog doesn't say, now and after they are uninstalled.
+    /// </summary>
+    public void RememberInstalledPlatforms(IEnumerable<PluginEntry> installed)
+    {
+        foreach (var entry in installed)
+        {
+            if (!entry.IsSystem && entry.Platforms is { } platforms && _learned.Learn(entry.Id, platforms))
+            {
+                if (_all.FirstOrDefault(item => string.Equals(item.Entry.Id, entry.Id, StringComparison.OrdinalIgnoreCase)) is { } item)
+                {
+                    item.LearnedPlatforms = _learned.For(entry.Id);
+                }
+            }
+        }
+    }
+
+    /// <summary>Keeps what an installed plugin's manifest says about its systems, for when its catalog doesn't say.</summary>
+    private void Learn(StoreItemViewModel item, IReadOnlyList<string>? platforms)
+    {
+        if (platforms is null)
+        {
+            return;
+        }
+
+        _learned.Learn(item.Entry.Id, platforms);
+        item.LearnedPlatforms = _learned.For(item.Entry.Id);
+    }
+
+    /// <summary>Uninstalls a plugin from the store (after the item asked); its mappings stay, as from the Installed tab.</summary>
+    internal async Task UninstallAsync(StoreItemViewModel item)
+    {
+        item.IsInstalling = true;
+        item.Progress = "Uninstalling…";
+        var stepProgress = new Progress<string>(step => item.Progress = step);
+        try
+        {
+            await Task.Run(() => _catalog.Uninstall(item.Entry.Id, stepProgress));
+            item.IsInstalled = false;
+            item.CanUninstall = false;
+            StatusReported?.Invoke($"Uninstalled {item.Entry.Name}. Controls that used it keep their mapping as unavailable.", false);
+        }
+        catch (PluginException ex)
+        {
+            StatusReported?.Invoke($"Could not uninstall {item.Entry.Name}: {ex.Message}", true);
+        }
+        finally
+        {
+            item.IsInstalling = false;
+            item.Progress = string.Empty;
         }
     }
 
@@ -733,6 +814,7 @@ public partial class StoreItemViewModel : ViewModelBase
                 OnPropertyChanged(nameof(CanInstall));
                 OnPropertyChanged(nameof(CanBuy));
                 OnPropertyChanged(nameof(ShowInstall));
+                OnPropertyChanged(nameof(ShowUninstall));
             }
         }
     }
@@ -745,6 +827,7 @@ public partial class StoreItemViewModel : ViewModelBase
             if (SetProperty(ref _isInstalling, value))
             {
                 OnPropertyChanged(nameof(CanInstall));
+                OnPropertyChanged(nameof(ShowUninstall));
             }
         }
     }
@@ -766,16 +849,38 @@ public partial class StoreItemViewModel : ViewModelBase
 
     public bool CanInstall => !IsInstalled && !IsInstalling && !IsPaid && RunsHere is not false && (Entry.DownloadUrl is not null || Entry.RepositoryUrl is not null);
 
+    private IReadOnlyList<string>? _learnedPlatforms;
+
+    /// <summary>What its manifest said about its systems when it was installed here (kept after it is uninstalled).</summary>
+    public IReadOnlyList<string>? LearnedPlatforms
+    {
+        get => _learnedPlatforms;
+        set
+        {
+            _learnedPlatforms = value;
+            foreach (var property in (string[])[nameof(Platforms), nameof(RunsHere), nameof(CanInstall), nameof(SystemsText), nameof(SystemsToolTip),
+                         nameof(IsMadeForThisSystem), nameof(IsNotMadeForThisSystem), nameof(HasUnknownSystems), nameof(NotForThisSystemText)])
+            {
+                OnPropertyChanged(property);
+            }
+        }
+    }
+
+    /// <summary>The systems it runs on: its catalog's, else what DeckHost learned when it was installed; null when nobody knows.</summary>
+    public IReadOnlyList<string>? Platforms => Entry.Platforms ?? _learnedPlatforms;
+
     /// <summary>Made for this system (true), not (false), or nobody listed its systems (null).</summary>
-    public bool? RunsHere => PluginPlatforms.RunsOn(Entry.Platforms, PluginPlatforms.Current);
+    public bool? RunsHere => PluginPlatforms.RunsOn(Platforms, PluginPlatforms.Current);
 
     /// <summary>"Windows · macOS", or "Systems not listed".</summary>
-    public string SystemsText => Entry.Platforms is { } platforms ? PluginPlatforms.Describe(platforms) : "Systems not listed";
+    public string SystemsText => Platforms is { } platforms ? PluginPlatforms.Describe(platforms) : "Systems not listed";
+
+    private string LearnedNote => Entry.Platforms is null && _learnedPlatforms is not null ? " (Read from its manifest when it was installed.)" : string.Empty;
 
     public string SystemsToolTip => RunsHere switch
     {
-        true => $"Made for {PluginPlatforms.List(Entry.Platforms!)}, so it runs here.",
-        false => $"Made for {PluginPlatforms.List(Entry.Platforms!)} only: it can't run on {PluginPlatforms.DisplayName(PluginPlatforms.Current)}.",
+        true => $"Made for {PluginPlatforms.List(Platforms!)}, so it runs here.{LearnedNote}",
+        false => $"Made for {PluginPlatforms.List(Platforms!)} only: it can't run on {PluginPlatforms.DisplayName(PluginPlatforms.Current)}.{LearnedNote}",
         null => "Its catalog doesn't say which systems it runs on: it may not run here. Stream Deck plugins are often made for Windows and macOS only.",
     };
 
@@ -787,6 +892,54 @@ public partial class StoreItemViewModel : ViewModelBase
 
     /// <summary>Shown instead of Install: "Made for Windows and macOS only: it can't run on Linux."</summary>
     public string NotForThisSystemText => RunsHere is false ? SystemsToolTip : string.Empty;
+
+    // ---------------------------------------------------------------- uninstall, after asking
+
+    private bool _canUninstall;
+    private bool _confirmingUninstall;
+
+    /// <summary>Installed and removable (not a system or bundled plugin).</summary>
+    public bool CanUninstall
+    {
+        get => _canUninstall;
+        set
+        {
+            if (SetProperty(ref _canUninstall, value))
+            {
+                OnPropertyChanged(nameof(ShowUninstall));
+            }
+        }
+    }
+
+    public bool ShowUninstall => IsInstalled && CanUninstall && !IsInstalling && !ConfirmingUninstall;
+
+    /// <summary>Uninstall was pressed: the question shows with Uninstall and Cancel.</summary>
+    public bool ConfirmingUninstall
+    {
+        get => _confirmingUninstall;
+        private set
+        {
+            if (SetProperty(ref _confirmingUninstall, value))
+            {
+                OnPropertyChanged(nameof(ShowUninstall));
+            }
+        }
+    }
+
+    public string UninstallQuestion => $"Uninstall {Name}? Controls that use it keep their mapping, but do nothing until you install it again.";
+
+    [RelayCommand]
+    private void AskUninstall() => ConfirmingUninstall = true;
+
+    [RelayCommand]
+    private void CancelUninstall() => ConfirmingUninstall = false;
+
+    [RelayCommand]
+    private Task ConfirmUninstall()
+    {
+        ConfirmingUninstall = false;
+        return _owner.UninstallAsync(this);
+    }
 
     [RelayCommand]
     private Task Install() => _owner.InstallAsync(this);

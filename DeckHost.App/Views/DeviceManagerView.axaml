@@ -88,11 +88,21 @@
 											   Text="{Binding Card.CapabilitiesText}" IsVisible="{Binding Card.HasCapabilitiesText, FallbackValue=False}" />
 									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
 											   Text="{Binding Card.FirmwareText}" IsVisible="{Binding Card.HasFirmwareText, FallbackValue=False}" />
+									<Border IsVisible="{Binding ConfirmingRemove}" Margin="0,6,0,0" Padding="10" CornerRadius="8"
+											Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.7F1D1D}" BorderThickness="1">
+										<StackPanel Spacing="8">
+											<TextBlock Text="{Binding RemoveQuestion}" TextWrapping="Wrap" Foreground="{DynamicResource C.FECACA}" />
+											<StackPanel Orientation="Horizontal" Spacing="8">
+												<Button Content="Remove" Command="{Binding ConfirmRemoveCommand}" />
+												<Button Content="Cancel" Classes="accent" Command="{Binding CancelRemoveCommand}" />
+											</StackPanel>
+										</StackPanel>
+									</Border>
 								</StackPanel>
 								<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
 									<Button Content="Settings…" IsVisible="{Binding HasSettings}" Click="DeviceSettings_OnClick" HorizontalAlignment="Stretch"
 											ToolTip.Tip="This device's settings (what it offers: brightness, lights, idle screen, pairing, firmware, …)" />
-									<Button Content="Remove" Command="{Binding RemoveCommand}" IsEnabled="{Binding CanRemove}" ToolTip.Tip="{Binding RemoveTip}" HorizontalAlignment="Stretch" />
+									<Button Content="Remove" Command="{Binding RemoveCommand}" IsEnabled="{Binding CanRemove}" IsVisible="{Binding !ConfirmingRemove}" ToolTip.Tip="{Binding RemoveTip}" HorizontalAlignment="Stretch" />
 								</StackPanel>
 							</Grid>
 						</Border>

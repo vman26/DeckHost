@@ -174,4 +174,134 @@ public class StorePlatformsTests
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    [Test]
+    public void Learn_ThenANewInstance_RemembersTheSystems()
+    {
+        // Arrange
+        var folder = Directory.CreateTempSubdirectory("deckhost-learned-test").FullName;
+        try
+        {
+            var path = Path.Combine(folder, "learned-platforms.json");
+            new LearnedPlatforms(path).Learn(PluginId, ["mac", "windows"]);
+
+            // Act
+            var remembered = new LearnedPlatforms(path).For(PluginId);
+
+            // Assert
+            Assert.That(remembered, Is.EqualTo(new[] { PluginPlatforms.Windows, PluginPlatforms.MacOS }));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Learn_TheSameSystemsAgain_ChangesNothing()
+    {
+        // Arrange
+        var folder = Directory.CreateTempSubdirectory("deckhost-learned-test").FullName;
+        try
+        {
+            var learned = new LearnedPlatforms(Path.Combine(folder, "learned-platforms.json"));
+            learned.Learn(PluginId, [PluginPlatforms.Linux]);
+
+            // Act
+            var changed = learned.Learn(PluginId, [PluginPlatforms.Linux]);
+
+            // Assert
+            Assert.That(changed, Is.False);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Test]
+    public void RunsHere_CatalogSilentButLearnedOnInstall_UsesWhatWasLearned()
+    {
+        // Arrange
+        var item = Item(Unknown, null);
+
+        // Act
+        item.LearnedPlatforms = [Other];
+
+        // Assert
+        Assert.That((item.RunsHere, item.IsNotMadeForThisSystem, item.SystemsToolTip.Contains("manifest", StringComparison.Ordinal)), Is.EqualTo(((bool?)false, true, true)));
+    }
+
+    [Test]
+    public void Platforms_CatalogAndLearnedDisagree_TheCatalogWins()
+    {
+        // Arrange
+        var item = Item(PluginId, [PluginPlatforms.Current]);
+
+        // Act
+        item.LearnedPlatforms = [Other];
+
+        // Assert
+        Assert.That(item.RunsHere, Is.True);
+    }
+
+    [Test]
+    public void ShowUninstall_InstalledAndRemovable_IsTrueUntilAsked()
+    {
+        // Arrange
+        var item = Item(PluginId, null, installed: true);
+        item.CanUninstall = true;
+        var before = item.ShowUninstall;
+
+        // Act
+        item.AskUninstallCommand.Execute(null);
+
+        // Assert
+        Assert.That((before, item.ShowUninstall, item.ConfirmingUninstall), Is.EqualTo((true, false, true)));
+    }
+
+    [Test]
+    public void ShowUninstall_NotInstalled_IsFalse()
+    {
+        // Arrange
+        var item = Item(PluginId, null);
+
+        // Act
+        item.CanUninstall = true;
+
+        // Assert
+        Assert.That(item.ShowUninstall, Is.False);
+    }
+
+    [Test]
+    public void Entries_BundledPackageWithAndWithoutPlatforms_ReportTheirSystems()
+    {
+        // Arrange
+        var root = Directory.CreateTempSubdirectory("deckhost-entry-platforms").FullName;
+        try
+        {
+            WritePackage(Path.Combine(root, "bundled", "windows-only"), "deckhost.device.windows", """, "platforms": ["windows"]""");
+            WritePackage(Path.Combine(root, "bundled", "everywhere"), "deckhost.device.everywhere", string.Empty);
+            using var catalog = new PluginCatalog(Path.Combine(root, "plugins"), [], [], []) { BundledDirectory = Path.Combine(root, "bundled") };
+
+            // Act
+            catalog.Load();
+
+            // Assert
+            var entries = catalog.Entries.ToDictionary(static entry => entry.Id, static entry => entry.Platforms);
+            Assert.That(entries["deckhost.device.windows"], Is.EqualTo(new[] { PluginPlatforms.Windows }));
+            Assert.That(entries["deckhost.device.everywhere"], Is.EqualTo(PluginPlatforms.All));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void WritePackage(string folder, string id, string extra)
+    {
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, PluginManifest.FileName),
+            $$"""{ "id": "{{id}}", "name": "Test", "version": "1.0.0", "assembly": "Test.dll", "kind": "device"{{extra}} }""");
+    }
 }

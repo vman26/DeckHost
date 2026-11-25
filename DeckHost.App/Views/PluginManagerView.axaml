@@ -351,6 +351,15 @@
 												<TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" MaxLines="{Binding DescriptionLines}" />
 												<TextBlock Text="{Binding PermissionsText}" IsVisible="{Binding HasPermissions}" FontSize="11" Foreground="{DynamicResource C.FDE68A}" />
 												<TextBlock Text="{Binding NotForThisSystemText}" IsVisible="{Binding IsNotMadeForThisSystem}" FontSize="12" Foreground="{DynamicResource C.FCA5A5}" TextWrapping="Wrap" />
+												<Border IsVisible="{Binding ConfirmingUninstall}" Padding="10" CornerRadius="8" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.7F1D1D}" BorderThickness="1">
+													<StackPanel Spacing="8">
+														<TextBlock Text="{Binding UninstallQuestion}" TextWrapping="Wrap" Foreground="{DynamicResource C.FECACA}" />
+														<StackPanel Orientation="Horizontal" Spacing="8">
+															<Button Content="Uninstall" Command="{Binding ConfirmUninstallCommand}" />
+															<Button Content="Cancel" Classes="accent" Command="{Binding CancelUninstallCommand}" />
+														</StackPanel>
+													</StackPanel>
+												</Border>
 												<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasProgress}">
 													<ProgressBar IsIndeterminate="{Binding IsInstalling}" Width="120" VerticalAlignment="Center" />
 													<TextBlock Text="{Binding Progress}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" />
@@ -362,6 +371,8 @@
 												<Border Classes="badge" Background="{DynamicResource C.14532D}" IsVisible="{Binding IsInstalled}" HorizontalAlignment="Right">
 													<TextBlock Text="Installed" FontSize="11" Foreground="{DynamicResource C.BBF7D0}" />
 												</Border>
+												<Button Content="Uninstall" IsVisible="{Binding ShowUninstall}" Command="{Binding AskUninstallCommand}" HorizontalAlignment="Right"
+														ToolTip.Tip="Remove it from DeckHost (asks first)" />
 												<Button Content="Page" IsVisible="{Binding HasPage}" ToolTip.Tip="{Binding PageToolTip}" Command="{Binding OpenPageCommand}" HorizontalAlignment="Right" />
 												<Button Content="{Binding ExpandText}" ToolTip.Tip="Show the plugin's README" Command="{Binding ToggleExpandedCommand}" HorizontalAlignment="Right" />
 											</StackPanel>

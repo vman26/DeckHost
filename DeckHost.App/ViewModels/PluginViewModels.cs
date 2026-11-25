@@ -373,7 +373,9 @@ public partial class PluginManagerViewModel : ViewModelBase
         DevicePlugins.Clear();
         SystemPlugins.Clear();
         InstalledPlugins.Clear();
-        foreach (var entry in _catalog.Entries)
+        var entries = _catalog.Entries;
+        Store.RememberInstalledPlatforms(entries);
+        foreach (var entry in entries)
         {
             if (entry.Kind == PluginKind.Device && entry.IsSystem)
             {
@@ -453,7 +455,13 @@ public partial class PluginEntryViewModel : ViewModelBase
         Entry.Author is null ? null : $"by {Entry.Author}",
         Entry.ActionCount is { } count ? $"{count} action{(count == 1 ? string.Empty : "s")}" : null,
         Entry.Kind == PluginKind.Device ? null : PluginCategories.Resolve(Entry.Category, Entry.Name, Entry.Description, Entry.Id),
+        Entry.IsSystem ? null : SystemsText,
     }.Where(static part => part is not null));
+
+    /// <summary>"for Windows · macOS" from its manifest; "systems not listed" for a Stream Deck plugin whose manifest names none.</summary>
+    public string? SystemsText => Entry.Platforms is { } platforms
+        ? "for " + PluginPlatforms.Describe(platforms)
+        : Entry.Source == PluginCatalog.StreamDeckSource ? "systems not listed" : null;
 
     /// <summary>Where it came from: a store source, "File" or "Built into DeckHost".</summary>
     public string Origin => Entry.Kind == PluginKind.Device && Entry.IsSystem ? "Built into DeckHost" : Entry.Origin ?? "File";

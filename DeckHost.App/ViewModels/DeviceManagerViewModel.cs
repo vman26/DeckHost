@@ -175,8 +175,30 @@ public sealed partial class DeviceRowViewModel(DeviceRosterEntry entry, DeviceMa
         ? "Take it out of the list. Its profiles are kept for when it is added again."
         : "DeckHost always keeps one device in the list.";
 
+    private bool _confirmingRemove;
+
+    /// <summary>Remove was pressed: the question shows, with Remove and Cancel, before anything changes.</summary>
+    public bool ConfirmingRemove
+    {
+        get => _confirmingRemove;
+        private set => SetProperty(ref _confirmingRemove, value);
+    }
+
+    public string RemoveQuestion => $"Remove {Name} from the list? Its profiles are kept: add it again (it shows under Found when it's plugged in) and they come back.";
+
+    /// <summary>Asks first (<see cref="ConfirmingRemove"/>); <see cref="ConfirmRemoveCommand"/> removes it.</summary>
     [RelayCommand]
-    private void Remove() => owner.Remove(this);
+    private void Remove() => ConfirmingRemove = CanRemove;
+
+    [RelayCommand]
+    private void ConfirmRemove()
+    {
+        ConfirmingRemove = false;
+        owner.Remove(this);
+    }
+
+    [RelayCommand]
+    private void CancelRemove() => ConfirmingRemove = false;
 
     [RelayCommand]
     private void Add() => owner.Add(this);
