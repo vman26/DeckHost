@@ -34,6 +34,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Three starter layouts (Media, Streaming, Work) with a preview; the starter goes on your plugged-in deck. The tour also imports
   a Stream Deck profile and asks whether closing the window keeps DeckHost in the tray.
 - After importing a Stream Deck profile, DeckHost lists the plugins it uses that you don't have, with **Install** from the store.
+  Their keys keep the plugin's action and work by themselves once it's installed.
+- A control whose plugin is missing or turned off is marked on the device; selecting it offers **Install** (from the store),
+  **Turn it on** or **Remove**, and dropping another action replaces it.
 - Three short tips over the window after the tour (☰ → Show tips), and a hint on an empty layout.
 - The first time you close the window, DeckHost asks whether to keep running in the tray or quit.
 - **What's new** opens once after DeckHost updated, with that version's notes.

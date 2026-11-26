@@ -354,6 +354,18 @@
 													<Border Background="{DynamicResource C.66FFFFFF}"
 															IsVisible="{Binding IsPressed}"
 															IsHitTestVisible="False" />
+													<!-- The action's plugin is missing or off: a mark in the corner (the tooltip and the editor say which). -->
+													<Border IsVisible="{Binding IsUnavailable}"
+															IsHitTestVisible="False"
+															HorizontalAlignment="Right"
+															VerticalAlignment="Top"
+															Margin="4"
+															Width="18"
+															Height="18"
+															CornerRadius="9"
+															Background="{DynamicResource C.FBBF24}">
+														<TextBlock Text="!" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource C.0F172A}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+													</Border>
 													<TextBlock Text="{Binding InputIndicator}"
 															   IsVisible="{Binding HasInputIndicator}"
 															   IsHitTestVisible="False"
@@ -432,8 +444,53 @@
 					<Border Grid.Row="2" Background="{DynamicResource C.16181E}">
 						<Panel>
 							<ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasEditor}">
-								<!-- Filled in code: a new view per control (see ShowEditor). -->
-								<ContentControl x:Name="EditorHost" />
+								<StackPanel>
+									<!-- The selected control's action can't run here: install or turn on its plugin, or remove it. -->
+									<Border IsVisible="{Binding HasSelectedUnavailable}" Margin="16,12,16,0" Padding="14" CornerRadius="10"
+											Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.FBBF24}" BorderThickness="1">
+										<StackPanel Spacing="8" DataContext="{Binding SelectedUnavailable}" x:DataType="vm:UnavailableActionViewModel">
+											<Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+												<StackPanel Spacing="4">
+													<TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource C.FDE68A}" TextWrapping="Wrap" />
+													<TextBlock Text="{Binding Message}" FontSize="13" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
+												</StackPanel>
+												<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+													<Button Content="Turn it on" Classes="accent" Command="{Binding TurnOnCommand}" IsVisible="{Binding IsTurnedOff}" />
+													<Button Content="Remove" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove this action from the control" />
+												</StackPanel>
+											</Grid>
+											<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
+											<StackPanel Spacing="6" IsVisible="{Binding IsNotInstalled}">
+												<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding Store.HasStoreStatus}">
+													<TextBlock Text="{Binding Store.StoreStatus}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" VerticalAlignment="Center" />
+													<Button Grid.Column="1" Content="Try again" Command="{Binding Store.RetryCommand}" IsVisible="{Binding !Store.IsLoadingStore}" />
+												</Grid>
+												<ItemsControl ItemsSource="{Binding Store.Items}">
+													<ItemsControl.ItemTemplate>
+														<DataTemplate x:DataType="vm:MissingPluginItemViewModel">
+															<Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+																<StackPanel Spacing="2">
+																	<TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" TextTrimming="CharacterEllipsis" />
+																	<TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
+																	<TextBlock Text="{Binding SearchHint}" IsVisible="{Binding IsNotInStore}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
+																	<TextBlock Text="{Binding ElsewhereText}" IsVisible="{Binding RunsElsewhere}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
+																	<TextBlock Text="{Binding Progress}" IsVisible="{Binding HasProgress}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
+																</StackPanel>
+																<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+																	<Button Content="Install" Classes="accent" Command="{Binding InstallCommand}" IsVisible="{Binding ShowInstall}" />
+																	<Button Content="Buy…" Command="{Binding BuyCommand}" IsVisible="{Binding ShowBuy}" />
+																	<Button Content="Search…" Command="{Binding SearchCommand}" IsVisible="{Binding IsNotInStore}" ToolTip.Tip="Search the Elgato Marketplace in the browser" />
+																</StackPanel>
+															</Grid>
+														</DataTemplate>
+													</ItemsControl.ItemTemplate>
+												</ItemsControl>
+											</StackPanel>
+										</StackPanel>
+									</Border>
+									<!-- Filled in code: a new view per control (see ShowEditor). -->
+									<ContentControl x:Name="EditorHost" />
+								</StackPanel>
 							</ScrollViewer>
 							<TextBlock IsVisible="{Binding !HasEditor}"
 									   Text="Select a control to configure its action."

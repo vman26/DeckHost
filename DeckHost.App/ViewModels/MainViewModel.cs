@@ -23,6 +23,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private readonly IDeviceHostService _deviceHostService;
     private readonly PluginCatalog _pluginCatalog;
+    private readonly Dictionary<string, MissingPluginsViewModel> _storeLookups = new(StringComparer.OrdinalIgnoreCase);
+    private UnavailableActionViewModel? _selectedUnavailable;
     private readonly ProfileStore? _profileStore;
     private readonly IPluginStateTransfer? _pluginState;
     private readonly DispatcherTimer _saveTimer;
@@ -858,7 +860,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     public bool ShowEmptyDeckHint => IsEmptyDeck(ControlItems);
 
     internal static bool IsEmptyDeck(IReadOnlyCollection<ControlItemViewModel> controls) =>
-        controls.Count > 0 && controls.All(static control => control.AssignedBinding is null);
+        controls.Count > 0 && controls.All(static control => control.AssignedBinding is null && !control.IsUnavailable);
 
     /// <summary>☰ → Device simulator is offered (DeckHost settings → Developer → Device simulator).</summary>
     public bool ShowDeviceSimulator
@@ -874,8 +876,53 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         set => SetProperty(ref _showDebugPanel, value);
     }
 
+    /// <summary>The selected control's action can't run (its plugin is missing or off): the card above the editor.</summary>
+    public UnavailableActionViewModel? SelectedUnavailable
+    {
+        get => _selectedUnavailable;
+        private set
+        {
+            if (SetProperty(ref _selectedUnavailable, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedUnavailable));
+            }
+        }
+    }
+
+    public bool HasSelectedUnavailable => _selectedUnavailable is not null;
+
+    private void UpdateSelectedUnavailable()
+    {
+        var model = SelectedControl is { } control && SelectedProfile is { } profile && profile.GetBinding(control.Id) is null
+            ? profile.GetModel(control.Id)
+            : null;
+        if (model is null)
+        {
+            SelectedUnavailable = null;
+            return;
+        }
+
+        if (SelectedUnavailable is { } shown && Equals(shown.Binding, model))
+        {
+            return;
+        }
+
+        // One store lookup per plugin while its plugin stays missing (selecting its other keys reuses it).
+        var reason = UnavailableAction.ReasonFor(model, _pluginCatalog.Entries);
+        var store = reason == UnavailableReason.NotInstalled && _storeLookups.TryGetValue(model.Action.PluginId, out var known) ? known : null;
+        var card = new UnavailableActionViewModel(model, _pluginCatalog, store);
+        card.RemoveRequested += (_, _) => RemoveAssignment(card.ControlId);
+        SelectedUnavailable = card;
+        if (store is null && card.IsNotInstalled)
+        {
+            _storeLookups[model.Action.PluginId] = card.Store;
+            _ = card.LookUpAsync();
+        }
+    }
+
     private void RebuildEditor()
     {
+        UpdateSelectedUnavailable();
         if (_editor is { } old)
         {
             old.Changed -= OnEditorChanged;
@@ -1755,6 +1802,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     {
         _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
         RebuildActions();
+        _storeLookups.Clear();
 
         // Bindings to a disabled plugin become "unavailable" (kept); re-enabled ones come back.
         foreach (var profile in EveryLayout.ToList())
@@ -2332,6 +2380,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     private void AttachBinding(ControlItemViewModel controlItem, ControlBindingViewModel? binding)
     {
         controlItem.AssignedBinding = binding;
+        controlItem.UnavailableBinding = binding is null ? SelectedProfile?.GetModel(controlItem.Id) : null;
         OnPropertyChanged(nameof(ShowEmptyDeckHint));
 
         if (SelectedControl == controlItem)

@@ -294,9 +294,17 @@ public static class StreamDeckProfileImporter
                 return new ControlBinding(control.Id, ProfileActionKind.Single, plugin.ToActionReference(plugin.DefaultSettings), appearance, []);
             }
 
-            // Not available here: keep how the key looked.
-            _unavailable.Add(Text(action, "Name") is { Length: > 0 } actionName ? actionName : uuid);
-            NoteUnavailable(action, uuid);
+            // Not available here: keep how the key looked, and which plugin's action it is, so the key
+            // shows it as unavailable and gets the action back by itself once the plugin is installed.
+            var name = Text(action, "Name") is { Length: > 0 } actionName ? actionName : uuid;
+            _unavailable.Add(name);
+            if (NoteUnavailable(action, uuid) is { } use)
+            {
+                var pluginId = PluginIdOf(use) ?? uuid;
+                var reference = new ActionReference(pluginId, use.PluginName ?? pluginId, uuid, name, InputCapabilities.None, OutputCapabilities.None, ActionSettings.Empty);
+                return new ControlBinding(control.Id, ProfileActionKind.Single, reference, appearance, []);
+            }
+
             return appearance.Text is null && appearance.ImagePath is null
                 ? null
                 : Single(control, appearance, BuiltIn, "builtin.display-content");
@@ -360,13 +368,17 @@ public static class StreamDeckProfileImporter
         }
 
         /// <summary>Keeps an unmapped action with the plugin its <c>Plugin</c> object names (Stream Deck 6 profiles).</summary>
-        private void NoteUnavailable(JsonObject action, string uuid)
+        private StreamDeckActionUse? NoteUnavailable(JsonObject action, string uuid)
         {
-            if (uuid.Length > 0)
+            if (uuid.Length == 0)
             {
-                var plugin = action["Plugin"] as JsonObject;
-                _unavailableActions.Add(new StreamDeckActionUse(uuid, Text(plugin, "UUID"), Text(plugin, "Name")));
+                return null;
             }
+
+            var plugin = action["Plugin"] as JsonObject;
+            var use = new StreamDeckActionUse(uuid, Text(plugin, "UUID"), Text(plugin, "Name"));
+            _unavailableActions.Add(use);
+            return use;
         }
 
         private ControlBinding Single(PhysicalControl control, ControlAppearance appearance, string pluginId, string actionId, params (string, string)[] settings) =>

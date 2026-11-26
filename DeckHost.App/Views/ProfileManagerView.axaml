@@ -101,7 +101,7 @@
 							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
 								<StackPanel Spacing="2">
 									<TextBlock Text="{Binding MissingPlugins.Title}" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource C.F8FAFC}" TextWrapping="Wrap" />
-									<TextBlock Classes="hint" Text="Their keys kept their title and image. Install a plugin, then give its keys the action again." />
+									<TextBlock Classes="hint" Text="Their keys kept their title and image and are marked on the device. Install a plugin and its keys work again by themselves." />
 								</StackPanel>
 								<Button Grid.Column="1" Content="✕" ToolTip.Tip="Hide this list" Command="{Binding MissingPlugins.DismissCommand}" VerticalAlignment="Top" />
 							</Grid>
