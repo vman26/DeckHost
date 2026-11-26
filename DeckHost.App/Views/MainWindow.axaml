@@ -116,7 +116,7 @@
 					<TextBlock Text="{Binding RecoveredNotice}" TextWrapping="Wrap" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" />
 					<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
 						<Button Content="Report…" Click="OpenSupport_OnClick" />
-						<Button Content="✕" Click="DismissRecovered_OnClick" />
+						<Button Content="✕" Click="DismissRecovered_OnClick" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss" />
 					</StackPanel>
 				</Grid>
 			</Border>
@@ -286,11 +286,16 @@
 													ClipToBounds="True"
 													Cursor="Hand"
 													Focusable="True"
+													IsTabStop="True"
+													AutomationProperties.Name="{Binding AccessibleName}"
+													AutomationProperties.HelpText="{Binding AccessibleHelp}"
+													KeyDown="ControlCard_OnKeyDown"
 													PointerPressed="ControlCard_OnPointerPressed"
 													PointerMoved="ControlCard_OnPointerMoved"
 													PointerReleased="ControlCard_OnPointerReleased"
 													PointerWheelChanged="ControlCard_OnPointerWheelChanged"
 													ToolTip.Tip="{Binding ToolTipText}">
+												<Border.FocusAdorner><FocusAdornerTemplate><Border BorderBrush="{DynamicResource C.93C5FD}" BorderThickness="2" CornerRadius="10" Margin="-4" /></FocusAdornerTemplate></Border.FocusAdorner>
 												<Border.ContextMenu>
 													<ContextMenu DataContext="{Binding}">
 														<MenuItem Header="Try it"
@@ -517,6 +522,11 @@
 																Cursor="Hand"
 																Opacity="{Binding ListOpacity}"
 																ToolTip.Tip="{Binding ListToolTip}"
+																Focusable="True"
+																IsTabStop="True"
+																AutomationProperties.Name="{Binding Name}"
+																AutomationProperties.HelpText="Enter puts it on the selected control."
+																KeyDown="ActionCard_OnKeyDown"
 																PointerPressed="ActionCard_OnPointerPressed">
 															<Border.ContextMenu>
 																<ContextMenu>

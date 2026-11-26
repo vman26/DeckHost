@@ -239,6 +239,16 @@ public class ControlItemViewModel : ViewModelBase
 
     public Avalonia.Thickness OutlineThickness => new(IsSelected ? 2.5 : 1.5);
 
+    /// <summary>What a screen reader says for this control: its name and what it does.</summary>
+    public string AccessibleName => AssignedBinding is null
+        ? $"{DisplayName}, empty"
+        : $"{DisplayName}, {AssignedBinding.DisplayName}";
+
+    /// <summary>The keys that work on a control that has the keyboard focus.</summary>
+    public string AccessibleHelp =>
+        "Enter to customize, Space to press" + (IsKnob ? ", plus and minus to turn" : string.Empty)
+        + ", Delete to remove its action, arrow keys to go to the next control, the menu key for more.";
+
     public string ToolTipText => AssignedBinding is null
         ? $"{DisplayName}: drop an action here."
         : $"{DisplayName}: {AssignedBinding.DisplayName}. Double-click to press it{(IsKnob ? ", scroll to turn it" : string.Empty)}; drag to move, Ctrl+drag to copy.";
@@ -283,5 +293,6 @@ public class ControlItemViewModel : ViewModelBase
         OnPropertyChanged(nameof(PreviewImageLabel));
         OnPropertyChanged(nameof(HasPreviewImage));
         OnPropertyChanged(nameof(ToolTipText));
+        OnPropertyChanged(nameof(AccessibleName));
     }
 }

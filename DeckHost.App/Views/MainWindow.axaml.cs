@@ -477,6 +477,85 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         }
     }
 
+    /// <summary>
+    /// The device canvas from the keyboard: Enter customizes the focused control, Space presses it,
+    /// + and − turn a knob, Delete removes its action and the arrow keys go to the next control.
+    /// </summary>
+    private void ControlCard_OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || DataContext is not MainViewModel vm || sender is not Control { DataContext: ControlItemViewModel controlItem } control)
+        {
+            return;
+        }
+
+        var inputs = controlItem.Control.Inputs;
+        switch (e.Key)
+        {
+            case Key.Enter:
+                vm.SelectControl(controlItem.Control);
+                break;
+            case Key.Space when inputs.HasFlag(InputCapabilities.Press):
+                vm.SelectControl(controlItem.Control);
+                vm.Simulate(controlItem, InputCapabilities.Press, 1);
+                if (inputs.HasFlag(InputCapabilities.Release))
+                {
+                    vm.Simulate(controlItem, InputCapabilities.Release, 0);
+                }
+
+                break;
+            case Key.Space when inputs.HasFlag(InputCapabilities.Swipe):
+                vm.Simulate(controlItem, InputCapabilities.Swipe, 1);
+                break;
+            case Key.OemPlus or Key.Add or Key.OemMinus or Key.Subtract when inputs.HasFlag(InputCapabilities.Rotate):
+                vm.Simulate(controlItem, InputCapabilities.Rotate, e.Key is Key.OemPlus or Key.Add ? 1 : -1);
+                break;
+            case Key.Delete or Key.Back when controlItem.AssignedBinding is not null:
+                vm.RemoveAssignment(controlItem.Control);
+                break;
+            case Key.Left or Key.Right or Key.Up or Key.Down:
+                var items = vm.ControlItems;
+                var rects = items.Select(static item => new Avalonia.Rect(item.X, item.Y, item.Width, item.Height)).ToList();
+                var direction = e.Key switch
+                {
+                    Key.Left => CanvasDirection.Left,
+                    Key.Right => CanvasDirection.Right,
+                    Key.Up => CanvasDirection.Up,
+                    _ => CanvasDirection.Down,
+                };
+                if (CanvasNavigation.Next(rects, items.IndexOf(controlItem), direction) is { } next)
+                {
+                    FocusControlCard(control, items[next]);
+                }
+
+                break;
+            default:
+                return;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Moves the keyboard focus to the card of <paramref name="target"/>, a sibling of <paramref name="from"/>.</summary>
+    private static void FocusControlCard(Control from, ControlItemViewModel target)
+    {
+        var items = from.FindAncestorOfType<ItemsControl>();
+        var card = items?.GetVisualDescendants().OfType<Border>().FirstOrDefault(border => ReferenceEquals(border.DataContext, target) && border.Focusable);
+        card?.Focus(NavigationMethod.Directional);
+    }
+
+    /// <summary>Enter on an action in the list puts it on the selected control, like dropping it there.</summary>
+    private void ActionCard_OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.Key is not (Key.Enter or Key.Space) || DataContext is not MainViewModel vm ||
+            sender is not Control { DataContext: ActionItemViewModel actionItem } || vm.SelectedControl is not { } selected)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        vm.AssignActionToControl(selected.Control, actionItem.Action);
+    }
+
     private void ControlCard_OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not MainViewModel vm ||

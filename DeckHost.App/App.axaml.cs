@@ -45,6 +45,7 @@ public partial class App : Application
     {
         AvaloniaXamlLoader.Load(this);
         ApplyTheme(Platform.AppSettings.Load().Theme);
+        Views.AccessibleNames.Install();
     }
 
     public override void OnFrameworkInitializationCompleted()
