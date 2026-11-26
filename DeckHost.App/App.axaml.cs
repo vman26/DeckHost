@@ -119,10 +119,37 @@ public partial class App : Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             mainWindow.Closing += (_, e) =>
             {
-                if (KeepsWindowOnClose(e.CloseReason, exiting, settings.KeepsRunningInTray))
+                var outcome = Platform.TrayCloseNotice.Decide(e.CloseReason, exiting, settings);
+                if (outcome == Platform.WindowCloseOutcome.HideToTray)
                 {
                     e.Cancel = true;
                     mainWindow.Hide();
+                }
+                else if (outcome == Platform.WindowCloseOutcome.AskFirst)
+                {
+                    // The first close to the tray says so once, and lets the user quit instead.
+                    e.Cancel = true;
+                    mainWindow.AskTrayNotice(keepRunning =>
+                    {
+                        settings = Platform.TrayCloseNotice.Answer(Platform.AppSettings.Load(), keepRunning);
+                        try
+                        {
+                            Platform.AppSettings.Save(settings);
+                        }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                        {
+                            logger.LogWarning(ex, "Could not remember the tray notice");
+                        }
+
+                        if (keepRunning)
+                        {
+                            mainWindow.Hide();
+                        }
+                        else
+                        {
+                            ExitApplication();
+                        }
+                    });
                 }
                 else if (e.CloseReason is WindowCloseReason.OSShutdown or WindowCloseReason.ApplicationShutdown)
                 {

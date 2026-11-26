@@ -38,6 +38,7 @@
                 <SolidColorBrush x:Key="C.475569" Color="#475569" />
                 <SolidColorBrush x:Key="C.64748B" Color="#64748B" />
                 <SolidColorBrush x:Key="C.66FFFFFF" Color="#66FFFFFF" />
+                <SolidColorBrush x:Key="C.99000000" Color="#99000000" />
                 <SolidColorBrush x:Key="C.7F1D1D" Color="#7F1D1D" />
                 <SolidColorBrush x:Key="C.93C5FD" Color="#93C5FD" />
                 <SolidColorBrush x:Key="C.94A3B8" Color="#94A3B8" />
@@ -86,6 +87,7 @@
                 <SolidColorBrush x:Key="C.475569" Color="#94A3B8" />
                 <SolidColorBrush x:Key="C.64748B" Color="#64748B" />
                 <SolidColorBrush x:Key="C.66FFFFFF" Color="#66000000" />
+                <SolidColorBrush x:Key="C.99000000" Color="#66000000" />
                 <SolidColorBrush x:Key="C.7F1D1D" Color="#FEE2E2" />
                 <SolidColorBrush x:Key="C.93C5FD" Color="#1D4ED8" />
                 <SolidColorBrush x:Key="C.94A3B8" Color="#475569" />
