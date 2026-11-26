@@ -851,6 +851,15 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     public bool HasEditor => _editor is not null;
 
+    /// <summary>
+    /// The edited layout has nothing on any control yet: the canvas says "Drag an action here" and
+    /// points at the action list, until the first binding exists.
+    /// </summary>
+    public bool ShowEmptyDeckHint => IsEmptyDeck(ControlItems);
+
+    internal static bool IsEmptyDeck(IReadOnlyCollection<ControlItemViewModel> controls) =>
+        controls.Count > 0 && controls.All(static control => control.AssignedBinding is null);
+
     /// <summary>☰ → Device simulator is offered (DeckHost settings → Developer → Device simulator).</summary>
     public bool ShowDeviceSimulator
     {
@@ -2189,6 +2198,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         OnPropertyChanged(nameof(CanvasWidth));
         OnPropertyChanged(nameof(CanvasHeight));
+        OnPropertyChanged(nameof(ShowEmptyDeckHint));
     }
 
     /// <summary>
@@ -2317,6 +2327,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     private void AttachBinding(ControlItemViewModel controlItem, ControlBindingViewModel? binding)
     {
         controlItem.AssignedBinding = binding;
+        OnPropertyChanged(nameof(ShowEmptyDeckHint));
 
         if (SelectedControl == controlItem)
         {
