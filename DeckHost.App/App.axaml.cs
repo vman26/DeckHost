@@ -257,11 +257,14 @@ public partial class App : Application
             }
         };
         menu.Items.Add(updateItem);
+        var deckItem = new NativeMenuItem("Desktop deck");
+        deckItem.Click += (_, _) => Views.DesktopDeckWindow.ShowDeck(Ioc.Default.GetRequiredService<IDeviceHostService>());
         var settingsItem = new NativeMenuItem("Settings…");
         settingsItem.Click += (_, _) => openSettings();
         var exitItem = new NativeMenuItem("Exit");
         exitItem.Click += (_, _) => exit();
         menu.Items.Add(openItem);
+        menu.Items.Add(deckItem);
         menu.Items.Add(settingsItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(exitItem);

@@ -338,6 +338,9 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     private void OpenDeviceCreator_OnClick(object? sender, RoutedEventArgs e) => OpenDeviceCreator();
 
     /// <summary>Starts a device simulator window (this program with --simulator, its own process).</summary>
+    private void OpenDesktopDeck_OnClick(object? sender, RoutedEventArgs e) =>
+        DesktopDeckWindow.ShowDeck(Ioc.Default.GetRequiredService<DeckHost.Core.Interfaces.IDeviceHostService>());
+
     private void OpenSimulator_OnClick(object? sender, RoutedEventArgs e)
     {
         if (Environment.ProcessPath is not { } program)

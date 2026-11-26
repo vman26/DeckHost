@@ -23,6 +23,8 @@ namespace DeckHost.App.Platform;
 /// <param name="OnlyCompatibleActions">The action list shows only the actions that fit the selected control.</param>
 /// <param name="DeviceSimulator">Developer option: let device simulator windows connect (☰ → Device simulator).</param>
 /// <param name="CollapsedPluginSections">The sections of the Plugins page the user folded up (<c>PluginManagerViewModel</c> section ids).</param>
+/// <param name="DesktopDeckOnTop">The desktop deck window stays on top of other windows.</param>
+/// <param name="DesktopDeckDevice">The device the desktop deck shows (null: the Web Deck).</param>
 public sealed record AppSettingsData(
     bool StartMinimized = true,
     bool? CloseToTray = null,
@@ -39,7 +41,9 @@ public sealed record AppSettingsData(
     bool InstallUpdatesAutomatically = false,
     bool DeviceSimulator = false,
     bool OnlyCompatibleActions = false,
-    string[]? CollapsedPluginSections = null)
+    string[]? CollapsedPluginSections = null,
+    bool DesktopDeckOnTop = true,
+    string? DesktopDeckDevice = null)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
 }

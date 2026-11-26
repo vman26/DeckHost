@@ -1078,7 +1078,7 @@ public sealed class WebDeckTests : IDisposable
 
     private static string RunNewCode(WebDeckPlugin plugin)
     {
-        var action = Expect.Single(plugin.GetSettingActions(WebDeckPlugin.DeviceId));
+        var action = Expect.Single(plugin.GetSettingActions(WebDeckPlugin.DeviceId), static action => action.Id == WebDeckPlugin.NewCodeAction);
         return plugin.RunSettingAction(WebDeckPlugin.DeviceId, action.Id);
     }
 

@@ -41,6 +41,7 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
     /// <summary>"true" to serve the page and the deck over HTTPS with a certificate made for this computer.</summary>
     public const string Https = "https";
     public const string NewCodeAction = "new-code";
+    public const string QrCodeAction = "qr-code";
 
     /// <summary>Wrong codes or PINs from one address within <see cref="FailureWindow"/> before it has to wait.</summary>
     public const int MaxFailures = 5;
@@ -157,12 +158,18 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
 
     public IReadOnlyList<DeviceSettingAction> GetSettingActions(string deviceId) =>
     [
+        new(QrCodeAction, "Show a QR code for phones", "Opens a page here with a QR code: scan it with the phone's camera to open the deck with the pairing code filled in."),
         new(NewCodeAction, "New pairing code", "Phones that are connected now are disconnected and need the new code.",
             Confirm: "Make a new pairing code? Every phone and browser that uses the Web Deck now is disconnected and has to enter the new code."),
     ];
 
     public string RunSettingAction(string deviceId, string actionId)
     {
+        if (actionId == QrCodeAction)
+        {
+            return ShowQrCode();
+        }
+
         if (actionId != NewCodeAction)
         {
             return "Unknown action.";
@@ -418,6 +425,15 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
                     return;
                 }
 
+                // The QR code page, for the screen of this computer only (it shows the pairing code).
+                if (path == "/pair")
+                {
+                    var page = IPAddress.IsLoopback(remote) && Link is { } link ? PairingPage(link, PairingCode, PinCode.Length > 0) : null;
+                    await WriteResponseAsync(stream, page is null ? 404 : 200, page is null ? "text/plain" : "text/html; charset=utf-8",
+                        page is null ? "Not Found"u8.ToArray() : Encoding.UTF8.GetBytes(page)).ConfigureAwait(false);
+                    return;
+                }
+
                 if (path == "/info")
                 {
                     await WriteResponseAsync(stream, 200, "application/json", Encoding.UTF8.GetBytes(
@@ -457,6 +473,65 @@ public sealed class WebDeckPlugin : IDevicePlugin, IDeviceOutput, IConfigurableD
     }
 
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+
+    // ---------------------------------------------------------------- QR code
+
+    private string ShowQrCode()
+    {
+        if (SharingMode != SharingNetwork || ListeningPort is not { } port)
+        {
+            return "Choose \"Phones and tablets on this network\" under Sharing first.";
+        }
+
+        var page = $"{(Secure ? "https" : "http")}://localhost:{port}/pair";
+        try
+        {
+            using var _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(page) { UseShellExecute = true });
+            return "The QR code is open in your browser.";
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return $"Open {page} in a browser on this computer.";
+        }
+    }
+
+    /// <summary>The QR code of <paramref name="link"/> as SVG: one square per dark module, with a quiet zone (pure, for the tests).</summary>
+    internal static string QrSvg(string link)
+    {
+        using var generator = new QRCoder.QRCodeGenerator();
+        using var data = generator.CreateQrCode(link, QRCoder.QRCodeGenerator.ECCLevel.M);
+        var matrix = data.ModuleMatrix;
+        var size = matrix.Count;
+        var svg = new StringBuilder();
+        svg.Append(CultureInfo.InvariantCulture, $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {size} {size}\" shape-rendering=\"crispEdges\" role=\"img\" aria-label=\"QR code of the deck's address\"><rect width=\"{size}\" height=\"{size}\" fill=\"#fff\"/><path fill=\"#000\" d=\"");
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                if (matrix[y][x])
+                {
+                    svg.Append(CultureInfo.InvariantCulture, $"M{x} {y}h1v1h-1z");
+                }
+            }
+        }
+
+        return svg.Append("\"/></svg>").ToString();
+    }
+
+    private static string PairingPage(string link, string code, bool hasPin)
+    {
+        var encoded = System.Net.WebUtility.HtmlEncode(link);
+        return $$"""
+            <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>DeckHost: connect a phone</title>
+            <style>body{font-family:system-ui,sans-serif;background:#0b1220;color:#e2e8f0;display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px}
+            .qr{width:min(70vw,360px);background:#fff;padding:16px;border-radius:12px}code{font-size:1.4em;letter-spacing:.1em}a{color:#93c5fd;word-break:break-all}</style></head>
+            <body><h1>Scan this with your phone</h1><div class="qr">{{QrSvg(link)}}</div>
+            <p>Or open <a href="{{encoded}}">{{encoded}}</a></p><p>Pairing code: <code>{{System.Net.WebUtility.HtmlEncode(code)}}</code></p>
+            {{(hasPin ? "<p>The phone asks for the PIN once.</p>" : string.Empty)}}
+            <p>The phone must be on the same network. Keep this page to yourself: it holds the code.</p></body></html>
+            """;
+    }
 
     // ---------------------------------------------------------------- installable app
 

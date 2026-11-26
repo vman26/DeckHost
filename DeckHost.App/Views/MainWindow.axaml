@@ -134,6 +134,7 @@
 									<Button Content="Plugins and store" HorizontalAlignment="Stretch" Click="OpenPluginManager_OnClick" />
 									<Button Content="{Binding DevicesMenuText}" HorizontalAlignment="Stretch" Click="OpenDevices_OnClick" ToolTip.Tip="Remove devices, and add the ones DeckHost found" />
 									<Button Content="Device settings" HorizontalAlignment="Stretch" Click="OpenDeviceSettings_OnClick" />
+									<Button Content="Desktop deck" HorizontalAlignment="Stretch" Click="OpenDesktopDeck_OnClick" ToolTip.Tip="A deck in a small window on your desktop, on top of other windows: click its keys like a Stream Deck" />
 									<Button Content="Add a USB device" HorizontalAlignment="Stretch" Click="OpenDeviceCreator_OnClick" ToolTip.Tip="Make a button box, pedal, jog wheel or other USB device into a deck" />
 									<Button Content="Device simulator" HorizontalAlignment="Stretch" Click="OpenSimulator_OnClick" IsVisible="{Binding ShowDeviceSimulator}" ToolTip.Tip="Open a window that acts like any device DeckHost supports, without the hardware" />
 									<Button Content="DeckHost settings" HorizontalAlignment="Stretch" Click="OpenAppSettings_OnClick" />
