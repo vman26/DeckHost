@@ -118,6 +118,7 @@
   DeckHost.Contracts.Interfaces.IDevicePluginContext.ReportConnectionStatus(System.String deviceId, System.String state, System.String message) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDevicePluginContext.ReportInputEvent(System.String deviceId, System.String controlId, DeckHost.Contracts.Enums.InputCapabilities eventType, System.Int32 value) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDevicePluginContext.RequestRedraw(System.String deviceId) : System.Void
+  DeckHost.Contracts.Interfaces.IDeviceRelease.SetDeviceReleased(System.String deviceId, System.Boolean released) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDeviceSettingActions.GetSettingActions(System.String deviceId) : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Interfaces.DeviceSettingAction> abstract
   DeckHost.Contracts.Interfaces.IDeviceSettingActions.RunSettingAction(System.String deviceId, System.String actionId) : System.String abstract
   DeckHost.Contracts.Interfaces.IRenderContext.Clear(System.UInt32 argbColor) : System.Void abstract
@@ -948,6 +949,7 @@ interface DeckHost.Contracts.Interfaces.IDeviceModelCatalog
 interface DeckHost.Contracts.Interfaces.IDeviceOutput
 interface DeckHost.Contracts.Interfaces.IDevicePlugin
 interface DeckHost.Contracts.Interfaces.IDevicePluginContext
+interface DeckHost.Contracts.Interfaces.IDeviceRelease
 interface DeckHost.Contracts.Interfaces.IDeviceSettingActions
 interface DeckHost.Contracts.Interfaces.IRenderContext
 interface DeckHost.Contracts.Interfaces.IVariableStore

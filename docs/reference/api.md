@@ -271,6 +271,14 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `void ReportInputEvent(string deviceId, string controlId, InputCapabilities eventType, int value)` |  |
 | `void RequestRedraw(string deviceId)` | Asks the host to send every control image again, e.g. after the plugin drew something over them (a full-screen background). Thread-safe; the redraw happens on the host's worker. |
 
+### IDeviceRelease
+
+*interface* — Optional for a device plugin: let go of a device so other software (the vendor's app, Bitfocus Companion, …) can open it. DeckHost releases every device the user removed or hasn't added on the Devices page, and takes it back when it is added again.
+
+| Member | |
+|---|---|
+| `void SetDeviceReleased(string deviceId, bool released)` | Closes the device and doesn't open it again while `released` (true), or opens it again (false). A released device that is plugged in still reports `IsConnected`, so DeckHost can offer to add it back. Called on the host's worker: it must not block for long or raise `DevicesChanged` synchronously. |
+
 ### IDeviceSettingActions
 
 *interface* — Optional, next to `IConfigurableDevicePlugin`: buttons on the device's settings page for things that aren't a value to save (make a new pairing code, reset the device, …).

@@ -113,7 +113,7 @@
 			<Border Classes="card" IsVisible="{Binding HasIgnored}">
 				<StackPanel Spacing="8">
 					<TextBlock Classes="section" Text="REMOVED" />
-					<TextBlock Classes="hint" Text="They stay out of the list. A removed device that is plugged in again shows up under Found." />
+					<TextBlock Classes="hint" Text="They stay out of the list. A removed device that is plugged in again shows up under Found. DeckHost lets go of removed Stream Decks and USB devices, so another app (Elgato's Stream Deck app, Bitfocus Companion) can use them while DeckHost runs." />
 					<ItemsControl ItemsSource="{Binding Ignored}">
 						<ItemsControl.ItemTemplate>
 							<DataTemplate x:DataType="vm:DeviceRowViewModel">
