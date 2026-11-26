@@ -392,11 +392,13 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     public void OpenWelcome() =>
         OpenSingle("Welcome", () =>
         {
-            var welcome = new WelcomeViewModel(DataContext as MainViewModel, TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>(), TryResolve<UpdateViewModel>());
+            var welcome = new WelcomeViewModel(DataContext as MainViewModel, TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>(), TryResolve<UpdateViewModel>(), TryResolve<DeviceSettingsService>());
 
             // On top of the tour: Back returns to it.
             welcome.DeviceCreatorRequested += (_, _) => OpenDeviceCreator();
             welcome.Finished += (_, _) => StartCoachMarks();
+            welcome.DesktopDeckRequested += (_, _) => OpenDesktopDeck_OnClick(null, new RoutedEventArgs());
+            welcome.SimulatorRequested += (_, _) => OpenSimulator_OnClick(null, new RoutedEventArgs());
             return new WelcomeView { DataContext = welcome };
         });
 

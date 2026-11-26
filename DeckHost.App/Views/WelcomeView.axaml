@@ -15,6 +15,24 @@
 			<Setter Property="FontSize" Value="22" />
 			<Setter Property="FontWeight" Value="SemiBold" />
 			<Setter Property="Foreground" Value="{DynamicResource C.F8FAFC}" />
+			<Setter Property="AutomationProperties.HeadingLevel" Value="1" />
+			<Setter Property="AutomationProperties.LiveSetting" Value="Polite" />
+		</Style>
+		<Style Selector="TextBlock.subheading">
+			<Setter Property="FontWeight" Value="SemiBold" />
+			<Setter Property="Foreground" Value="{DynamicResource C.E2E8F0}" />
+			<Setter Property="AutomationProperties.HeadingLevel" Value="2" />
+		</Style>
+		<Style Selector="TextBlock.status">
+			<Setter Property="Foreground" Value="{DynamicResource C.93C5FD}" />
+			<Setter Property="TextWrapping" Value="Wrap" />
+			<Setter Property="AutomationProperties.LiveSetting" Value="Polite" />
+		</Style>
+		<Style Selector="TextBlock.dot">
+			<Setter Property="Foreground" Value="{DynamicResource C.64748B}" />
+		</Style>
+		<Style Selector="TextBlock.dot.connected">
+			<Setter Property="Foreground" Value="{DynamicResource C.BBF7D0}" />
 		</Style>
 		<Style Selector="Border.card">
 			<Setter Property="Background" Value="{DynamicResource C.0F172A}" />
@@ -28,6 +46,14 @@
 			<Setter Property="CornerRadius" Value="10" />
 			<Setter Property="Padding" Value="12,10" />
 		</Style>
+		<Style Selector="Border.preview">
+			<Setter Property="Background" Value="{DynamicResource C.1E293B}" />
+			<Setter Property="CornerRadius" Value="8" />
+			<Setter Property="Padding" Value="8,6" />
+			<Setter Property="Width" Value="104" />
+			<Setter Property="Height" Value="58" />
+			<Setter Property="Margin" Value="0,0,6,6" />
+		</Style>
 	</UserControl.Styles>
 
 	<Grid RowDefinitions="*,Auto" MaxWidth="760" Margin="20">
@@ -36,7 +62,7 @@
 				<!-- 1: welcome and devices -->
 				<StackPanel Spacing="16" IsVisible="{Binding IsDevicesStep}">
 					<StackPanel Orientation="Horizontal" Spacing="14">
-						<Image Source="/Assets/deckhost-64.png" Width="56" Height="56" />
+						<Image Source="/Assets/deckhost-64.png" Width="56" Height="56" AutomationProperties.AccessibilityView="Raw" />
 						<StackPanel VerticalAlignment="Center" Spacing="2">
 							<TextBlock Classes="heading" Text="Welcome to DeckHost" />
 							<TextBlock Classes="hint" Text="One platform. Unlimited control." />
@@ -46,17 +72,19 @@
 					<Border Classes="card">
 						<StackPanel Spacing="10">
 							<Grid ColumnDefinitions="*,Auto">
-								<TextBlock Text="Your devices" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" />
+								<TextBlock Classes="subheading" Text="Your devices" VerticalAlignment="Center" />
 								<Button Grid.Column="1" Content="Look again" Command="{Binding RefreshDevicesCommand}" />
 							</Grid>
+							<TextBlock Classes="status" Text="{Binding FoundMessage}" IsVisible="{Binding HasFoundMessage}" Foreground="{DynamicResource C.BBF7D0}" FontWeight="SemiBold" />
+							<TextBlock Classes="hint" Text="No devices found yet." IsVisible="{Binding !HasDevices}" />
 							<ItemsControl ItemsSource="{Binding Devices}">
 								<ItemsControl.ItemsPanel>
 									<ItemsPanelTemplate><StackPanel Spacing="6" /></ItemsPanelTemplate>
 								</ItemsControl.ItemsPanel>
 								<ItemsControl.ItemTemplate>
 									<DataTemplate x:DataType="vm:WelcomeDevice">
-										<StackPanel Orientation="Horizontal" Spacing="10">
-											<TextBlock Text="{Binding Dot}" Foreground="{Binding DotColor}" VerticalAlignment="Center" />
+										<StackPanel Orientation="Horizontal" Spacing="10" AutomationProperties.Name="{Binding AccessibleName}">
+											<TextBlock Classes="dot" Classes.connected="{Binding IsConnected}" Text="{Binding Dot}" VerticalAlignment="Center" />
 											<TextBlock Text="{Binding Name}" Foreground="{DynamicResource C.E2E8F0}" VerticalAlignment="Center" />
 											<TextBlock Text="{Binding State}" Foreground="{DynamicResource C.64748B}" VerticalAlignment="Center" />
 										</StackPanel>
@@ -64,10 +92,26 @@
 								</ItemsControl.ItemTemplate>
 							</ItemsControl>
 							<Border Classes="tip" IsVisible="{Binding ShowNoDeviceHelp}">
-								<StackPanel Spacing="6">
-									<TextBlock Text="No device connected yet" FontWeight="SemiBold" Foreground="{DynamicResource C.FDE68A}" />
-									<TextBlock Classes="hint" Text="{Binding DeviceHelp}" />
-									<TextBlock Classes="hint" Text="No device at all? Use the Web Deck: choose it in the device picker at the top, open Device settings and turn on sharing. Its link opens a deck on your phone." />
+								<StackPanel Spacing="8">
+									<TextBlock Classes="subheading" Text="No device connected yet" Foreground="{DynamicResource C.FDE68A}" />
+									<TextBlock Classes="hint" Text="{Binding DeviceHelp}" AutomationProperties.LiveSetting="Polite" />
+									<Border IsVisible="{Binding HasHelpCommands}" Background="{DynamicResource C.0B1120}" CornerRadius="8" Padding="10,8">
+										<Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+											<SelectableTextBlock Text="{Binding HelpCommands}" FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace" FontSize="12" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
+											<Button Grid.Column="1" Content="Copy" VerticalAlignment="Top" Click="CopyCommands_OnClick" AutomationProperties.Name="Copy the commands" />
+										</Grid>
+									</Border>
+									<StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasHelpDocs}">
+										<Button Content="Show the steps in the documentation" Command="{Binding OpenHelpDocsCommand}" />
+										<TextBlock Classes="status" Text="{Binding CommandsStatus}" VerticalAlignment="Center" />
+									</StackPanel>
+									<TextBlock Classes="hint" Text="No device at hand? You can still try DeckHost:" Margin="0,4,0,0" />
+									<WrapPanel>
+										<Button Content="Open a deck on this screen" Command="{Binding OpenDesktopDeckCommand}" Margin="0,0,8,8" ToolTip.Tip="A window with the Web Deck's keys, on top of other windows." />
+										<Button Content="Use my phone" Command="{Binding UsePhoneCommand}" Margin="0,0,8,8" ToolTip.Tip="Shares the Web Deck with phones on this network and opens a QR code to scan." />
+										<Button Content="Try the simulator" Command="{Binding TrySimulatorCommand}" Margin="0,0,8,8" ToolTip.Tip="A window that looks and works like a real device (an N4 Pro, a Stream Deck, …)." />
+									</WrapPanel>
+									<TextBlock Classes="status" Text="{Binding NoDeviceStatus}" IsVisible="{Binding HasNoDeviceStatus}" />
 									<TextBlock Classes="hint" Text="You can set everything up without a device; it shows up as soon as you plug it in." />
 								</StackPanel>
 							</Border>
@@ -76,7 +120,7 @@
 					<Border Classes="card">
 						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
 							<StackPanel Spacing="4">
-								<TextBlock Text="Another USB device?" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+								<TextBlock Classes="subheading" Text="Another USB device?" />
 								<TextBlock Classes="hint" Text="A button box, foot pedal, jog wheel or game controller can become a deck too: press each key and turn each knob once so DeckHost learns them, place them as they sit, and save." />
 							</StackPanel>
 							<Button Grid.Column="1" Content="Add a USB device" VerticalAlignment="Center" Command="{Binding AddUsbDeviceCommand}" />
@@ -90,16 +134,39 @@
 					<TextBlock Classes="hint" Text="Fill the empty keys of this profile with everyday actions, or start empty and drag actions from the list on the right yourself." />
 					<Border Classes="card">
 						<StackPanel Spacing="10">
-							<TextBlock Text="Starter layout" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
-							<TextBlock Classes="hint" Text="Play / pause, previous and next track, mute, volume down and up, a clock, system info, lock, and switch profile. On a knob: the volume; on the touch strip: swipe to skip tracks. Controls that already have an action keep it." />
-							<Button Content="Put these on my device" Classes="accent" Command="{Binding ApplyStarterCommand}" IsEnabled="{Binding CanApplyStarter}" HorizontalAlignment="Left" />
-							<TextBlock Text="{Binding StarterStatus}" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
+							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+								<TextBlock Classes="subheading" Text="Starter layout" VerticalAlignment="Center" />
+								<ComboBox Grid.Column="1" ItemsSource="{Binding Starters}" SelectedItem="{Binding SelectedStarter}" MinWidth="160" AutomationProperties.Name="Starter layout" />
+							</Grid>
+							<TextBlock Classes="hint" Text="{Binding StarterDescription}" />
+							<TextBlock Classes="hint" Text="{Binding StarterNote}" IsVisible="{Binding HasStarterNote}" Foreground="{DynamicResource C.FDE68A}" />
+							<ItemsControl ItemsSource="{Binding StarterPreview}" IsVisible="{Binding HasStarterPreview}" AutomationProperties.Name="What the starter puts on the device">
+								<ItemsControl.ItemsPanel>
+									<ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+								</ItemsControl.ItemsPanel>
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="vm:StarterPreviewItem">
+										<Border Classes="preview" ToolTip.Tip="{Binding ControlName}">
+											<StackPanel VerticalAlignment="Center" Spacing="2">
+												<TextBlock Text="{Binding ActionName}" Foreground="{DynamicResource C.F1F5F9}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+												<TextBlock Text="{Binding ControlName}" Foreground="{DynamicResource C.94A3B8}" FontSize="10" TextTrimming="CharacterEllipsis" />
+											</StackPanel>
+										</Border>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+							<TextBlock Classes="hint" Text="Every control already has an action: nothing would change." IsVisible="{Binding StarterFillsNothing}" />
+							<TextBlock Classes="hint" Text="Controls that already have an action keep it." />
+							<Button Content="{Binding ApplyStarterLabel}" Classes="accent" Command="{Binding ApplyStarterCommand}" IsEnabled="{Binding CanApplyStarter}" HorizontalAlignment="Left" />
+							<TextBlock Classes="status" Text="{Binding StarterStatus}" />
 						</StackPanel>
 					</Border>
 					<Border Classes="card">
-						<StackPanel Spacing="6">
-							<TextBlock Text="Coming from the Stream Deck app?" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
-							<TextBlock Classes="hint" Text="Import your .streamDeckProfile files on the Profiles page (the grid icon at the top right), and install your Stream Deck plugins from Plugins → Store." />
+						<StackPanel Spacing="8">
+							<TextBlock Classes="subheading" Text="Coming from the Stream Deck app?" />
+							<TextBlock Classes="hint" Text="Bring your .streamDeckProfile files along: the keys and dials land where they were. Install your Stream Deck plugins from Plugins → Store." />
+							<Button Content="Import a Stream Deck profile…" Click="ImportProfile_OnClick" IsEnabled="{Binding CanImport}" HorizontalAlignment="Left" />
+							<TextBlock Classes="status" Text="{Binding ImportStatus}" />
 						</StackPanel>
 					</Border>
 				</StackPanel>
@@ -114,12 +181,16 @@
 								<TextBlock Classes="hint" Margin="28,0,0,0" Text="Your device works right after sign-in; DeckHost waits in the tray." />
 							</StackPanel>
 							<StackPanel Spacing="2">
+								<CheckBox Content="Closing the window keeps DeckHost running in the tray" IsChecked="{Binding KeepRunningInTray}" />
+								<TextBlock Classes="hint" Margin="28,0,0,0" Text="{Binding TrayHint}" />
+							</StackPanel>
+							<StackPanel Spacing="2">
 								<CheckBox Content="Check for DeckHost updates" IsChecked="{Binding CheckForUpdates}" />
 								<TextBlock Classes="hint" Margin="28,0,0,0" Text="Asks GitHub for new releases now and then. Updates are only installed when you choose to." />
 							</StackPanel>
 							<StackPanel Orientation="Horizontal" Spacing="10">
 								<TextBlock Text="Look" VerticalAlignment="Center" Foreground="{DynamicResource C.E2E8F0}" />
-								<ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" MinWidth="200" />
+								<ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" MinWidth="200" AutomationProperties.Name="Look" />
 							</StackPanel>
 							<StackPanel Spacing="2">
 								<CheckBox Content="After a crash, offer to report it" IsChecked="{Binding OfferCrashReports}" />
@@ -132,22 +203,22 @@
 				<!-- 4: how it works -->
 				<StackPanel Spacing="12" IsVisible="{Binding IsTipsStep}">
 					<TextBlock Classes="heading" Text="How DeckHost works" />
-					<Border Classes="tip"><TextBlock Classes="hint" Text="Drag an action from the list on the right onto a key, knob or touch zone. Drag it off again to remove it." /></Border>
-					<Border Classes="tip"><TextBlock Classes="hint" Text="Click a control to set it up below the device: the action's settings, text, icon, background and light. Double-click it to try it. Made a mistake? Undo with Ctrl+Z or the arrows at the top." /></Border>
-					<Border Classes="tip"><TextBlock Classes="hint" Text="Multi Action runs several actions in a row; Key Logic does something else on a double press or a hold; Workflow links triggers, conditions, waits and loops on a canvas." /></Border>
-					<Border Classes="tip"><TextBlock Classes="hint" Text="Profiles switch the whole device, pages flip with a swipe, and folders open a set of keys. A profile can turn on by itself when an app comes to the front, and be copied to another device (Profiles → Copy to)." /></Border>
-					<Border Classes="tip"><TextBlock Classes="hint" Text="More actions: Plugins → Store has DeckHost, OpenAction and Stream Deck plugins. Each runs in its own process, so one that crashes can't take DeckHost down; it's restarted by itself." /></Border>
-					<Border Classes="tip"><TextBlock Classes="hint" Text="Device settings has each device's brightness, lights and firmware version. Help and support (☰ menu) has the documentation, a way to report problems, and what DeckHost sees of each device." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Drag an action from the list on the right onto a key, knob or touch zone; drag it off to remove it." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Click a control to set it up below the device. Double-click it to try it. Ctrl+Z undoes." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="Profiles switch the whole device, pages flip with a swipe, folders open a set of keys." /></Border>
+					<Border Classes="tip"><TextBlock Classes="hint" Text="More actions are in Plugins → Store; help is in the ☰ menu." /></Border>
+					<Button Content="Open the documentation" Command="{Binding OpenDocumentationCommand}" HorizontalAlignment="Left" />
+					<TextBlock Classes="status" Text="{Binding CommandsStatus}" IsVisible="{Binding IsTipsStep}" />
 				</StackPanel>
 			</StackPanel>
 		</ScrollViewer>
 
 		<Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,16,0,0">
 			<Button Content="Skip the tour" Command="{Binding FinishCommand}" />
-			<TextBlock Grid.Column="1" Text="{Binding StepText}" Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center" />
+			<TextBlock Grid.Column="1" Text="{Binding StepText}" Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
 			<StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
 				<Button Content="Back" Command="{Binding BackCommand}" IsVisible="{Binding CanGoBack}" />
-				<Button Content="{Binding NextLabel}" Classes="accent" Command="{Binding NextCommand}" />
+				<Button x:Name="NextButton" Content="{Binding NextLabel}" Classes="accent" Command="{Binding NextCommand}" />
 			</StackPanel>
 		</Grid>
 	</Grid>
