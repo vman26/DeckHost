@@ -506,13 +506,13 @@ public partial class ProfileManagerViewModel : ViewModelBase
 
     private void AddAppName(string? name)
     {
-        var normalized = AutoProfileSelector.NormalizeAppName(name);
+        var normalized = AutoProfileSelector.NormalizeRule(name);
         if (EditingProfile is null || normalized.Length == 0)
         {
             return;
         }
 
-        if (!EditingProfile.AutoSwitchApps.Any(app => AutoProfileSelector.NormalizeAppName(app) == normalized))
+        if (!EditingProfile.AutoSwitchApps.Any(app => AutoProfileSelector.NormalizeRule(app) == normalized))
         {
             EditingProfile.AutoSwitchApps.Add(normalized);
             _main.NotifyProfilesEdited();

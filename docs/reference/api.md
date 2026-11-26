@@ -78,6 +78,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Counter` |  |
 | `const string ExecutionCount` |  |
 | `const string ForegroundApp` | The name of the app in the foreground (where the platform reports it). |
+| `const string ForegroundTitle` | The title of the focused window, where the system lets DeckHost read it (Windows, Linux X11). |
 | `const string HardwareId` |  |
 | `const string LastAction` |  |
 | `const string LastActionAt` |  |

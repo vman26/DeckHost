@@ -290,3 +290,19 @@ public class AppVersionTests
         Assert.That((Path.IsPathRooted(name), name.Length <= DeckHost.App.Program.MaxSocketPath), Is.EqualTo((true, true)));
     }
 }
+
+public sealed class WindowTitleTests
+{
+    [Test]
+    public void ParseWindowName_XpropOutputWithEscapedQuotes_IsTheTitle()
+    {
+        // Arrange
+        const string Output = "_NET_WM_NAME(UTF8_STRING) = \"Say \\\"hi\\\" - Mail\"";
+
+        // Act
+        var title = DeckHost.App.Platform.ForegroundAppWatcher.ParseWindowName(Output);
+
+        // Assert
+        Assert.That(title, Is.EqualTo("Say \"hi\" - Mail"));
+    }
+}

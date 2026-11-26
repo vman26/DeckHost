@@ -25,6 +25,7 @@ internal sealed partial class ForegroundAppWatcher : IDisposable
     private readonly int _ownProcessId = Environment.ProcessId;
     private readonly Timer _timer;
     private int _lastProcessId;
+    private string? _lastTitle;
     private int _polling;
 
     public ForegroundAppWatcher()
@@ -32,8 +33,11 @@ internal sealed partial class ForegroundAppWatcher : IDisposable
         _timer = new Timer(_ => Poll());
     }
 
-    /// <summary>Raised on the UI thread with the process name (without .exe) when another app gets focus.</summary>
-    public event Action<string>? ForegroundAppChanged;
+    /// <summary>
+    /// Raised on the UI thread with the process name (without .exe) and the window title (null where
+    /// it can't be read: macOS, Wayland) when another app gets focus or the focused window's title changes.
+    /// </summary>
+    public event Action<string, string?>? ForegroundAppChanged;
 
     public static bool IsSupported =>
         OperatingSystem.IsWindows() ||
@@ -46,6 +50,9 @@ internal sealed partial class ForegroundAppWatcher : IDisposable
         : "Automatic switching isn't supported on this system.";
 
     public string? CurrentApp { get; private set; }
+
+    /// <summary>The focused window's title, when it can be read.</summary>
+    public string? CurrentTitle { get; private set; }
 
     public void Start()
     {
@@ -110,7 +117,7 @@ internal sealed partial class ForegroundAppWatcher : IDisposable
 
         try
         {
-            if (FindForegroundApp() is not { } app || app.ProcessId == _lastProcessId)
+            if (FindForegroundApp() is not { } app || (app.ProcessId == _lastProcessId && app.Title == _lastTitle))
             {
                 return;
             }
@@ -123,10 +130,12 @@ internal sealed partial class ForegroundAppWatcher : IDisposable
             }
 
             _lastProcessId = app.ProcessId;
+            _lastTitle = app.Title;
             Dispatcher.UIThread.Post(() =>
             {
                 CurrentApp = app.Name;
-                ForegroundAppChanged?.Invoke(app.Name);
+                CurrentTitle = app.Title;
+                ForegroundAppChanged?.Invoke(app.Name, app.Title);
             });
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or ArgumentException or ExternalException)
@@ -139,7 +148,7 @@ internal sealed partial class ForegroundAppWatcher : IDisposable
         }
     }
 
-    private static (int ProcessId, string Name)? FindForegroundApp()
+    private static (int ProcessId, string Name, string? Title)? FindForegroundApp()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -150,18 +159,20 @@ internal sealed partial class ForegroundAppWatcher : IDisposable
             }
 
             using var process = Process.GetProcessById((int)processId);
-            return ((int)processId, process.ProcessName);
+            return ((int)processId, process.ProcessName, WindowsTitle(window));
         }
 
         if (OperatingSystem.IsMacOS())
         {
-            return MacNative.FrontmostApp();
+            return MacNative.FrontmostApp() is { } mac ? (mac.ProcessId, mac.Name, null) : null;
         }
 
         if (OperatingSystem.IsLinux())
         {
             var active = ExternalTool.TryRun("xprop", ["-root", "_NET_ACTIVE_WINDOW"]);
-            return WindowIds(active).FirstOrDefault() is { } window ? LinuxWindowProcess(window) : null;
+            return WindowIds(active).FirstOrDefault() is { } window && LinuxWindowProcess(window) is { } linux
+                ? (linux.Id, linux.Name, ParseWindowName(ExternalTool.TryRun("xprop", ["-id", window, "_NET_WM_NAME"])))
+                : null;
         }
 
         return null;
@@ -194,6 +205,35 @@ internal sealed partial class ForegroundAppWatcher : IDisposable
             return null;
         }
     }
+
+    /// <summary>"_NET_WM_NAME(UTF8_STRING) = \"Inbox - Mail\"" → Inbox - Mail (escaped quotes kept as quotes).</summary>
+    internal static string? ParseWindowName(string? xpropOutput)
+    {
+        var match = xpropOutput is null ? null : WindowNameRegex().Match(xpropOutput);
+        return match is { Success: true } ? match.Groups[1].Value.Replace("\\\"", "\"", StringComparison.Ordinal) : null;
+    }
+
+    private static string? WindowsTitle(IntPtr window)
+    {
+        var length = GetWindowTextLengthW(window);
+        if (length <= 0)
+        {
+            return null;
+        }
+
+        var buffer = new char[length + 1];
+        var copied = GetWindowTextW(window, buffer, buffer.Length);
+        return copied > 0 ? new string(buffer, 0, copied) : null;
+    }
+
+    [GeneratedRegex("=\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")]
+    private static partial Regex WindowNameRegex();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextW(IntPtr window, [Out] char[] text, int maxCount);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowTextLengthW(IntPtr window);
 
     [GeneratedRegex("0x[0-9a-fA-F]+")]
     private static partial Regex WindowIdRegex();

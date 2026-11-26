@@ -876,6 +876,7 @@
   DeckHost.Contracts.VariableKeys.ExecutionCount : System.String const
   DeckHost.Contracts.VariableKeys.For(System.String deviceId, System.String controlId, System.String suffix) : System.String
   DeckHost.Contracts.VariableKeys.ForegroundApp : System.String const
+  DeckHost.Contracts.VariableKeys.ForegroundTitle : System.String const
   DeckHost.Contracts.VariableKeys.HardwareId : System.String const
   DeckHost.Contracts.VariableKeys.LastAction : System.String const
   DeckHost.Contracts.VariableKeys.LastActionAt : System.String const

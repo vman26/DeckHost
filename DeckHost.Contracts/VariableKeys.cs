@@ -32,6 +32,9 @@ public static class VariableKeys
     /// <summary>The name of the app in the foreground (where the platform reports it).</summary>
     public const string ForegroundApp = "system.foregroundApp";
 
+    /// <summary>The title of the focused window, where the system lets DeckHost read it (Windows, Linux X11).</summary>
+    public const string ForegroundTitle = "system.foregroundTitle";
+
     /// <summary><c>vars.{name}</c>: a variable that workflows set and check (names ignore case).</summary>
     public static string UserVariable(string name) => $"vars.{name.Trim().ToLowerInvariant()}";
 
