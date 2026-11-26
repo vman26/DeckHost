@@ -392,6 +392,11 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         {
             OpenWelcome();
         }
+        else if (WhatsNewViewModel.ShouldShow())
+        {
+            WhatsNewViewModel.MarkSeen();
+            OpenSingle("What's new", () => new WhatsNewView { DataContext = new WhatsNewViewModel() });
+        }
     }
 
     private void OpenPluginManager_OnClick(object? sender, RoutedEventArgs e)
