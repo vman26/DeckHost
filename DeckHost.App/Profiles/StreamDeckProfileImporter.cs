@@ -18,7 +18,23 @@ namespace DeckHost.App.Profiles;
 /// <param name="Imported">Keys and dials that got an action.</param>
 /// <param name="NotPlaced">Keys and dials with no place on this device (a bigger Stream Deck).</param>
 /// <param name="Unavailable">Actions DeckHost doesn't have (their key keeps its title and image).</param>
-public sealed record StreamDeckImportResult(IReadOnlyList<DeviceProfile> Layouts, int Imported, int NotPlaced, IReadOnlyList<string> Unavailable);
+public sealed record StreamDeckImportResult(IReadOnlyList<DeviceProfile> Layouts, int Imported, int NotPlaced, IReadOnlyList<string> Unavailable)
+{
+    /// <summary>Every action DeckHost couldn't map, with the plugin the profile says it comes from (to find missing plugins).</summary>
+    public IReadOnlyList<StreamDeckActionUse> UnavailableActions { get; init; } = [];
+}
+
+/// <summary>An action a Stream Deck profile uses, as the profile names it.</summary>
+/// <param name="ActionUuid">The action's UUID (<c>&lt;plugin uuid&gt;.&lt;action&gt;</c> by Stream Deck convention).</param>
+/// <param name="PluginUuid">The plugin's UUID, when the profile records it (Stream Deck 6 writes a <c>Plugin</c> object per action).</param>
+/// <param name="PluginName">The plugin's name, when the profile records it.</param>
+public sealed record StreamDeckActionUse(string ActionUuid, string? PluginUuid = null, string? PluginName = null);
+
+/// <summary>A Stream Deck plugin an imported profile uses that isn't installed.</summary>
+/// <param name="Id">The plugin's UUID (the store's id for Elgato archive and OpenAction plugins).</param>
+/// <param name="Name">Its name, when the profile records it.</param>
+/// <param name="ActionUuids">The actions of it the profile uses.</param>
+public sealed record MissingPlugin(string Id, string? Name, IReadOnlyList<string> ActionUuids);
 
 /// <summary>
 /// Imports an Elgato <c>.streamDeckProfile</c> (a zip of a <c>&lt;id&gt;.sdProfile</c> folder) as
@@ -54,11 +70,70 @@ public static class StreamDeckProfileImporter
         }
     }
 
+    /// <summary>The Stream Deck app's own actions: part of the app, not a plugin anybody can install.</summary>
+    private const string StreamDeckAppPrefix = "com.elgato.streamdeck.";
+
+    /// <summary>
+    /// The plugins behind <paramref name="actions"/> that aren't installed, most used first. A plugin is the one the profile
+    /// names, else the action's UUID without its last part. It counts as installed when an installed id is that plugin
+    /// or a prefix of the action's UUID (<c>com.elgato.discord</c> for <c>com.elgato.discord.voice.mute</c>). The Stream
+    /// Deck app's own actions (<c>com.elgato.streamdeck.*</c>) are left out.
+    /// </summary>
+    public static IReadOnlyList<MissingPlugin> FindMissingPlugins(IEnumerable<StreamDeckActionUse> actions, IEnumerable<string> installedPluginIds)
+    {
+        var installed = installedPluginIds.Where(static id => id.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var uses = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var order = new List<string>();
+        foreach (var action in actions)
+        {
+            if (PluginIdOf(action) is not { } id || IsStreamDeckApp(action.ActionUuid) || IsStreamDeckApp(id + ".") ||
+                installed.Contains(id) || installed.Any(installedId => action.ActionUuid.StartsWith(installedId + ".", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            if (!uses.TryGetValue(id, out var actionUuids))
+            {
+                uses[id] = actionUuids = [];
+                order.Add(id);
+            }
+
+            if (!actionUuids.Contains(action.ActionUuid, StringComparer.OrdinalIgnoreCase))
+            {
+                actionUuids.Add(action.ActionUuid);
+            }
+
+            if (names.GetValueOrDefault(id) is null && !string.IsNullOrWhiteSpace(action.PluginName))
+            {
+                names[id] = action.PluginName.Trim();
+            }
+        }
+
+        return [.. order
+            .Select(id => new MissingPlugin(id, names.GetValueOrDefault(id), uses[id]))
+            .OrderByDescending(static plugin => plugin.ActionUuids.Count)];
+    }
+
+    private static bool IsStreamDeckApp(string uuid) => uuid.StartsWith(StreamDeckAppPrefix, StringComparison.OrdinalIgnoreCase);
+
+    private static string? PluginIdOf(StreamDeckActionUse action)
+    {
+        if (!string.IsNullOrWhiteSpace(action.PluginUuid))
+        {
+            return action.PluginUuid.Trim();
+        }
+
+        var dot = action.ActionUuid.LastIndexOf('.');
+        return dot > 0 ? action.ActionUuid[..dot] : null;
+    }
+
     private sealed class Reader(ZipArchive zip, string deviceId, IReadOnlyList<PhysicalControl> controls, IReadOnlyCollection<ActionItemViewModel> actions, string assetDirectory)
     {
         private readonly string _stamp = Guid.NewGuid().ToString("N")[..8];
         private readonly List<DeviceProfile?> _layouts = [];
         private readonly HashSet<string> _unavailable = new(StringComparer.Ordinal);
+        private readonly List<StreamDeckActionUse> _unavailableActions = [];
         private readonly HashSet<string> _read = new(StringComparer.OrdinalIgnoreCase);
         private string _assets = assetDirectory;
         private int _imported;
@@ -103,7 +178,10 @@ public static class StreamDeckProfileImporter
                 AddLayout(rootId, name, null, null, (manifest, folder), folder);
             }
 
-            return new StreamDeckImportResult([.. _layouts.OfType<DeviceProfile>()], _imported, _notPlaced, [.. _unavailable.Order(StringComparer.Ordinal)]);
+            return new StreamDeckImportResult([.. _layouts.OfType<DeviceProfile>()], _imported, _notPlaced, [.. _unavailable.Order(StringComparer.Ordinal)])
+            {
+                UnavailableActions = [.. _unavailableActions.Distinct()],
+            };
         }
 
         /// <summary>A page or child profile's manifest, by its id: a folder named after it under Profiles.</summary>
@@ -218,6 +296,7 @@ public static class StreamDeckProfileImporter
 
             // Not available here: keep how the key looked.
             _unavailable.Add(Text(action, "Name") is { Length: > 0 } actionName ? actionName : uuid);
+            NoteUnavailable(action, uuid);
             return appearance.Text is null && appearance.ImagePath is null
                 ? null
                 : Single(control, appearance, BuiltIn, "builtin.display-content");
@@ -272,11 +351,22 @@ public static class StreamDeckProfileImporter
                     else
                     {
                         _unavailable.Add(Text(step, "Name") is { Length: > 0 } name ? name : uuid);
+                        NoteUnavailable(step, uuid);
                     }
                 }
             }
 
             return new ControlBinding(control.Id, kind, Reference(BuiltIn, scaffoldId, []), appearance, steps);
+        }
+
+        /// <summary>Keeps an unmapped action with the plugin its <c>Plugin</c> object names (Stream Deck 6 profiles).</summary>
+        private void NoteUnavailable(JsonObject action, string uuid)
+        {
+            if (uuid.Length > 0)
+            {
+                var plugin = action["Plugin"] as JsonObject;
+                _unavailableActions.Add(new StreamDeckActionUse(uuid, Text(plugin, "UUID"), Text(plugin, "Name")));
+            }
         }
 
         private ControlBinding Single(PhysicalControl control, ControlAppearance appearance, string pluginId, string actionId, params (string, string)[] settings) =>

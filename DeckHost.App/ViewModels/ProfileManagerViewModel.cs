@@ -21,9 +21,11 @@ public partial class ProfileManagerViewModel : ViewModelBase
     private string? _selectedRunningApp;
     private bool _confirmingDelete;
 
-    public ProfileManagerViewModel(MainViewModel main, Core.State.VariableStore? variables = null)
+    /// <param name="missingPlugins">What a Stream Deck import lacks; one with the app's plugin catalog (if any) when null.</param>
+    public ProfileManagerViewModel(MainViewModel main, Core.State.VariableStore? variables = null, MissingPluginsViewModel? missingPlugins = null)
     {
         _main = main;
+        MissingPlugins = missingPlugins ?? new MissingPluginsViewModel(TryResolveCatalog());
         _main.PropertyChanged += OnMainPropertyChanged;
         _editingProfile = main.SelectedRootProfile ?? main.Profiles.FirstOrDefault();
         ProfileLayers = new BackgroundLayersViewModel(_editingProfile?.BackgroundLayers, layers =>
@@ -318,8 +320,16 @@ public partial class ProfileManagerViewModel : ViewModelBase
     public string Message
     {
         get => _message;
-        set => SetProperty(ref _message, value);
+        set
+        {
+            if (SetProperty(ref _message, value))
+            {
+                OnPropertyChanged(nameof(HasMessage));
+            }
+        }
     }
+
+    public bool HasMessage => Message.Length > 0;
 
     /// <summary>The daily backups of all profiles, newest first.</summary>
     public System.Collections.ObjectModel.ObservableCollection<BackupItemViewModel> Backups { get; } = [];
@@ -356,6 +366,22 @@ public partial class ProfileManagerViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The plugins the last imported Stream Deck profile uses that aren't installed.</summary>
+    public MissingPluginsViewModel MissingPlugins { get; }
+
+    /// <summary>The app's plugin catalog, or null outside the app (tests, previews).</summary>
+    private static Core.Plugins.PluginCatalog? TryResolveCatalog()
+    {
+        try
+        {
+            return CommunityToolkit.Mvvm.DependencyInjection.Ioc.Default.GetService<Core.Plugins.PluginCatalog>();
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Imports a DeckHost or Stream Deck profile file.</summary>
     public void Import(string path)
     {
@@ -363,6 +389,8 @@ public partial class ProfileManagerViewModel : ViewModelBase
         {
             Message = _main.ImportProfile(path);
             EditingProfile = _main.SelectedRootProfile;
+            var missing = DeckHost.App.Profiles.StreamDeckProfileImporter.FindMissingPlugins(_main.LastImportUnavailableActions, MissingPlugins.InstalledPluginIds);
+            _ = MissingPlugins.ShowAsync(missing);
         }
         catch (Exception ex) when (ex is Core.Profiles.ProfileBundleException or System.IO.IOException or UnauthorizedAccessException)
         {
