@@ -1,0 +1,29 @@
+{
+  "version": "0.1.0-rc.7+7659fdf",
+  "measured": "2026-11-26T00:10:50.226596+00:00",
+  "machine": {
+    "system": "macos",
+    "description": "macOS 26.7.2",
+    "architecture": "arm64",
+    "processors": 3,
+    "memoryGb": 7
+  },
+  "metrics": {
+    "startup.firstFrameSeconds": 2.1765976,
+    "idleWindow.cpuPercent": 1.356453099618696,
+    "idleWindow.cpuPercentP95": 2.3837715540300155,
+    "idleWindow.memoryMb": 238.048828125,
+    "busy.cpuPercent": 6.89747377400666,
+    "busy.cpuPercentP95": 14.887044913435437,
+    "busy.memoryMaxMb": 258.5,
+    "busy.memoryGrowthMb": 21.099999999999994,
+    "busy.framesPerSecond": 7.333333333333333,
+    "latency.p50Ms": 1.184875,
+    "latency.p95Ms": 3.720042,
+    "latency.maxMs": 25.721375,
+    "process.threads": 31,
+    "process.count": 1,
+    "idleTray.cpuPercent": 0.9013689148077276,
+    "idleTray.memoryMb": 249.81333705357142
+  }
+}

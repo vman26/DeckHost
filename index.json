@@ -1,6 +1,14 @@
 {
   "releases": [
     {
+      "tag": "v0.1.0-rc.7",
+      "systems": {
+        "linux": "releases/v0.1.0-rc.7/linux.json",
+        "macos": "releases/v0.1.0-rc.7/macos.json",
+        "windows": "releases/v0.1.0-rc.7/windows.json"
+      }
+    },
+    {
       "tag": "v0.1.0-rc.6",
       "systems": {
         "linux": "releases/v0.1.0-rc.6/linux.json",
