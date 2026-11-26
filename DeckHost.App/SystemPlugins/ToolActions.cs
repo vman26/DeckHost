@@ -52,14 +52,14 @@ internal sealed class TimerAction() : DeckActionBase(
 
     public override TimeSpan? RefreshInterval => TimeSpan.FromMilliseconds(500);
 
-    private static string Id(string deviceId, string controlId) => $"{deviceId}|{controlId}";
+    private static string StateKey(string deviceId, string controlId) => $"{deviceId}|{controlId}";
 
     internal static TimeSpan Duration(ActionSettings settings) =>
         TimeSpan.FromMinutes(settings.GetInt(MinutesKey, 5)) + TimeSpan.FromSeconds(settings.GetInt(SecondsKey, 0));
 
     protected override void Run(ActionContext context)
     {
-        var id = Id(context.DeviceId, context.ControlId);
+        var id = StateKey(context.DeviceId, context.ControlId);
         var state = _timers.GetOrAdd(id, static _ => new TimerState());
         var now = Environment.TickCount64;
         lock (state)
@@ -113,7 +113,7 @@ internal sealed class TimerAction() : DeckActionBase(
     {
         var now = Environment.TickCount64;
         var countdown = context.Settings.Get(ModeKey, Countdown) == Countdown;
-        _timers.TryGetValue(Id(context.DeviceId, context.ControlId), out var state);
+        _timers.TryGetValue(StateKey(context.DeviceId, context.ControlId), out var state);
         var elapsed = TimeSpan.Zero;
         var running = false;
         if (state is not null)
@@ -224,7 +224,7 @@ internal sealed class RunCommandAction() : DeckActionBase(
         new(VariableKey, "Save the output in", ActionSettingKind.Variable, Placeholder: "Optional variable name", Description: "The first 4000 characters of what it prints, for Show Variable and workflows."),
     ];
 
-    private static string Id(string deviceId, string controlId) => $"{deviceId}|{controlId}";
+    private static string StateKey(string deviceId, string controlId) => $"{deviceId}|{controlId}";
 
     public override TimeSpan? RefreshInterval => TimeSpan.FromSeconds(1);
 
@@ -235,7 +235,7 @@ internal sealed class RunCommandAction() : DeckActionBase(
         var folder = context.Settings.Get(FolderKey).Trim();
         var timeout = TimeSpan.FromSeconds(Math.Clamp(context.Settings.GetInt(TimeoutKey, 30), 1, 600));
         var variable = context.Settings.Get(VariableKey).Trim();
-        var id = Id(context.DeviceId, context.ControlId);
+        var id = StateKey(context.DeviceId, context.ControlId);
         _results[id] = ("Running…", long.MaxValue);
         RunInBackground(context, () =>
         {
@@ -355,7 +355,7 @@ internal sealed class RunCommandAction() : DeckActionBase(
     protected override (uint From, uint To) TileColors => Palette.Tools;
 
     protected override string? Caption(IRenderContext context) =>
-        _results.TryGetValue(Id(context.DeviceId, context.ControlId), out var result) && result.Until > Environment.TickCount64
+        _results.TryGetValue(StateKey(context.DeviceId, context.ControlId), out var result) && result.Until > Environment.TickCount64
             ? result.Text
             : Title(context);
 }
@@ -389,7 +389,7 @@ internal sealed class HttpRequestAction() : DeckActionBase(
         new(VariableKey, "Save the answer in", ActionSettingKind.Variable, Placeholder: "Optional variable name"),
     ];
 
-    private static string Id(string deviceId, string controlId) => $"{deviceId}|{controlId}";
+    private static string StateKey(string deviceId, string controlId) => $"{deviceId}|{controlId}";
 
     public override TimeSpan? RefreshInterval => TimeSpan.FromSeconds(1);
 
@@ -401,7 +401,7 @@ internal sealed class HttpRequestAction() : DeckActionBase(
         var contentType = context.Settings.Get(ContentTypeKey, "application/json");
         var headers = ParseHeaders(context.Settings.Get(HeadersKey));
         var variable = context.Settings.Get(VariableKey).Trim();
-        var id = Id(context.DeviceId, context.ControlId);
+        var id = StateKey(context.DeviceId, context.ControlId);
         RunInBackground(context, () =>
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
@@ -455,7 +455,7 @@ internal sealed class HttpRequestAction() : DeckActionBase(
     protected override (uint From, uint To) TileColors => Palette.Web;
 
     protected override string? Caption(IRenderContext context) =>
-        _results.TryGetValue(Id(context.DeviceId, context.ControlId), out var result) && result.Until > Environment.TickCount64
+        _results.TryGetValue(StateKey(context.DeviceId, context.ControlId), out var result) && result.Until > Environment.TickCount64
             ? result.Text
             : Title(context);
 }

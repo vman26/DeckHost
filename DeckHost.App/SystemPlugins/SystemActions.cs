@@ -39,7 +39,7 @@ internal sealed class LaunchAppAction() : DeckActionBase(
 
     public override TimeSpan? RefreshInterval => TimeSpan.FromSeconds(2);
 
-    private static string Id(ActionContext context) => $"{context.DeviceId}|{context.ControlId}";
+    private static string StateKey(ActionContext context) => $"{context.DeviceId}|{context.ControlId}";
 
     /// <summary>With "Hold to close": a press waits; a hold closes the app, a release before it starts it.</summary>
     protected override bool HandleInput(ActionContext context)
@@ -52,10 +52,10 @@ internal sealed class LaunchAppAction() : DeckActionBase(
         switch (context.EventType)
         {
             case InputCapabilities.Press:
-                _pressed[Id(context)] = true;
+                _pressed[StateKey(context)] = true;
                 return true;
             case InputCapabilities.LongPress:
-                if (_pressed.TryRemove(Id(context), out _))
+                if (_pressed.TryRemove(StateKey(context), out _))
                 {
                     var name = RunningApps.ProcessName(context.Settings.Get(PathKey));
                     RunInBackground(context, () => RunningApps.Close(name));
@@ -63,7 +63,7 @@ internal sealed class LaunchAppAction() : DeckActionBase(
 
                 return true;
             case InputCapabilities.Release:
-                if (_pressed.TryRemove(Id(context), out _))
+                if (_pressed.TryRemove(StateKey(context), out _))
                 {
                     RunNow(context);
                 }
