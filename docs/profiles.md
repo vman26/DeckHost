@@ -32,5 +32,5 @@ A profile can have a background color and an image or animated GIF that spans al
 ## Export, import and backups
 
 - **Export…** saves a profile with its pages, folders and images as a `.deckhostprofile` file. **Import…** adds one as a new profile.
-- **Import…** also takes `.streamDeckProfile` files from the Elgato app. Pages, folders, Multi Actions and Multi Action Switches come along; actions of plugins you haven't installed are kept and work once you install them.
+- **Import…** also takes `.streamDeckProfile` files from the Elgato app. Pages, folders, Multi Actions and Multi Action Switches come along; actions of plugins you haven't installed are kept and work once you install them. The Profiles page lists those plugins with **Install**; on the device such a key has a yellow **!**, and selecting it offers **Install**, **Turn it on** (for a plugin that's off) or **Remove**. Dropping another action on it replaces it.
 - DeckHost keeps a copy of your profiles from each of the last days; **Backups** on the Profiles page lists them: **Restore** brings one back, **Back up now** makes one.

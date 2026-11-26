@@ -96,6 +96,7 @@ public class ControlItemViewModel : ViewModelBase
 
     private Avalonia.Media.Imaging.WriteableBitmap? _previewBitmap;
     private bool _isPressed;
+    private ControlBinding? _unavailableBinding;
     private string _inputIndicator = string.Empty;
     private Avalonia.Threading.DispatcherTimer? _flashTimer;
 
@@ -207,7 +208,34 @@ public class ControlItemViewModel : ViewModelBase
         }
     }
 
-    public string AssignmentLabel => AssignedBinding?.DisplayName ?? "Drop action here";
+    public string AssignmentLabel => AssignedBinding?.DisplayName ?? (UnavailableBinding is { } missing ? $"{missing.Action.ActionName} (unavailable)" : "Drop action here");
+
+    /// <summary>
+    /// The control's binding when its plugin isn't installed or is turned off (null otherwise): the canvas marks it
+    /// and the editor offers to install the plugin or remove the action.
+    /// </summary>
+    public ControlBinding? UnavailableBinding
+    {
+        get => _unavailableBinding;
+        set
+        {
+            if (Equals(_unavailableBinding, value))
+            {
+                return;
+            }
+
+            _unavailableBinding = value;
+            OnPropertyChanged(nameof(UnavailableBinding));
+            OnPropertyChanged(nameof(IsUnavailable));
+            OnPropertyChanged(nameof(UnavailableText));
+            RefreshComputedState();
+        }
+    }
+
+    public bool IsUnavailable => UnavailableBinding is not null;
+
+    /// <summary>Why the control does nothing: "Needs the Discord plugin".</summary>
+    public string UnavailableText => UnavailableBinding is { } missing ? UnavailableAction.Describe(missing) : string.Empty;
 
     public bool HasAssignment => AssignedBinding is not null;
 
@@ -241,7 +269,7 @@ public class ControlItemViewModel : ViewModelBase
 
     /// <summary>What a screen reader says for this control: its name and what it does.</summary>
     public string AccessibleName => AssignedBinding is null
-        ? $"{DisplayName}, empty"
+        ? IsUnavailable ? $"{DisplayName}, {UnavailableText}" : $"{DisplayName}, empty"
         : $"{DisplayName}, {AssignedBinding.DisplayName}";
 
     /// <summary>The keys that work on a control that has the keyboard focus.</summary>
@@ -250,7 +278,7 @@ public class ControlItemViewModel : ViewModelBase
         + ", Delete to remove its action, arrow keys to go to the next control, the menu key for more.";
 
     public string ToolTipText => AssignedBinding is null
-        ? $"{DisplayName}: drop an action here."
+        ? IsUnavailable ? $"{DisplayName}: {UnavailableText}. Select it to install the plugin, or drop another action here." : $"{DisplayName}: drop an action here."
         : $"{DisplayName}: {AssignedBinding.DisplayName}. Double-click to press it{(IsKnob ? ", scroll to turn it" : string.Empty)}; drag to move, Ctrl+drag to copy.";
 
     /// <summary>Knobs are round, keys and zones rounded rectangles (a CornerRadius, so the binding takes it).</summary>

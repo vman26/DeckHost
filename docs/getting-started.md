@@ -23,10 +23,12 @@ Download the package for your system from the [Download](download.md) page (the 
 
 The first start opens a short tour:
 
-1. **Your devices**: what DeckHost found, and what to do if your device isn't there.
-2. **A starting point**: put everyday actions on the empty keys (media keys, volume, clock, system info, lock, switch profile; the volume on the first knob and track skipping on the touch strip), or start empty.
-3. **Preferences**: start with your sign-in, check for updates, and offer to report crashes.
-4. **How it works**: the editor in five lines.
+1. **Your devices**: what DeckHost found, updated as you plug devices in. If yours isn't there, it says why when it can (on Linux a missing device rule, with the commands to copy; elsewhere the Elgato or MiraBox app holding the device). No device? Open a deck on this screen, use your phone, or try the device simulator.
+2. **A starting point**: pick a starter (Media, Streaming or Work), see a preview, and put it on your plugged-in deck. Controls that already have an action keep it. Coming from the Stream Deck app? Import a `.streamDeckProfile` here; DeckHost lists the plugins it needs that you don't have, with **Install**.
+3. **Preferences**: start with your sign-in, keep running in the tray when you close the window, check for updates, the look, and offer to report crashes.
+4. **How it works**: four short tips and a link to this documentation.
+
+After the tour three tips point at the action list, the device and the pickers in the header. Show them again from **☰ → Show tips**.
 
 Open it again from **☰ → Welcome tour**.
 

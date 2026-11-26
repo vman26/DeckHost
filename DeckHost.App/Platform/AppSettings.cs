@@ -25,6 +25,9 @@ namespace DeckHost.App.Platform;
 /// <param name="CollapsedPluginSections">The sections of the Plugins page the user folded up (<c>PluginManagerViewModel</c> section ids).</param>
 /// <param name="DesktopDeckOnTop">The desktop deck window stays on top of other windows.</param>
 /// <param name="DesktopDeckDevice">The device the desktop deck shows (null: the Web Deck).</param>
+/// <param name="TrayNoticeShown">The user was told once that closing the window keeps DeckHost running in the tray.</param>
+/// <param name="CoachMarksShown">The tips over the main window (action list, device, pickers) were shown after the welcome tour.</param>
+/// <param name="LastSeenVersion">The DeckHost version (without build metadata) last started: a newer one opens What's new once (null: none yet, a fresh install).</param>
 public sealed record AppSettingsData(
     bool StartMinimized = true,
     bool? CloseToTray = null,
@@ -43,7 +46,10 @@ public sealed record AppSettingsData(
     bool OnlyCompatibleActions = false,
     string[]? CollapsedPluginSections = null,
     bool DesktopDeckOnTop = true,
-    string? DesktopDeckDevice = null)
+    string? DesktopDeckDevice = null,
+    bool TrayNoticeShown = false,
+    bool CoachMarksShown = false,
+    string? LastSeenVersion = null)
 {
     public bool KeepsRunningInTray => CloseToTray ?? !OperatingSystem.IsLinux();
 }

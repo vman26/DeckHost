@@ -36,6 +36,13 @@ public sealed partial class AppSettingsViewModel : ViewModelBase
     /// <summary>Raised after a change, so the app can update its tray and close behavior.</summary>
     public static event Action<AppSettingsData>? Changed;
 
+    /// <summary>Saves settings changed elsewhere (the welcome tour) and tells the app, as a change here would.</summary>
+    internal static void SaveAndAnnounce(AppSettingsData settings)
+    {
+        AppSettings.Save(settings);
+        Changed?.Invoke(settings);
+    }
+
     public bool CanStartAtLogin => AppSettings.CanStartAtLogin;
 
     public bool StartAtLogin

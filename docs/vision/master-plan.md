@@ -2472,7 +2472,13 @@ product and are kept as it grows.
   right, and swipe.
 - **Key Logic:** press, double press and hold on one key; **Multi Action Switch** for toggles.
 - **Undo and redo** with merged quick edits; **drag a control onto another** to move, swap or copy.
-- **Welcome tour** and a **debug panel**.
+- **Welcome tour** and a **debug panel**. The tour follows devices live, explains a missing Linux
+  device rule or an app holding the device (`Platform/DeviceSetupHelp`), offers the desktop deck, the
+  phone and the simulator without a device, and has three starter layouts with a preview
+  (`StarterLayouts`). Tips over the window after it (`CoachMarksViewModel`), a hint on an empty
+  layout, a one-time tray question on the first close (`TrayCloseNotice`), **What's new** after an
+  update (`WhatsNewViewModel`, the embedded changelog) and the plugins a Stream Deck import needs
+  (`MissingPluginsViewModel`).
 - **Keyboard and screen readers:** the device canvas and the action list are focusable and named;
   Enter, Space, +/−, Delete and arrow keys work on controls (`CanvasNavigation`), and icon buttons
   take their tooltip as their accessible name (`AccessibleNames`, guarded by `AccessibilityTests`).

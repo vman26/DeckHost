@@ -72,6 +72,7 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
             UpdatePreviewShown();
         };
         AppSettingsViewModel.Changed += settings => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyDebugSetting(settings));
+        SizeChanged += (_, _) => PlaceCoachMark();
     }
 
     private MainViewModel? _workflowSource;
@@ -200,9 +201,11 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         {
             PageContent.Content = null;
             PageHost.IsVisible = false;
+            UpdateCoachLayer();
             return;
         }
 
+        UpdateCoachLayer();
         var (title, page) = _pages[^1];
         PageTitle.Text = title;
         PageContent.MaxWidth = page is IWidePage ? double.PositiveInfinity : 1100;
@@ -235,6 +238,21 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        // Esc answers the tray notice with its default (keep running) and ends the tips.
+        if (e.Key == Key.Escape && !e.Handled && TrayNotice.IsVisible)
+        {
+            e.Handled = true;
+            AnswerTrayNotice(keepRunning: true);
+            return;
+        }
+
+        if (e.Key == Key.Escape && !e.Handled && _coachMarks is not null && CoachLayer.IsVisible)
+        {
+            e.Handled = true;
+            _coachMarks.Skip();
+            return;
+        }
+
         // Esc leaves a page (unless something inside used it, like a hotkey recorder).
         if (e.Key == Key.Escape && !e.Handled && _pages.Count > 0)
         {
@@ -374,10 +392,13 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
     public void OpenWelcome() =>
         OpenSingle("Welcome", () =>
         {
-            var welcome = new WelcomeViewModel(DataContext as MainViewModel, TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>(), TryResolve<UpdateViewModel>());
+            var welcome = new WelcomeViewModel(DataContext as MainViewModel, TryResolve<DeckHost.Core.Interfaces.IDeviceHostService>(), TryResolve<UpdateViewModel>(), TryResolve<DeviceSettingsService>());
 
             // On top of the tour: Back returns to it.
             welcome.DeviceCreatorRequested += (_, _) => OpenDeviceCreator();
+            welcome.Finished += (_, _) => StartCoachMarks();
+            welcome.DesktopDeckRequested += (_, _) => OpenDesktopDeck_OnClick(null, new RoutedEventArgs());
+            welcome.SimulatorRequested += (_, _) => OpenSimulator_OnClick(null, new RoutedEventArgs());
             return new WelcomeView { DataContext = welcome };
         });
 
@@ -390,9 +411,154 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         }
         else if (WelcomeViewModel.ShouldShow())
         {
+            WhatsNewViewModel.MarkSeen();
             OpenWelcome();
         }
+        else if (WhatsNewViewModel.ShouldShow())
+        {
+            WhatsNewViewModel.MarkSeen();
+            OpenSingle("What's new", () => new WhatsNewView { DataContext = new WhatsNewViewModel() });
+        }
     }
+
+    // ---------------------------------------------------------------- tips (coach marks)
+
+    private CoachMarksViewModel? _coachMarks;
+
+    /// <summary>The tips over the window after the welcome tour, unless they were shown before.</summary>
+    public void StartCoachMarks()
+    {
+        if (!AppSettings.Load().CoachMarksShown)
+        {
+            ShowCoachMarks();
+        }
+    }
+
+    /// <summary>The tips over the window, from the first one (☰ → Show tips).</summary>
+    public void ShowCoachMarks()
+    {
+        if (_coachMarks is not null)
+        {
+            return;
+        }
+
+        var marks = new CoachMarksViewModel();
+        marks.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CoachMarksViewModel.Index))
+            {
+                PlaceCoachMark();
+            }
+        };
+        marks.Finished += (_, _) =>
+        {
+            _coachMarks = null;
+            CoachLayer.IsVisible = false;
+            CoachCard.DataContext = null;
+            try
+            {
+                AppSettings.Save(AppSettings.Load() with { CoachMarksShown = true });
+            }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+            {
+            }
+        };
+        _coachMarks = marks;
+        CoachCard.DataContext = marks;
+
+        // After the page that started them (the welcome tour) has closed and the workspace is laid out.
+        Avalonia.Threading.Dispatcher.UIThread.Post(UpdateCoachLayer, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private void ShowCoachMarks_OnClick(object? sender, RoutedEventArgs e)
+    {
+        MenuButton.Flyout?.Hide();
+        GoHome();
+        ShowCoachMarks();
+    }
+
+    /// <summary>The tips point at the workspace, so they wait while a page covers it.</summary>
+    private void UpdateCoachLayer()
+    {
+        CoachLayer.IsVisible = _coachMarks is not null && _pages.Count == 0;
+        if (CoachLayer.IsVisible)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(PlaceCoachMark, Avalonia.Threading.DispatcherPriority.Background);
+        }
+    }
+
+    /// <summary>The highlight around the current tip's part of the window, and its card next to it.</summary>
+    private void PlaceCoachMark()
+    {
+        if (_coachMarks is not { } marks || !CoachLayer.IsVisible)
+        {
+            return;
+        }
+
+        Control target = marks.Current.Target switch
+        {
+            CoachMarkTarget.Actions => ActionsArea,
+            CoachMarkTarget.Device => DeviceArea,
+            _ => PickersArea,
+        };
+        if (target.TranslatePoint(default, CoachLayer) is not { } origin)
+        {
+            return;
+        }
+
+        const double Gap = 12;
+        const double Inflate = 4;
+        var area = CoachLayer.Bounds.Size;
+        var rect = new Avalonia.Rect(origin, target.Bounds.Size).Inflate(Inflate).Intersect(new Avalonia.Rect(area));
+        Canvas.SetLeft(CoachHighlight, rect.X);
+        Canvas.SetTop(CoachHighlight, rect.Y);
+        CoachHighlight.Width = rect.Width;
+        CoachHighlight.Height = rect.Height;
+
+        CoachCard.Measure(Size.Infinity);
+        var place = CoachMarksViewModel.PlaceCard(rect, CoachCard.DesiredSize, area, Gap);
+        Canvas.SetLeft(CoachCard, place.X);
+        Canvas.SetTop(CoachCard, place.Y);
+    }
+
+    // ---------------------------------------------------------------- the first close to the tray
+
+    private Action<bool>? _trayNoticeAnswer;
+
+    /// <summary>
+    /// Says once that closing keeps DeckHost running in the tray, with Keep running and Quit
+    /// (<paramref name="answered"/> gets true for Keep running). The app hides or quits after it.
+    /// </summary>
+    public void AskTrayNotice(Action<bool> answered)
+    {
+        if (_trayNoticeAnswer is not null)
+        {
+            return;
+        }
+
+        _trayNoticeAnswer = answered;
+        TrayNoticeText.Text = TrayCloseNotice.Message;
+        TrayNotice.IsVisible = true;
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+        TrayNoticeKeep.Focus();
+    }
+
+    private void AnswerTrayNotice(bool keepRunning)
+    {
+        var answer = _trayNoticeAnswer;
+        _trayNoticeAnswer = null;
+        TrayNotice.IsVisible = false;
+        answer?.Invoke(keepRunning);
+    }
+
+    private void TrayNoticeKeep_OnClick(object? sender, RoutedEventArgs e) => AnswerTrayNotice(keepRunning: true);
+
+    private void TrayNoticeQuit_OnClick(object? sender, RoutedEventArgs e) => AnswerTrayNotice(keepRunning: false);
 
     private void OpenPluginManager_OnClick(object? sender, RoutedEventArgs e)
     {

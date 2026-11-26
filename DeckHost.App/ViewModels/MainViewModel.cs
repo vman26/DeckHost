@@ -23,6 +23,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     private readonly IDeviceHostService _deviceHostService;
     private readonly PluginCatalog _pluginCatalog;
+    private readonly Dictionary<string, MissingPluginsViewModel> _storeLookups = new(StringComparer.OrdinalIgnoreCase);
+    private UnavailableActionViewModel? _selectedUnavailable;
     private readonly ProfileStore? _profileStore;
     private readonly IPluginStateTransfer? _pluginState;
     private readonly DispatcherTimer _saveTimer;
@@ -851,6 +853,15 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     public bool HasEditor => _editor is not null;
 
+    /// <summary>
+    /// The edited layout has nothing on any control yet: the canvas says "Drag an action here" and
+    /// points at the action list, until the first binding exists.
+    /// </summary>
+    public bool ShowEmptyDeckHint => IsEmptyDeck(ControlItems);
+
+    internal static bool IsEmptyDeck(IReadOnlyCollection<ControlItemViewModel> controls) =>
+        controls.Count > 0 && controls.All(static control => control.AssignedBinding is null && !control.IsUnavailable);
+
     /// <summary>☰ → Device simulator is offered (DeckHost settings → Developer → Device simulator).</summary>
     public bool ShowDeviceSimulator
     {
@@ -865,8 +876,53 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         set => SetProperty(ref _showDebugPanel, value);
     }
 
+    /// <summary>The selected control's action can't run (its plugin is missing or off): the card above the editor.</summary>
+    public UnavailableActionViewModel? SelectedUnavailable
+    {
+        get => _selectedUnavailable;
+        private set
+        {
+            if (SetProperty(ref _selectedUnavailable, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedUnavailable));
+            }
+        }
+    }
+
+    public bool HasSelectedUnavailable => _selectedUnavailable is not null;
+
+    private void UpdateSelectedUnavailable()
+    {
+        var model = SelectedControl is { } control && SelectedProfile is { } profile && profile.GetBinding(control.Id) is null
+            ? profile.GetModel(control.Id)
+            : null;
+        if (model is null)
+        {
+            SelectedUnavailable = null;
+            return;
+        }
+
+        if (SelectedUnavailable is { } shown && Equals(shown.Binding, model))
+        {
+            return;
+        }
+
+        // One store lookup per plugin while its plugin stays missing (selecting its other keys reuses it).
+        var reason = UnavailableAction.ReasonFor(model, _pluginCatalog.Entries);
+        var store = reason == UnavailableReason.NotInstalled && _storeLookups.TryGetValue(model.Action.PluginId, out var known) ? known : null;
+        var card = new UnavailableActionViewModel(model, _pluginCatalog, store);
+        card.RemoveRequested += (_, _) => RemoveAssignment(card.ControlId);
+        SelectedUnavailable = card;
+        if (store is null && card.IsNotInstalled)
+        {
+            _storeLookups[model.Action.PluginId] = card.Store;
+            _ = card.LookUpAsync();
+        }
+    }
+
     private void RebuildEditor()
     {
+        UpdateSelectedUnavailable();
         if (_editor is { } old)
         {
             old.Changed -= OnEditorChanged;
@@ -1499,18 +1555,23 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         StatusMessage = $"Exported {profile.RootProfile.Name} to {Path.GetFileName(path)}.";
     }
 
+    /// <summary>The Stream Deck actions the last <see cref="ImportProfile"/> couldn't map (empty after a DeckHost profile).</summary>
+    public IReadOnlyList<DeckHost.App.Profiles.StreamDeckActionUse> LastImportUnavailableActions { get; private set; } = [];
+
     /// <summary>
     /// Imports a DeckHost profile (<c>.deckhostprofile</c>) or a Stream Deck profile
     /// (<c>.streamDeckProfile</c>) as a new profile and shows it. Returns what happened.
     /// </summary>
     public string ImportProfile(string path)
     {
+        LastImportUnavailableActions = [];
         string summary;
         IReadOnlyList<DeviceProfile> layouts;
         if (path.EndsWith(DeckHost.App.Profiles.StreamDeckProfileImporter.Extension, StringComparison.OrdinalIgnoreCase))
         {
             var result = DeckHost.App.Profiles.StreamDeckProfileImporter.Import(path, SelectedDevice!.Id, [.. ControlItems.Select(static item => item.Control)], [.. _actionsByKey.Values], ImportedAssetsDirectory);
             layouts = result.Layouts;
+            LastImportUnavailableActions = result.UnavailableActions;
             summary = $"{result.Imported} key(s) and dial(s) imported"
                 + (result.NotPlaced > 0 ? $", {result.NotPlaced} had no place on this device" : string.Empty)
                 + (result.Unavailable.Count > 0 ? $"; not in DeckHost (kept their look): {string.Join(", ", result.Unavailable.Take(6))}{(result.Unavailable.Count > 6 ? ", …" : string.Empty)}" : string.Empty)
@@ -1741,6 +1802,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     {
         _deviceHostService.SetApplicationPlugins(_pluginCatalog.EnabledApplicationPlugins);
         RebuildActions();
+        _storeLookups.Clear();
 
         // Bindings to a disabled plugin become "unavailable" (kept); re-enabled ones come back.
         foreach (var profile in EveryLayout.ToList())
@@ -2189,6 +2251,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
         OnPropertyChanged(nameof(CanvasWidth));
         OnPropertyChanged(nameof(CanvasHeight));
+        OnPropertyChanged(nameof(ShowEmptyDeckHint));
     }
 
     /// <summary>
@@ -2317,6 +2380,8 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
     private void AttachBinding(ControlItemViewModel controlItem, ControlBindingViewModel? binding)
     {
         controlItem.AssignedBinding = binding;
+        controlItem.UnavailableBinding = binding is null ? SelectedProfile?.GetModel(controlItem.Id) : null;
+        OnPropertyChanged(nameof(ShowEmptyDeckHint));
 
         if (SelectedControl == controlItem)
         {
@@ -2389,61 +2454,108 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         ApplyBinding(SelectedControl.Id, existing.Model with { Appearance = appearance });
     }
 
-    /// <summary>The action list's entry for an action (its name and icon), or null.</summary>
-    /// <summary>The actions the welcome tour's starter layout puts on empty keys, in reading order.</summary>
-    internal static readonly string[] StarterKeyActions =
-    [
-        "deckhost.plugin.media:media.playpause",
-        "deckhost.plugin.media:media.previous",
-        "deckhost.plugin.media:media.next",
-        "deckhost.plugin.media:media.mute",
-        "deckhost.plugin.media:media.volumedown",
-        "deckhost.plugin.media:media.volumeup",
-        "deckhost.plugin.builtin:builtin.clock",
-        "deckhost.plugin.system:system.info",
-        "deckhost.plugin.system:system.lock",
-        "deckhost.plugin.builtin:builtin.switch-profile",
-    ];
+    /// <summary>The actions the welcome tour's media starter puts on empty keys, in reading order.</summary>
+    internal static readonly string[] StarterKeyActions = [.. StarterLayouts.MediaStarter.Keys.Select(static action => action.ActionKey)];
 
     /// <summary>
     /// Fills the edited layout's empty controls with everyday actions (media keys, clock, system info,
     /// lock; the first knob sets the volume, a swipe skips tracks). Returns how many it filled.
     /// </summary>
-    public int ApplyStarterLayout()
+    public int ApplyStarterLayout() => ApplyStarterLayout(StarterLayouts.MediaStarter);
+
+    /// <summary>
+    /// Fills the empty controls of <paramref name="device"/>'s first profile (the edited layout when
+    /// null) with <paramref name="starter"/>'s actions; the editor switches to that device first.
+    /// Returns how many controls it filled.
+    /// </summary>
+    public int ApplyStarterLayout(StarterLayout starter, DeviceDefinition? device = null)
     {
+        ArgumentNullException.ThrowIfNull(starter);
+        SwitchToDeviceForStarter(device);
         var filled = 0;
-        Grouped("the starter layout", () => filled = ApplyStarterLayoutCore());
+        Grouped("the starter layout", () => filled = ApplyStarterLayoutCore(starter));
         return filled;
     }
 
-    private int ApplyStarterLayoutCore()
+    /// <summary>Edits <paramref name="device"/> (when it is listed and not the edited one already), as the starter layout and the tour's import do.</summary>
+    public void SwitchToDeviceForStarter(DeviceDefinition? device)
     {
-        if (SelectedProfile is null)
+        if (device is not null && (SelectedDevice is null || !SameId(device.Id, SelectedDevice.Id))
+            && _deviceHostService.Devices.FirstOrDefault(candidate => SameId(candidate.Id, device.Id)) is { } listed)
+        {
+            // Switching clears the undo history, so it goes before a grouped step.
+            SwitchDevice(listed);
+        }
+    }
+
+    /// <summary>
+    /// What <see cref="ApplyStarterLayout(StarterLayout, DeviceDefinition?)"/> would put where, without
+    /// changing anything: on <paramref name="device"/> (with the profile the editor would open for it)
+    /// or, when null, on the edited layout.
+    /// </summary>
+    public IReadOnlyList<StarterPreviewItem> PreviewStarterLayout(StarterLayout starter, DeviceDefinition? device = null)
+    {
+        ArgumentNullException.ThrowIfNull(starter);
+        ProfileItemViewModel? layout;
+        IReadOnlyList<PhysicalControl> controls;
+        if (device is null || SelectedDevice is not null && SameId(device.Id, SelectedDevice.Id))
+        {
+            layout = SelectedProfile;
+            controls = [.. ControlItems.Select(static item => item.Control)];
+        }
+        else
+        {
+            // SwitchDevice opens the device's first profile (a new, empty one when it has none).
+            layout = _otherDeviceProfiles.FirstOrDefault(profile => SameId(profile.DeviceId, device.Id));
+            controls = device.Controls;
+        }
+
+        return [.. PlanStarter(starter, controls, layout).Select(placement => new StarterPreviewItem(
+            placement.Control.Id,
+            placement.Control.DisplayName,
+            placement.Action.Label ?? (_actionsByKey.TryGetValue(placement.Action.ActionKey, out var item) ? item.Name : placement.Action.ActionKey)))];
+    }
+
+    /// <summary>Whether an action plugin is loaded (its actions are in the list).</summary>
+    public bool HasActionsOf(string pluginId) =>
+        _actionsByKey.Values.Any(item => string.Equals(item.PluginId, pluginId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Whether any profile of the device has an action on a control (it was set up before).</summary>
+    public bool HasBindingsFor(string deviceId) =>
+        EveryLayout.Any(layout => SameId(layout.DeviceId, deviceId) && layout.BindingCount + layout.UnresolvedBindingCount > 0);
+
+    private IReadOnlyList<StarterPlacement> PlanStarter(StarterLayout starter, IReadOnlyList<PhysicalControl> controls, ProfileItemViewModel? layout) =>
+        StarterLayouts.Plan(
+            starter,
+            controls,
+            controlId => layout?.GetModel(controlId) is not null,
+            (action, control) => _actionsByKey.TryGetValue(action.ActionKey, out var item) && item.FitsControl(control));
+
+    private int ApplyStarterLayoutCore(StarterLayout starter)
+    {
+        if (SelectedProfile is null || ControlItems.Count == 0)
         {
             return 0;
         }
 
         var filled = 0;
-        var keyActions = new Queue<string>(StarterKeyActions);
-        foreach (var item in ControlItems.ToList())
+        foreach (var placement in PlanStarter(starter, [.. ControlItems.Select(static item => item.Control)], SelectedProfile))
         {
-            if (SelectedProfile.GetBinding(item.Id) is not null)
+            if (!_actionsByKey.TryGetValue(placement.Action.ActionKey, out var action))
             {
                 continue;
             }
 
-            var key = item.Control.Type switch
+            if (placement.Action.Settings is { Count: > 0 } settings)
             {
-                Contracts.Models.ControlType.Key when keyActions.Count > 0 => keyActions.Dequeue(),
-                Contracts.Models.ControlType.Encoder when !ControlItems.Any(other => other.Control.Type == Contracts.Models.ControlType.Encoder && other.Id.CompareTo(item.Id) < 0) => "deckhost.plugin.media:media.volume-knob",
-                _ when item.Id == "touch.swipe" => "deckhost.plugin.media:media.track-swipe",
-                _ => null,
-            };
-            if (key is not null && _actionsByKey.TryGetValue(key, out var action) && action.FitsControl(item.Control))
-            {
-                AssignActionToControl(item.Control, action.Action);
-                filled++;
+                ApplyBinding(placement.Control.Id, new ControlBinding(placement.Control.Id, ProfileActionKind.Single, action.ToActionReference(new ActionSettings(settings)), new ControlAppearance(), []));
             }
+            else
+            {
+                AssignActionToControl(placement.Control, action.Action);
+            }
+
+            filled++;
         }
 
         SelectControl(ControlItems[0].Control);
@@ -2451,6 +2563,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         return filled;
     }
 
+    /// <summary>The action list's entry for an action (its name and icon), or null.</summary>
     public ActionItemViewModel? FindActionItem(IDeckAction action) => TryGetActionItem(action, out var item) ? item : null;
 
     private bool TryGetActionItem(IDeckAction action, out ActionItemViewModel actionItem)

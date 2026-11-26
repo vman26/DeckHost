@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" font-family="Segoe UI, Arial, sans-serif">
+  <title>Illustration: the Windows SmartScreen message, More info, then Run anyway</title>
+  <rect x="10" y="10" width="360" height="280" rx="4" fill="#0067b8"/>
+  <text x="30" y="58" font-size="22" fill="#fff">Windows protected your PC</text>
+  <text x="30" y="92" font-size="12" fill="#fff">Microsoft Defender SmartScreen prevented an</text>
+  <text x="30" y="108" font-size="12" fill="#fff">unrecognized app from starting…</text>
+  <text x="30" y="140" font-size="13" fill="#fff" text-decoration="underline">More info</text>
+  <rect x="24" y="124" width="74" height="24" rx="3" fill="none" stroke="#facc15" stroke-width="3"/>
+  <text x="104" y="141" font-size="13" fill="#facc15" font-weight="bold">1</text>
+  <rect x="260" y="240" width="94" height="32" fill="#fff" opacity="0.9"/>
+  <text x="280" y="261" font-size="13" fill="#000">Don't run</text>
+  <text x="380" y="155" font-size="28" fill="#94a3b8">→</text>
+  <rect x="400" y="10" width="350" height="280" rx="4" fill="#0067b8"/>
+  <text x="420" y="58" font-size="22" fill="#fff">Windows protected your PC</text>
+  <text x="420" y="100" font-size="12" fill="#fff">App:        DeckHost-1.0.0-win-x64-install.exe</text>
+  <text x="420" y="120" font-size="12" fill="#fff">Publisher: Unknown publisher</text>
+  <rect x="540" y="240" width="94" height="32" fill="#fff" opacity="0.9"/>
+  <text x="556" y="261" font-size="13" fill="#000">Run anyway</text>
+  <rect x="536" y="236" width="102" height="40" rx="3" fill="none" stroke="#facc15" stroke-width="3"/>
+  <text x="518" y="262" font-size="13" fill="#facc15" font-weight="bold">2</text>
+  <rect x="644" y="240" width="94" height="32" fill="#fff" opacity="0.9"/>
+  <text x="664" y="261" font-size="13" fill="#000">Don't run</text>
+</svg>

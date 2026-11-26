@@ -125,7 +125,7 @@
 			<!-- Header: menu, device and profile, update notice, tools. -->
 			<Border Padding="16,10" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="0,0,0,1">
 				<Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="14">
-					<Button Classes="tool" Width="40" Height="40" FontSize="18" Content="☰" ToolTip.Tip="Menu">
+					<Button x:Name="MenuButton" Classes="tool" Width="40" Height="40" FontSize="18" Content="☰" ToolTip.Tip="Menu">
 						<Button.Flyout>
 							<Flyout Placement="BottomEdgeAlignedLeft">
 								<StackPanel Width="250" Spacing="8" Margin="6">
@@ -140,6 +140,7 @@
 									<Button Content="DeckHost settings" HorizontalAlignment="Stretch" Click="OpenAppSettings_OnClick" />
 									<Button Content="Help and support" HorizontalAlignment="Stretch" Click="OpenSupport_OnClick" />
 									<Button Content="Welcome tour" HorizontalAlignment="Stretch" Click="OpenWelcome_OnClick" />
+									<Button Content="Show tips" HorizontalAlignment="Stretch" Click="ShowCoachMarks_OnClick" ToolTip.Tip="Show the tips over this window again: where the actions are, where they go, and where profiles and devices are picked" />
 									<Separator />
 									<CheckBox Content="Switch profiles with the active app"
 											  IsChecked="{Binding AutoSwitchEnabled}"
@@ -149,7 +150,7 @@
 						</Button.Flyout>
 					</Button>
 
-					<StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center">
+					<StackPanel Grid.Column="1" x:Name="PickersArea" Spacing="0" VerticalAlignment="Center">
 						<StackPanel Orientation="Horizontal" Spacing="8">
 							<Image Source="/Assets/deckhost-64.png" Width="22" Height="22" VerticalAlignment="Center" ToolTip.Tip="DeckHost" />
 							<TextBlock Text="{Binding DeviceName}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" VerticalAlignment="Center" IsVisible="{Binding !HasSeveralDevices}" />
@@ -260,7 +261,7 @@
 								<MenuItem Header="Device settings" Click="OpenDeviceSettings_OnClick" />
 							</ContextMenu>
 						</Grid.ContextMenu>
-						<Viewbox Stretch="Uniform" StretchDirection="Both" Margin="24,16,24,64" HorizontalAlignment="Center" VerticalAlignment="Center">
+						<Viewbox x:Name="DeviceArea" Stretch="Uniform" StretchDirection="Both" Margin="24,16,24,64" HorizontalAlignment="Center" VerticalAlignment="Center">
 							<Panel Width="{Binding CanvasWidth}" Height="{Binding CanvasHeight}">
 								<!-- The device as the simulator draws it: its body, and its screens in the profile's background color. -->
 								<local:DeviceBodyView Geometry="{Binding CanvasGeometry}"
@@ -353,6 +354,18 @@
 													<Border Background="{DynamicResource C.66FFFFFF}"
 															IsVisible="{Binding IsPressed}"
 															IsHitTestVisible="False" />
+													<!-- The action's plugin is missing or off: a mark in the corner (the tooltip and the editor say which). -->
+													<Border IsVisible="{Binding IsUnavailable}"
+															IsHitTestVisible="False"
+															HorizontalAlignment="Right"
+															VerticalAlignment="Top"
+															Margin="4"
+															Width="18"
+															Height="18"
+															CornerRadius="9"
+															Background="{DynamicResource C.FBBF24}">
+														<TextBlock Text="!" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource C.0F172A}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+													</Border>
 													<TextBlock Text="{Binding InputIndicator}"
 															   IsVisible="{Binding HasInputIndicator}"
 															   IsHitTestVisible="False"
@@ -368,6 +381,22 @@
 								</ItemsControl>
 							</Panel>
 						</Viewbox>
+						<!-- Nothing on the layout yet: point at the action list. Drops go through to the controls under it. -->
+						<Border IsVisible="{Binding ShowEmptyDeckHint}"
+								IsHitTestVisible="False"
+								HorizontalAlignment="Center"
+								VerticalAlignment="Center"
+								Margin="0,0,0,48"
+								Padding="16,10"
+								CornerRadius="12"
+								Background="{DynamicResource C.E61E222B}"
+								BorderBrush="{DynamicResource C.3B82F6}"
+								BorderThickness="1">
+							<StackPanel Spacing="2">
+								<TextBlock Text="Drag an action here  →" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource C.F8FAFC}" />
+								<TextBlock Text="from the action list on the right, onto a key, knob or touch zone" FontSize="12" HorizontalAlignment="Center" Foreground="{DynamicResource C.94A3B8}" />
+							</StackPanel>
+						</Border>
 						<!-- Pages of the profile (and where an open folder is), like the Stream Deck app's page dots. -->
 						<StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="20,0,20,6" Spacing="4">
 							<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" IsVisible="{Binding IsInFolder}">
@@ -415,8 +444,53 @@
 					<Border Grid.Row="2" Background="{DynamicResource C.16181E}">
 						<Panel>
 							<ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasEditor}">
-								<!-- Filled in code: a new view per control (see ShowEditor). -->
-								<ContentControl x:Name="EditorHost" />
+								<StackPanel>
+									<!-- The selected control's action can't run here: install or turn on its plugin, or remove it. -->
+									<Border IsVisible="{Binding HasSelectedUnavailable}" Margin="16,12,16,0" Padding="14" CornerRadius="10"
+											Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.FBBF24}" BorderThickness="1">
+										<StackPanel Spacing="8" DataContext="{Binding SelectedUnavailable}" x:DataType="vm:UnavailableActionViewModel">
+											<Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+												<StackPanel Spacing="4">
+													<TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource C.FDE68A}" TextWrapping="Wrap" />
+													<TextBlock Text="{Binding Message}" FontSize="13" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
+												</StackPanel>
+												<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+													<Button Content="Turn it on" Classes="accent" Command="{Binding TurnOnCommand}" IsVisible="{Binding IsTurnedOff}" />
+													<Button Content="Remove" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove this action from the control" />
+												</StackPanel>
+											</Grid>
+											<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
+											<StackPanel Spacing="6" IsVisible="{Binding IsNotInstalled}">
+												<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding Store.HasStoreStatus}">
+													<TextBlock Text="{Binding Store.StoreStatus}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" VerticalAlignment="Center" />
+													<Button Grid.Column="1" Content="Try again" Command="{Binding Store.RetryCommand}" IsVisible="{Binding !Store.IsLoadingStore}" />
+												</Grid>
+												<ItemsControl ItemsSource="{Binding Store.Items}">
+													<ItemsControl.ItemTemplate>
+														<DataTemplate x:DataType="vm:MissingPluginItemViewModel">
+															<Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+																<StackPanel Spacing="2">
+																	<TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" TextTrimming="CharacterEllipsis" />
+																	<TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
+																	<TextBlock Text="{Binding SearchHint}" IsVisible="{Binding IsNotInStore}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
+																	<TextBlock Text="{Binding ElsewhereText}" IsVisible="{Binding RunsElsewhere}" FontSize="12" Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
+																	<TextBlock Text="{Binding Progress}" IsVisible="{Binding HasProgress}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
+																</StackPanel>
+																<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+																	<Button Content="Install" Classes="accent" Command="{Binding InstallCommand}" IsVisible="{Binding ShowInstall}" />
+																	<Button Content="Buy…" Command="{Binding BuyCommand}" IsVisible="{Binding ShowBuy}" />
+																	<Button Content="Search…" Command="{Binding SearchCommand}" IsVisible="{Binding IsNotInStore}" ToolTip.Tip="Search the Elgato Marketplace in the browser" />
+																</StackPanel>
+															</Grid>
+														</DataTemplate>
+													</ItemsControl.ItemTemplate>
+												</ItemsControl>
+											</StackPanel>
+										</StackPanel>
+									</Border>
+									<!-- Filled in code: a new view per control (see ShowEditor). -->
+									<ContentControl x:Name="EditorHost" />
+								</StackPanel>
 							</ScrollViewer>
 							<TextBlock IsVisible="{Binding !HasEditor}"
 									   Text="Select a control to configure its action."
@@ -479,7 +553,7 @@
 				</Border>
 
 				<!-- Actions, grouped by plugin. Drag one onto a control (or into a Multi Action's steps). -->
-				<Border Grid.Column="2" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1,0,0,0">
+				<Border Grid.Column="2" x:Name="ActionsArea" Background="{DynamicResource C.16181E}" BorderBrush="{DynamicResource C.262B36}" BorderThickness="1,0,0,0">
 					<Grid RowDefinitions="Auto,Auto,*">
 						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="12,12,12,4">
 							<TextBox PlaceholderText="Search actions" Text="{Binding SearchText, Mode=TwoWay}" />
@@ -581,6 +655,37 @@
 				</Grid>
 			</Border>
 		</Grid>
+
+		<!-- Tips over the window after the welcome tour (☰ → Show tips): a highlight around the part they explain and a card. -->
+		<Canvas x:Name="CoachLayer" IsVisible="False" ZIndex="90">
+			<Border x:Name="CoachHighlight" IsHitTestVisible="False" CornerRadius="12" BorderBrush="{DynamicResource C.3B82F6}" BorderThickness="2" />
+			<Border x:Name="CoachCard" Width="300" Padding="14,12" CornerRadius="12" Background="{DynamicResource C.1E293B}" BorderBrush="{DynamicResource C.3B82F6}" BorderThickness="1"
+					BoxShadow="0 6 18 0 #80000000" x:DataType="vm:CoachMarksViewModel">
+				<StackPanel Spacing="10">
+					<TextBlock Text="{Binding StepText}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
+					<TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="14" Foreground="{DynamicResource C.F8FAFC}" />
+					<StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+						<Button Content="Skip" Command="{Binding SkipCommand}" ToolTip.Tip="End the tips (Esc)" />
+						<Button Content="{Binding NextLabel}" Classes="accent" Command="{Binding NextCommand}" />
+					</StackPanel>
+				</StackPanel>
+			</Border>
+		</Canvas>
+
+		<!-- The first close to the tray: DeckHost says it keeps running, and the user can quit instead. -->
+		<Border x:Name="TrayNotice" IsVisible="False" ZIndex="100" Background="{DynamicResource C.99000000}">
+			<Border MaxWidth="460" Padding="20,16" CornerRadius="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+					Background="{DynamicResource C.1E293B}" BorderBrush="{DynamicResource C.475569}" BorderThickness="1">
+				<StackPanel Spacing="14">
+					<TextBlock Text="DeckHost stays in the tray" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
+					<TextBlock x:Name="TrayNoticeText" TextWrapping="Wrap" Foreground="{DynamicResource C.E2E8F0}" />
+					<StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+						<Button Content="Quit DeckHost" Click="TrayNoticeQuit_OnClick" />
+						<Button x:Name="TrayNoticeKeep" Content="Keep running in the tray" Classes="accent" Click="TrayNoticeKeep_OnClick" />
+					</StackPanel>
+				</StackPanel>
+			</Border>
+		</Border>
 
 		<!-- The drag ghost: what is being dragged (the action's icon and name) follows the pointer. -->
 		<Canvas x:Name="DragLayer" IsHitTestVisible="False">

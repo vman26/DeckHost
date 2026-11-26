@@ -95,6 +95,45 @@
 			<!-- Details -->
 			<ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasEditingProfile}">
 				<StackPanel Spacing="14">
+					<!-- After a Stream Deck import: the plugins it uses that aren't installed. -->
+					<Border Classes="card" IsVisible="{Binding MissingPlugins.HasItems}" BorderBrush="{DynamicResource C.1E3A8A}">
+						<StackPanel Spacing="10">
+							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+								<StackPanel Spacing="2">
+									<TextBlock Text="{Binding MissingPlugins.Title}" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource C.F8FAFC}" TextWrapping="Wrap" />
+									<TextBlock Classes="hint" Text="Their keys kept their title and image and are marked on the device. Install a plugin and its keys work again by themselves." />
+								</StackPanel>
+								<Button Grid.Column="1" Content="✕" ToolTip.Tip="Hide this list" Command="{Binding MissingPlugins.DismissCommand}" VerticalAlignment="Top" />
+							</Grid>
+							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding MissingPlugins.HasStoreStatus}">
+								<TextBlock Classes="hint" Text="{Binding MissingPlugins.StoreStatus}" VerticalAlignment="Center" />
+								<Button Grid.Column="1" Content="Try again" Command="{Binding MissingPlugins.RetryCommand}" IsVisible="{Binding !MissingPlugins.IsLoadingStore}" />
+							</Grid>
+							<ItemsControl ItemsSource="{Binding MissingPlugins.Items}">
+								<ItemsControl.ItemTemplate>
+									<DataTemplate x:DataType="vm:MissingPluginItemViewModel">
+										<Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,4">
+											<StackPanel Spacing="2">
+												<TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" TextTrimming="CharacterEllipsis" />
+												<TextBlock Text="{Binding Id}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" TextTrimming="CharacterEllipsis" />
+												<TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
+												<TextBlock Classes="hint" Text="{Binding SearchHint}" IsVisible="{Binding IsNotInStore}" />
+												<TextBlock Classes="hint" Text="{Binding ElsewhereText}" IsVisible="{Binding RunsElsewhere}" />
+												<TextBlock Text="{Binding Progress}" IsVisible="{Binding HasProgress}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" TextWrapping="Wrap" />
+											</StackPanel>
+											<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+												<Button Content="Install" Classes="accent" Command="{Binding InstallCommand}" IsVisible="{Binding ShowInstall}" />
+												<Button Content="Buy…" Command="{Binding BuyCommand}" IsVisible="{Binding ShowBuy}" />
+												<Button Content="Search…" Command="{Binding SearchCommand}" IsVisible="{Binding IsNotInStore}" ToolTip.Tip="Search the Elgato Marketplace in the browser" />
+											</StackPanel>
+										</Grid>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+						</StackPanel>
+					</Border>
+					<TextBlock Classes="hint" Text="{Binding Message}" IsVisible="{Binding HasMessage}" Foreground="{DynamicResource C.93C5FD}" />
+
 					<Border Classes="card">
 						<StackPanel Spacing="10">
 							<TextBlock Classes="section" Text="PROFILE" />

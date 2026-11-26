@@ -47,6 +47,8 @@ Updates that DeckHost installs itself don't ask again.
 1. Run the installer. Windows says **"Windows protected your PC"**.
 2. Choose **More info**, check that the file name starts with `DeckHost-`, and choose **Run anyway**.
 
+![Illustration: More info, then Run anyway](images/first-start-windows.svg)
+
 Using the zip? Before you unpack it, right-click it → **Properties** → tick **Unblock** → **OK**.
 Otherwise Windows asks for every program inside it.
 
@@ -55,6 +57,9 @@ Otherwise Windows asks for every program inside it.
 - macOS 14 and older: right-click (or Control-click) DeckHost.app → **Open**, then **Open** again.
 - macOS 15 and newer: open DeckHost.app once and close the message. Then go to **System Settings →
   Privacy & Security**, scroll down to *"DeckHost" was blocked…* and choose **Open Anyway**.
+
+  ![Illustration: System Settings → Privacy & Security → Open Anyway](images/first-start-macos.svg)
+
 - Or in Terminal, on any version: `xattr -dr com.apple.quarantine /Applications/DeckHost.app`
 
 **Linux:** nothing to allow. Make the AppImage executable (`chmod +x`) and run it.

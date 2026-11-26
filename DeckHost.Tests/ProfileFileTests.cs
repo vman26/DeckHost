@@ -440,6 +440,51 @@ public sealed class ProfileFileTests : IDisposable
         Assert.That(result.NotPlaced, Is.EqualTo(1));
     }
 
+    [Test]
+    public void Import_AnActionOfAPluginThatIsntInstalled_IsReportedAsAMissingPlugin()
+    {
+        // Act
+        var result = ImportPaged();
+
+        // Assert
+        var missing = Expect.Single(StreamDeckProfileImporter.FindMissingPlugins(result.UnavailableActions, []));
+        Assert.That(missing.Id, Is.EqualTo("com.example.unknown"));
+    }
+
+    [Test]
+    public void Import_AnActionWithItsPluginObject_KeepsThePluginsIdAndName()
+    {
+        // Arrange
+        var file = StreamDeckProfile(("P.sdProfile/manifest.json", """
+            { "Name": "With plugin", "Actions": {
+                "0,0": { "UUID": "com.elgato.discord.voice.mute", "Plugin": { "Name": "Discord", "UUID": "com.elgato.discord", "Version": "1.0" }, "States": [ {} ] } } }
+            """));
+
+        // Act
+        var result = StreamDeckProfileImporter.Import(file, Dev, Controls, Actions, _root);
+
+        // Assert
+        Assert.That(Expect.Single(result.UnavailableActions), Is.EqualTo(new StreamDeckActionUse("com.elgato.discord.voice.mute", "com.elgato.discord", "Discord")));
+    }
+
+    [Test]
+    public void Import_AnActionOfAPluginThatIsntInstalled_KeepsItAsThatPluginsAction()
+    {
+        // Arrange
+        var file = StreamDeckProfile(("P.sdProfile/manifest.json", """
+            { "Name": "With plugin", "Actions": {
+                "0,0": { "UUID": "com.elgato.discord.voice.mute", "Name": "Mute", "Plugin": { "Name": "Discord", "UUID": "com.elgato.discord", "Version": "1.0" }, "States": [ { "Title": "Mic" } ] } } }
+            """));
+
+        // Act
+        var result = StreamDeckProfileImporter.Import(file, Dev, Controls, Actions, _root);
+
+        // Assert
+        var binding = Expect.Single(result.Layouts[0].Bindings);
+        Assert.That((binding.Action.PluginId, binding.Action.PluginName, binding.Action.ActionId, binding.Action.ActionName, binding.Appearance.Text),
+            Is.EqualTo(("com.elgato.discord", "Discord", "com.elgato.discord.voice.mute", "Mute", "Mic")));
+    }
+
     private string SinglePageStreamDeckProfile() => StreamDeckProfile(("X.sdProfile/manifest.json", """
             { "Name": "Old", "Version": "1.0", "Actions": {
                 "0,0": { "UUID": "com.elgato.streamdeck.system.open", "Settings": { "path": "C:\\Tools\\app.exe" }, "States": [ { "Title": "App" } ] },
