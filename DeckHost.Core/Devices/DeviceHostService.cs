@@ -800,6 +800,18 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
             return;
         }
 
+        // A release or long press belongs to the layout its press happened on. A Folder, Back or
+        // Page key switches on its press; without this its release went to whatever the new layout
+        // has under the finger (a Stream Deck action got a keyUp without a keyDown).
+        if (LayoutOfPress(inputEvent, activeProfile) is not { } pressedProfile)
+        {
+            Log("Info", $"Input {inputEvent.EventType} on '{inputEvent.ControlId}' ignored: its press was on a layout that is gone.");
+            return;
+        }
+
+        var shown = ReferenceEquals(pressedProfile, activeProfile);
+        activeProfile = pressedProfile;
+
         // Key Logic keys run a press, a double press or a hold, which needs timing.
         if (activeProfile.Bindings.FirstOrDefault(binding => binding.ActionKind == ProfileActionKind.KeyLogic &&
                 string.Equals(binding.ControlId, inputEvent.ControlId, StringComparison.OrdinalIgnoreCase)) is { } keyLogic &&
@@ -844,7 +856,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
 
         Log("Info", $"Input {inputEvent.EventType} ({inputEvent.Value}) on '{inputEvent.ControlId}'{(target is null ? string.Empty : $" (as a press of '{target}')")} {(dispatched ? "dispatched" : "had no matching action")}.");
 
-        if (dispatched)
+        if (dispatched && shown)
         {
             HandleLightFeedback(activeProfile, target ?? inputEvent.ControlId);
         }
@@ -855,6 +867,38 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         if (target is not null)
         {
             MarkControlDirty(inputEvent.DeviceId, target);
+        }
+    }
+
+    /// <summary>The layout each held control was pressed on, until its release.</summary>
+    private readonly Dictionary<(string DeviceId, string ControlId), string> _pressedOn = [];
+
+    /// <summary>
+    /// The layout an input belongs to: a press notes the shown layout; a long press and a release
+    /// go to the layout their press was on (null when that layout was removed meanwhile).
+    /// </summary>
+    private DeviceProfile? LayoutOfPress(DeviceInputEvent inputEvent, DeviceProfile active)
+    {
+        var key = (inputEvent.DeviceId, inputEvent.ControlId);
+        switch (inputEvent.EventType)
+        {
+            case InputCapabilities.Press:
+                _pressedOn[key] = active.Id;
+                return active;
+            case InputCapabilities.LongPress or InputCapabilities.Release when _pressedOn.TryGetValue(key, out var pressedId):
+                if (inputEvent.EventType == InputCapabilities.Release)
+                {
+                    _pressedOn.Remove(key);
+                }
+
+                if (string.Equals(pressedId, active.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return active;
+                }
+
+                return _profilesById.GetValueOrDefault(pressedId);
+            default:
+                return active;
         }
     }
 

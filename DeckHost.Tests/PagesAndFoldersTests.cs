@@ -249,6 +249,87 @@ public sealed class PagesAndFoldersTests : IAsyncDisposable
         Assert.That(_active, Is.EqualTo(SecondPage));
     }
 
+    private const string TestPluginId = "test.inputs";
+
+    private static ControlBinding Recording(string controlId, RecordingAction action) =>
+        new(controlId, ProfileActionKind.Single,
+            new ActionReference(TestPluginId, TestPluginId, action.Id, action.Id, InputCapabilities.None, OutputCapabilities.None),
+            new ControlAppearance(), []);
+
+    private async Task<(DeviceHostService Host, RecordingAction InFolder)> StartWithAnActionUnderTheFolderKey()
+    {
+        var inFolder = new RecordingAction("in-folder");
+        var host = new DeviceHostService([new FakeDevicePlugin()], [_builtIns, new TestApplicationPlugin(TestPluginId, inFolder)], _store);
+        host.SetProfiles([
+            new DeviceProfile(FirstProfile, FirstProfile, Device, [Builtin(SecondKey, FolderAction.ActionId, (FolderAction.FolderIdKey, Folder1))]),
+            Folder(Folder1, FirstProfile, Builtin(FirstKey, FolderBackAction.ActionId), Recording(SecondKey, inFolder)),
+        ]);
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+        return (host, inFolder);
+    }
+
+    private static async Task PressAndRelease(DeviceHostService host, string controlId)
+    {
+        host.SimulateInput(new DeviceInputEvent(Device, controlId, InputCapabilities.Press, 1));
+        await host.WhenIdleAsync();
+        await host.WhenIdleAsync();
+        host.SimulateInput(new DeviceInputEvent(Device, controlId, InputCapabilities.Release, 0));
+        await host.WhenIdleAsync();
+    }
+
+    [Test]
+    public async Task SimulateInput_ReleaseOfTheKeyThatOpenedAFolder_DoesNotReachTheActionUnderItInTheFolder()
+    {
+        // Arrange
+        var (host, inFolder) = await StartWithAnActionUnderTheFolderKey();
+        await using var started = host;
+
+        // Act
+        await PressAndRelease(host, SecondKey);
+
+        // Assert
+        Assert.That(inFolder.Executions, Is.Empty);
+    }
+
+    [Test]
+    public async Task SimulateInput_PressAndReleaseInsideAnOpenFolder_ReachTheActionThere()
+    {
+        // Arrange
+        var (host, inFolder) = await StartWithAnActionUnderTheFolderKey();
+        await using var started = host;
+        await PressAndRelease(host, SecondKey);
+
+        // Act
+        await PressAndRelease(host, SecondKey);
+
+        // Assert
+        Assert.That(inFolder.Executions.Select(static context => context.EventType),
+            Is.EqualTo(new[] { InputCapabilities.Press, InputCapabilities.Release }));
+    }
+
+    [Test]
+    public async Task SimulateInput_ReleaseOfTheBackKey_DoesNotReachTheActionUnderItOnTheLayoutBehind()
+    {
+        // Arrange
+        var underBack = new RecordingAction("under-back");
+        await using var host = new DeviceHostService([new FakeDevicePlugin()], [_builtIns, new TestApplicationPlugin(TestPluginId, underBack)], _store);
+        host.SetProfiles([
+            new DeviceProfile(FirstProfile, FirstProfile, Device,
+                [Recording(FirstKey, underBack), Builtin(SecondKey, FolderAction.ActionId, (FolderAction.FolderIdKey, Folder1))]),
+            Folder(Folder1, FirstProfile, Builtin(FirstKey, FolderBackAction.ActionId)),
+        ]);
+        await host.StartAsync(CancellationToken.None);
+        await host.WhenIdleAsync();
+        await PressAndRelease(host, SecondKey);
+
+        // Act
+        await PressAndRelease(host, FirstKey);
+
+        // Assert
+        Assert.That(underBack.Executions, Is.Empty);
+    }
+
     private async Task StartWithPagesAndFoldersBetweenTwoProfiles()
     {
         var switchNext = Builtin(FirstKey, SwitchProfileAction, (ModeKey, "next"));

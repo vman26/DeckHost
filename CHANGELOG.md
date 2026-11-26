@@ -157,6 +157,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Fixed
 
+- Releasing a Folder, Back or Page key no longer reaches the action that the new layout has under it. Stream Deck plugins
+  such as Audio Mixer got a key release without a press there, so its Application Placeholder in a folder selected itself
+  as soon as the folder opened.
 - Stream Deck and OpenAction plugins no longer lose their saved settings when the plugin saves them while its
   settings page reads them: DeckHost could hand the plugin empty settings, so the Discord plugin forgot its Client ID
   and Secret right after Discord asked for access and asked again on every press. Settings files are now written
