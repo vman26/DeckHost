@@ -72,6 +72,11 @@ internal abstract class DeckActionBase(
 
     public void Execute(ActionContext context)
     {
+        if (HandleInput(context))
+        {
+            return;
+        }
+
         if (UsesTrigger)
         {
             if (!MatchesTrigger(context))
@@ -129,6 +134,19 @@ internal abstract class DeckActionBase(
 
     protected virtual void Run(ActionContext context)
     {
+    }
+
+    /// <summary>
+    /// Sees every input before the "Run when" trigger does; return true to take it (an action that
+    /// tells a short press from a hold, like Launch App with "Hold to close").
+    /// </summary>
+    protected virtual bool HandleInput(ActionContext context) => false;
+
+    /// <summary>Runs the action as its trigger would (for <see cref="HandleInput"/>).</summary>
+    protected void RunNow(ActionContext context)
+    {
+        RecordActivation(context);
+        Run(context);
     }
 
     /// <summary>

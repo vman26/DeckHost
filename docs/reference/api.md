@@ -20,9 +20,13 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Clock` | A clock face with hands. |
 | `const string Counter` |  |
 | `const string Folder` | A folder. |
+| `const string Globe` | A globe, for web requests. |
 | `const string KeyLogic` | A key with one, two and a long press, for Key Logic. |
 | `const string Keyboard` |  |
 | `const string Lock` |  |
+| `const string Microphone` | A microphone, for Microphone Mute. |
+| `const string MicrophoneOff` | A crossed-out microphone. |
+| `const string Music` | A music note, for sounds. |
 | `const string Muted` |  |
 | `const string Next` |  |
 | `const string OpenLink` |  |
@@ -35,8 +39,10 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Speaker` |  |
 | `const string Stack` |  |
 | `const string Stop` |  |
+| `const string Stopwatch` | A stopwatch, for Timer. |
 | `const string Swipe` | A hand swiping left and right. |
 | `const string SwitchProfile` |  |
+| `const string Terminal` | A terminal window, for Run Command. |
 | `const string Text` |  |
 | `const string Timer` | An hourglass. |
 | `const string Toggle` | A switch, for a Multi Action Switch. |

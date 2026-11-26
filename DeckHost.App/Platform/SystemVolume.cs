@@ -19,7 +19,7 @@ namespace DeckHost.App.Platform;
 /// reading and refreshes it in the background when it's older than <see cref="MaxAge"/>.
 /// </para>
 /// </summary>
-internal static class SystemVolume
+internal static partial class SystemVolume
 {
     private const int DataFlowRender = 0;
     private const int RoleMultimedia = 1;

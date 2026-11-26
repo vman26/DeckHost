@@ -23,9 +23,13 @@
   DeckHost.Contracts.Icons.Clock : System.String const
   DeckHost.Contracts.Icons.Counter : System.String const
   DeckHost.Contracts.Icons.Folder : System.String const
+  DeckHost.Contracts.Icons.Globe : System.String const
   DeckHost.Contracts.Icons.KeyLogic : System.String const
   DeckHost.Contracts.Icons.Keyboard : System.String const
   DeckHost.Contracts.Icons.Lock : System.String const
+  DeckHost.Contracts.Icons.Microphone : System.String const
+  DeckHost.Contracts.Icons.MicrophoneOff : System.String const
+  DeckHost.Contracts.Icons.Music : System.String const
   DeckHost.Contracts.Icons.Muted : System.String const
   DeckHost.Contracts.Icons.Next : System.String const
   DeckHost.Contracts.Icons.OpenLink : System.String const
@@ -38,8 +42,10 @@
   DeckHost.Contracts.Icons.Speaker : System.String const
   DeckHost.Contracts.Icons.Stack : System.String const
   DeckHost.Contracts.Icons.Stop : System.String const
+  DeckHost.Contracts.Icons.Stopwatch : System.String const
   DeckHost.Contracts.Icons.Swipe : System.String const
   DeckHost.Contracts.Icons.SwitchProfile : System.String const
+  DeckHost.Contracts.Icons.Terminal : System.String const
   DeckHost.Contracts.Icons.Text : System.String const
   DeckHost.Contracts.Icons.Timer : System.String const
   DeckHost.Contracts.Icons.Toggle : System.String const
