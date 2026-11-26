@@ -11,6 +11,14 @@ The main window is laid out like the Stream Deck app: the device at the top, the
 - **Drag a control off the device** to remove its action.
 - **Double-click** a control to try it. The real action runs.
 
+### With the keyboard
+
+The device and the action list work without a mouse, and screen readers read each control as its name and action ("Key 3, Mute").
+
+- **Tab** moves between the controls on the device and the actions in the list; a blue ring shows which has the focus.
+- On a control: **Enter** opens its editor, **Space** presses it, **+** and **−** turn a knob, **Delete** removes its action, the **arrow keys** go to the control next to it, and the **menu key** (or Shift+F10) opens its menu.
+- On an action: **Enter** puts it on the selected control.
+
 ## Setting up a control
 
 Click a control. Its editor opens below the device, and every change shows on the device right away; **Revert** puts back how the control was when you selected it.

@@ -40,10 +40,10 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 4.4 One engine for both | 🟡 | `WorkflowConverter` turns Multi Actions into workflows, but Multi Actions still run on `ActionRouter.RunSteps` |
 | 4.5 Vector, raster, text, gradients, transparency, fonts, icon packs, scaling, LED visualization | ✅ | `SkiaRenderContext` |
 | 4.5 Layers, animations, data-bound properties, transitions | 🟡 | Background layers with data-bound color, opacity and visibility, GIF animation; no transitions, no layers on keys |
-| 4.6 Virtual surfaces, browser interface | ✅ | Web Deck; device simulator (any model, `DeckHost --simulator`) |
+| 4.6 Virtual surfaces, browser interface | ✅ | Web Deck (QR code pairing); desktop deck window; device simulator (any model, `DeckHost --simulator`) |
 | 4.6 Mobile clients, remote profile management, remote events | ⬜ | The Web Deck works on phones; no app, no remote editing |
 | 4.8 App detection, profile switching, system monitoring, dynamic states | ✅ | `ForegroundAppWatcher`, System Info |
-| 4.8 Window/process rules, game contexts, contextual backgrounds | 🟡 | By app name only |
+| 4.8 Window/process rules, game contexts, contextual backgrounds | 🟡 | App names, `*`/`?` patterns and window titles (Windows, X11; `AutoSwitchRule`); no contextual backgrounds |
 
 ## 6. Technical architecture
 
@@ -84,7 +84,7 @@ Where DeckHost stands against the [master plan](master-plan.md), section by sect
 | 7.1.11.7 Hardware modes and modules | 🟡 | `DevicesChanged` with new controls; no modes described |
 | 7.1.11.8 Nested controls, vendor extensions | ⬜ | |
 | 7.1.11.9 Serialized descriptor | 🟡 | Generic HID devices are described in JSON (`HidDeviceDescription`); `DeviceDefinition` itself has no file form |
-| 7.3 N4 Pro, Elgato family, generic HID, virtual | ✅ | Also the other StreamDock models (N4, 293, 293s, M18, XL, M3, N3, N1, K1 Pro, Mini) from the SDK, not yet checked on hardware |
+| 7.3 N4 Pro, Elgato family, generic HID, virtual | ✅ | Also the other StreamDock models (N4, 293, 293s, M18, XL, M3, N3, N1, K1 Pro, Mini) from the SDK, the Neo's info screen and touch points, Mini Discord edition and Modules 6/15/32; none of these checked on hardware yet (device report form, tested-hardware table). Stream Deck Studio recognized only; + XL, Network Dock not yet |
 | 7.4 Device-independent profiles | 🟡 | Conventional control ids and `LayoutMapper`; no logical-control layer |
 
 ## 8. Plugins

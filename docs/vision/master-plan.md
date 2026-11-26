@@ -2447,6 +2447,10 @@ product and are kept as it grows.
 - **Device statistics:** inputs, frames, failures and the last error per device, on the Help page
   and in support bundles.
 - **N4 Pro specifics:** vibration, boot video, idle screen, LED brightness, key lights.
+- **Releasing devices:** a device removed on the Devices page is let go (`IDeviceRelease`: Elgato,
+  USB devices), so another app can open it while DeckHost runs.
+- **Desktop deck:** a window (☰, tray) that shows a device's keys as rendered and presses them on
+  click, optionally on top of other windows; the Web Deck by default.
 - **Device simulator:** a window (`DeckHost --simulator`) that acts as any model a device plugin
   describes (`IDeviceModelCatalog`): DeckHost sees it as a connected device and sends it images,
   lights and settings; it sends presses, knob turns and swipes back.
@@ -2469,6 +2473,11 @@ product and are kept as it grows.
 - **Key Logic:** press, double press and hold on one key; **Multi Action Switch** for toggles.
 - **Undo and redo** with merged quick edits; **drag a control onto another** to move, swap or copy.
 - **Welcome tour** and a **debug panel**.
+- **Keyboard and screen readers:** the device canvas and the action list are focusable and named;
+  Enter, Space, +/−, Delete and arrow keys work on controls (`CanvasNavigation`), and icon buttons
+  take their tooltip as their accessible name (`AccessibleNames`, guarded by `AccessibilityTests`).
+- **Built-in tools:** soundboard, microphone mute and push to talk, timer and stopwatch, run command,
+  web request, hotkey presets, Launch App's running dot and hold to close.
 
 **Profiles**
 
@@ -2491,7 +2500,7 @@ product and are kept as it grows.
 
 **Remote and safety**
 
-- **Web Deck:** a connect page with a short pairing code and an optional PIN, rate limiting of
+- **Web Deck:** a QR code page for phones, a connect page with a short pairing code and an optional PIN, rate limiting of
   wrong tries, and a new code that disconnects every phone.
 
 **Application**

@@ -10,6 +10,17 @@
 
 Give a profile one or more apps (Profiles page): it turns on by itself while one of them is in front, and DeckHost goes back to the profile you chose by hand when you leave it. Turn this off in the **☰** menu. On Linux this works for X11 and XWayland apps and needs `xprop`.
 
+An entry can be more than a name:
+
+| Entry | Switches when |
+|---|---|
+| `obs64` | OBS is in front |
+| `steam_app_*` | any app whose name starts with `steam_app_` (`*` is any text, `?` one character) |
+| `chrome \| *YouTube*` | Chrome is in front with a window title that contains YouTube |
+| `* \| *Zoom Meeting*` | any app shows a window titled with Zoom Meeting |
+
+An entry with a window title wins over one without, and an exact name over a pattern, so a YouTube profile and a Chrome profile can live side by side. Window titles are read on Windows and on Linux (X11); on macOS only app names are used. The focused window's title is also the variable `system.foregroundTitle` for workflows.
+
 ## Backgrounds
 
 A profile can have a background color and an image or animated GIF that spans all keys, with gradient, image and solid **layers** on top that can even follow the CPU load or a variable ([Backgrounds](backgrounds.md)). **Default background for all profiles** applies to every profile without one of its own.

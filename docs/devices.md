@@ -140,6 +140,14 @@ Switch on **Use HTTPS (encrypted)** in the Web Deck's settings to serve the page
 - Browsers only offer to **install the deck as an app** (a full-screen icon of its own that opens the deck directly) over HTTPS or on this computer. DeckHost serves the app manifest, its icon and a small service worker for it; the worker only keeps the page itself and never the deck or the pairing. Chrome and Edge accept an app from a certificate you have clicked through only on some systems; Safari on an iPhone only does it once the certificate is installed and trusted in the phone's settings. Where the install button doesn't show up, **Add to Home Screen** still works.
 - Plain HTTP stays the default, and a page at an `http://` address of the network can't be installed (that is the browsers' rule, not a DeckHost limit).
 
+### A deck on your desktop
+
+**☰ → Desktop deck** (also in the tray menu) opens a small window with a deck: click its keys like a Stream Deck's, scroll over a knob to turn it. It shows the Web Deck by default, so it works without any hardware (set its columns and rows in the Web Deck's settings); pick any other device at the top to click its keys from the screen. **On top** keeps it above other windows. On Windows the tray item opens it next to the mouse pointer.
+
+### Connecting a phone with a QR code
+
+With **Phones and tablets on this network** chosen, **Show a QR code for phones** on the Web Deck's settings page opens a page on this computer with a QR code. Point the phone's camera at it: the deck opens with the pairing code filled in. The page is only served to this computer, since it shows the code.
+
 ## Linux: the device rule
 
 Linux only lets programs open USB devices they're allowed to. `install.sh` installs a udev rule (`70-deckhost-mirabox.rules`) for the N4 Pro and Elgato devices; unplug the device and plug it in again afterwards. Without it, DeckHost lists the device as not connected.
