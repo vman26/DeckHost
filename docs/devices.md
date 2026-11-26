@@ -49,9 +49,9 @@ This support was written from the protocol and isn't tested on every model yet. 
 
 ## Devices you no longer use
 
-**☰ → Devices** lists every device DeckHost knows, plugged in or not, and is where you take one out of the list.
+**☰ → Devices** (also **N devices…** on the Plugins page) lists every device DeckHost knows, plugged in or not: what each one is and can do, the plugin that connects it, its firmware, and **Settings…** for its own settings. It's also where you take one out of the list.
 
-- **Your devices** are the ones in the header's device picker. **Remove** takes one out, whether or not it is plugged in. Its profiles are kept, so adding it again brings them back. DeckHost always keeps one device in the list.
+- **Your devices** are the ones in the header's device picker. **Remove** takes one out, whether or not it is plugged in, after you confirm. Its profiles are kept, so adding it again brings them back. DeckHost always keeps one device in the list.
 - **Removed** devices stay out of the list. A removed device that is plugged in again after you unplugged it shows up under **Found**, with **Add** and **Keep ignoring**. **Add back** is there for the others.
 - **Found** devices are new devices waiting for your decision. By default DeckHost adds a new device by itself when it is plugged in; switch **Add new devices by themselves** off and a new device waits under **Found** instead (a **N new devices** button appears in the header).
 

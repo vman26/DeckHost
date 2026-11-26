@@ -1,0 +1,10 @@
+{
+  "id": "deckhost.device.simulator",
+  "name": "Device simulator",
+  "version": "1.0.0",
+  "author": "DeckHost",
+  "description": "A window that DeckHost sees as a connected device of any model, for trying profiles and plugins without the hardware. Turned on in DeckHost settings → Developer.",
+  "assembly": "DeckHost.Device.Simulator.dll",
+  "hostApiVersion": 1,
+  "kind": "device"
+}

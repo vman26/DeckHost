@@ -22,4 +22,7 @@ public interface IDevicePluginContext
     void RequestRedraw(string deviceId)
     {
     }
+
+    /// <summary>The device plugins DeckHost runs now, for a plugin that offers other plugins' models (the device simulator).</summary>
+    IReadOnlyList<IDevicePlugin> GetDevicePlugins() => [];
 }

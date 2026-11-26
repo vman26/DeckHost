@@ -18,13 +18,15 @@ using DeckHost.Core.Plugins;
 using DeckHost.Core.Profiles;
 using DeckHost.Core.State;
 using DeckHost.Core.StreamDeck;
-using DeckHost.Device.MiraBox;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NLog.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace DeckHost.App;
 
@@ -70,8 +72,39 @@ public partial class App : Application
             var runtimeLogger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Runtime");
             deviceHostService.RuntimeLogReceived += entry => runtimeLogger.Log(ToLogLevel(entry.Level), "{Message}", entry.Message);
 
+            // Device plugins from packages (the bundled ones and installed ones) join the host as they load and leave
+            // before they are disposed (disabled, replaced, uninstalled).
+            var livePlugins = services.GetRequiredService<Core.Devices.LiveDevicePlugins>();
+            var pendingDevicePlugins = new List<Task>();
+            pluginCatalog.DevicePluginLoaded += plugin =>
+            {
+                livePlugins.Add(plugin);
+                lock (pendingDevicePlugins)
+                {
+                    pendingDevicePlugins.Add(deviceHostService.AddDevicePluginAsync(plugin));
+                }
+            };
+            pluginCatalog.DevicePluginUnloading += plugin =>
+            {
+                // The host stops using it (and blanks its devices) before the catalog disposes it.
+                deviceHostService.RemoveDevicePluginAsync(plugin).Wait(TimeSpan.FromSeconds(5));
+                livePlugins.Remove(plugin);
+            };
+
             // Loading starts the Stream Deck plugin processes, so the host's device list must exist first.
             pluginCatalog.Load();
+
+            // The window opens on the last device used: wait until the plugins' devices are listed.
+            Task[] devicePluginsAdded;
+            lock (pendingDevicePlugins)
+            {
+                devicePluginsAdded = [.. pendingDevicePlugins];
+            }
+
+            Task.WhenAll(devicePluginsAdded).Wait(TimeSpan.FromSeconds(5));
+
+            // The simulator plugin runs only while the Developer option is on.
+            ApplyDeviceSimulator(pluginCatalog, Platform.AppSettings.Load().DeviceSimulator);
             deviceHostService.SetApplicationPlugins(pluginCatalog.EnabledApplicationPlugins);
 
             var mainViewModel = services.GetRequiredService<MainViewModel>();
@@ -295,15 +328,14 @@ public partial class App : Application
         });
 
         // Devices
-        services.AddSingleton<MiraBoxDevicePlugin>();
-        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<MiraBoxDevicePlugin>());
-        services.AddSingleton<DeckHost.Device.Elgato.ElgatoDevicePlugin>();
-        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Elgato.ElgatoDevicePlugin>());
-        services.AddSingleton<DeckHost.Device.Hid.HidDevicePlugin>();
-        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Hid.HidDevicePlugin>());
+        // The generic USB (HID) plugin is a bundled package too; the device creator writes the description files it reads.
+        services.AddSingleton<DeckHost.Device.Hid.IHidDescriptionStore>(_ => new DeckHost.Device.Hid.HidDescriptionFiles());
         services.AddSingleton<DeckHost.Device.Hid.IHidDeviceSource, DeckHost.Device.Hid.HidSharpDeviceSource>();
-        services.AddSingleton<DeckHost.Device.Web.WebDeckPlugin>();
-        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Web.WebDeckPlugin>());
+
+        // The Web Deck and Elgato plugins ship as packages under plugins/bundled and are loaded by the plugin catalog,
+        // like any installed plugin; what they add is announced to the host (see OnFrameworkInitializationCompleted).
+        // Device plugins that are compiled in, plus the ones loaded from packages as they come and go:
+        services.AddSingleton(provider => new Core.Devices.LiveDevicePlugins(provider.GetServices<IDevicePlugin>()));
 
         // Devices of OpenAction device plugins (OpenDeck's Mirabox, Ajazz, ... plugins): the runtime
         // runs the plugin, this turns the devices it registers into DeckHost devices.
@@ -313,8 +345,7 @@ public partial class App : Application
         // The device simulator (DeckHost --simulator) connects here and can be any model the other
         // device plugins describe; they are asked when a simulator connects, not now. Only listens
         // with DeckHost settings → Developer → Device simulator on.
-        services.AddSingleton(provider => new DeckHost.Device.Simulator.SimulatorDevicePlugin(appData, () => provider.GetServices<IDevicePlugin>(), Platform.AppSettings.Load().DeviceSimulator));
-        services.AddSingleton<IDevicePlugin>(provider => provider.GetRequiredService<DeckHost.Device.Simulator.SimulatorDevicePlugin>());
+        // The device simulator is a bundled package as well (DeckHost settings → Developer turns it on: ApplyDeviceSimulator).
 
         // Runtime
         services.AddSingleton<VariableStore>();
@@ -366,6 +397,9 @@ public partial class App : Application
             {
                 // Safe mode: only the built-in plugins, so whatever crashed DeckHost can't run again.
                 LoadsExtraPlugins = !Platform.SafeMode.IsOn,
+
+                // The device plugins that ship with DeckHost: loaded even in safe mode (the devices need them).
+                BundledDirectory = Path.Combine(AppContext.BaseDirectory, "plugins", "bundled"),
             };
 
             // DeckHost plugins run in their own process (this program with --plugin-host), unless
@@ -401,9 +435,9 @@ public partial class App : Application
             provider.GetRequiredService<PluginCatalog>(),
             provider.GetRequiredService<ProfileStore>(),
             provider.GetRequiredService<IPluginStateTransfer>()));
-        services.AddSingleton(provider => new Core.Firmware.FirmwareService(provider.GetServices<IDevicePlugin>(), provider.GetRequiredService<IDeviceHostService>()));
+        services.AddSingleton(provider => new Core.Firmware.FirmwareService(provider.GetRequiredService<Core.Devices.LiveDevicePlugins>(), provider.GetRequiredService<IDeviceHostService>()));
         services.AddSingleton(provider => new PluginDocsService(provider.GetRequiredService<PluginCatalog>()));
-        services.AddSingleton(provider => new DeviceSettingsService(provider.GetServices<IDevicePlugin>(), () => provider.GetRequiredService<MainViewModel>(), provider.GetRequiredService<Core.Firmware.FirmwareService>()));
+        services.AddSingleton(provider => new DeviceSettingsService(provider.GetRequiredService<Core.Devices.LiveDevicePlugins>(), () => provider.GetRequiredService<MainViewModel>(), provider.GetRequiredService<Core.Firmware.FirmwareService>()));
         services.AddSingleton(provider =>
         {
             // The user's store sources can change while DeckHost runs: read them for every check.
@@ -435,6 +469,41 @@ public partial class App : Application
             new Platform.AppUpdater()));
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>The id of the bundled device simulator plugin.</summary>
+    internal const string DeviceSimulatorPluginId = "deckhost.device.simulator";
+
+    /// <summary>
+    /// DeckHost settings → Developer → Device simulator: turns the bundled simulator plugin on or off in the catalog. Off also
+    /// removes an endpoint file a DeckHost that didn't close cleanly left, so simulator windows don't try a dead port.
+    /// Call it off the UI thread once the window runs (the catalog can take a moment).
+    /// </summary>
+    internal static void ApplyDeviceSimulator(PluginCatalog catalog, bool enabled)
+    {
+        var entry = catalog.Entries.FirstOrDefault(static entry => string.Equals(entry.Id, DeviceSimulatorPluginId, StringComparison.OrdinalIgnoreCase));
+        if (entry is not null && entry.IsEnabled != enabled)
+        {
+            try
+            {
+                catalog.SetEnabled(DeviceSimulatorPluginId, enabled);
+            }
+            catch (PluginException)
+            {
+                // Shown on the Plugins page.
+            }
+        }
+
+        if (!enabled)
+        {
+            try
+            {
+                File.Delete(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost", DeckHost.Device.Simulator.SimulatorWire.EndpointFileName));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
     }
 
     private static LogLevel ToLogLevel(string level) => level switch

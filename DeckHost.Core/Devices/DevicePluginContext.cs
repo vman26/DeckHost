@@ -11,10 +11,17 @@ public sealed class DevicePluginContext : IDevicePluginContext
     private readonly Action<string, string> _log;
     private readonly Action<DeviceConnectionStatus> _reportStatus;
     private readonly Action<string>? _requestRedraw;
+    private readonly Func<IReadOnlyList<IDevicePlugin>>? _devicePlugins;
 
-    public DevicePluginContext(IDeviceInputSink inputSink, Action<string, string> log, Action<DeviceConnectionStatus> reportStatus, Action<string>? requestRedraw = null)
+    public DevicePluginContext(
+        IDeviceInputSink inputSink,
+        Action<string, string> log,
+        Action<DeviceConnectionStatus> reportStatus,
+        Action<string>? requestRedraw = null,
+        Func<IReadOnlyList<IDevicePlugin>>? devicePlugins = null)
     {
         _requestRedraw = requestRedraw;
+        _devicePlugins = devicePlugins;
         ArgumentNullException.ThrowIfNull(inputSink);
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(reportStatus);
@@ -32,4 +39,6 @@ public sealed class DevicePluginContext : IDevicePluginContext
     public void Log(string level, string message) => _log(level, message);
 
     public void RequestRedraw(string deviceId) => _requestRedraw?.Invoke(deviceId);
+
+    public IReadOnlyList<IDevicePlugin> GetDevicePlugins() => _devicePlugins?.Invoke() ?? [];
 }

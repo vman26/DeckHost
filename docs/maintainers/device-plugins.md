@@ -4,17 +4,38 @@ A **device plugin** connects hardware to DeckHost: it finds devices, describes t
 reports what the user presses and turns, and shows the images and lights DeckHost renders.
 DeckHost's own are `DeckHost.Device.MiraBox` (N4 Pro, through the vendor SDK), `DeckHost.Device.Elgato`
 (Stream Decks over USB HID), `DeckHost.Device.Web` (the Web Deck in a browser) and
-`DeckHost.Device.Hid` (USB devices described in the device creator).
+`DeckHost.Device.Hid` (USB devices described in the device creator), plus `DeckHost.Device.Simulator`.
+All of them ship as bundled plugin packages (see below).
 
 !!! tip "No code needed for input-only USB devices"
     A button box, pedal or jog wheel that only sends input can usually be added with
     **☰ → Add a USB device**: press each key, turn each knob, save. Write a device plugin when the
     device has screens or lights, or a protocol the device creator can't learn.
 
-!!! note "Device plugins are part of DeckHost"
-    Unlike action plugins, device plugins are built into DeckHost today: you add one with a pull
-    request (a `DeckHost.Device.<Name>` project, registered in `DeckHost.App/App.axaml.cs`). They
-    reference only `DeckHost.Contracts`, so loading them from packages later is possible.
+!!! note "Device plugins are packages, like action plugins"
+    A device plugin is a plugin package whose `plugin.json` says `"kind": "device"`: its assembly has
+    a public `IDevicePlugin` (a parameterless constructor, or one whose parameters are all optional)
+    with the same `Id` as the manifest. Install it from the Plugin Manager like any other package.
+    It runs **inside DeckHost** (devices need the live output and input callbacks; running them in their
+    own process is not supported yet), takes SkiaSharp from the host as well as `DeckHost.Contracts`,
+    and may be disabled and re-enabled without a restart: DeckHost blanks and unlists its devices,
+    then starts it again. Its load context isn't unloaded (native callbacks, `[UnmanagedCallersOnly]`,
+    can't live in a collectible one), so an old copy stays in memory until DeckHost restarts.
+
+    Native libraries go next to the assembly in the package: a `[LibraryImport]` of the plugin is
+    looked up in its folder first. A plugin that needs the folder itself (the assembly is loaded from
+    memory, so it has no `Location`) reads `AppContext.GetData("DeckHost.PluginDirectory.<assembly name>")`.
+    A `public static (bool Ok, string Report) CheckRuntime()` on the plugin class is run by
+    `DeckHost --check-native` (MiraBox loads its native bridge and lists the devices).
+
+    The plugins that ship with DeckHost are packages too, in `plugins/bundled/<id with dashes for dots>` next to the app (macOS codesign takes a folder with a dot in its name for a nested bundle):
+    they can be disabled but not uninstalled, and an installed version of the same id replaces the
+    bundled one. A project makes itself one by setting `<BundledPluginId>` and importing
+    `build/BundledDevicePlugin.targets` (see `DeckHost.Device.Web.csproj`; files such as native
+    libraries are added as `BundledPluginExtraFile` items, see `DeckHost.Device.MiraBox.csproj`);
+    `DeckHost.App` copies them to `plugins/bundled`. The app keeps a reference to the HID and simulator
+    projects for the device creator and the simulator window; those copies never run the plugin (the
+    creator writes the description files the HID plugin watches).
 
 ## The shape
 
@@ -41,9 +62,9 @@ public sealed class ExampleDevicePlugin : IDevicePlugin, IDeviceOutput
 }
 ```
 
-Register it in `App.axaml.cs` next to the others
-(`services.AddSingleton<IDevicePlugin>(…)`). The architecture tests check that a device plugin
-references nothing of DeckHost but Contracts.
+Give it a `plugin.json` (`"kind": "device"`) and build it as a package: copy the Web Deck's project file
+for a bundled one, or zip the plugin like the OBS plugin for an installable one. The architecture
+tests check that a device plugin references nothing of DeckHost but Contracts.
 
 ## Describing a device
 

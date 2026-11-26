@@ -1,0 +1,11 @@
+{
+  "id": "deckhost.device.web",
+  "name": "Web Deck",
+  "version": "1.0.0",
+  "author": "DeckHost",
+  "description": "A virtual deck in a browser: a phone, a tablet or a window on this computer.",
+  "assembly": "DeckHost.Device.Web.dll",
+  "hostApiVersion": 1,
+  "kind": "device",
+  "permissions": ["network"]
+}

@@ -10,7 +10,6 @@
     <IsWindows>$([MSBuild]::IsOsPlatform('Windows'))</IsWindows>
     <IsLinux>$([MSBuild]::IsOsPlatform('Linux'))</IsLinux>
     <IsMacOS>$([MSBuild]::IsOsPlatform('OSX'))</IsMacOS>
-    <MiraBoxNativeRuntimeDir>$(MSBuildProjectDirectory)/../native/MiraBoxBridge/out/$(Configuration)/bin/$(Configuration)</MiraBoxNativeRuntimeDir>
     <!-- The GitHub repository (owner/name) the updater checks for releases. The release workflow
          sets it to the public releases repository when the source repository is private. -->
     <DeckHostUpdateRepository Condition="'$(DeckHostUpdateRepository)' == ''">vman26/DeckHost</DeckHostUpdateRepository>
@@ -61,11 +60,12 @@
   <ItemGroup>
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
     <ProjectReference Include="..\DeckHost.Core\DeckHost.Core.csproj" />
-    <ProjectReference Include="..\DeckHost.Device.Elgato\DeckHost.Device.Elgato.csproj" />
+    <!-- Bundled device plugins: built first, shipped as packages under plugins/bundled (not referenced by the app). -->
+    <ProjectReference Include="..\DeckHost.Device.Elgato\DeckHost.Device.Elgato.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\DeckHost.Device.Hid\DeckHost.Device.Hid.csproj" />
-    <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" />
+    <ProjectReference Include="..\DeckHost.Device.MiraBox\DeckHost.Device.MiraBox.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\DeckHost.Device.Simulator\DeckHost.Device.Simulator.csproj" />
-    <ProjectReference Include="..\DeckHost.Device.Web\DeckHost.Device.Web.csproj" />
+    <ProjectReference Include="..\DeckHost.Device.Web\DeckHost.Device.Web.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <!-- Only WebView2's Core API is used (Views/WebView2Host); drop its WPF and WinForms wrappers. -->
@@ -76,30 +76,23 @@
   </Target>
 
   <Target Name="PreparePluginDirectories" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true'">
-    <MakeDir Directories="$(OutDir)plugins\;$(OutDir)plugins\device\;$(OutDir)plugins\functional\;$(OutDir)plugins\device\deckhost-device-mirabox\" />
+    <MakeDir Directories="$(OutDir)plugins\;$(OutDir)plugins\bundled\;$(OutDir)plugins\functional\" />
   </Target>
 
-  <!-- MiraBoxNative resolves MiraBoxBridge only from plugins/device/deckhost-device-mirabox. -->
-  <Target Name="CopyMiraBoxBridgeRuntimeToPluginOutput" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true' and Exists('$(MiraBoxNativeRuntimeDir)')">
+  <!-- The device plugins that ship with DeckHost: artifacts/bundled/<folder> (staged by build/BundledDevicePlugin.targets) -> plugins/bundled/<folder>. -->
+  <Target Name="CopyBundledPluginsToOutput" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(OutDir)' != '' and '$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
-      <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.dll" Condition="'$(IsWindows)' == 'true'" />
-      <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.pdb" Condition="'$(IsWindows)' == 'true' and '$(Configuration)' == 'Debug'" />
-      <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.so" Condition="'$(IsLinux)' == 'true'" />
-      <MiraBoxNativeArtifacts Include="$(MiraBoxNativeRuntimeDir)/*.dylib" Condition="'$(IsMacOS)' == 'true'" />
+      <BundledPluginFile Include="$(MSBuildProjectDirectory)\..\artifacts\bundled\**\*" />
     </ItemGroup>
-
-    <!-- Plain copies: hard links would let a later native rebuild silently change files elsewhere. -->
-    <Copy SourceFiles="@(MiraBoxNativeArtifacts)" DestinationFolder="$(OutDir)plugins\device\deckhost-device-mirabox\" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(BundledPluginFile)" DestinationFiles="@(BundledPluginFile->'$(OutDir)plugins\bundled\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
-  <!-- dotnet publish: the same native files, in the same place next to the published app. -->
-  <Target Name="PublishMiraBoxBridgeRuntime" AfterTargets="Publish" Condition="'$(PublishDir)' != '' and Exists('$(MiraBoxNativeRuntimeDir)')">
+  <Target Name="PublishBundledPlugins" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
     <ItemGroup>
-      <MiraBoxNativePublish Include="$(MiraBoxNativeRuntimeDir)/*.dll" Condition="'$(IsWindows)' == 'true'" />
-      <MiraBoxNativePublish Include="$(MiraBoxNativeRuntimeDir)/*.so" Condition="'$(IsLinux)' == 'true'" />
-      <MiraBoxNativePublish Include="$(MiraBoxNativeRuntimeDir)/*.dylib" Condition="'$(IsMacOS)' == 'true'" />
+      <BundledPluginPublish Include="$(MSBuildProjectDirectory)\..\artifacts\bundled\**\*" />
     </ItemGroup>
-    <MakeDir Directories="$(PublishDir)plugins/device/deckhost-device-mirabox;$(PublishDir)plugins/functional" />
-    <Copy SourceFiles="@(MiraBoxNativePublish)" DestinationFolder="$(PublishDir)plugins/device/deckhost-device-mirabox/" />
+    <MakeDir Directories="$(PublishDir)plugins/functional" />
+    <Copy SourceFiles="@(BundledPluginPublish)" DestinationFiles="@(BundledPluginPublish->'$(PublishDir)plugins\bundled\%(RecursiveDir)%(Filename)%(Extension)')" />
   </Target>
+
 </Project>

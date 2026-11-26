@@ -6,6 +6,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Ships as a plugin package under plugins/bundled (build/BundledDevicePlugin.targets). The app also references
+         this project, for the device creator (descriptions, learner); the two copies only share the description files. -->
+    <BundledPluginId>deckhost.device.hid</BundledPluginId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,4 +22,6 @@
   <ItemGroup>
     <ProjectReference Include="..\DeckHost.Contracts\DeckHost.Contracts.csproj" />
   </ItemGroup>
+
+  <Import Project="..\build\BundledDevicePlugin.targets" />
 </Project>

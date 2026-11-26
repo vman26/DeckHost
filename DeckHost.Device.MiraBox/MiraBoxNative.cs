@@ -218,8 +218,13 @@ internal static unsafe partial class MiraBoxNative
         }
     }
 
+    /// <summary>
+    /// The plugin's own folder when DeckHost loaded it as a package (it publishes it as an AppContext value: a memory-loaded
+    /// assembly has no location), else <c>plugins/device/deckhost-device-mirabox</c> next to the program (tests, tools).
+    /// </summary>
     private static string GetPluginDirectory() =>
-        Path.Combine(AppContext.BaseDirectory, "plugins", "device", PluginDirectoryName);
+        AppContext.GetData("DeckHost.PluginDirectory." + typeof(MiraBoxNative).Assembly.GetName().Name) as string
+        ?? Path.Combine(AppContext.BaseDirectory, "plugins", "device", PluginDirectoryName);
 
     private static void EnsurePluginDependenciesLoaded(string pluginDirectory)
     {

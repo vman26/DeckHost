@@ -12,7 +12,7 @@ namespace DeckHost.App.ViewModels;
 /// The device creator: makes a USB device DeckHost doesn't know into a deck. Pick the device, then
 /// add its keys and knobs by pressing and turning them (<see cref="HidLearner"/> works out where they
 /// show up in the device's reports), place them as they sit on the device, and save: the device
-/// joins the device picker with its own profiles (<see cref="HidDevicePlugin"/>).
+/// joins the device picker with its own profiles (<see cref="HidDevicePlugin"/>, which reads the saved files: <see cref="IHidDescriptionStore"/>).
 /// </summary>
 public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
 {
@@ -26,7 +26,7 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
     /// <summary>Knob learning ends after this many changed reports (or Done).</summary>
     private const int KnobReports = 8;
 
-    private readonly HidDevicePlugin? _plugin;
+    private readonly IHidDescriptionStore? _plugin;
     private readonly IHidDeviceSource _source;
     private readonly Action<Action> _post;
     private readonly Func<DateTimeOffset> _clock;
@@ -46,7 +46,7 @@ public sealed partial class DeviceCreatorViewModel : ViewModelBase, IDisposable
     private int _reportCount;
     private int _columns = 4;
 
-    public DeviceCreatorViewModel(HidDevicePlugin? plugin, IHidDeviceSource source, Action<Action>? post = null, Func<DateTimeOffset>? clock = null)
+    public DeviceCreatorViewModel(IHidDescriptionStore? plugin, IHidDeviceSource source, Action<Action>? post = null, Func<DateTimeOffset>? clock = null)
     {
         _plugin = plugin;
         _source = source;

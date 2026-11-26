@@ -35,7 +35,7 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
     private static readonly TimeSpan LongPressDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly string _directory;
-    private readonly Func<IEnumerable<IDevicePlugin>> _plugins;
+    private readonly Func<IEnumerable<IDevicePlugin>>? _plugins;
     private readonly Lock _sync = new();
     private readonly List<SimulatedDevice> _devices = [];
     private readonly ConcurrentDictionary<(string DeviceId, string ControlId), Timer> _longPressTimers = new();
@@ -47,12 +47,18 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
     private bool _disposed;
     private bool _enabled;
 
-    /// <param name="directory">DeckHost's data folder: the endpoint file goes there, device settings under <c>devices/</c>.</param>
-    /// <param name="plugins">The device plugins whose models can be simulated (read when a simulator connects).</param>
-    /// <param name="enabled">Listen for simulators (DeckHost settings → Developer → Device simulator); see <see cref="SetEnabled"/>.</param>
-    public SimulatorDevicePlugin(string directory, Func<IEnumerable<IDevicePlugin>> plugins, bool enabled = true)
+    /// <param name="directory">DeckHost's data folder (by default %AppData%/DeckHost): the endpoint file goes there, device settings under <c>devices/</c>.</param>
+    /// <param name="plugins">
+    /// The device plugins whose models can be simulated (read when a simulator connects). By default the ones the host runs
+    /// (<see cref="IDevicePluginContext.GetDevicePlugins"/>), which is how DeckHost loads it: a bundled package.
+    /// </param>
+    /// <param name="enabled">
+    /// Listen for simulators; see <see cref="SetEnabled"/>. DeckHost settings → Developer → Device simulator turns the whole
+    /// plugin on and off in the Plugin Manager instead.
+    /// </param>
+    public SimulatorDevicePlugin(string? directory = null, Func<IEnumerable<IDevicePlugin>>? plugins = null, bool enabled = true)
     {
-        _directory = directory;
+        _directory = directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeckHost");
         _plugins = plugins;
         _enabled = enabled;
     }
@@ -171,7 +177,7 @@ public sealed class SimulatorDevicePlugin : IDevicePlugin, IDeviceOutput, IDevic
     public IReadOnlyList<SimulatorModel> Models()
     {
         var models = new List<SimulatorModel>();
-        foreach (var plugin in _plugins())
+        foreach (var plugin in _plugins?.Invoke() ?? _context?.GetDevicePlugins() ?? [])
         {
             if (ReferenceEquals(plugin, this) || plugin is not IDeviceModelCatalog catalog)
             {

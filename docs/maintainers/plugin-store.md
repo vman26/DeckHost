@@ -127,6 +127,7 @@ until they uninstall it.
 | `repository`, `page`, `icon` | Optional links (https); the store shows the icon and opens the page. |
 | `category` | Optional: Audio, Streaming, Smart home, Productivity, … (DeckHost guesses one otherwise). |
 | `permissions` | What the plugin does beyond drawing and reacting to input; shown in the store. |
+| `platforms` | Optional: the systems it runs on, `windows`, `macos`, `linux`. Leave it out for a DeckHost plugin that runs everywhere; a Stream Deck package's systems are read from its manifest (`tools/platforms.py`, the `platforms.json` DeckHost reads). The store's systems filter uses them. |
 | `license` | The plugin's license, e.g. `MIT`, `GPL-3.0-or-later`, `Proprietary`. |
 | `auto_update` | Optional, `false` to update only through pull requests. |
 | `purchase_url`, `price` | For a **paid** plugin, instead of `download_url`/`sha256`: the store shows **Buy**, which opens the page; buyers install the file they get with **Install plugin…**. |

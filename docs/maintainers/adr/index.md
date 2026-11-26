@@ -15,5 +15,6 @@ Architecture decision records: why DeckHost is built the way it is. Each one say
 | [0009](0009-firmware-updates.md) | Firmware updates go through the host, written by the device plugin | Accepted |
 | [0010](0010-license.md) | GPL-3.0 for DeckHost, MIT for the plugin API | Accepted |
 | [0011](0011-device-descriptor.md) | The device descriptor is DeviceDefinition, grown in place | Accepted |
+| [0012](0012-device-plugin-packages.md) | Device plugins are plugin packages | Accepted |
 
 Format: *Context* (what forced a choice), *Decision*, *Consequences* (good and bad). Keep them short.

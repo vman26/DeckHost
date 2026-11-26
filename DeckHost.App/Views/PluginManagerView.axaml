@@ -169,112 +169,110 @@
 			<TabItem Header="Installed">
 		<ScrollViewer HorizontalScrollBarVisibility="Disabled">
 			<StackPanel Margin="20" Spacing="12">
-				<TextBlock Classes="section" Text="DEVICES" />
-				<ItemsControl ItemsSource="{Binding Devices}">
-					<ItemsControl.ItemTemplate>
-						<DataTemplate x:DataType="vm:DeviceInfoViewModel">
-							<Border Classes="card" Margin="0,0,0,8">
-								<StackPanel Spacing="4">
-									<StackPanel Orientation="Horizontal" Spacing="8">
-										<TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
-										<Border Classes="badge" Background="{DynamicResource C.14532D}" IsVisible="{Binding IsConnected}">
-											<TextBlock Text="{Binding State}" FontSize="11" Foreground="{DynamicResource C.BBF7D0}" />
-										</Border>
-										<Border Classes="badge" Background="{DynamicResource C.1E293B}" IsVisible="{Binding !IsConnected}">
-											<TextBlock Text="{Binding State}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
-										</Border>
-									</StackPanel>
-									<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-										<TextBlock Text="{Binding Detail}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" VerticalAlignment="Center" />
-										<Button Grid.Column="1" Content="Settings…" IsVisible="{Binding HasSettings}" Click="DeviceSettings_OnClick"
-												ToolTip.Tip="This device's settings (what it offers: brightness, lights, idle screen, pairing, firmware, …)" />
-									</Grid>
-									<TextBlock Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap"
-											   Text="{Binding IdentityText}" IsVisible="{Binding HasIdentityText}" />
-									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
-											   Text="{Binding CapabilitiesText}" IsVisible="{Binding HasCapabilitiesText}" />
-									<TextBlock Foreground="{DynamicResource C.64748B}" FontSize="12" TextWrapping="Wrap"
-											   Text="{Binding FirmwareText}" IsVisible="{Binding HasFirmwareText}" />
+				<!-- Each section folds up (remembered), so a long list of plugins stays easy to find your way in. -->
+				<Expander IsExpanded="{Binding DevicePluginsExpanded}" HorizontalAlignment="Stretch">
+					<Expander.Header>
+						<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+							<StackPanel Spacing="2" VerticalAlignment="Center">
+								<TextBlock Classes="section" Text="{Binding DevicePluginsHeader}" />
+								<TextBlock Classes="hint" Text="They connect hardware and the Web Deck: what DeckHost can talk to." />
+							</StackPanel>
+							<Button Grid.Column="1" Content="{Binding DevicesButtonLabel}" Click="Devices_OnClick"
+									ToolTip.Tip="Your devices: what they are and can do, their firmware and their settings" />
+						</Grid>
+					</Expander.Header>
+					<ItemsControl ItemsSource="{Binding DevicePlugins}">
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate>
+								<StackPanel Spacing="8" />
+							</ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+					</ItemsControl>
+				</Expander>
+
+				<Expander IsExpanded="{Binding SystemPluginsExpanded}" HorizontalAlignment="Stretch">
+					<Expander.Header>
+						<StackPanel Spacing="2">
+							<TextBlock Classes="section" Text="{Binding SystemPluginsHeader}" />
+							<TextBlock Classes="hint" Text="They add what keys, knobs and touch zones can do." />
+						</StackPanel>
+					</Expander.Header>
+					<ItemsControl ItemsSource="{Binding SystemPlugins}">
+						<ItemsControl.ItemsPanel>
+							<ItemsPanelTemplate>
+								<StackPanel Spacing="8" />
+							</ItemsPanelTemplate>
+						</ItemsControl.ItemsPanel>
+					</ItemsControl>
+				</Expander>
+
+				<Expander IsExpanded="{Binding InstalledPluginsExpanded}" HorizontalAlignment="Stretch">
+					<Expander.Header>
+						<TextBlock Classes="section" Text="{Binding InstalledPluginsHeader}" />
+					</Expander.Header>
+					<StackPanel Spacing="12">
+						<!-- Plugin updates from the store catalogs. -->
+						<Border Classes="card" IsVisible="{Binding HasUpdatesPanel}">
+							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" DataContext="{Binding Updates}" x:DataType="vm:PluginUpdatesViewModel">
+								<StackPanel Spacing="6">
+									<TextBlock Text="Plugin updates" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+									<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
+									<CheckBox IsChecked="{Binding InstallAutomatically, Mode=TwoWay}"
+											  Content="Install plugin updates automatically"
+											  ToolTip.Tip="DeckHost checks the store a minute after it starts and every 6 hours. Each update keeps the previous version, so you can go back." />
 								</StackPanel>
-							</Border>
-						</DataTemplate>
-					</ItemsControl.ItemTemplate>
-				</ItemsControl>
-
-				<TextBlock Classes="section" Text="DEVICE PLUGINS" Margin="0,8,0,0" />
-				<TextBlock Classes="hint" Text="They connect hardware and the Web Deck: what DeckHost can talk to." Margin="0,-6,0,0" />
-				<ItemsControl ItemsSource="{Binding DevicePlugins}">
-					<ItemsControl.ItemsPanel>
-						<ItemsPanelTemplate>
-							<StackPanel Spacing="8" />
-						</ItemsPanelTemplate>
-					</ItemsControl.ItemsPanel>
-				</ItemsControl>
-
-				<TextBlock Classes="section" Text="ACTION PLUGINS: BUILT IN" Margin="0,8,0,0" />
-				<TextBlock Classes="hint" Text="They add what keys, knobs and touch zones can do." Margin="0,-6,0,0" />
-				<ItemsControl ItemsSource="{Binding SystemPlugins}">
-					<ItemsControl.ItemsPanel>
-						<ItemsPanelTemplate>
-							<StackPanel Spacing="8" />
-						</ItemsPanelTemplate>
-					</ItemsControl.ItemsPanel>
-				</ItemsControl>
-
-				<TextBlock Classes="section" Text="ACTION PLUGINS: INSTALLED" Margin="0,8,0,0" />
-				<!-- Plugin updates from the store catalogs. -->
-				<Border Classes="card" IsVisible="{Binding HasUpdatesPanel}">
-					<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" DataContext="{Binding Updates}" x:DataType="vm:PluginUpdatesViewModel">
-						<StackPanel Spacing="6">
-							<TextBlock Text="Plugin updates" FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
-							<TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
-							<CheckBox IsChecked="{Binding InstallAutomatically, Mode=TwoWay}"
-									  Content="Install plugin updates automatically"
-									  ToolTip.Tip="DeckHost checks the store a minute after it starts and every 6 hours. Each update keeps the previous version, so you can go back." />
-						</StackPanel>
-						<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
-							<Button Content="Check for updates" Command="{Binding CheckCommand}" IsEnabled="{Binding IsIdle}" HorizontalAlignment="Right" />
-							<Button Content="{Binding UpdateAllLabel}" Classes="accent" IsVisible="{Binding HasUpdates}" IsEnabled="{Binding IsIdle}"
-									Command="{Binding UpdateAllCommand}" HorizontalAlignment="Right" />
-						</StackPanel>
-					</Grid>
-				</Border>
-				<Border Classes="card" IsVisible="{Binding HasNoInstalledPlugins}">
-					<StackPanel Spacing="4">
-						<TextBlock Text="No plugins installed yet." FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
-						<TextBlock Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap"
-								   Text="Use Install plugin… to add a plugin package (.zip). Plugins run with your user's rights, so only install packages you trust." />
+								<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+									<Button Content="Check for updates" Command="{Binding CheckCommand}" IsEnabled="{Binding IsIdle}" HorizontalAlignment="Right" />
+									<Button Content="{Binding UpdateAllLabel}" Classes="accent" IsVisible="{Binding HasUpdates}" IsEnabled="{Binding IsIdle}"
+											Command="{Binding UpdateAllCommand}" HorizontalAlignment="Right" />
+								</StackPanel>
+							</Grid>
+						</Border>
+						<Border Classes="card" IsVisible="{Binding HasNoInstalledPlugins}">
+							<StackPanel Spacing="4">
+								<TextBlock Text="No plugins installed yet." FontWeight="SemiBold" Foreground="{DynamicResource C.E2E8F0}" />
+								<TextBlock Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap"
+										   Text="Use Install plugin… to add a plugin package (.zip). Plugins run with your user's rights, so only install packages you trust." />
+							</StackPanel>
+						</Border>
+						<ItemsControl ItemsSource="{Binding InstalledPlugins}">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<StackPanel Spacing="8" />
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+						</ItemsControl>
 					</StackPanel>
-				</Border>
-				<ItemsControl ItemsSource="{Binding InstalledPlugins}">
-					<ItemsControl.ItemsPanel>
-						<ItemsPanelTemplate>
-							<StackPanel Spacing="8" />
-						</ItemsPanelTemplate>
-					</ItemsControl.ItemsPanel>
-				</ItemsControl>
-				<TextBlock Classes="section" Text="FOLDERS" Margin="0,8,0,0" />
-				<Border Classes="card">
-					<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
-						<TextBlock Text="DeckHost plugins" Foreground="{DynamicResource C.94A3B8}" />
-						<SelectableTextBlock Grid.Column="1" Text="{Binding InstallDirectory}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
-						<TextBlock Grid.Row="1" Text="Stream Deck plugins (Elgato, OpenAction)" Foreground="{DynamicResource C.94A3B8}" />
-						<SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StreamDeckDirectory}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
-						<TextBlock Grid.Row="2" Text="Log files" Foreground="{DynamicResource C.94A3B8}" />
-						<SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LogDirectory}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
-					</Grid>
-				</Border>
+				</Expander>
+
+				<Expander IsExpanded="{Binding FoldersExpanded}" HorizontalAlignment="Stretch">
+					<Expander.Header>
+						<TextBlock Classes="section" Text="FOLDERS" />
+					</Expander.Header>
+					<Border Classes="card">
+						<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+							<TextBlock Text="DeckHost plugins" Foreground="{DynamicResource C.94A3B8}" />
+							<SelectableTextBlock Grid.Column="1" Text="{Binding InstallDirectory}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
+							<TextBlock Grid.Row="1" Text="Stream Deck plugins (Elgato, OpenAction)" Foreground="{DynamicResource C.94A3B8}" />
+							<SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StreamDeckDirectory}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
+							<TextBlock Grid.Row="2" Text="Log files" Foreground="{DynamicResource C.94A3B8}" />
+							<SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LogDirectory}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" />
+						</Grid>
+					</Border>
+				</Expander>
 			</StackPanel>
 		</ScrollViewer>
 			</TabItem>
 			<TabItem Header="Store">
 				<Grid RowDefinitions="Auto,Auto,*" RowSpacing="10" Margin="8,12,8,8" DataContext="{Binding Store}" x:DataType="vm:PluginStoreViewModel">
-					<Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+					<Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
 						<TextBox Text="{Binding SearchText, Mode=TwoWay}" PlaceholderText="Search by name, author or description" />
 						<ComboBox Grid.Column="1" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource, Mode=TwoWay}" MinWidth="170" />
 						<ComboBox Grid.Column="2" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory, Mode=TwoWay}" MinWidth="150" />
-						<ComboBox Grid.Column="3" ItemsSource="{Binding Statuses}" SelectedItem="{Binding SelectedStatus, Mode=TwoWay}" MinWidth="120" />
-						<Button Grid.Column="4" Content="↻" ToolTip.Tip="Reload the catalogs" Command="{Binding RefreshCommand}" />
+						<ComboBox Grid.Column="3" ItemsSource="{Binding Systems}" SelectedItem="{Binding SelectedSystem, Mode=TwoWay}" MinWidth="150"
+								  ToolTip.Tip="Works here: made for this system, or its systems aren't listed. Made for: only the ones known to run here." />
+						<ComboBox Grid.Column="4" ItemsSource="{Binding Statuses}" SelectedItem="{Binding SelectedStatus, Mode=TwoWay}" MinWidth="120" />
+						<Button Grid.Column="5" Content="↻" ToolTip.Tip="Reload the catalogs" Command="{Binding RefreshCommand}" />
 					</Grid>
 					<StackPanel Grid.Row="1" Spacing="6">
 						<TextBlock Text="{Binding Summary}" Foreground="{DynamicResource C.94A3B8}" FontSize="12" TextWrapping="Wrap" />
@@ -338,10 +336,30 @@
 													<Border Classes="badge" Background="{Binding SourceColor}">
 														<TextBlock Text="{Binding Source}" FontSize="11" Foreground="{DynamicResource C.E2E8F0}" />
 													</Border>
+													<!-- Which systems it is made for: green when this one, red when not, grey when nobody listed them. -->
+													<Border Classes="badge" Background="{DynamicResource C.14532D}" IsVisible="{Binding IsMadeForThisSystem}" ToolTip.Tip="{Binding SystemsToolTip}">
+														<TextBlock Text="{Binding SystemsText}" FontSize="11" Foreground="{DynamicResource C.BBF7D0}" />
+													</Border>
+													<Border Classes="badge" Background="{DynamicResource C.7F1D1D}" IsVisible="{Binding IsNotMadeForThisSystem}" ToolTip.Tip="{Binding SystemsToolTip}">
+														<TextBlock Text="{Binding SystemsText}" FontSize="11" Foreground="{DynamicResource C.FECACA}" />
+													</Border>
+													<Border Classes="badge" Background="{DynamicResource C.1E293B}" IsVisible="{Binding HasUnknownSystems}" ToolTip.Tip="{Binding SystemsToolTip}">
+														<TextBlock Text="{Binding SystemsText}" FontSize="11" Foreground="{DynamicResource C.94A3B8}" />
+													</Border>
 												</StackPanel>
 												<TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource C.64748B}" TextTrimming="CharacterEllipsis" />
 												<TextBlock Text="{Binding Description}" IsVisible="{Binding HasDescription}" Foreground="{DynamicResource C.CBD5E1}" TextWrapping="Wrap" MaxLines="{Binding DescriptionLines}" />
 												<TextBlock Text="{Binding PermissionsText}" IsVisible="{Binding HasPermissions}" FontSize="11" Foreground="{DynamicResource C.FDE68A}" />
+												<TextBlock Text="{Binding NotForThisSystemText}" IsVisible="{Binding IsNotMadeForThisSystem}" FontSize="12" Foreground="{DynamicResource C.FCA5A5}" TextWrapping="Wrap" />
+												<Border IsVisible="{Binding ConfirmingUninstall}" Padding="10" CornerRadius="8" Background="{DynamicResource C.2A1215}" BorderBrush="{DynamicResource C.7F1D1D}" BorderThickness="1">
+													<StackPanel Spacing="8">
+														<TextBlock Text="{Binding UninstallQuestion}" TextWrapping="Wrap" Foreground="{DynamicResource C.FECACA}" />
+														<StackPanel Orientation="Horizontal" Spacing="8">
+															<Button Content="Uninstall" Command="{Binding ConfirmUninstallCommand}" />
+															<Button Content="Cancel" Classes="accent" Command="{Binding CancelUninstallCommand}" />
+														</StackPanel>
+													</StackPanel>
+												</Border>
 												<StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasProgress}">
 													<ProgressBar IsIndeterminate="{Binding IsInstalling}" Width="120" VerticalAlignment="Center" />
 													<TextBlock Text="{Binding Progress}" FontSize="12" Foreground="{DynamicResource C.93C5FD}" />
@@ -353,6 +371,8 @@
 												<Border Classes="badge" Background="{DynamicResource C.14532D}" IsVisible="{Binding IsInstalled}" HorizontalAlignment="Right">
 													<TextBlock Text="Installed" FontSize="11" Foreground="{DynamicResource C.BBF7D0}" />
 												</Border>
+												<Button Content="Uninstall" IsVisible="{Binding ShowUninstall}" Command="{Binding AskUninstallCommand}" HorizontalAlignment="Right"
+														ToolTip.Tip="Remove it from DeckHost (asks first)" />
 												<Button Content="Page" IsVisible="{Binding HasPage}" ToolTip.Tip="{Binding PageToolTip}" Command="{Binding OpenPageCommand}" HorizontalAlignment="Right" />
 												<Button Content="{Binding ExpandText}" ToolTip.Tip="Show the plugin's README" Command="{Binding ToggleExpandedCommand}" HorizontalAlignment="Right" />
 											</StackPanel>

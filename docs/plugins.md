@@ -1,12 +1,16 @@
 # Plugins and the store
 
-**Plugins** (the puzzle icon at the top right) lists what's installed: DeckHost's own plugins, installed DeckHost plugins, and Stream Deck / OpenAction plugins. Enable, disable and uninstall them there.
+**Plugins** (the puzzle icon at the top right) lists what's installed: device plugins (what connects your hardware), DeckHost's own action plugins, and installed DeckHost, Stream Deck and OpenAction plugins. Enable, disable and uninstall them there. Each section folds up with the arrow on its right, and stays folded the next time. Your devices themselves, with their firmware and settings, are on the [Devices](devices.md#devices-you-no-longer-use) page: the **N devices…** button next to the device plugins opens it.
 
 ![The Plugins page: devices and device plugins, then action plugins](images/plugins.png)
 
 ## The store
 
 The **Store** tab lists plugins from the [DeckHost plugin catalog](https://github.com/vman26/deckhost-plugins), OpenAction, and the Elgato community archive, with their icons and README (**More ▾**). Install with one click; DeckHost checks a catalog download against its checksum, and shows what a plugin may do (use the network, start programs, …) before you install it.
+
+Each plugin shows the systems it's made for: green when it runs on yours, red (with **Install** greyed out) when it doesn't, grey when nobody listed them. Many Stream Deck plugins are made for Windows and macOS only. The systems filter shows **Works on** your system (the default: made for it, or not listed), **Made for** your system (only the ones known to run), or **Any system**. DeckHost plugins run everywhere DeckHost does unless they say otherwise; for OpenAction and Elgato plugins the systems come from each plugin's manifest, read by the [plugin repository](https://github.com/vman26/deckhost-plugins) every week. When you install a plugin whose systems nobody listed, DeckHost reads them from its manifest and remembers them: the store shows them from then on (also after you uninstall it), and so does the plugin's card on the Installed tab.
+
+An installed plugin can be uninstalled from the store too: **Uninstall** asks first, like on the Installed tab.
 
 Some plugins are **paid**: **Buy** opens the author's page; install the file you get with **Install plugin…**. **Sources** adds catalogs of your own (a web address, a catalog file or a folder of packages).
 

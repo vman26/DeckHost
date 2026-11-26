@@ -45,7 +45,7 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
         using var page = new DeviceManagerViewModel(_host);
 
         // Act
-        page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
+        page.Listed.Single(static row => row.Id == Unplugged).ConfirmRemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
         page.Refresh();
 
@@ -60,7 +60,7 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     {
         // Arrange
         using var page = new DeviceManagerViewModel(_host);
-        page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
+        page.Listed.Single(static row => row.Id == Unplugged).ConfirmRemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
         page.Refresh();
 
@@ -79,7 +79,7 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
     {
         // Arrange
         using var page = new DeviceManagerViewModel(_host);
-        page.Listed.Single(static row => row.Id == Unplugged).RemoveCommand.Execute(null);
+        page.Listed.Single(static row => row.Id == Unplugged).ConfirmRemoveCommand.Execute(null);
         await _host.WhenIdleAsync();
 
         // Act
@@ -124,5 +124,95 @@ public sealed class DeviceManagerViewModelTests : IAsyncDisposable
         // Assert
         Assert.That(page.Discovered, Is.Empty);
         Assert.That(page.Ignored.Select(static row => row.Id), Is.EqualTo(new[] { "new.device" }));
+    }
+
+    [Test]
+    public void Constructor_ListedDevice_HasACardWithItsConnectionState()
+    {
+        // Act
+        using var page = new DeviceManagerViewModel(_host);
+
+        // Assert
+        var plugged = page.Listed.Single(static row => row.Id == Plugged);
+        var unplugged = page.Listed.Single(static row => row.Id == Unplugged);
+        Assert.That(plugged.Card?.Device.Id, Is.EqualTo(Plugged));
+        Assert.That((plugged.State, unplugged.State), Is.EqualTo(("Connected", "Not connected")));
+    }
+
+    [Test]
+    public void CreateDeviceSettings_WithoutASettingsService_IsNull()
+    {
+        // Arrange
+        using var page = new DeviceManagerViewModel(_host);
+        var row = page.Listed.Single(static row => row.Id == Plugged);
+
+        // Act
+        var settings = page.CreateDeviceSettings(row);
+
+        // Assert
+        Assert.That((row.HasSettings, settings), Is.EqualTo((false, (DeviceSettingsViewModel?)null)));
+    }
+
+    [Test]
+    public async Task Resume_AfterARemovalWhileThePageWasCovered_ShowsTheRemoval()
+    {
+        // Arrange
+        var page = new DeviceManagerViewModel(_host);
+        page.Dispose();
+        _host.RemoveDevice(Unplugged);
+        await _host.WhenIdleAsync();
+
+        // Act
+        page.Resume();
+
+        // Assert
+        Assert.That(page.Ignored.Select(static row => row.Id), Is.EqualTo(new[] { Unplugged }));
+        page.Dispose();
+    }
+
+    [Test]
+    public async Task Card_OfARemovedDevice_IsNull()
+    {
+        // Arrange
+        using var page = new DeviceManagerViewModel(_host);
+        _host.RemoveDevice(Unplugged);
+        await _host.WhenIdleAsync();
+
+        // Act
+        page.Refresh();
+
+        // Assert
+        Assert.That(page.Ignored.Single().Card, Is.Null);
+    }
+
+    [Test]
+    public async Task Remove_WithoutConfirming_KeepsTheDeviceAndAsks()
+    {
+        // Arrange
+        using var page = new DeviceManagerViewModel(_host);
+        var row = page.Listed.Single(static row => row.Id == Unplugged);
+
+        // Act
+        row.RemoveCommand.Execute(null);
+        await _host.WhenIdleAsync();
+        page.Refresh();
+
+        // Assert
+        Assert.That((row.ConfirmingRemove, page.Listed.Count), Is.EqualTo((true, 2)));
+    }
+
+    [Test]
+    public void CancelRemove_AfterRemove_StopsAsking()
+    {
+        // Arrange
+        using var page = new DeviceManagerViewModel(_host);
+        var row = page.Listed.Single(static row => row.Id == Unplugged);
+        row.RemoveCommand.Execute(null);
+
+        // Act
+        row.CancelRemoveCommand.Execute(null);
+
+        // Assert
+        Assert.That(row.ConfirmingRemove, Is.False);
     }
 }
