@@ -318,6 +318,46 @@ public sealed class RenderingAndStoreTests : IDisposable
         Assert.That(saved.ContainsKey("dev|p2|key.0|com.test.action"), Is.False);
     }
 
+    private const string AudioMixerContext = "dev|p1|key.1|com.test.mixer";
+
+    [Test]
+    public void SaveInstanceSettings_SeveralChangesWithinTheDelay_AreWrittenTogetherLater()
+    {
+        // Arrange
+        var (instances, data) = WriteStreamDeckInstances();
+        var runtime = new StreamDeckRuntime(data, Path.Combine(_root, "logs"), (_, _) => { }) { InstanceSettingsWriteDelay = TimeSpan.FromHours(1) };
+        var before = File.ReadAllText(instances);
+
+        // Act
+        runtime.SaveInstanceSettings(AudioMixerContext, new JsonObject { ["volume"] = 1 });
+        runtime.SaveInstanceSettings(AudioMixerContext, new JsonObject { ["volume"] = 2 });
+        var whileWaiting = File.ReadAllText(instances);
+        runtime.Dispose();
+
+        // Assert
+        Assert.That(whileWaiting, Is.EqualTo(before));
+        var saved = JsonNode.Parse(File.ReadAllText(instances))!.AsObject();
+        Assert.That(saved[AudioMixerContext]?["volume"]?.GetValue<int>(), Is.EqualTo(2));
+    }
+
+    [Test]
+    public void SaveInstanceSettings_TheSameSettingsAgain_DoesNotWriteTheFile()
+    {
+        // Arrange
+        var (instances, data) = WriteStreamDeckInstances();
+        using var runtime = new StreamDeckRuntime(data, Path.Combine(_root, "logs"), (_, _) => { }) { InstanceSettingsWriteDelay = TimeSpan.FromHours(1) };
+        runtime.SaveInstanceSettings(AudioMixerContext, new JsonObject { ["volume"] = 1 });
+        runtime.FlushInstanceSettings();
+        File.Delete(instances);
+
+        // Act
+        runtime.SaveInstanceSettings(AudioMixerContext, new JsonObject { ["volume"] = 1 });
+        runtime.FlushInstanceSettings();
+
+        // Assert
+        Assert.That(File.Exists(instances), Is.False);
+    }
+
     // ---------------------------------------------------------------- catalogs and categories
 
     [Test]

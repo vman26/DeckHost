@@ -351,6 +351,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
         Parallel.ForEach(running.Where(static plugin => plugin.Html is null), plugin => Stop(plugin.Manifest.Uuid));
         _server.Dispose();
+        FlushInstanceSettings();
     }
 
     // ---------------------------------------------------------------- calls from the action adapter
@@ -899,12 +900,43 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         }
     }
 
-    private void SaveInstanceSettings(string context, JsonObject settings)
+    /// <summary>
+    /// How long a changed instance setting waits before instances.json is written. Writes in the
+    /// meantime are written together: some plugins save every key's settings whenever any key
+    /// appears (Audio Mixer: once per key for every key that appears, so a folder of eight keys
+    /// wrote the whole file 64 times on the plugin's connection and its images came late).
+    /// </summary>
+    public TimeSpan InstanceSettingsWriteDelay { get; set; } = TimeSpan.FromMilliseconds(500);
+
+    private int _instanceSettingsWritePending;
+
+    internal void SaveInstanceSettings(string context, JsonObject settings)
     {
         lock (_settingsLock)
         {
+            if (_instanceSettings[context] is { } current && JsonNode.DeepEquals(current, settings))
+            {
+                return;
+            }
+
             _instanceSettings[context] = settings.DeepClone();
-            WriteJson(InstanceSettingsPath, _instanceSettings);
+        }
+
+        if (Interlocked.Exchange(ref _instanceSettingsWritePending, 1) == 0)
+        {
+            _ = Task.Delay(InstanceSettingsWriteDelay).ContinueWith(_ => FlushInstanceSettings(), TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>Writes instances.json when a change waits for it (also on <see cref="Dispose"/>).</summary>
+    internal void FlushInstanceSettings()
+    {
+        lock (_settingsLock)
+        {
+            if (Interlocked.Exchange(ref _instanceSettingsWritePending, 0) == 1)
+            {
+                WriteJson(InstanceSettingsPath, _instanceSettings);
+            }
         }
     }
 
