@@ -13,6 +13,10 @@ namespace DeckHost.Device.Elgato;
 /// <param name="ImageReportLength">Length of the reports that carry key images (first generation: 8191 on the first edition, 1024 on the Mini).</param>
 /// <param name="KeysRightToLeft">The first edition numbers its keys from the right in each row.</param>
 /// <param name="TransposeKeyImages">The Mini's key images are mirrored on the diagonal (turned 90° and flipped).</param>
+/// <param name="TouchPoints">Touch buttons without a display but with an RGB light (the Neo's two arrows), reported after the keys.</param>
+/// <param name="InfoScreenWidth">Width of a small screen without input (the Neo's info bar), 0 when there is none.</param>
+/// <param name="InfoScreenHeight">Height of that screen.</param>
+/// <param name="Verified">Checked on real hardware; the others are built from the published protocol and say so.</param>
 public sealed record StreamDeckModel(
     string Name,
     int ProductId,
@@ -27,7 +31,11 @@ public sealed record StreamDeckModel(
     int Generation = 2,
     int ImageReportLength = 1024,
     bool KeysRightToLeft = false,
-    bool TransposeKeyImages = false)
+    bool TransposeKeyImages = false,
+    int TouchPoints = 0,
+    int InfoScreenWidth = 0,
+    int InfoScreenHeight = 0,
+    bool Verified = false)
 {
     public const int VendorId = 0x0fd9;
 
@@ -41,16 +49,34 @@ public sealed record StreamDeckModel(
         new("Stream Deck MK.2", 0x00a5, 5, 3, 72, FlipKeyImages: true),
         new("Stream Deck XL", 0x006c, 8, 4, 96, FlipKeyImages: true),
         new("Stream Deck XL", 0x008f, 8, 4, 96, FlipKeyImages: true),
-        new("Stream Deck Neo", 0x009a, 4, 2, 96, FlipKeyImages: true),
+        new("Stream Deck Neo", 0x009a, 4, 2, 96, FlipKeyImages: true, TouchPoints: 2, InfoScreenWidth: 248, InfoScreenHeight: 58),
         new("Stream Deck +", 0x0084, 4, 2, 120, FlipKeyImages: false, Dials: 4, TouchStripWidth: 800, TouchStripHeight: 100),
         new("Stream Deck Pedal", 0x0086, 3, 1, 0, FlipKeyImages: false, HasDisplays: false),
         new("Stream Deck (first edition)", 0x0060, 5, 3, 72, FlipKeyImages: true, Generation: 1, ImageReportLength: 8191, KeysRightToLeft: true),
         new("Stream Deck Mini", 0x0063, 3, 2, 80, FlipKeyImages: false, Generation: 1, TransposeKeyImages: true),
         new("Stream Deck Mini", 0x0090, 3, 2, 80, FlipKeyImages: false, Generation: 1, TransposeKeyImages: true),
+        new("Stream Deck Mini (Discord edition)", 0x00b3, 3, 2, 80, FlipKeyImages: false, Generation: 1, TransposeKeyImages: true),
+        new("Stream Deck Module 6", 0x00b8, 3, 2, 80, FlipKeyImages: false, Generation: 1, TransposeKeyImages: true),
+        new("Stream Deck Module 15", 0x00b9, 5, 3, 72, FlipKeyImages: true),
+        new("Stream Deck Module 32", 0x00ba, 8, 4, 96, FlipKeyImages: true),
     ];
 
-    /// <summary>Models recognized but not driven (none at the moment).</summary>
-    public static IReadOnlyDictionary<int, string> NotYetSupported { get; } = new Dictionary<int, string>();
+    /// <summary>
+    /// Models recognized but not driven yet: DeckHost says so in the log and on the Devices page
+    /// instead of ignoring them.
+    /// </summary>
+    public static IReadOnlyDictionary<int, string> NotYetSupported { get; } = new Dictionary<int, string>
+    {
+        [0x00aa] = "Stream Deck Studio",
+    };
+
+    /// <summary>The control id of touch point <paramref name="index"/> (the Neo's arrows).</summary>
+    public static string TouchPointId(int index) => $"button.{index}";
+
+    /// <summary>The control id of the info screen.</summary>
+    public const string InfoScreenId = "screen.0";
+
+    public const string InfoScreenDisplayId = "info";
 
     /// <summary>
     /// The device's own key number for DeckHost's key <paramref name="key"/> (reading order). The same
@@ -93,6 +119,15 @@ public sealed record StreamDeckModel(
             });
         }
 
+        if (InfoScreenWidth > 0)
+        {
+            displays.Add(new DeviceDisplay(InfoScreenDisplayId, InfoScreenWidth, InfoScreenHeight)
+            {
+                RotationDegrees = FlipKeyImages ? 180 : 0,
+                ControlIds = [InfoScreenId],
+            });
+        }
+
         if (Dials > 0)
         {
             displays.Add(new DeviceDisplay(StripDisplayId, TouchStripWidth, TouchStripHeight)
@@ -107,9 +142,26 @@ public sealed record StreamDeckModel(
             Displays = displays,
             Capabilities = (HasDisplays ? DeviceCapabilities.Images | DeviceCapabilities.Brightness : DeviceCapabilities.None)
                 | (Dials > 0 ? DeviceCapabilities.Touch : DeviceCapabilities.None)
+                | (TouchPoints > 0 ? DeviceCapabilities.RgbLights : DeviceCapabilities.None)
                 | DeviceCapabilities.Firmware | DeviceCapabilities.Settings,
-            Limits = Generation == 1 ? new DeviceLimits { Notes = ["Key images are sent as bitmaps, one key at a time."] } : null,
+            Limits = LimitNotes() is { Count: > 0 } notes ? new DeviceLimits { Notes = notes } : null,
         };
+    }
+
+    private List<string> LimitNotes()
+    {
+        var notes = new List<string>();
+        if (Generation == 1)
+        {
+            notes.Add("Key images are sent as bitmaps, one key at a time.");
+        }
+
+        if (!Verified)
+        {
+            notes.Add("Preview: built from the published protocol and not yet checked on this model. Please report how it works.");
+        }
+
+        return notes;
     }
 
     public IReadOnlyList<PhysicalControl> Controls()
@@ -137,12 +189,54 @@ public sealed record StreamDeckModel(
             });
         }
 
+        var below = Rows * (Key + Gap);
+        if (InfoScreenWidth > 0 || TouchPoints > 0)
+        {
+            var rowWidth = (Columns * (Key + Gap)) - Gap;
+            const int PointSize = 36;
+            var screenWidth = rowWidth - (TouchPoints > 0 ? 2 * (PointSize + Gap) : 0);
+            var screenHeight = InfoScreenHeight > 0 ? Math.Round(screenWidth * InfoScreenHeight / (double)InfoScreenWidth) : PointSize;
+            var screenLeft = TouchPoints > 0 ? PointSize + Gap : 0;
+            if (InfoScreenWidth > 0)
+            {
+                controls.Add(new PhysicalControl(
+                    InfoScreenId,
+                    "Info screen",
+                    ControlType.Display,
+                    new Rect(screenLeft, below, screenWidth, screenHeight),
+                    InputCapabilities.None,
+                    OutputCapabilities.ColorImage | OutputCapabilities.Text,
+                    InfoScreenWidth,
+                    InfoScreenHeight)
+                {
+                    DisplayId = InfoScreenDisplayId,
+                });
+            }
+
+            for (var point = 0; point < TouchPoints; point++)
+            {
+                var left = point == 0 ? 0 : rowWidth - PointSize;
+                controls.Add(new PhysicalControl(
+                    TouchPointId(point),
+                    point == 0 ? "Left touch point" : "Right touch point",
+                    ControlType.Button,
+                    new Rect(left, below + ((screenHeight - PointSize) / 2), PointSize, PointSize),
+                    keyInputs,
+                    OutputCapabilities.None,
+                    HardwareId: (KeyCount + point).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    LedIndex: point)
+                {
+                    Shape = ControlShape.Round,
+                });
+            }
+        }
+
         if (Dials == 0)
         {
             return controls;
         }
 
-        var top = Rows * (Key + Gap);
+        var top = below + (InfoScreenWidth > 0 || TouchPoints > 0 ? 60 : 0);
         var width = (Columns * (Key + Gap)) - Gap;
         var zoneWidth = (width - ((Dials - 1) * 6)) / (double)Dials;
         for (var dial = 0; dial < Dials; dial++)

@@ -38,14 +38,27 @@ DeckHost talks to Stream Decks directly over USB, without Elgato's software. **C
 
 | Model | Status |
 |---|---|
-| Stream Deck MK.2, Original v2 | supported |
+| Stream Deck MK.2, Original v2, MK.2 Scissor | supported |
 | Stream Deck XL | supported |
-| Stream Deck Neo | supported |
+| Stream Deck Neo | supported: 8 keys, the info screen and the two touch points with their lights |
 | Stream Deck + (dials and touch strip) | supported |
 | Stream Deck Pedal | supported |
-| First-edition Stream Deck, Stream Deck Mini | supported (older protocol, not tested on hardware yet) |
+| Stream Deck Module 15 and 32 | supported (same protocol as the MK.2 and XL) |
+| First-edition Stream Deck, Stream Deck Mini (also the Discord edition), Module 6 | supported (older protocol) |
+| Stream Deck Studio | recognized, not driven yet: the log says so |
+| Stream Deck + XL, Network Dock, Galleon 100 SD | not yet |
 
-This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't (**☰ → Help and support → Report a problem**).
+This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't with a [device report](https://github.com/vman26/DeckHost/issues/new?template=device-report.yml).
+
+## Tested hardware
+
+What people have checked on real hardware, from [device reports](https://github.com/vman26/DeckHost/issues?q=label%3Adevice-report). A model that isn't here works from its published protocol or SDK, and its Devices page card says *Preview*.
+
+| Device | Windows | macOS | Linux | Notes |
+|---|---|---|---|---|
+| MiraBox N4 Pro | ✅ | ✅ | ✅ | keys, touch strip, knobs, LED rings, brightness, vibration, idle screen |
+
+✅ works · 🟡 works with problems (see the notes) · ❌ doesn't work · blank: not reported yet
 
 ## Devices you no longer use
 

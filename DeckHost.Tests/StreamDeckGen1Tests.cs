@@ -85,15 +85,16 @@ public class StreamDeckGen1Tests
     }
 
     [Test]
-    public void NotYetSupported_FirstEditionAndMiniAreDrivenNow_IsEmpty()
+    public void NotYetSupported_FirstEditionAndMini_AreDrivenNow()
     {
-        // Arrange (the model table)
+        // Arrange
+        int[] gen1ProductIds = [0x0060, 0x0063, 0x0090];
 
         // Act
         var notYet = StreamDeckModel.NotYetSupported;
 
         // Assert
-        Assert.That(notYet, Is.Empty);
+        Assert.That(gen1ProductIds, Has.None.AnyOf(notYet.Keys.Cast<int>().ToArray()));
     }
 
     [Test]
