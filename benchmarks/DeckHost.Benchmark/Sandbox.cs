@@ -111,6 +111,9 @@ internal sealed class Sandbox : IDisposable
             ["AutoUpdatePlugins"] = false,
             ["DeviceSimulator"] = true,
             ["WelcomeShown"] = true,
+            ["CoachMarksShown"] = true,
+            ["TrayNoticeShown"] = true,
+            ["LastSeenVersion"] = "999.0.0", // newer than any build: What's new never opens
             ["StartMinimized"] = startInTray,
         };
         File.WriteAllText(Path.Combine(DataDirectory, "settings.json"), JsonSerializer.Serialize(settings));
