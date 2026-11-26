@@ -23,9 +23,13 @@
   DeckHost.Contracts.Icons.Clock : System.String const
   DeckHost.Contracts.Icons.Counter : System.String const
   DeckHost.Contracts.Icons.Folder : System.String const
+  DeckHost.Contracts.Icons.Globe : System.String const
   DeckHost.Contracts.Icons.KeyLogic : System.String const
   DeckHost.Contracts.Icons.Keyboard : System.String const
   DeckHost.Contracts.Icons.Lock : System.String const
+  DeckHost.Contracts.Icons.Microphone : System.String const
+  DeckHost.Contracts.Icons.MicrophoneOff : System.String const
+  DeckHost.Contracts.Icons.Music : System.String const
   DeckHost.Contracts.Icons.Muted : System.String const
   DeckHost.Contracts.Icons.Next : System.String const
   DeckHost.Contracts.Icons.OpenLink : System.String const
@@ -38,8 +42,10 @@
   DeckHost.Contracts.Icons.Speaker : System.String const
   DeckHost.Contracts.Icons.Stack : System.String const
   DeckHost.Contracts.Icons.Stop : System.String const
+  DeckHost.Contracts.Icons.Stopwatch : System.String const
   DeckHost.Contracts.Icons.Swipe : System.String const
   DeckHost.Contracts.Icons.SwitchProfile : System.String const
+  DeckHost.Contracts.Icons.Terminal : System.String const
   DeckHost.Contracts.Icons.Text : System.String const
   DeckHost.Contracts.Icons.Timer : System.String const
   DeckHost.Contracts.Icons.Toggle : System.String const
@@ -112,6 +118,7 @@
   DeckHost.Contracts.Interfaces.IDevicePluginContext.ReportConnectionStatus(System.String deviceId, System.String state, System.String message) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDevicePluginContext.ReportInputEvent(System.String deviceId, System.String controlId, DeckHost.Contracts.Enums.InputCapabilities eventType, System.Int32 value) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDevicePluginContext.RequestRedraw(System.String deviceId) : System.Void
+  DeckHost.Contracts.Interfaces.IDeviceRelease.SetDeviceReleased(System.String deviceId, System.Boolean released) : System.Void abstract
   DeckHost.Contracts.Interfaces.IDeviceSettingActions.GetSettingActions(System.String deviceId) : System.Collections.Generic.IReadOnlyList<DeckHost.Contracts.Interfaces.DeviceSettingAction> abstract
   DeckHost.Contracts.Interfaces.IDeviceSettingActions.RunSettingAction(System.String deviceId, System.String actionId) : System.String abstract
   DeckHost.Contracts.Interfaces.IRenderContext.Clear(System.UInt32 argbColor) : System.Void abstract
@@ -870,6 +877,7 @@
   DeckHost.Contracts.VariableKeys.ExecutionCount : System.String const
   DeckHost.Contracts.VariableKeys.For(System.String deviceId, System.String controlId, System.String suffix) : System.String
   DeckHost.Contracts.VariableKeys.ForegroundApp : System.String const
+  DeckHost.Contracts.VariableKeys.ForegroundTitle : System.String const
   DeckHost.Contracts.VariableKeys.HardwareId : System.String const
   DeckHost.Contracts.VariableKeys.LastAction : System.String const
   DeckHost.Contracts.VariableKeys.LastActionAt : System.String const
@@ -941,6 +949,7 @@ interface DeckHost.Contracts.Interfaces.IDeviceModelCatalog
 interface DeckHost.Contracts.Interfaces.IDeviceOutput
 interface DeckHost.Contracts.Interfaces.IDevicePlugin
 interface DeckHost.Contracts.Interfaces.IDevicePluginContext
+interface DeckHost.Contracts.Interfaces.IDeviceRelease
 interface DeckHost.Contracts.Interfaces.IDeviceSettingActions
 interface DeckHost.Contracts.Interfaces.IRenderContext
 interface DeckHost.Contracts.Interfaces.IVariableStore

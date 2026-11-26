@@ -95,7 +95,7 @@ public static class VariableTypes
 public static class VariableCatalog
 {
     /// <summary>The variables DeckHost publishes itself; listed even before they have a value.</summary>
-    public static IReadOnlyList<string> SystemKeys { get; } = ["system.cpu", "system.memory", VariableKeys.ForegroundApp];
+    public static IReadOnlyList<string> SystemKeys { get; } = ["system.cpu", "system.memory", VariableKeys.ForegroundApp, VariableKeys.ForegroundTitle];
 
     /// <summary>Describes one store entry.</summary>
     public static VariableInfo Describe(string key, string? value)

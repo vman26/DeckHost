@@ -1365,7 +1365,7 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
                 ScheduleSave();
                 if (value && _foregroundAppWatcher.CurrentApp is { } app)
                 {
-                    OnForegroundAppChanged(app);
+                    OnForegroundAppChanged(app, _foregroundAppWatcher.CurrentTitle);
                 }
                 else if (!value)
                 {
@@ -1377,7 +1377,9 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
 
     public bool AutoSwitchSupported => Platform.ForegroundAppWatcher.IsSupported;
 
-    public string CurrentAppName => _foregroundAppWatcher.CurrentApp ?? "—";
+    public string CurrentAppName => _foregroundAppWatcher.CurrentApp is { } app
+        ? string.IsNullOrWhiteSpace(_foregroundAppWatcher.CurrentTitle) ? app : $"{app} | {_foregroundAppWatcher.CurrentTitle}"
+        : "—";
 
     public ProfileItemViewModel CreateProfile(string name, ProfileItemViewModel? copyFrom = null)
     {
@@ -1677,18 +1679,19 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         return candidate;
     }
 
-    private void OnForegroundAppChanged(string appName)
+    private void OnForegroundAppChanged(string appName, string? windowTitle)
     {
         OnPropertyChanged(nameof(CurrentAppName));
 
-        // Workflows can check which app is in front.
+        // Workflows can check which app is in front, and its window title.
         _deviceHostService.SetVariable(VariableKeys.ForegroundApp, appName);
+        _deviceHostService.SetVariable(VariableKeys.ForegroundTitle, windowTitle ?? string.Empty);
         if (!AutoSwitchEnabled || SelectedDevice is null)
         {
             return;
         }
 
-        var match = AutoProfileSelector.FindProfileForApp(Profiles.Select(static profile => profile.ToModel()), SelectedDevice.Id, appName);
+        var match = AutoProfileSelector.FindProfileForApp(Profiles.Select(static profile => profile.ToModel()), SelectedDevice.Id, appName, windowTitle);
         if (match is null)
         {
             ReturnToManualProfile();

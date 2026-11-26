@@ -1,0 +1,58 @@
+name: Device report
+description: "Tell us how DeckHost works with your deck, good or bad. Every report fills in the tested-hardware table in the docs."
+labels: [device-report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you! Only one N4 Pro has been checked by hand so far, so every report helps.
+        Close the vendor's own app (Elgato Stream Deck, MiraBox Stream Dock) before you try: only one program can drive a deck.
+  - type: input
+    id: model
+    attributes:
+      label: Device
+      description: The name on the Devices page (☰ → Devices), or the box.
+      placeholder: Stream Deck XL, StreamDock 293V3, Ajazz AKP153…
+    validations:
+      required: true
+  - type: input
+    id: usb
+    attributes:
+      label: USB ids (if DeckHost doesn't list it)
+      description: "Windows: Device Manager → Details → Hardware Ids. Linux: lsusb. macOS: System Information → USB."
+      placeholder: "0fd9:009a"
+  - type: input
+    id: version
+    attributes:
+      label: DeckHost version
+      description: ☰ → About.
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options: [Windows, macOS, Linux (X11), Linux (Wayland)]
+    validations:
+      required: true
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What works
+      description: Tick what you checked and what worked. Leave out what the device doesn't have.
+      options:
+        - label: It is found and listed when plugged in
+        - label: Every key shows its own picture, the right way up, in the right place
+        - label: Every key press arrives on the right key (Key ID action helps)
+        - label: Knobs turn the right way and press
+        - label: Touch strip or touch zones (taps and swipes)
+        - label: Small screens (info bar, side displays)
+        - label: Lights (LED rings, touch points)
+        - label: Brightness
+        - label: Unplug and plug in again
+        - label: Sleep and wake of the computer
+  - type: textarea
+    id: notes
+    attributes:
+      label: What didn't work, or anything odd
+      description: A photo of the device next to the DeckHost window helps for pictures in the wrong place.

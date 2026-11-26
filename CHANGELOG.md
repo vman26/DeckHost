@@ -12,6 +12,23 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 
 ### Added
 
+- New built-in actions: **Play Sound** and **Stop All Sounds** (a soundboard), **Microphone Mute** (toggle, mute, unmute or
+  push to talk, and the key shows whether the microphone is muted), **Timer** (a countdown or a stopwatch: press to start or
+  pause, hold to reset, a sound at zero), **Run Command** (a program with arguments, its result on the key and its output in a
+  variable) and **Web Request** (GET/POST/PUT/PATCH/DELETE for webhooks and local APIs).
+- **Hotkey** has presets (copy, paste, screenshot, new tab, …) with the right keys on Windows, macOS and Linux.
+- **Launch App** shows a green dot while the app runs, and can close it when you hold the key.
+- Profiles can switch by window title and by app patterns: `chrome | *YouTube*`, `* | *Zoom Meeting*`, `steam_app_*`.
+- **Desktop deck** (☰ and the tray): a small window, on top of the others if you like, with a deck you click.
+- The Web Deck shows a **QR code** for phones, with the pairing code in it.
+- DeckHost lets go of Stream Decks and USB devices you removed on the Devices page, so Elgato's app or Bitfocus Companion can use
+  them while DeckHost runs.
+- Stream Deck Neo: the info screen and the two touch points (with their lights) work. The Stream Deck Mini Discord edition and
+  the Stream Deck Modules (6, 15, 32) are supported; a Stream Deck Studio is recognized (not driven yet).
+- Keyboard and screen readers: Tab to the controls on the device and the actions in the list; Enter, Space, +/−, Delete and the
+  arrow keys work on them, and screen readers read each control's name and action.
+- A **Device report** issue form and a tested-hardware table in the docs.
+
 - Device support is now plugins like the others: MiraBox, Elgato Stream Deck, Web Deck, generic USB devices and the device simulator
   ship as bundled plugins in the Plugin Manager (you can turn each off there), and device plugins from other developers can be
   installed as packages (`"kind": "device"` in plugin.json).

@@ -109,6 +109,19 @@ Goes on: keys, knobs.
 | Switch to | choice | Options: Next profile, Previous profile, A specific profile, Do nothing. Default: Next profile. Can differ per input. |
 | Profile name | text | The profile's name as shown in the profile list. Can differ per input. |
 
+### Timer
+
+A countdown or a stopwatch: press to start or pause, hold to reset.
+
+Goes on: keys. Redraws every 500 ms. Not available as a Multi Action step.
+
+| Setting | Kind | |
+|---|---|---|
+| Counts | choice | Options: Down (countdown), Up (stopwatch). Default: Down (countdown). |
+| Minutes | number 0–180 | Default: 5. |
+| Seconds | number 0–59 | Default: 0. |
+| Sound at zero | file |  |
+
 ### Workflow
 
 Build what the control does from linked nodes: what starts it (press, tap, double press, hold, turn), actions, waits, If (a variable, the app in front, the time), toggles, repeats and variables.
@@ -116,6 +129,16 @@ Build what the control does from linked nodes: what starts it (press, tap, doubl
 Goes on: keys, knobs. Not available as a Multi Action step.
 
 ## Media Controls
+
+### Microphone Mute
+
+Mutes or unmutes the default microphone, or unmutes it only while you hold the key (push to talk).
+
+Goes on: keys. Redraws every 2 s.
+
+| Setting | Kind | |
+|---|---|---|
+| Press | choice | Options: Mutes or unmutes, Mutes, Unmutes, Unmutes while held (push to talk). Default: Mutes or unmutes. |
 
 ### Mute
 
@@ -147,6 +170,20 @@ Goes on: keys, knobs.
 |---|---|---|
 | Run when | choice | Which input on this control runs the action. Options: Pressed, Released, Held down (long press), Turned left, Turned right, Swiped left, Swiped right. Default: Pressed. |
 
+### Play Sound
+
+Plays a sound file (WAV, MP3, …), like a soundboard. Press again to stop it.
+
+Goes on: keys, knobs.
+
+| Setting | Kind | |
+|---|---|---|
+| Run when | choice | Which input on this control runs the action. Options: Pressed, Released, Held down (long press), Turned left, Turned right, Swiped left, Swiped right. Default: Pressed. |
+| Sound file | file |  |
+| Volume | number 0–100 % | Default: 100. |
+| Pressed while it plays | choice | Options: Stops it, Plays it again from the start. Default: Stops it. |
+| Output device (Linux, optional) | text | The PipeWire or PulseAudio sink name (wpctl status, pactl list short sinks). Windows and macOS play on the default device. |
+
 ### Previous Track
 
 Sends the Previous Track media key to the app that is playing.
@@ -160,6 +197,16 @@ Goes on: keys, knobs.
 ### Stop
 
 Sends the Stop media key to the app that is playing.
+
+Goes on: keys, knobs.
+
+| Setting | Kind | |
+|---|---|---|
+| Run when | choice | Which input on this control runs the action. Options: Pressed, Released, Held down (long press), Turned left, Turned right, Swiped left, Swiped right. Default: Pressed. |
+
+### Stop All Sounds
+
+Stops every sound that Play Sound keys are playing.
 
 Goes on: keys, knobs.
 
@@ -214,13 +261,14 @@ Goes on: keys, knobs.
 | Setting | Kind | |
 |---|---|---|
 | Run when | choice | Which input on this control runs the action. Options: Pressed, Released, Held down (long press), Turned left, Turned right, Swiped left, Swiped right. Default: Pressed. |
+| Shortcut | choice | A common shortcut, with the right keys on every system (Ctrl on Windows and Linux, Cmd on macOS). Options: My own keys, Copy, Cut, Paste, Undo, Redo, Select all, Save, Find, Screenshot (area), New tab, Close tab, Reopen closed tab, Switch app, Show desktop, Emoji picker. Default: My own keys. |
 | Keys | hotkey | Click Record and press the combination, or type it: Ctrl, Alt, Shift, Win plus one key (A-Z, 0-9, F1-F24, Enter, Tab, Esc, Space, arrows, Home, End, PageUp, PageDown, Delete, PrintScreen, media keys). |
 
 ### Launch App
 
 Starts a program, script or shortcut.
 
-Goes on: keys, knobs.
+Goes on: keys, knobs. Redraws every 2 s.
 
 | Setting | Kind | |
 |---|---|---|
@@ -228,6 +276,8 @@ Goes on: keys, knobs.
 | Program | file | An.exe, a shortcut (.lnk) or any file Windows can open. |
 | Arguments | text |  |
 | Start in | text |  |
+| Show a green dot while it runs | toggle | Default: true. |
+| Hold the key to close it | toggle | A short press then starts it when you let go; holding asks the app to close. Default: false. |
 
 ### Lock Computer
 
@@ -250,6 +300,21 @@ Goes on: keys, knobs.
 | Run when | choice | Which input on this control runs the action. Options: Pressed, Released, Held down (long press), Turned left, Turned right, Swiped left, Swiped right. Default: Pressed. |
 | Address or path | text |  |
 
+### Run Command
+
+Runs a program or script in the background and shows whether it worked; can save its output in a variable.
+
+Goes on: keys, knobs. Redraws every 1 s.
+
+| Setting | Kind | |
+|---|---|---|
+| Run when | choice | Which input on this control runs the action. Options: Pressed, Released, Held down (long press), Turned left, Turned right, Swiped left, Swiped right. Default: Pressed. |
+| Program | file | Runs the program itself, not a shell. For shell features (pipes, &&) run the shell: cmd with /c …, or sh with -c … |
+| Arguments | text | Separated by spaces; put an argument with spaces in double quotes. |
+| Start in | text |  |
+| Stop it after | number 1–600 s | Default: 30. |
+| Save the output in | variable | The first 4000 characters of what it prints, for Show Variable and workflows. |
+
 ### System Info
 
 Shows CPU, memory, disk or uptime, updated every second.
@@ -271,3 +336,19 @@ Goes on: keys, knobs.
 |---|---|---|
 | Run when | choice | Which input on this control runs the action. Options: Pressed, Released, Held down (long press), Turned left, Turned right, Swiped left, Swiped right. Default: Pressed. |
 | Text | text |  |
+
+### Web Request
+
+Sends a GET, POST, PUT or DELETE to an address (webhooks, Home Assistant, local APIs) and can save the answer in a variable.
+
+Goes on: keys, knobs. Redraws every 1 s.
+
+| Setting | Kind | |
+|---|---|---|
+| Run when | choice | Which input on this control runs the action. Options: Pressed, Released, Held down (long press), Turned left, Turned right, Swiped left, Swiped right. Default: Pressed. |
+| Method | choice | Options: GET, POST, PUT, PATCH, DELETE. Default: POST. |
+| Address | text |  |
+| Body | text | Sent with POST, PUT and PATCH. |
+| Content type | choice | Options: JSON, Text, Form. Default: JSON. |
+| Headers | secret | One per line, or several separated by ';;'. Kept like a password. |
+| Save the answer in | variable |  |

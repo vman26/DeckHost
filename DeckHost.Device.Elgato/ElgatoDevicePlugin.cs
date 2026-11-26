@@ -13,8 +13,44 @@ namespace DeckHost.Device.Elgato;
 /// app, which otherwise holds the device). Devices are found and followed as they are plugged in
 /// and out; each one seen before stays listed while unplugged, so its profiles can be edited.
 /// </summary>
-public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog, IDeviceSettingActions
+public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigurableDevicePlugin, IDeviceFirmware, IDeviceModelCatalog, IDeviceSettingActions, IDeviceRelease
 {
+    /// <summary>Lets go of a deck (it shows its own logo again) so another app can open it, or takes it back.</summary>
+    public void SetDeviceReleased(string deviceId, bool released)
+    {
+        lock (_sync)
+        {
+            if (!_sessions.TryGetValue(deviceId, out var session) || session.Released == released)
+            {
+                return;
+            }
+
+            session.Released = released;
+            if (released && session.Stream is { } stream)
+            {
+                lock (session.WriteLock)
+                {
+                    try
+                    {
+                        stream.SetFeature(StreamDeckProtocol.ResetReport(session.Model));
+                    }
+                    catch (Exception ex) when (ex is IOException or TimeoutException or ObjectDisposedException)
+                    {
+                    }
+                }
+
+                session.Close();
+                _context?.Log("Information", $"{session.Model.Name} {session.Serial} is free for other apps now.");
+            }
+        }
+
+        if (!released)
+        {
+            // Open it again (off the caller's thread).
+            OnDeviceListChanged(this, null!);
+        }
+    }
+
     public const string ForgetActionId = "forget";
 
     /// <summary>An unplugged deck seen before can be forgotten: it leaves the device list until it's plugged in again.</summary>
@@ -67,6 +103,7 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
     private readonly string _directory;
     private IReadOnlyCollection<DeviceDefinition> _devices = [];
     private IDevicePluginContext? _context;
+    private readonly HashSet<int> _warnedUnsupported = [];
     private int _refreshQueued;
     private bool _disposed;
 
@@ -164,6 +201,11 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
             var jpeg = StreamDeckProtocol.EncodeJpeg(rgba, width, height, zoneWidth, model.TouchStripHeight, flip: false);
             reports = StreamDeckProtocol.TouchStripReports(zone * zoneWidth, 0, zoneWidth, model.TouchStripHeight, jpeg);
         }
+        else if (controlId == StreamDeckModel.InfoScreenId && model.InfoScreenWidth > 0)
+        {
+            var jpeg = StreamDeckProtocol.EncodeJpeg(rgba, width, height, model.InfoScreenWidth, model.InfoScreenHeight, model.FlipKeyImages);
+            reports = StreamDeckProtocol.InfoScreenReports(jpeg);
+        }
         else
         {
             error = null;
@@ -173,11 +215,32 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
         return Write(session, reports, out error);
     }
 
-    /// <summary>Stream Decks have no RGB LEDs.</summary>
+    /// <summary>Only the Neo's touch points have RGB lights; other controls ignore it.</summary>
     public bool TrySetLight(string deviceId, string controlId, byte red, byte green, byte blue, out string? error)
     {
         error = null;
-        return true;
+        if (Find(deviceId) is not { Stream: not null } session
+            || session.Model.TouchPoints == 0
+            || !controlId.StartsWith("button.", StringComparison.Ordinal)
+            || !int.TryParse(controlId.AsSpan(7), NumberStyles.None, CultureInfo.InvariantCulture, out var point)
+            || point >= session.Model.TouchPoints)
+        {
+            return true;
+        }
+
+        lock (session.WriteLock)
+        {
+            try
+            {
+                session.Stream?.SetFeature(StreamDeckProtocol.TouchPointColorReport(session.Model, point, red, green, blue));
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or TimeoutException or ObjectDisposedException)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
     }
 
     public void Clear(string deviceId)
@@ -195,6 +258,11 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
         for (var key = 0; key < model.KeyCount; key++)
         {
             Write(session, model.Generation == 1 ? StreamDeckProtocol.Gen1KeyImageReports(model, key, keyImage) : StreamDeckProtocol.KeyImageReports(key, keyImage), out _);
+        }
+
+        if (model.InfoScreenWidth > 0)
+        {
+            Write(session, StreamDeckProtocol.InfoScreenReports(StreamDeckProtocol.EncodeJpeg(black, 1, 1, model.InfoScreenWidth, model.InfoScreenHeight, flip: false)), out _);
         }
 
         if (model.TouchStripWidth > 0)
@@ -269,9 +337,9 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
             {
                 if (StreamDeckModel.Find(device.ProductID) is not { } model)
                 {
-                    if (StreamDeckModel.NotYetSupported.TryGetValue(device.ProductID, out var name))
+                    if (StreamDeckModel.NotYetSupported.TryGetValue(device.ProductID, out var name) && _warnedUnsupported.Add(device.ProductID))
                     {
-                        _context?.Log("Warning", $"{name} is not supported yet.");
+                        _context?.Log("Warning", $"{name} is not supported yet. Please open an issue with the device so it can be added.");
                     }
 
                     continue;
@@ -287,7 +355,13 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
                     changed = true;
                 }
 
-                if (session.Stream is not null)
+                if (!session.Present)
+                {
+                    session.Present = true;
+                    changed |= session.Released;
+                }
+
+                if (session.Stream is not null || session.Released)
                 {
                     continue;
                 }
@@ -312,6 +386,12 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
                 connected.Add((session, $"{model.Name} {serial}"));
                 var reader = new Thread(() => ReadLoop(session, stream)) { IsBackground = true, Name = $"Stream Deck {serial}" };
                 reader.Start();
+            }
+
+            foreach (var session in _sessions.Values.Where(session => session.Present && !present.Contains(session.DeviceId)))
+            {
+                session.Present = false;
+                changed |= session.Released;
             }
 
             foreach (var session in _sessions.Values.Where(session => session.Stream is not null && !present.Contains(session.DeviceId)))
@@ -348,7 +428,7 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
     private void ReadLoop(Session session, HidStream stream)
     {
         var buffer = new byte[Math.Max(512, stream.Device.GetMaxInputReportLength())];
-        var keysDown = new bool[session.Model.KeyCount];
+        var keysDown = new bool[session.Model.KeyCount + session.Model.TouchPoints];
         var dialsDown = new bool[Math.Max(1, session.Model.Dials)];
         try
         {
@@ -362,7 +442,7 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
 
                 foreach (var input in StreamDeckProtocol.Parse(buffer.AsSpan(0, length), session.Model, keysDown, dialsDown))
                 {
-                    if (input.ControlId.StartsWith("key.", StringComparison.Ordinal))
+                    if (input.ControlId.StartsWith("key.", StringComparison.Ordinal) || input.ControlId.StartsWith("button.", StringComparison.Ordinal))
                     {
                         TrackLongPress(session.DeviceId, input.ControlId, input.Event);
                     }
@@ -480,7 +560,7 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
             .OrderBy(static session => session.DeviceId, StringComparer.Ordinal)
             .Select(static session => session.Model.Describe(
                 session.DeviceId,
-                session.Stream is not null,
+                session.Stream is not null || (session.Released && session.Present),
                 session.Serial,
                 session.Firmware,
                 session.Firmware is { } firmware ? $"Serial {session.Serial}, firmware {firmware}" : $"Serial {session.Serial}"))];
@@ -552,6 +632,12 @@ public sealed class ElgatoDevicePlugin : IDevicePlugin, IDeviceOutput, IConfigur
         public Lock WriteLock { get; } = new();
 
         public HidStream? Stream { get; private set; }
+
+        /// <summary>Plugged in (whether or not DeckHost has it open).</summary>
+        public bool Present { get; set; }
+
+        /// <summary>Let go for other apps: not opened while plugged in.</summary>
+        public bool Released { get; set; }
 
         /// <summary>The firmware version the deck reported when it connected.</summary>
         public string? Firmware { get; set; }

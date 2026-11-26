@@ -136,6 +136,7 @@
 						<StackPanel Spacing="10">
 							<TextBlock Classes="section" Text="SWITCH TO THIS PROFILE WHEN THESE APPS ARE IN FRONT" />
 							<TextBlock Classes="hint" Text="When the focused app isn't listed in any profile, DeckHost goes back to the profile you picked yourself. DeckHost's own windows never trigger a switch." />
+							<TextBlock Classes="hint" Text="Add a window title after a bar to switch on it: chrome | *YouTube* (only YouTube tabs), * | *Zoom Meeting* (any app). * matches any text and ? one character, also in app names: steam_app_* for every Steam game. A rule with a title wins over one without. Window titles are read on Windows and Linux (X11)." />
 							<ItemsControl ItemsSource="{Binding EditingProfile.AutoSwitchApps}">
 								<ItemsControl.ItemsPanel>
 									<ItemsPanelTemplate>
@@ -169,7 +170,7 @@
 								<Button Grid.Column="2" Content="↻" ToolTip.Tip="Refresh the list" Command="{Binding RefreshRunningAppsCommand}" />
 							</Grid>
 							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-								<TextBox Text="{Binding NewAppName, Mode=TwoWay}" PlaceholderText="Or type a process name, e.g. obs64 or chrome" />
+								<TextBox Text="{Binding NewAppName, Mode=TwoWay}" PlaceholderText="Or type a process name or a rule: obs64, chrome | *YouTube*, steam_app_*" />
 								<Button Grid.Column="1" Content="Add" Command="{Binding AddAppCommand}" />
 							</Grid>
 						</StackPanel>

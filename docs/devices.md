@@ -38,21 +38,34 @@ DeckHost talks to Stream Decks directly over USB, without Elgato's software. **C
 
 | Model | Status |
 |---|---|
-| Stream Deck MK.2, Original v2 | supported |
+| Stream Deck MK.2, Original v2, MK.2 Scissor | supported |
 | Stream Deck XL | supported |
-| Stream Deck Neo | supported |
+| Stream Deck Neo | supported: 8 keys, the info screen and the two touch points with their lights |
 | Stream Deck + (dials and touch strip) | supported |
 | Stream Deck Pedal | supported |
-| First-edition Stream Deck, Stream Deck Mini | supported (older protocol, not tested on hardware yet) |
+| Stream Deck Module 15 and 32 | supported (same protocol as the MK.2 and XL) |
+| First-edition Stream Deck, Stream Deck Mini (also the Discord edition), Module 6 | supported (older protocol) |
+| Stream Deck Studio | recognized, not driven yet: the log says so |
+| Stream Deck + XL, Network Dock, Galleon 100 SD | not yet |
 
-This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't (**☰ → Help and support → Report a problem**).
+This support was written from the protocol and isn't tested on every model yet. Please report what works and what doesn't with a [device report](https://github.com/vman26/DeckHost/issues/new?template=device-report.yml).
+
+## Tested hardware
+
+What people have checked on real hardware, from [device reports](https://github.com/vman26/DeckHost/issues?q=label%3Adevice-report). A model that isn't here works from its published protocol or SDK, and its Devices page card says *Preview*.
+
+| Device | Windows | macOS | Linux | Notes |
+|---|---|---|---|---|
+| MiraBox N4 Pro | ✅ | ✅ | ✅ | keys, touch strip, knobs, LED rings, brightness, vibration, idle screen |
+
+✅ works · 🟡 works with problems (see the notes) · ❌ doesn't work · blank: not reported yet
 
 ## Devices you no longer use
 
 **☰ → Devices** (also **N devices…** on the Plugins page) lists every device DeckHost knows, plugged in or not: what each one is and can do, the plugin that connects it, its firmware, and **Settings…** for its own settings. It's also where you take one out of the list.
 
 - **Your devices** are the ones in the header's device picker. **Remove** takes one out, whether or not it is plugged in, after you confirm. Its profiles are kept, so adding it again brings them back. DeckHost always keeps one device in the list.
-- **Removed** devices stay out of the list. A removed device that is plugged in again after you unplugged it shows up under **Found**, with **Add** and **Keep ignoring**. **Add back** is there for the others.
+- **Removed** devices stay out of the list. DeckHost lets go of a removed Stream Deck or USB device (from the device creator), so another app such as Elgato's Stream Deck app or Bitfocus Companion can use it while DeckHost keeps running; **Add back** takes it again. MiraBox devices are still held by MiraBox's SDK while DeckHost runs. A removed device that is plugged in again after you unplugged it shows up under **Found**, with **Add** and **Keep ignoring**. **Add back** is there for the others.
 - **Found** devices are new devices waiting for your decision. By default DeckHost adds a new device by itself when it is plugged in; switch **Add new devices by themselves** off and a new device waits under **Found** instead (a **N new devices** button appears in the header).
 
 DeckHost remembers every MiraBox and Stream Deck it has seen, so you can edit them unplugged (and lists an N4 Pro before anything is plugged in). **Forget this device** on a device's settings page still works for an unplugged device; Devices from the device creator are also removed on its page.
@@ -126,6 +139,14 @@ Switch on **Use HTTPS (encrypted)** in the Web Deck's settings to serve the page
 - The certificate isn't signed by anyone, so a phone or browser warns the first time. The fingerprint shown next to the setting is what to compare with the one the warning page shows before you continue.
 - Browsers only offer to **install the deck as an app** (a full-screen icon of its own that opens the deck directly) over HTTPS or on this computer. DeckHost serves the app manifest, its icon and a small service worker for it; the worker only keeps the page itself and never the deck or the pairing. Chrome and Edge accept an app from a certificate you have clicked through only on some systems; Safari on an iPhone only does it once the certificate is installed and trusted in the phone's settings. Where the install button doesn't show up, **Add to Home Screen** still works.
 - Plain HTTP stays the default, and a page at an `http://` address of the network can't be installed (that is the browsers' rule, not a DeckHost limit).
+
+### A deck on your desktop
+
+**☰ → Desktop deck** (also in the tray menu) opens a small window with a deck: click its keys like a Stream Deck's, scroll over a knob to turn it. It shows the Web Deck by default, so it works without any hardware (set its columns and rows in the Web Deck's settings); pick any other device at the top to click its keys from the screen. **On top** keeps it above other windows. On Windows the tray item opens it next to the mouse pointer.
+
+### Connecting a phone with a QR code
+
+With **Phones and tablets on this network** chosen, **Show a QR code for phones** on the Web Deck's settings page opens a page on this computer with a QR code. Point the phone's camera at it: the deck opens with the pairing code filled in. The page is only served to this computer, since it shows the code.
 
 ## Linux: the device rule
 

@@ -121,6 +121,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
     private volatile DeviceDefinition[] _devicesSnapshot = [];
     private readonly DeviceRoster? _roster;
     private volatile DeviceRosterEntry[] _rosterEntries = [];
+    private readonly Dictionary<string, bool> _released = new(StringComparer.OrdinalIgnoreCase);
     private Action? _rosterChanged;
     private volatile DeviceProfile[] _profilesSnapshot = [];
     private int _startRequested;
@@ -1400,6 +1401,7 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
                 // Only the devices the user has in the list are used; the others wait on the Devices page.
                 var listing = _roster?.Decide(device.Id, device.IsConnected) ?? DeviceListing.Listed;
                 entries.Add(new DeviceRosterEntry(device.Id, device.Name, plugin.Name, device.IsConnected, listing));
+                ReleaseUnlisted(plugin, device.Id, listing != DeviceListing.Listed);
                 if (listing != DeviceListing.Listed)
                 {
                     continue;
@@ -1458,6 +1460,25 @@ public sealed class DeviceHostService : IDeviceHostService, IDeviceInputSink
         if (raiseEvent)
         {
             SafeInvoke(() => DevicesChanged?.Invoke());
+        }
+    }
+
+    /// <summary>A device that isn't in the list is let go, so other apps can use it (plugins with <see cref="IDeviceRelease"/>).</summary>
+    private void ReleaseUnlisted(IDevicePlugin plugin, string deviceId, bool release)
+    {
+        if (plugin is not IDeviceRelease releasable || (_released.TryGetValue(deviceId, out var was) ? was == release : !release))
+        {
+            return;
+        }
+
+        _released[deviceId] = release;
+        try
+        {
+            releasable.SetDeviceReleased(deviceId, release);
+        }
+        catch (Exception ex)
+        {
+            Log("Warning", $"'{plugin.Name}' could not {(release ? "let go of" : "take back")} {deviceId}: {ex.Message}");
         }
     }
 

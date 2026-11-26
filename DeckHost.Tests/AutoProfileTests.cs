@@ -93,3 +93,63 @@ public class AutoProfileTests
         }
     }
 }
+
+public sealed class AutoSwitchRuleTests
+{
+    private const string Device = "dev";
+    private const string ChromeId = "chrome";
+    private const string YouTubeId = "youtube";
+    private const string MeetingId = "meeting";
+    private const string GamesId = "games";
+
+    private static readonly DeviceProfile[] Profiles =
+    [
+        new(ChromeId, "Chrome", Device, [], ["chrome"]),
+        new(YouTubeId, "YouTube", Device, [], ["chrome | *YouTube*"]),
+        new(MeetingId, "Meetings", Device, [], ["* | *Zoom Meeting*"]),
+        new(GamesId, "Games", Device, [], ["steam_app_*"]),
+    ];
+
+    [TestCase("chrome", "Cats - YouTube - Google Chrome", YouTubeId)]
+    [TestCase("chrome", "Inbox - Google Chrome", ChromeId)]
+    [TestCase("chrome", null, ChromeId)]
+    [TestCase("zoom", "Zoom Meeting", MeetingId)]
+    [TestCase("steam_app_570", "Dota 2", GamesId)]
+    public void FindProfileForApp_TitleAndPatternRules_PicksTheBestFit(string app, string? title, string expectedProfileId)
+    {
+        // Arrange (the profiles above)
+
+        // Act
+        var profile = AutoProfileSelector.FindProfileForApp(Profiles, Device, app, title);
+
+        // Assert
+        Assert.That(profile?.Id, Is.EqualTo(expectedProfileId));
+    }
+
+    [TestCase("Chrome.exe|*YouTube*", "chrome | *YouTube*")]
+    [TestCase("OBS64", "obs64")]
+    [TestCase(" | *Meeting*", "* | *Meeting*")]
+    public void NormalizeRule_ATypedRule_IsStoredTheSameWayEveryTime(string typed, string expected)
+    {
+        // Arrange (the typed rule)
+
+        // Act
+        var rule = AutoProfileSelector.NormalizeRule(typed);
+
+        // Assert
+        Assert.That(rule, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Wildcard_RegexCharactersInTheTitle_AreTakenLiterally()
+    {
+        // Arrange
+        const string Pattern = "Report (final).docx*";
+
+        // Act
+        var matches = AutoSwitchRule.Wildcard(Pattern, "Report (final).docx - Word");
+
+        // Assert
+        Assert.That(matches, Is.True);
+    }
+}

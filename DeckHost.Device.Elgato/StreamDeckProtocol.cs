@@ -20,7 +20,25 @@ public static class StreamDeckProtocol
     private const int StripHeaderLength = 16;
 
     /// <summary>The reports that set key <paramref name="key"/> to a JPEG: [0x02, 0x07, key, last, length, page].</summary>
-    public static IEnumerable<byte[]> KeyImageReports(int key, byte[] jpeg)
+    public static IEnumerable<byte[]> KeyImageReports(int key, byte[] jpeg) => PagedImageReports(0x07, key, jpeg);
+
+    /// <summary>The reports that set the Neo's info screen to a JPEG: [0x02, 0x0B, 0, last, length, page].</summary>
+    public static IEnumerable<byte[]> InfoScreenReports(byte[] jpeg) => PagedImageReports(0x0B, 0, jpeg);
+
+    /// <summary>Feature report: the color of a touch point (the Neo's arrows), addressed by its number after the keys.</summary>
+    public static byte[] TouchPointColorReport(StreamDeckModel model, int point, byte red, byte green, byte blue)
+    {
+        var report = new byte[32];
+        report[0] = 0x03;
+        report[1] = 0x06;
+        report[2] = (byte)(model.KeyCount + point);
+        report[3] = red;
+        report[4] = green;
+        report[5] = blue;
+        return report;
+    }
+
+    private static IEnumerable<byte[]> PagedImageReports(byte command, int target, byte[] jpeg)
     {
         var payload = ReportLength - KeyHeaderLength;
         var page = 0;
@@ -29,8 +47,8 @@ public static class StreamDeckProtocol
             var length = Math.Min(payload, jpeg.Length - offset);
             var report = new byte[ReportLength];
             report[0] = 0x02;
-            report[1] = 0x07;
-            report[2] = (byte)key;
+            report[1] = command;
+            report[2] = (byte)target;
             report[3] = (byte)(offset + length >= jpeg.Length ? 1 : 0);
             report[4] = (byte)(length & 0xFF);
             report[5] = (byte)(length >> 8);
@@ -247,13 +265,15 @@ public static class StreamDeckProtocol
         switch (report[1])
         {
             case 0x00:
-                for (var key = 0; key < model.KeyCount && 4 + key < report.Length; key++)
+                // Keys, then the touch points (Neo).
+                for (var key = 0; key < model.KeyCount + model.TouchPoints && key < keysDown.Length && 4 + key < report.Length; key++)
                 {
                     var down = report[4 + key] != 0;
                     if (down != keysDown[key])
                     {
                         keysDown[key] = down;
-                        events.Add(new StreamDeckInput($"key.{key}", down ? InputCapabilities.Press : InputCapabilities.Release, down ? 1 : 0));
+                        var id = key < model.KeyCount ? $"key.{key}" : StreamDeckModel.TouchPointId(key - model.KeyCount);
+                        events.Add(new StreamDeckInput(id, down ? InputCapabilities.Press : InputCapabilities.Release, down ? 1 : 0));
                     }
                 }
 

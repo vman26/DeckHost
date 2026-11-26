@@ -20,9 +20,13 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Clock` | A clock face with hands. |
 | `const string Counter` |  |
 | `const string Folder` | A folder. |
+| `const string Globe` | A globe, for web requests. |
 | `const string KeyLogic` | A key with one, two and a long press, for Key Logic. |
 | `const string Keyboard` |  |
 | `const string Lock` |  |
+| `const string Microphone` | A microphone, for Microphone Mute. |
+| `const string MicrophoneOff` | A crossed-out microphone. |
+| `const string Music` | A music note, for sounds. |
 | `const string Muted` |  |
 | `const string Next` |  |
 | `const string OpenLink` |  |
@@ -35,8 +39,10 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Speaker` |  |
 | `const string Stack` |  |
 | `const string Stop` |  |
+| `const string Stopwatch` | A stopwatch, for Timer. |
 | `const string Swipe` | A hand swiping left and right. |
 | `const string SwitchProfile` |  |
+| `const string Terminal` | A terminal window, for Run Command. |
 | `const string Text` |  |
 | `const string Timer` | An hourglass. |
 | `const string Toggle` | A switch, for a Multi Action Switch. |
@@ -72,6 +78,7 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `const string Counter` |  |
 | `const string ExecutionCount` |  |
 | `const string ForegroundApp` | The name of the app in the foreground (where the platform reports it). |
+| `const string ForegroundTitle` | The title of the focused window, where the system lets DeckHost read it (Windows, Linux X11). |
 | `const string HardwareId` |  |
 | `const string LastAction` |  |
 | `const string LastActionAt` |  |
@@ -263,6 +270,14 @@ Everything in `DeckHost.Contracts` (MIT), the library plugins are built against.
 | `void ReportConnectionStatus(string deviceId, string state, string message)` |  |
 | `void ReportInputEvent(string deviceId, string controlId, InputCapabilities eventType, int value)` |  |
 | `void RequestRedraw(string deviceId)` | Asks the host to send every control image again, e.g. after the plugin drew something over them (a full-screen background). Thread-safe; the redraw happens on the host's worker. |
+
+### IDeviceRelease
+
+*interface* — Optional for a device plugin: let go of a device so other software (the vendor's app, Bitfocus Companion, …) can open it. DeckHost releases every device the user removed or hasn't added on the Devices page, and takes it back when it is added again.
+
+| Member | |
+|---|---|
+| `void SetDeviceReleased(string deviceId, bool released)` | Closes the device and doesn't open it again while `released` (true), or opens it again (false). A released device that is plugged in still reports `IsConnected`, so DeckHost can offer to add it back. Called on the host's worker: it must not block for long or raise `DevicesChanged` synchronously. |
 
 ### IDeviceSettingActions
 

@@ -49,6 +49,8 @@ internal static class Palette
     public static readonly (uint, uint) Profiles = (0xFFFB923C, 0xFFDB2777);
     public static readonly (uint, uint) Multi = (0xFF818CF8, 0xFFA855F7);
     public static readonly (uint, uint) Clock = (0xFF4F46E5, 0xFF1E1B4B);
+    public static readonly (uint, uint) Sound = (0xFFF87171, 0xFFBE185D);
+    public static readonly (uint, uint) Tools = (0xFF2DD4BF, 0xFF0F766E);
 }
 
 /// <summary>Knob: turn for volume, press to mute. Where it has a display it shows the level.</summary>

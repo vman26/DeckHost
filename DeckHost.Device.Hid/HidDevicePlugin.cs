@@ -12,8 +12,33 @@ namespace DeckHost.Device.Hid;
 /// when its hardware is plugged in it is opened and its reports become key presses and knob turns.
 /// These devices only send input: they have no screens or lights DeckHost could drive.
 /// </summary>
-public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmware, IDeviceModelCatalog, IHidDescriptionStore
+public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmware, IDeviceModelCatalog, IHidDescriptionStore, IDeviceRelease
 {
+    private readonly HashSet<string> _released = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _present = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Lets go of a device so another program can open it, or takes it back.</summary>
+    public void SetDeviceReleased(string deviceId, bool released)
+    {
+        lock (_sync)
+        {
+            if (!(released ? _released.Add(deviceId) : _released.Remove(deviceId)))
+            {
+                return;
+            }
+
+            if (released && _sessions.TryGetValue(deviceId, out var session) && session.Stream is not null)
+            {
+                session.Close();
+            }
+        }
+
+        if (!released)
+        {
+            OnDeviceListChanged(this, null!);
+        }
+    }
+
     /// <summary>Every device described in the device creator (for the device simulator).</summary>
     public IReadOnlyList<DeviceDefinition> DescribeModels() => [.. Devices.Select(static device => device with { IsConnected = false })];
 
@@ -259,6 +284,11 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmw
             {
                 var description = session.Description;
                 var match = hardware.FirstOrDefault(device => device.VendorID == description.VendorId && device.ProductID == description.ProductId && Matches(device, description));
+                if ((match is not null ? _present.Add(session.DeviceId) : _present.Remove(session.DeviceId)) && _released.Contains(session.DeviceId))
+                {
+                    changed = true;
+                }
+
                 if (match is null)
                 {
                     if (session.Stream is not null)
@@ -271,7 +301,7 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmw
                     continue;
                 }
 
-                if (session.Stream is not null)
+                if (session.Stream is not null || _released.Contains(session.DeviceId))
                 {
                     continue;
                 }
@@ -403,11 +433,11 @@ public sealed class HidDevicePlugin : IDevicePlugin, IDeviceOutput, IDeviceFirmw
     private IReadOnlyCollection<DeviceDefinition> BuildDefinitions() =>
         [.. _sessions.Values
             .OrderBy(static session => session.Description.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(static session => new DeviceDefinition(
+            .Select(session => new DeviceDefinition(
                 session.DeviceId,
                 session.Description.Name,
                 session.Description.PhysicalControls(),
-                session.Stream is not null,
+                session.Stream is not null || (_released.Contains(session.DeviceId) && _present.Contains(session.DeviceId)),
                 $"USB {session.Description.VendorId:X4}:{session.Description.ProductId:X4}")
             {
                 Identity = new DeviceIdentity(Model: session.Description.Name, Connection: $"USB {session.Description.VendorId:X4}:{session.Description.ProductId:X4}"),

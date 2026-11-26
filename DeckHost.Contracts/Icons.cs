@@ -67,4 +67,22 @@ public static class Icons
 
     /// <summary>Two nodes and a link.</summary>
     public const string Workflow = "M3 3h7v7H3Z M14 14h7v7h-7Z M10 5.5h4a3.5 3.5 0 0 1 3.5 3.5v5h-2V9A1.5 1.5 0 0 0 14 7.5h-4Z";
+
+    /// <summary>A microphone, for Microphone Mute.</summary>
+    public const string Microphone = "M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z M5 10h2a5 5 0 0 0 10 0h2a7 7 0 0 1-14 0Z M11 17h2v3h3v2H8v-2h3Z";
+
+    /// <summary>A crossed-out microphone.</summary>
+    public const string MicrophoneOff = Microphone + " M3.4 2L22 20.6L20.6 22L2 3.4Z";
+
+    /// <summary>A music note, for sounds.</summary>
+    public const string Music = "M9 4l11-2v13.5a3 3 0 1 1-2-2.8V6.4L11 7.6V17.5a3 3 0 1 1-2-2.8Z";
+
+    /// <summary>A stopwatch, for Timer.</summary>
+    public const string Stopwatch = "M12 5a8 8 0 1 1 0 16a8 8 0 1 1 0-16Z M12 7a6 6 0 1 0 0 12a6 6 0 1 0 0-12Z M10 1h4v2h-4Z M11 9h2v5h-2Z";
+
+    /// <summary>A terminal window, for Run Command.</summary>
+    public const string Terminal = "M2 4h20v16H2Z M4 6v12h16V6Z M6 9l1.4-1.4L11.8 12l-4.4 4.4L6 15l3-3Z M12 15h6v2h-6Z";
+
+    /// <summary>A globe, for web requests.</summary>
+    public const string Globe = "M12 2a10 10 0 1 1 0 20a10 10 0 1 1 0-20Z M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16Z M11 4h2v16h-2Z M4 11h16v2H4Z";
 }

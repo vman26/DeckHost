@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 
 namespace DeckHost.App.SystemPlugins;
 
@@ -21,13 +22,69 @@ internal sealed class LaunchAppAction() : DeckActionBase(
     private const string PathKey = "path";
     private const string ArgumentsKey = "arguments";
     private const string WorkingDirectoryKey = "workingDirectory";
+    private const string ShowRunningKey = "showRunning";
+    private const string HoldToCloseKey = "holdToClose";
+    private const uint RunningDotColor = 0xFF22C55E;
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _pressed = new(StringComparer.Ordinal);
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
         new(PathKey, "Program", ActionSettingKind.FilePath, Placeholder: @"C:\Program Files\App\app.exe", Description: "An .exe, a shortcut (.lnk) or any file Windows can open."),
         new(ArgumentsKey, "Arguments", Placeholder: "Optional"),
         new(WorkingDirectoryKey, "Start in", Placeholder: "Optional folder"),
+        new(ShowRunningKey, "Show a green dot while it runs", ActionSettingKind.Toggle, "true"),
+        new(HoldToCloseKey, "Hold the key to close it", ActionSettingKind.Toggle, "false", "A short press then starts it when you let go; holding asks the app to close."),
     ];
+
+    public override TimeSpan? RefreshInterval => TimeSpan.FromSeconds(2);
+
+    private static string StateKey(ActionContext context) => $"{context.DeviceId}|{context.ControlId}";
+
+    /// <summary>With "Hold to close": a press waits; a hold closes the app, a release before it starts it.</summary>
+    protected override bool HandleInput(ActionContext context)
+    {
+        if (!context.Settings.GetBool(HoldToCloseKey) || context.Settings.Get(TriggerKey, "press") != "press")
+        {
+            return false;
+        }
+
+        switch (context.EventType)
+        {
+            case InputCapabilities.Press:
+                _pressed[StateKey(context)] = true;
+                return true;
+            case InputCapabilities.LongPress:
+                if (_pressed.TryRemove(StateKey(context), out _))
+                {
+                    var name = RunningApps.ProcessName(context.Settings.Get(PathKey));
+                    RunInBackground(context, () => RunningApps.Close(name));
+                }
+
+                return true;
+            case InputCapabilities.Release:
+                if (_pressed.TryRemove(StateKey(context), out _))
+                {
+                    RunNow(context);
+                }
+
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public override void Render(IRenderContext context)
+    {
+        base.Render(context);
+        if (context.IsCompact || !context.Settings.GetBool(ShowRunningKey, true) || !RunningApps.IsRunning(RunningApps.ProcessName(context.Settings.Get(PathKey))))
+        {
+            return;
+        }
+
+        var size = Math.Max(8, context.Width * 0.11);
+        context.FillRoundedRect(context.Width - size - (size * 0.6), size * 0.6, size, size, size / 2, RunningDotColor);
+    }
 
     protected override void Run(ActionContext context)
     {
@@ -136,15 +193,25 @@ internal sealed class HotkeyAction() : DeckActionBase(
     "Presses a key combination in the active app.")
 {
     private const string KeysKey = "keys";
+    private const string PresetKey = "preset";
+    private const string Custom = "custom";
 
     protected override IReadOnlyList<ActionSettingDefinition> OwnSettings { get; } =
     [
-        new(KeysKey, "Keys", ActionSettingKind.Hotkey, Placeholder: "Ctrl+Shift+M", Description: "Click Record and press the combination, or type it: Ctrl, Alt, Shift, Win plus one key (A-Z, 0-9, F1-F24, Enter, Tab, Esc, Space, arrows, Home, End, PageUp, PageDown, Delete, PrintScreen, media keys)."),
+        new(PresetKey, "Shortcut", ActionSettingKind.Choice, Custom, "A common shortcut, with the right keys on every system (Ctrl on Windows and Linux, Cmd on macOS).",
+            [new(Custom, "My own keys"), .. HotkeyPresets.All.Select(static preset => new ActionSettingOption(preset.Id, preset.Label))]),
+        new(KeysKey, "Keys", ActionSettingKind.Hotkey, Placeholder: "Ctrl+Shift+M", Description: "Click Record and press the combination, or type it: Ctrl, Alt, Shift, Win plus one key (A-Z, 0-9, F1-F24, Enter, Tab, Esc, Space, arrows, Home, End, PageUp, PageDown, Delete, PrintScreen, media keys).")
+        {
+            ShowWhen = new(PresetKey, Custom),
+        },
     ];
+
+    private static string KeysOf(ActionSettings settings) =>
+        HotkeyPresets.Find(settings.Get(PresetKey, Custom)) is { } preset ? preset.KeysHere : settings.Get(KeysKey);
 
     protected override void Run(ActionContext context)
     {
-        var keys = context.Settings.Get(KeysKey);
+        var keys = KeysOf(context.Settings);
         RunQueued(context, () =>
         {
             if (!Hotkey.TryParse(keys, out var hotkey, out var error))
@@ -156,7 +223,8 @@ internal sealed class HotkeyAction() : DeckActionBase(
         });
     }
 
-    protected override string Title(IRenderContext context) => context.Settings.Get(KeysKey, Name);
+    protected override string Title(IRenderContext context) =>
+        HotkeyPresets.Find(context.Settings.Get(PresetKey, Custom)) is { } preset ? preset.Label : context.Settings.Get(KeysKey, Name);
 
     protected override string? Subtitle(IRenderContext context) => null;
 
