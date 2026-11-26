@@ -409,7 +409,13 @@ public partial class MainWindow : Window, IPageHost, IDragGhostHost
         }
         else if (WelcomeViewModel.ShouldShow())
         {
+            WhatsNewViewModel.MarkSeen();
             OpenWelcome();
+        }
+        else if (WhatsNewViewModel.ShouldShow())
+        {
+            WhatsNewViewModel.MarkSeen();
+            OpenSingle("What's new", () => new WhatsNewView { DataContext = new WhatsNewViewModel() });
         }
     }
 

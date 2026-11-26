@@ -1508,18 +1508,23 @@ public partial class MainViewModel : ViewModelBase, IDeviceLightSettings
         StatusMessage = $"Exported {profile.RootProfile.Name} to {Path.GetFileName(path)}.";
     }
 
+    /// <summary>The Stream Deck actions the last <see cref="ImportProfile"/> couldn't map (empty after a DeckHost profile).</summary>
+    public IReadOnlyList<DeckHost.App.Profiles.StreamDeckActionUse> LastImportUnavailableActions { get; private set; } = [];
+
     /// <summary>
     /// Imports a DeckHost profile (<c>.deckhostprofile</c>) or a Stream Deck profile
     /// (<c>.streamDeckProfile</c>) as a new profile and shows it. Returns what happened.
     /// </summary>
     public string ImportProfile(string path)
     {
+        LastImportUnavailableActions = [];
         string summary;
         IReadOnlyList<DeviceProfile> layouts;
         if (path.EndsWith(DeckHost.App.Profiles.StreamDeckProfileImporter.Extension, StringComparison.OrdinalIgnoreCase))
         {
             var result = DeckHost.App.Profiles.StreamDeckProfileImporter.Import(path, SelectedDevice!.Id, [.. ControlItems.Select(static item => item.Control)], [.. _actionsByKey.Values], ImportedAssetsDirectory);
             layouts = result.Layouts;
+            LastImportUnavailableActions = result.UnavailableActions;
             summary = $"{result.Imported} key(s) and dial(s) imported"
                 + (result.NotPlaced > 0 ? $", {result.NotPlaced} had no place on this device" : string.Empty)
                 + (result.Unavailable.Count > 0 ? $"; not in DeckHost (kept their look): {string.Join(", ", result.Unavailable.Take(6))}{(result.Unavailable.Count > 6 ? ", …" : string.Empty)}" : string.Empty)

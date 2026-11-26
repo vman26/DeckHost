@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <!-- What's new after an update (ViewModels/WhatsNewViewModel) reads the version's section. -->
+    <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="DeckHost.CHANGELOG.md" Link="CHANGELOG.md" />
   </ItemGroup>
 
   <ItemGroup>

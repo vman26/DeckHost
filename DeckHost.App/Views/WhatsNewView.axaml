@@ -1,0 +1,30 @@
+<UserControl
+		xmlns="https://github.com/avaloniaui"
+		xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		xmlns:vm="using:DeckHost.App.ViewModels"
+		xmlns:views="using:DeckHost.App.Views"
+		x:Class="DeckHost.App.Views.WhatsNewView"
+		x:DataType="vm:WhatsNewViewModel">
+
+	<Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="14">
+		<StackPanel Spacing="4">
+			<TextBlock Text="{Binding Title}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource C.F8FAFC}" />
+			<TextBlock Text="DeckHost was updated. Here is what changed." Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
+		</StackPanel>
+
+		<Border Grid.Row="1" Background="{DynamicResource C.0F172A}" BorderBrush="{DynamicResource C.1E293B}" BorderThickness="1" CornerRadius="12">
+			<ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="16,12">
+				<StackPanel Spacing="8">
+					<views:MarkdownView Markdown="{Binding Notes}" IsVisible="{Binding HasNotes}" />
+					<TextBlock Text="The notes for this version aren't in this build. All changes has them." IsVisible="{Binding !HasNotes}"
+							   Foreground="{DynamicResource C.94A3B8}" TextWrapping="Wrap" />
+				</StackPanel>
+			</ScrollViewer>
+		</Border>
+
+		<Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+			<Button Content="All changes" Command="{Binding OpenAllChangesCommand}" ToolTip.Tip="Every release on GitHub, in the browser" />
+			<Button Grid.Column="2" Content="Close" Classes="accent" Click="Close_OnClick" />
+		</Grid>
+	</Grid>
+</UserControl>
