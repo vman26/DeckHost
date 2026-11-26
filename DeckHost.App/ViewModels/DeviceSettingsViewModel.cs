@@ -31,6 +31,9 @@ public sealed class DeviceSettingsService(IEnumerable<IDevicePlugin> plugins, Fu
                 firmware?.Supports(device.Id) == true ? new FirmwareViewModel(firmware, device) : null)
             : null;
 
+    /// <summary>The plugin with the device's settings (null when it has none), for a setting changed outside the settings page.</summary>
+    public IConfigurableDevicePlugin? SettingsPlugin(string deviceId) => FindPlugin(deviceId);
+
     private IConfigurableDevicePlugin? FindPlugin(string deviceId) =>
         _plugins.FirstOrDefault(plugin => plugin is IConfigurableDevicePlugin
             && plugin.Devices.Any(device => string.Equals(device.Id, deviceId, StringComparison.OrdinalIgnoreCase))) as IConfigurableDevicePlugin;
