@@ -163,6 +163,9 @@ Add a line under **Unreleased** in the same pull request as the change, in the g
 - Stream Deck plugins that save their settings often no longer slow down: DeckHost skips saves that change nothing and
   writes the rest together shortly after. Audio Mixer saved every key's settings once for each key that appeared, so a folder
   full of its keys stayed blank or unresponsive for a while the first time it opened.
+- When several keys of a Stream Deck plugin appear at once (opening a folder or page), DeckHost now hands them to the
+  plugin one at a time and lets it settle in between. Audio Mixer drew icons from several threads at once otherwise, failed
+  and reset its settings, so its keys stayed unresponsive.
 - Stream Deck and OpenAction plugins no longer lose their saved settings when the plugin saves them while its
   settings page reads them: DeckHost could hand the plugin empty settings, so the Discord plugin forgot its Client ID
   and Secret right after Discord asked for access and asked again on every press. Settings files are now written

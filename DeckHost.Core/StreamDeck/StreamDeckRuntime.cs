@@ -360,7 +360,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
     {
         var state = GetOrCreateInstance(manifest, action, context.DeviceId, context.ProfileId, context.ControlId, context.Host);
         state.Visible = true;
-        Send(manifest.Uuid, Envelope("willAppear", state));
+        SendInTurn(manifest.Uuid, Envelope("willAppear", state), settle: true);
     }
 
     internal void Disappear(StreamDeckManifest manifest, StreamDeckActionManifest action, ActionContext context)
@@ -368,7 +368,61 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         if (_instances.TryGetValue(ContextId(context.DeviceId, context.ProfileId, context.ControlId, action.Uuid), out var state))
         {
             state.Visible = false;
-            Send(manifest.Uuid, Envelope("willDisappear", state));
+            SendInTurn(manifest.Uuid, Envelope("willDisappear", state), settle: false);
+        }
+    }
+
+    /// <summary>
+    /// After a willAppear, the next willAppear of the same plugin waits until the plugin sent nothing
+    /// for this long (at most <see cref="AppearMaxWait"/>). Plugins that set up every key on each
+    /// key that appears, from several threads, break when a whole page of keys arrives at once
+    /// (Audio Mixer draws the same icon twice at the same time and resets its settings).
+    /// </summary>
+    public TimeSpan AppearQuietTime { get; set; } = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>The longest a willAppear waits for the plugin to settle after the one before it.</summary>
+    public TimeSpan AppearMaxWait { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// willAppear and willDisappear go out in order, one plugin at a time: a willAppear lets the
+    /// plugin settle (<see cref="AppearQuietTime"/>) before the next of these is sent.
+    /// </summary>
+    private void SendInTurn(string pluginUuid, JsonObject message, bool settle)
+    {
+        if (!_plugins.TryGetValue(pluginUuid, out var running))
+        {
+            return;
+        }
+
+        lock (running.TurnLock)
+        {
+            running.Turns = running.Turns.ContinueWith(async _ =>
+            {
+                Send(pluginUuid, message);
+                if (settle && running.Connection is not null)
+                {
+                    await WaitUntilSettledAsync(running).ConfigureAwait(false);
+                }
+            }, TaskScheduler.Default).Unwrap();
+        }
+    }
+
+    private async Task WaitUntilSettledAsync(RunningPlugin running)
+    {
+        var quiet = (long)AppearQuietTime.TotalMilliseconds;
+        var deadline = Environment.TickCount64 + (long)AppearMaxWait.TotalMilliseconds;
+        var sentAt = Environment.TickCount64;
+        while (true)
+        {
+            var now = Environment.TickCount64;
+            var lastHeard = Math.Max(sentAt, Volatile.Read(ref running.LastMessageAt));
+            var wait = Math.Min(lastHeard + quiet, deadline) - now;
+            if (wait <= 0)
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(wait)).ConfigureAwait(false);
         }
     }
 
@@ -559,9 +613,10 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                         await connection.SendAsync(DeviceDidConnect(device)).ConfigureAwait(false);
                     }
 
+                    // In turn, so the keys that appeared before the plugin connected reach it one at a time too.
                     while (running.Pending.TryDequeue(out var pending))
                     {
-                        await connection.SendAsync(pending).ConfigureAwait(false);
+                        SendInTurn(uuid, pending, settle: pending["event"]?.GetValue<string>() == "willAppear");
                     }
 
                     if (running.Reappear)
@@ -570,7 +625,7 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
                         running.Reappear = false;
                         foreach (var instance in _instances.Values.Where(instance => instance.Visible && string.Equals(instance.PluginUuid, uuid, StringComparison.OrdinalIgnoreCase)).ToList())
                         {
-                            await connection.SendAsync(Envelope("willAppear", instance)).ConfigureAwait(false);
+                            SendInTurn(uuid, Envelope("willAppear", instance), settle: true);
                             instance.RequestRender();
                         }
                     }
@@ -592,6 +647,11 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
 
                 if (pluginUuid is not null)
                 {
+                    if (_plugins.TryGetValue(pluginUuid, out var sender))
+                    {
+                        Volatile.Write(ref sender.LastMessageAt, Environment.TickCount64);
+                    }
+
                     HandlePluginMessage(pluginUuid, eventName, message);
                 }
                 else if (inspectorContext is not null)
@@ -1198,6 +1258,14 @@ public sealed class StreamDeckRuntime : IDisposable, Plugins.IPluginStateTransfe
         public string? Status { get; set; }
 
         public string? Problem { get; set; }
+
+        /// <summary>When the plugin last sent a message (<see cref="Environment.TickCount64"/>).</summary>
+        public long LastMessageAt;
+
+        /// <summary>The willAppear / willDisappear messages, sent one after another (<see cref="SendInTurn"/>).</summary>
+        public Task Turns = Task.CompletedTask;
+
+        public Lock TurnLock { get; } = new();
     }
 
     private sealed class InstanceState(string context, string pluginUuid, string actionUuid, string deviceId, string controlId, string controller, int row, int column)
