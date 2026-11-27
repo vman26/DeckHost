@@ -331,7 +331,7 @@ public sealed class StreamDeckTests : IDisposable
     }
 
     /// <summary>Installs a Node plugin made from <paramref name="script"/>, puts its action on key.0 and starts the host.</summary>
-    private async Task<RunningPlugin> StartNodePluginAsync(string script, StreamDeckRuntime runtime, PluginCatalog catalog)
+    private async Task<RunningPlugin> StartNodePluginAsync(string script, StreamDeckRuntime runtime, PluginCatalog catalog, params string[] controlIds)
     {
         var plugin = new FakeDevicePlugin();
         runtime.DevicesProvider = () => plugin.Devices;
@@ -339,7 +339,10 @@ public sealed class StreamDeckTests : IDisposable
         var store = new VariableStore();
         var host = new DeviceHostService([plugin], catalog.EnabledApplicationPlugins, store);
         var reference = new ActionReference(PluginUuid, "Test", ActionUuid, "Test action", InputCapabilities.None, OutputCapabilities.None);
-        host.SetProfiles([new DeviceProfile("p1", "P", FakeDevicePlugin.DeviceId, [new ControlBinding(KeyId, ProfileActionKind.Single, reference, new ControlAppearance(), [])])]);
+        var bindings = (controlIds.Length == 0 ? [KeyId] : controlIds)
+            .Select(controlId => new ControlBinding(controlId, ProfileActionKind.Single, reference, new ControlAppearance(), []))
+            .ToList();
+        host.SetProfiles([new DeviceProfile("p1", "P", FakeDevicePlugin.DeviceId, bindings)]);
         await host.StartAsync(CancellationToken.None);
         var action = catalog.EnabledApplicationPlugins.Single(candidate => candidate.Id == PluginUuid).Actions.Single();
         return new RunningPlugin(runtime, catalog, host, store, action);
@@ -362,6 +365,45 @@ public sealed class StreamDeckTests : IDisposable
 
         // Assert
         Assert.That(await WaitForTitleAsync(running.Action, HelloTitle), Is.True, "willAppear → setTitle: " + string.Join(" | ", logs));
+    }
+
+    private const string SlowAppearScript = """
+        const args = process.argv.slice(2);
+        const value = name => args[args.indexOf(name) + 1];
+        const socket = new WebSocket(`ws://127.0.0.1:${value('-port')}`);
+        let busy = false;
+        let settled = 0;
+        const log = message => socket.send(JSON.stringify({ event: 'logMessage', payload: { message } }));
+        socket.onopen = () => socket.send(JSON.stringify({ event: value('-registerEvent'), uuid: value('-pluginUUID') }));
+        socket.onmessage = message => {
+          const data = JSON.parse(message.data);
+          if (data.event !== 'willAppear') return;
+          if (busy) log('overlap');
+          busy = true;
+          setTimeout(() => { busy = false; settled++; log(`settled ${settled}`); }, 50);
+        };
+        """;
+
+    [Test]
+    public async Task WillAppear_SeveralKeysAtOnce_ReachThePluginOneAfterAnother()
+    {
+        // Arrange
+        Assume.That(NodeJs.IsAvailable, "Node.js isn't installed on this machine; the protocol can't be exercised end to end");
+        var logs = new List<string>();
+        using var runtime = NewRuntime((_, message) => { lock (logs) { logs.Add(message); } });
+        using var catalog = NewCatalog(runtime);
+
+        // Act
+        await using var running = await StartNodePluginAsync(SlowAppearScript, runtime, catalog, "key.0", "key.1", "key.2");
+        for (var attempt = 0; attempt < 100 && !logs.ToList().Any(line => line.EndsWith("settled 3", StringComparison.Ordinal)); attempt++)
+        {
+            await Task.Delay(100);
+        }
+
+        // Assert
+        var seen = logs.ToList();
+        Assert.That(seen.Any(line => line.EndsWith("settled 3", StringComparison.Ordinal)), Is.True, string.Join(" | ", seen));
+        Assert.That(seen.Any(line => line.EndsWith("overlap", StringComparison.Ordinal)), Is.False, string.Join(" | ", seen));
     }
 
     [Test]
